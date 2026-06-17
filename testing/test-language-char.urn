@@ -1,0 +1,60 @@
+package testing
+
+from uranite.language.char import Char
+from uranite.testing.assertions import assertTrue, assertFalse, assertEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Char Tests ===" )
+
+    Char a = new Char( 'A' )
+    Char z = new Char( 'z' )
+    Char d = new Char( '5' )
+    Char sp = new Char( ' ' )
+
+    Char aVal = a.getValue()
+    assertEqualI64( 65, aVal as I64, "getValue A" )
+    putsln( "getValue OK" )
+
+    # isAlpha
+    Boolean aIsAlpha = a.isAlpha()
+    assertTrue( aIsAlpha, "isAlpha(A)" )
+    Boolean dIsAlpha = d.isAlpha()
+    assertFalse( dIsAlpha, "not isAlpha(5)" )
+
+    # isDigit
+    Boolean dIsDigit = d.isDigit()
+    assertTrue( dIsDigit, "isDigit(5)" )
+    Boolean aIsDigit = a.isDigit()
+    assertFalse( aIsDigit, "not isDigit(A)" )
+
+    # isAlphanumeric
+    Boolean aIsAlnum = a.isAlphanumeric()
+    assertTrue( aIsAlnum, "isAlphanumeric(A)" )
+    Boolean dIsAlnum = d.isAlphanumeric()
+    assertTrue( dIsAlnum, "isAlphanumeric(5)" )
+    Boolean spIsAlnum = sp.isAlphanumeric()
+    assertFalse( spIsAlnum, "not isAlphanumeric(sp)" )
+
+    # isWhitespace
+    Boolean spIsWs = sp.isWhitespace()
+    assertTrue( spIsWs, "isWhitespace(sp)" )
+    Boolean aIsWs = a.isWhitespace()
+    assertFalse( aIsWs, "not isWhitespace(A)" )
+    putsln( "is* methods OK" )
+
+    # toUpper
+    Char upper = z.toUpper()
+    assertEqualI64( 90, upper as I64, "toUpper(z)=Z" )
+    Char upperA = a.toUpper()
+    assertEqualI64( 65, upperA as I64, "toUpper(A)=A" )
+
+    # toLower
+    Char lower = a.toLower()
+    assertEqualI64( 97, lower as I64, "toLower(A)=a" )
+    Char lowerZ = z.toLower()
+    assertEqualI64( 122, lowerZ as I64, "toLower(z)=z" )
+    putsln( "toUpper/toLower OK" )
+
+    putsln( "=== All Char tests passed ===" )
+    return 0
