@@ -1,0 +1,38 @@
+package testing
+
+from uranite.operators.modulable import Modulable
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public class Val implements Modulable<Val>:
+    public Int value
+
+    public function Val( self, Int value ) -> Void:
+        self.value = value
+
+    public function modulo( self, Val other ) -> Val:
+        return new Val( self.value % other.value )
+
+public function main() -> I32:
+    putsln( "=== Modulable Tests ===" )
+
+    Val a = new Val( 17 )
+    Val b = new Val( 5 )
+
+    Val c = a.modulo( b )
+    assertEqualI64( 2, c.value, "17%5=2" )
+
+    Val d = new Val( 10 )
+    Val e = d.modulo( b )
+    assertEqualI64( 0, e.value, "10%5=0" )
+
+    Val f = new Val( 3 )
+    Val g = f.modulo( b )
+    assertEqualI64( 3, g.value, "3%5=3" )
+
+    Val h = a.modulo( a )
+    assertEqualI64( 0, h.value, "self modulo" )
+    putsln( "modulo OK" )
+
+    putsln( "=== All Modulable tests passed ===" )
+    return 0
