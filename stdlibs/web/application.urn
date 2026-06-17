@@ -1,0 +1,238 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/application.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Application: top-level entry point for the web framework. Registers
+# controllers, middleware, exception handlers. Builds router from
+# controllers and starts server. Similar to Spring Boot's SpringApplication.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.application
+
+from uranite.memory.memory import Memory
+from uranite.web.config import ServerConfig
+from uranite.web.server import HttpServer
+from uranite.web.router import Router
+from uranite.web.route import Route
+from uranite.web.controller import Controller
+from uranite.web.middleware import Middleware
+from uranite.web.exception-handler import ExceptionHandler
+from uranite.io.console import putsln
+
+const I64 MAX_CONTROLLERS = 32
+"""Maximum number of controllers that can be registered with an Application."""
+
+const I64 MAX_MIDDLEWARE = 16
+"""Maximum number of middleware instances that can be registered with an Application."""
+
+function addrToController( I64 addr ) -> Controller:
+    Controller obj = new Controller()
+    asm volatile "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+    return obj
+
+function addrToRoute( I64 addr ) -> Route:
+    Route obj = new Route( "", "", 0 )
+    asm volatile "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+    return obj
+
+public class Application:
+    
+    """
+    Top-level entry point for the Uranite web framework. Registers controllers,
+    middleware, and exception handlers, then builds a router from all controller
+    routes and starts an HTTP server. Provides a fluent API for configuration.
+    """
+    
+    public ServerConfig appConfig
+    """The server configuration used when starting the HTTP server."""
+    
+    public Memory<I64> controllers
+    """Storage for registered controller addresses."""
+    
+    public I64 controllerCount
+    """The number of controllers currently registered."""
+    
+    public Memory<I64> middlewares
+    """Storage for registered middleware addresses."""
+    
+    public I64 middlewareCount
+    """The number of middleware instances currently registered."""
+    
+    public ?ExceptionHandler exHandler
+    """The optional exception handler for unhandled errors during request processing."""
+    
+    public function Application( self ) -> Void:
+        
+        """
+        Create a new Application with default configuration: port 8080, host
+        0.0.0.0, no controllers, no middleware, and no exception handler.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.appConfig = new ServerConfig( 8080, "0.0.0.0" )
+        self.controllers = new Memory<I64>( MAX_CONTROLLERS )
+        self.controllerCount = 0
+        self.middlewares = new Memory<I64>( MAX_MIDDLEWARE )
+        self.middlewareCount = 0
+        self.exHandler = None
+    
+    public function config( self, ServerConfig cfg ) -> Application:
+        
+        """
+        Set the server configuration for this application.
+        
+        Parameters:
+            cfg (ServerConfig):
+                The server configuration to use.
+        
+        Returns:
+            This Application instance for method chaining.
+        """
+        
+        self.appConfig = cfg
+        return self
+    
+    public function controller( self, Controller ctrl ) -> Application:
+        
+        """
+        Register a controller with this application. The controller's routes
+        will be collected and added to the router when the application starts.
+        
+        Parameters:
+            ctrl (Controller):
+                The controller to register.
+        
+        Returns:
+            This Application instance for method chaining.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 ctrlAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" ctrlAddr ) : input( "r" ctrl ) : clobber()
+        self.controllers.set( self.controllerCount, ctrlAddr )
+        self.controllerCount = self.controllerCount + 1
+        return self
+    
+    public function middleware( self, Middleware mw ) -> Application:
+        
+        """
+        Register a middleware instance with this application. Middleware
+        processes requests and responses in the order they are registered.
+        
+        Parameters:
+            mw (Middleware):
+                The middleware instance to register.
+        
+        Returns:
+            This Application instance for method chaining.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 mwAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" mwAddr ) : input( "r" mw ) : clobber()
+        self.middlewares.set( self.middlewareCount, mwAddr )
+        self.middlewareCount = self.middlewareCount + 1
+        return self
+    
+    public function exceptionHandler( self, ExceptionHandler handler ) -> Application:
+        
+        """
+        Set the exception handler for this application. The handler converts
+        unhandled exceptions into appropriate HTTP error responses.
+        
+        Parameters:
+            handler (ExceptionHandler):
+                The exception handler to use.
+        
+        Returns:
+            This Application instance for method chaining.
+        """
+        
+        self.exHandler = handler
+        return self
+    
+    public function buildRouter( self ) -> Router:
+        
+        """
+        Build a Router by collecting all routes from all registered controllers.
+        Iterates through each controller and adds its routes to the router.
+        
+        Returns:
+            A fully populated Router containing all registered routes.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Router router = new Router()
+        I64 ci = 0
+        while ci < self.controllerCount:
+            I64 ctrlAddr = self.controllers.get( ci )
+            Controller ctrl = addrToController( ctrlAddr )
+            I64 ri = 0
+            while ri < ctrl.routeCount():
+                I64 routeAddr = ctrl.getRoute( ri )
+                Route route = addrToRoute( routeAddr )
+                router.addRoute( route )
+                ri = ri + 1
+            ci = ci + 1
+        return router
+    
+    public function run( self ) -> Void:
+        
+        """
+        Start the web application. Builds the router from registered controllers,
+        creates an HTTP server with the configured settings, and enters the
+        accept loop to handle incoming connections. This method blocks indefinitely.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        putsln( "Uranite Web Application starting..." )
+        Router router = self.buildRouter()
+        HttpServer server = new HttpServer( self.appConfig, router )
+        server.start()
+        server.acceptLoop()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release heap-allocated controller and middleware storage.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.controllers.free()
+        self.middlewares.free()
+
+export {
+    Application,
+    MAX_CONTROLLERS, MAX_MIDDLEWARE
+}
