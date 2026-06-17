@@ -1,0 +1,351 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/ipc/shared-memory.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides shared memory regions for inter-process communication by mapping the same
+# physical frames into multiple address spaces, along with a registry for tracking
+# active shared regions during map and unmap syscalls.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.ipc.shared-memory
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public class SharedRegion:
+    
+    """
+    Represents a shared memory region that maps the same physical page frames
+    into multiple address spaces for zero-copy IPC. This is the fastest IPC path
+    available. The caller is responsible for synchronization using Spinlock or
+    Mutex. Reference counting tracks how many address spaces currently map
+    the region.
+    """
+    
+    protect I64 regionId
+    protect I64 physicalBase
+    protect I64 pageCount
+    protect I64 ownerTaskId
+    protect I64 refCount
+    protect I64 flags
+    protect Spinlock lock
+    
+    public function SharedRegion( self, I64 id, I64 owner, I64 physBase, I64 pages, I64 regionFlags ) -> Void:
+        
+        """
+        Construct a new shared memory region backed by contiguous physical pages.
+        
+        Parameters:
+            id (I64):
+                The unique region identifier.
+            owner (I64):
+                The task identifier of the region's creator.
+            physBase (I64):
+                The physical base address of the memory region.
+            pages (I64):
+                The number of 4096-byte pages in the region.
+            regionFlags (I64):
+                Permission flags (bit 0 = readable, bit 1 = writable, bit 2 = executable).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.regionId = id
+        self.ownerTaskId = owner
+        self.physicalBase = physBase
+        self.pageCount = pages
+        self.refCount = 1
+        self.flags = regionFlags
+        self.lock = new Spinlock()
+    
+    public function getRegionId( self ) -> I64:
+        
+        """ Return the unique identifier of this shared memory region. """
+        
+        return self.regionId
+    
+    public function getPhysicalBase( self ) -> I64:
+        
+        """ Return the physical base address of the underlying memory. """
+        
+        return self.physicalBase
+    
+    public function getSize( self ) -> I64:
+        
+        """ Return the total size of the shared region in bytes (page count multiplied by 4096). """
+        
+        return self.pageCount * 4096
+    
+    public function getPageCount( self ) -> I64:
+        
+        """ Return the number of 4096-byte pages in this shared region. """
+        
+        return self.pageCount
+    
+    public function getOwnerTaskId( self ) -> I64:
+        
+        """ Return the task identifier of the task that created this shared region. """
+        
+        return self.ownerTaskId
+    
+    public function getFlags( self ) -> I64:
+        
+        """ Return the permission flags bitmask for this shared region. """
+        
+        return self.flags
+    
+    public function retain( self ) -> I64:
+        
+        """
+        Increment the reference count when mapping this region into another
+        address space. Protected by a spinlock.
+        
+        Returns:
+            I64:
+                The new reference count after incrementing.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        self.refCount = self.refCount + 1
+        I64 count = self.refCount
+        self.lock.unlock()
+        return count
+    
+    public function release( self ) -> Boolean:
+        
+        """
+        Decrement the reference count when unmapping this region from an
+        address space. Protected by a spinlock.
+        
+        Returns:
+            Boolean:
+                True when the last reference has been released and the physical
+                pages can be freed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        self.refCount = self.refCount - 1
+        I64 count = self.refCount
+        self.lock.unlock()
+        return count == 0
+    
+    public function getRefCount( self ) -> I64:
+        
+        """ Return the current number of address spaces mapping this shared region. """
+        
+        return self.refCount
+    
+    public function isWritable( self ) -> Boolean:
+        
+        """ Return True if this shared region permits write access (bit 1 of flags). """
+        
+        return ( self.flags & 2 ) != 0
+    
+    public function isExecutable( self ) -> Boolean:
+        
+        """
+        Return True if this shared region permits code execution (bit 2 of flags).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return ( self.flags & 4 ) != 0
+
+public class SharedMemoryRegistry:
+    
+    """
+    Registry of all active shared memory regions in the kernel. Tracks regions
+    by identifier for lookup during map and unmap syscalls. Uses a fixed-capacity
+    array with linear search and spinlock protection for concurrent access.
+    """
+    
+    protect Memory<I64> regionPointers
+    protect Memory<I64> regionIds
+    protect I64 capacity
+    protect I64 count
+    protect I64 nextRegionId
+    protect Spinlock lock
+    
+    public function SharedMemoryRegistry( self, I64 maxRegions ) -> Void:
+        
+        """
+        Construct a new shared memory registry with the given maximum capacity.
+        
+        Parameters:
+            maxRegions (I64):
+                The maximum number of shared memory regions that can be tracked.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxRegions
+        self.count = 0
+        self.nextRegionId = 1
+        self.regionPointers = new Memory<I64>( maxRegions )
+        self.regionIds = new Memory<I64>( maxRegions )
+        self.lock = new Spinlock()
+        I64 slotIndex = 0
+        while slotIndex < maxRegions:
+            self.regionPointers.set( slotIndex, 0 )
+            self.regionIds.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function allocateRegionId( self ) -> I64:
+        
+        """
+        Allocate the next unique region identifier from a monotonically
+        increasing counter.
+        
+        Returns:
+            I64:
+                A unique region identifier.
+        """
+        
+        I64 id = self.nextRegionId
+        self.nextRegionId = self.nextRegionId + 1
+        return id
+    
+    public function addRegion( self, I64 regionId, I64 regionPointer ) -> I64:
+        
+        """
+        Register a shared memory region in the registry. Searches for the first
+        free slot and stores the region identifier and pointer. Protected by a spinlock.
+        
+        Parameters:
+            regionId (I64):
+                The unique identifier of the region to register.
+            regionPointer (I64):
+                The type-erased pointer to the SharedRegion object.
+        
+        Returns:
+            I64:
+                The slot index where the region was stored, or -1 if the registry is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.count >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.regionPointers.get( slotIndex ) == 0:
+                self.regionPointers.set( slotIndex, regionPointer )
+                self.regionIds.set( slotIndex, regionId )
+                self.count = self.count + 1
+                self.lock.unlock()
+                return slotIndex
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return 0 - 1
+    
+    public function findRegion( self, I64 regionId ) -> I64:
+        
+        """
+        Find a shared memory region by its identifier.
+        
+        Parameters:
+            regionId (I64):
+                The unique identifier of the region to find.
+        
+        Returns:
+            I64:
+                The type-erased pointer to the SharedRegion object, or 0 if not found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.regionIds.get( slotIndex ) == regionId:
+                return self.regionPointers.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return 0
+    
+    public function removeRegion( self, I64 regionId ) -> Boolean:
+        
+        """
+        Remove a shared memory region from the registry by its identifier.
+        Protected by a spinlock.
+        
+        Parameters:
+            regionId (I64):
+                The unique identifier of the region to remove.
+        
+        Returns:
+            Boolean:
+                True if the region was found and removed, False if not found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.regionIds.get( slotIndex ) == regionId:
+                self.regionPointers.set( slotIndex, 0 )
+                self.regionIds.set( slotIndex, 0 )
+                self.count = self.count - 1
+                self.lock.unlock()
+                return True
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return False
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the number of shared memory regions currently registered. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the memory arrays allocated by this registry.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.regionPointers.free()
+        self.regionIds.free()
+
+export {
+    SharedRegion,
+    SharedMemoryRegistry
+}
