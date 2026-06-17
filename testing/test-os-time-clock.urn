@@ -1,0 +1,44 @@
+package testing
+
+from uranite.os.time.clock import SystemClock
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Time Clock Tests ===" )
+
+    SystemClock clock = new SystemClock( 1000 )
+    assertEqualI64( 0, clock.ticks, "ticks 0" )
+    assertEqualI64( 0, clock.seconds, "seconds 0" )
+    assertEqualI64( 0, clock.nanoseconds, "nanos 0" )
+    assertEqualI64( 1000, clock.tickFrequency, "frequency" )
+    assertEqualI64( 1000000, clock.nanosPerTick, "nanosPerTick" )
+    assertEqualI64( 0, clock.getTicks(), "getTicks 0" )
+    assertEqualI64( 0, clock.getSeconds(), "getSeconds 0" )
+    assertEqualI64( 0, clock.uptimeMillis(), "uptimeMillis 0" )
+    putsln( "init OK" )
+
+    clock.tick()
+    assertEqualI64( 1, clock.getTicks(), "ticks 1" )
+    assertEqualI64( 1000000, clock.getNanoseconds(), "nanos after tick" )
+
+    I64 i = 0
+    while i < 999:
+        clock.tick()
+        i = i + 1
+    assertEqualI64( 1000, clock.getTicks(), "ticks 1000" )
+    assertEqualI64( 1, clock.getSeconds(), "seconds 1" )
+    assertEqualI64( 0, clock.getNanoseconds(), "nanos rolled" )
+    assertEqualI64( 1000, clock.uptimeMillis(), "uptimeMillis 1000" )
+    putsln( "tick OK" )
+
+    clock.advance( 500 )
+    assertEqualI64( 1500, clock.getTicks(), "ticks after advance" )
+    assertEqualI64( 1500, clock.uptimeMillis(), "uptimeMillis 1500" )
+    assertEqualI64( 1500000, clock.uptimeMicros(), "uptimeMicros" )
+    putsln( "advance OK" )
+
+    putsln( "=== All clock tests passed ===" )
+    return 0
