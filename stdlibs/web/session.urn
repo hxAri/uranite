@@ -1,0 +1,298 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/session.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# In-memory session store. Session ID generated from monotonic clock.
+# Sessions stored as key-value pairs in Memory<I64> arrays.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.session
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import stringToPtr, stringLen
+from uranite.functions.builtin import equals, ptrToString
+from uranite.convert.convert import intToHex
+from uranite.datetime.datetime import nowMonotonic
+
+const I64 MAX_SESSION_ENTRIES = 64
+""" Maximum number of key-value entries a single session can hold. """
+
+const I64 MAX_SESSIONS = 256
+""" Maximum number of sessions the session store can hold. """
+
+function addrToSession( I64 addr ) -> Session:
+    
+    """
+    Reinterpret a raw memory address as a Session object reference.
+    
+    Uses inline assembly to cast the integer address back to a Session
+    pointer. The caller must ensure the address points to a valid Session.
+    
+    Parameters:
+        addr (I64):
+            The memory address of a previously stored Session object.
+    
+    Returns:
+        Session:
+            The Session object at the given address.
+    """
+    
+    Session obj = new Session( "" )
+    asm volatile "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+    return obj
+
+public class Session:
+    
+    """
+    An in-memory session that stores key-value string pairs.
+    
+    Each session is identified by a unique session ID and can hold up to
+    MAX_SESSION_ENTRIES entries. Keys and values are stored as raw pointers
+    in parallel Memory arrays.
+    """
+    
+    public String sessionId
+    """ The unique identifier for this session. """
+    public Memory<I64> keys
+    """ Storage for entry key string pointers. """
+    public Memory<I64> values
+    """ Storage for entry value string pointers. """
+    public I64 entryCount
+    """ The current number of key-value entries in this session. """
+    
+    public function Session( self, String sessionId ) -> Void:
+        
+        """
+        Construct a new Session with the given identifier.
+        
+        Allocates storage for up to MAX_SESSION_ENTRIES key-value pairs.
+        
+        Parameters:
+            sessionId (String):
+                The unique identifier for this session.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.sessionId = sessionId
+        self.keys = new Memory<I64>( MAX_SESSION_ENTRIES )
+        self.values = new Memory<I64>( MAX_SESSION_ENTRIES )
+        self.entryCount = 0
+    
+    public function set( self, String key, String value ) -> Void:
+        
+        """
+        Set a key-value pair in the session.
+        
+        If the key already exists, its value is updated in place. If the key
+        is new and the session has not reached MAX_SESSION_ENTRIES, the pair
+        is appended.
+        
+        Parameters:
+            key (String):
+                The entry key.
+            value (String):
+                The entry value.
+        
+        Complexity:
+            Time: O(n) where n is the number of entries (linear scan for existing key)
+        """
+        
+        I64 entryIndex = 0
+        while entryIndex < self.entryCount:
+            String entryKey = ptrToString( self.keys.get( entryIndex ) )
+            if equals( entryKey, key ):
+                self.values.set( entryIndex, stringToPtr( value ) )
+                return
+            entryIndex = entryIndex + 1
+        if self.entryCount < MAX_SESSION_ENTRIES:
+            self.keys.set( self.entryCount, stringToPtr( key ) )
+            self.values.set( self.entryCount, stringToPtr( value ) )
+            self.entryCount = self.entryCount + 1
+    
+    public function get( self, String key ) -> String:
+        
+        """
+        Retrieve a value from the session by key.
+        
+        Parameters:
+            key (String):
+                The entry key to look up.
+        
+        Returns:
+            String:
+                The associated value, or empty string if the key is not found.
+        
+        Complexity:
+            Time: O(n) where n is the number of entries
+        """
+
+        I64 entryIndex = 0
+        while entryIndex < self.entryCount:
+            String entryKey = ptrToString( self.keys.get( entryIndex ) )
+            if equals( entryKey, key ):
+                return ptrToString( self.values.get( entryIndex ) )
+            entryIndex = entryIndex + 1
+        return ""
+    
+    public function remove( self, String key ) -> Void:
+        
+        """
+        Remove a key-value pair from the session.
+        
+        Uses swap-with-last removal to avoid shifting elements. If the key
+        is not found, this method does nothing.
+        
+        Parameters:
+            key (String):
+                The entry key to remove.
+        
+        Complexity:
+            Time: O(n) where n is the number of entries (linear scan for key)
+        """
+        
+        I64 entryIndex = 0
+        while entryIndex < self.entryCount:
+            String entryKey = ptrToString( self.keys.get( entryIndex ) )
+            if equals( entryKey, key ):
+                I64 last = self.entryCount - 1
+                if entryIndex != last:
+                    self.keys.set( entryIndex, self.keys.get( last ) )
+                    self.values.set( entryIndex, self.values.get( last ) )
+                self.entryCount = self.entryCount - 1
+                return
+            entryIndex = entryIndex + 1
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release heap-allocated key and value buffers for this session.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        self.keys.free()
+        self.values.free()
+
+public class SessionStore:
+    
+    """
+    In-memory store that manages multiple Session instances.
+    
+    Sessions are created with unique IDs derived from the monotonic clock
+    and stored as raw memory addresses in a flat array. Supports up to
+    MAX_SESSIONS concurrent sessions.
+    """
+    
+    public Memory<I64> sessions
+    """ Storage for session object addresses. """
+    public I64 sessionCount
+    """ The current number of active sessions. """
+    
+    public function SessionStore( self ) -> Void:
+        
+        """
+        Construct a new SessionStore with empty session storage.
+        
+        Allocates space for up to MAX_SESSIONS session entries.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.sessions = new Memory<I64>( MAX_SESSIONS )
+        self.sessionCount = 0
+    
+    public function createSession( self ) -> Session:
+        
+        """
+        Create a new session with a unique ID derived from the monotonic clock.
+        
+        The session ID is generated by converting the current monotonic
+        timestamp to a hexadecimal string. The session is stored in the
+        session array if capacity permits.
+        
+        Returns:
+            Session:
+                The newly created session.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 mono = nowMonotonic()
+        String sid = intToHex( mono )
+        Session session = new Session( sid )
+        I64 sessionAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" sessionAddr ) : input( "r" session ) : clobber()
+        if self.sessionCount < MAX_SESSIONS:
+            self.sessions.set( self.sessionCount, sessionAddr )
+            self.sessionCount = self.sessionCount + 1
+        return session
+    
+    public function getSession( self, String sessionId ) -> ?Session:
+        
+        """
+        Look up an existing session by its session ID.
+        
+        Performs a linear scan over all stored sessions for a matching ID.
+        
+        Parameters:
+            sessionId (String):
+                The session ID to search for.
+        
+        Returns:
+            ?Session:
+                The matching session, or None if no session with the given
+                ID exists.
+        
+        Complexity:
+            Time: O(n) where n is the number of active sessions
+        """
+        
+        I64 sessionIndex = 0
+        while sessionIndex < self.sessionCount:
+            I64 sessionAddr = self.sessions.get( sessionIndex )
+            Session session = addrToSession( sessionAddr )
+            if equals( session.sessionId, sessionId ):
+                return session
+            sessionIndex = sessionIndex + 1
+        return None
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release the heap-allocated session storage buffer.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.sessions.free()
+
+export {
+    Session,
+    SessionStore,
+    MAX_SESSION_ENTRIES,
+    MAX_SESSIONS
+}
