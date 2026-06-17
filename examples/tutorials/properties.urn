@@ -1,0 +1,237 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Demonstrates the use of properties in Aether classes.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+
+class Rectangle:
+    
+    """ A class representing a rectangle with width and height """
+    
+    public F64 width
+    public F64 height
+
+    public function Rectangle( self, F64 w, F64 h ) -> Void:
+        
+        """
+        Initializes a new Rectangle instance.
+        
+        Parameters:
+            w: The width of the rectangle.
+            h: The height of the rectangle.
+        """
+        
+        self.width = w
+        self.height = h
+
+    public property area( self ) -> F64:
+        
+        """
+        Gets the area of the rectangle.
+        
+        Returns:
+            The calculated area.
+        """
+        
+        return self.width * self.height
+
+    public property perimeter( self ) -> F64:
+        
+        """
+        Gets the perimeter of the rectangle.
+        
+        Returns:
+            The calculated perimeter.
+        """
+        
+        return 2.0 * ( self.width + self.height )
+
+    public property diagonal( self ) -> F64:
+        
+        """
+        Gets the squared diagonal of the rectangle.
+        
+        Returns:
+            The squared diagonal length.
+        """
+        
+        return self.width * self.width + self.height * self.height
+
+    public property isSquare( self ) -> Boolean:
+        
+        """
+        Checks if the rectangle is a square.
+        
+        Returns:
+            True if width equals height, False otherwise.
+        """
+        
+        return self.width == self.height
+
+class Circle:
+    
+    """ A class representing a circle with a radius """
+    
+    public F64 radius
+
+    public function Circle( self, F64 r ) -> Void:
+        
+        """
+        Initializes a new Circle instance.
+        
+        Parameters:
+            r: The radius of the circle.
+        """
+        
+        self.radius = r
+
+    public property area( self ) -> F64:
+        
+        """
+        Gets the area of the circle.
+        
+        Returns:
+            The calculated area.
+        """
+        
+        return 3.14159265 * self.radius * self.radius
+
+    public property circumference( self ) -> F64:
+        
+        """
+        Gets the circumference of the circle.
+        
+        Returns:
+            The calculated circumference.
+        """
+        
+        return 2.0 * 3.14159265 * self.radius
+
+    public property diameter( self ) -> F64:
+        
+        """
+        Gets the diameter of the circle.
+        
+        Returns:
+            The calculated diameter.
+        """
+        
+        return 2.0 * self.radius
+
+class Temperature:
+    
+    """ A class representing temperature in Celsius with property conversions """
+    
+    public F64 celsius
+
+    public function Temperature( self, F64 c ) -> Void:
+        
+        """
+        Initializes a new Temperature instance.
+        
+        Parameters:
+            c: The temperature in Celsius.
+        """
+        
+        self.celsius = c
+
+    public property fahrenheit( self ) -> F64:
+        
+        """
+        Gets the temperature in Fahrenheit.
+        
+        Returns:
+            The converted temperature.
+        """
+        
+        return self.celsius * 1.8 + 32.0
+
+    public property kelvin( self ) -> F64:
+        
+        """
+        Gets the temperature in Kelvin.
+        
+        Returns:
+            The converted temperature.
+        """
+        
+        return self.celsius + 273.15
+
+    public property isFreezing( self ) -> Boolean:
+        
+        """
+        Checks if the temperature is at or below freezing point.
+        
+        Returns:
+            True if celsius <= 0.0, False otherwise.
+        """
+        
+        return self.celsius <= 0.0
+
+    public property isBoiling( self ) -> Boolean:
+        
+        """
+        Checks if the temperature is at or above boiling point.
+        
+        Returns:
+            True if celsius >= 100.0, False otherwise.
+        """
+        
+        return self.celsius >= 100.0
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the property demonstration.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    # Rectangle
+    Rectangle rect = new Rectangle( 10.0, 5.0 )
+    puts( "rect area = ", rect.area )
+    puts( "rect perimeter = ", rect.perimeter )
+    puts( "rect diagonal^2 = ", rect.diagonal )
+
+    Rectangle square = new Rectangle( 4.0, 4.0 )
+    puts( "square area = ", square.area )
+
+    # Circle
+    Circle c = new Circle( 5.0 )
+    puts( "circle area = ", c.area )
+    puts( "circle circumference = ", c.circumference )
+    puts( "circle diameter = ", c.diameter )
+
+    # Temperature
+    Temperature boiling = new Temperature( 100.0 )
+    puts( "100C = ", boiling.fahrenheit, "F" )
+    puts( "100C = ", boiling.kelvin, "K" )
+
+    Temperature freezing = new Temperature( 0.0 )
+    puts( "0C = ", freezing.fahrenheit, "F" )
+    puts( "0C = ", freezing.kelvin, "K" )
+
+    Temperature room = new Temperature( 22.0 )
+    puts( "22C = ", room.fahrenheit, "F" )
+
+    puts( "all property tests passed" )
+    return 0
