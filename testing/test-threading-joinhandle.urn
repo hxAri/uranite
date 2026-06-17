@@ -1,0 +1,33 @@
+package testing
+
+from uranite.threading.join-handle import JoinHandle
+from uranite.threading.thread import Thread, ThreadRuntime
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.time.clock import SystemClock
+from uranite.testing.assertions import {
+    assertEqualI64, assertGreaterThan
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Threading JoinHandle Tests ===" )
+
+    Scheduler sched = new Scheduler()
+    PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
+    SystemClock clock = new SystemClock( 1000 )
+    ThreadRuntime runtime = new ThreadRuntime( sched, pmm, clock, 256 )
+
+    I64 tid = runtime.allocateThreadId()
+    assertGreaterThan( tid, -1, "tid >= 0" )
+    putsln( "allocateThreadId OK" )
+
+    Thread t = new Thread( runtime, tid, 8, 5 )
+    JoinHandle handle = new JoinHandle( t, runtime )
+    assertEqualI64( tid, handle.getThreadId(), "handle tid" )
+    putsln( "JoinHandle OK" )
+
+    runtime.destroy()
+
+    putsln( "=== All joinhandle tests passed ===" )
+    return 0
