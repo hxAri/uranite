@@ -1,0 +1,55 @@
+package testing
+
+from uranite.language.uint import UInt
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue,
+    assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== UInt Tests ===" )
+
+    UInt a = new UInt( 100 )
+    UInt b = new UInt( 42 )
+
+    assertEqualI64( 100, a.getValue(), "getValue" )
+    putsln( "getValue OK" )
+
+    # arithmetic
+    UInt sum = a.add( b )
+    assertEqualI64( 142, sum.getValue(), "add" )
+    UInt diff = a.subtract( b )
+    assertEqualI64( 58, diff.getValue(), "subtract" )
+    UInt prod = a.multiply( b )
+    assertEqualI64( 4200, prod.getValue(), "multiply" )
+    UInt quot = a.divide( b )
+    assertEqualI64( 2, quot.getValue(), "divide" )
+    UInt mod = a.modulo( b )
+    assertEqualI64( 16, mod.getValue(), "modulo" )
+    putsln( "arithmetic OK" )
+
+    # equals
+    UInt c = new UInt( 100 )
+    assertTrue( a.equals( c ), "equals same" )
+    assertFalse( a.equals( b ), "equals diff" )
+    putsln( "equals OK" )
+
+    # compareTo
+    assertEqualI64( -1, b.compareTo( a ), "compareTo less" )
+    assertEqualI64( 0, a.compareTo( c ), "compareTo equal" )
+    assertEqualI64( 1, a.compareTo( b ), "compareTo greater" )
+    putsln( "compareTo OK" )
+
+    # bitwise
+    UInt andResult = a.bitwiseAnd( b )
+    assertEqualI64( 32, andResult.getValue(), "bitwiseAnd" )
+    UInt orResult = a.bitwiseOr( b )
+    assertEqualI64( 110, orResult.getValue(), "bitwiseOr" )
+    UInt xorResult = a.bitwiseXor( b )
+    assertEqualI64( 78, xorResult.getValue(), "bitwiseXor" )
+    putsln( "bitwise OK" )
+
+    putsln( "=== All UInt tests passed ===" )
+    return 0
