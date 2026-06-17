@@ -1,0 +1,219 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/request.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Web framework request object: method, path, path parameters,
+# query parameters, headers, body, content type, remote address.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.request
+
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString, substring, indexOf, equals
+
+const I64 MAX_PARAMS = 16
+""" Maximum number of path parameters a single request can hold. """
+const I64 MAX_HEADERS = 32
+""" Maximum number of headers a single request can hold. """
+const I64 MAX_QUERY_PARAMS = 16
+""" Maximum number of query string parameters a single request can hold. """
+
+public class HttpRequest:
+    
+    """
+    Represents an incoming HTTP request with method, path, headers, body,
+    path parameters, and query parameters.
+    
+    Path parameters are populated by the router when matching URL patterns
+    containing :param segments. Query parameters are extracted from the
+    raw path at construction time.
+    """
+    
+    public String method
+    """ The HTTP method (GET, POST, PUT, DELETE, PATCH, etc.). """
+    public String path
+    """ The request URL path with query string stripped. """
+    public String rawPath
+    """ The original request URL path including any query string. """
+    public String body
+    """ The raw request body content. """
+    public String contentType
+    """ The Content-Type header value, or empty string if not set. """
+    public String rawHeaders
+    """ The raw header block from the HTTP request. """
+    public I64 contentLength
+    """ The length of the request body in bytes. """
+    public I64 paramCount
+    """ The current number of populated path parameters. """
+    public Memory<I64> paramKeys
+    """ Storage for path parameter name pointers. """
+    public Memory<I64> paramValues
+    """ Storage for path parameter value pointers. """
+    public I64 queryCount
+    """ The current number of populated query parameters. """
+    public Memory<I64> queryKeys
+    """ Storage for query parameter name pointers. """
+    public Memory<I64> queryValues
+    """ Storage for query parameter value pointers. """
+    
+    public function HttpRequest( self, String method, String path, String body, String rawHeaders ) -> Void:
+        
+        """
+        Construct a new HttpRequest from raw HTTP data.
+        
+        Parses the path to separate the URL path from the query string.
+        Allocates storage for path parameters and query parameters.
+        
+        Parameters:
+            method (String):
+                The HTTP method (e.g., "GET", "POST").
+            path (String):
+                The full request path, possibly including a query string.
+            body (String):
+                The raw request body content.
+            rawHeaders (String):
+                The raw header block from the HTTP request.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.method = method
+        self.rawPath = path
+        self.body = body
+        self.rawHeaders = rawHeaders
+        self.contentType = ""
+        self.contentLength = stringLen( body )
+        self.paramCount = 0
+        self.paramKeys = new Memory<I64>( MAX_PARAMS )
+        self.paramValues = new Memory<I64>( MAX_PARAMS )
+        self.queryCount = 0
+        self.queryKeys = new Memory<I64>( MAX_QUERY_PARAMS )
+        self.queryValues = new Memory<I64>( MAX_QUERY_PARAMS )
+        I64 qPos = indexOf( path, "?" )
+        if qPos >= 0:
+            self.path = substring( path, 0, qPos )
+        else:
+            self.path = path
+    
+    public function setParam( self, String key, String value ) -> Void:
+        
+        """
+        Store a path parameter extracted during route matching.
+        
+        If the maximum number of path parameters has been reached, the
+        parameter is silently dropped.
+        
+        Parameters:
+            key (String):
+                The parameter name (from the route pattern, without the leading colon).
+            value (String):
+                The parameter value extracted from the request path.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.paramCount < MAX_PARAMS:
+            I64 keyPtr = stringToPtr( key )
+            I64 valPtr = stringToPtr( value )
+            self.paramKeys.set( self.paramCount, keyPtr )
+            self.paramValues.set( self.paramCount, valPtr )
+            self.paramCount = self.paramCount + 1
+    
+    public function param( self, String name ) -> String:
+        
+        """
+        Retrieve a path parameter value by name.
+        
+        Performs a linear scan over stored path parameters for a
+        case-sensitive name match.
+        
+        Parameters:
+            name (String):
+                The parameter name to look up.
+        
+        Returns:
+            String:
+                The parameter value, or empty string if not found.
+        
+        Complexity:
+            Time: O(n) where n is the number of stored path parameters
+        """
+        
+        I64 namePtr = stringToPtr( name )
+        I64 paramIndex = 0
+        while paramIndex < self.paramCount:
+            I64 kPtr = self.paramKeys.get( paramIndex )
+            String paramKey = ptrToString( kPtr )
+            if equals( paramKey, name ):
+                I64 vPtr = self.paramValues.get( paramIndex )
+                return ptrToString( vPtr )
+            paramIndex = paramIndex + 1
+        return ""
+    
+    public function query( self, String name ) -> String:
+        
+        """
+        Retrieve a query parameter value by name.
+        
+        Performs a linear scan over stored query parameters for a
+        case-sensitive name match.
+        
+        Parameters:
+            name (String):
+                The query parameter name to look up.
+        
+        Returns:
+            String:
+                The query parameter value, or empty string if not found.
+        
+        Complexity:
+            Time: O(n) where n is the number of stored query parameters
+        """
+        
+        I64 queryIndex = 0
+        while queryIndex < self.queryCount:
+            I64 kPtr = self.queryKeys.get( queryIndex )
+            String paramKey = ptrToString( kPtr )
+            if equals( paramKey, name ):
+                I64 vPtr = self.queryValues.get( queryIndex )
+                return ptrToString( vPtr )
+            queryIndex = queryIndex + 1
+        return ""
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all heap-allocated parameter and query buffers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.paramKeys.free()
+        self.paramValues.free()
+        self.queryKeys.free()
+        self.queryValues.free()
+
+export {
+    HttpRequest,
+    MAX_PARAMS, MAX_HEADERS, MAX_QUERY_PARAMS
+}
