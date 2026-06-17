@@ -1,0 +1,525 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-29 14:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process-pool.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Process pool with typed parameter passing and return values.
+# ProcessPoolTask<R,A> wraps function pointer + arg buffer + result buffer.
+# ProcessPoolHandle<R> allows awaiting typed results.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.process-pool
+
+from uranite.memory.memory import Memory
+from uranite.os.ipc.signal import Event
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import BlockReason
+from uranite.threading.channel import ChannelInner
+from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.process.process import Process, ProcessRuntime
+from uranite.process.process-handle import ProcessHandle
+from uranite.process.errors import ProcessError, ProcessPoolError
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.time.clock import SystemClock
+
+const I64 POOL_PROC_PENDING = 0
+""" Pool task state: queued but not yet picked up by a worker. """
+const I64 POOL_PROC_RUNNING = 1
+""" Pool task state: currently being executed by a worker process. """
+const I64 POOL_PROC_COMPLETED = 2
+""" Pool task state: execution completed successfully. """
+const I64 POOL_PROC_FAILED = 3
+""" Pool task state: execution failed with an error. """
+
+public class ProcessPoolTask<R, A>:
+    
+    """
+    A typed task submitted to a process pool for execution.
+    
+    Wraps a function pointer together with a typed argument buffer and a
+    typed result buffer. Tracks execution state via an atomic state machine
+    and signals completion through an Event for cooperative blocking.
+    """
+    
+    protect I64 functionPtr
+    """ Raw address of the function to execute, cast to I64. """
+    protect Memory<A> argBuffer
+    """ Single-element buffer holding the typed argument value. """
+    protect Memory<R> resultBuffer
+    """ Single-element buffer holding the typed result value after completion. """
+    protect Event completionEvent
+    """ Event signaled when the task reaches a terminal state. """
+    protect AtomicI64 state
+    """ Atomic state tracking the task lifecycle (POOL_PROC_PENDING through POOL_PROC_FAILED). """
+    protect AtomicBoolean hasError
+    """ Flag indicating whether the task failed during execution. """
+    
+    public function ProcessPoolTask( self, I64 functionPtr, A argument ) -> Void:
+        
+        """
+        Construct a new pool task with the given function and argument.
+        
+        Parameters:
+            functionPtr (I64):
+                Raw address of the function to execute.
+            argument (A):
+                The typed argument to pass to the function.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.functionPtr = functionPtr
+        self.argBuffer = new Memory<A>( 1 )
+        self.argBuffer.set( 0, argument )
+        self.resultBuffer = new Memory<R>( 1 )
+        self.completionEvent = new Event()
+        self.state = new AtomicI64( POOL_PROC_PENDING )
+        self.hasError = new AtomicBoolean( False )
+    
+    public function getFunctionPtr( self ) -> I64:
+        
+        """
+        Return the raw function pointer address for this task.
+        
+        Returns:
+            I64:
+                The function address to execute.
+        """
+        
+        return self.functionPtr
+    
+    public function getArgument( self ) -> A:
+        
+        """
+        Return the typed argument stored in the argument buffer.
+        
+        Returns:
+            A:
+                The argument value to pass to the function.
+        """
+        
+        return self.argBuffer.get( 0 )
+    
+    public function setResult( self, R value ) -> Void:
+        
+        """
+        Store the typed result and transition to completed state.
+        
+        Writes the result value, sets the state to POOL_PROC_COMPLETED,
+        and signals the completion event to wake any waiting tasks.
+        
+        Parameters:
+            value (R):
+                The result value produced by the function.
+        """
+        
+        self.resultBuffer.set( 0, value )
+        self.state.store( POOL_PROC_COMPLETED )
+        self.completionEvent.signal( 1 )
+    
+    public function getResult( self ) -> R:
+        
+        """
+        Return the typed result value.
+        
+        Should only be called after the task has completed successfully.
+        
+        Returns:
+            R:
+                The result value stored by setResult.
+        """
+        
+        return self.resultBuffer.get( 0 )
+    
+    public function markRunning( self ) -> Void:
+        
+        """
+        Transition the task to the running state.
+        
+        Called by a worker process when it begins executing this task.
+        """
+        
+        self.state.store( POOL_PROC_RUNNING )
+    
+    public function markFailed( self ) -> Void:
+        
+        """
+        Mark the task as failed and signal waiters.
+        
+        Sets the error flag, transitions to POOL_PROC_FAILED state, and
+        signals the completion event.
+        """
+        
+        self.hasError.store( True )
+        self.state.store( POOL_PROC_FAILED )
+        self.completionEvent.signal( 1 )
+    
+    public function isCompleted( self ) -> Boolean:
+        
+        """
+        Check whether the task has reached a terminal state.
+        
+        Returns:
+            Boolean:
+                True if the task is completed or failed.
+        """
+        
+        return self.state.load() >= POOL_PROC_COMPLETED
+    
+    public function hasFailed( self ) -> Boolean:
+        
+        """
+        Check whether the task failed during execution.
+        
+        Returns:
+            Boolean:
+                True if the task execution encountered an error.
+        """
+        
+        return self.hasError.load()
+    
+    public function getCompletionEvent( self ) -> Event:
+        
+        """
+        Return the event used for completion signaling.
+        
+        Returns:
+            Event:
+                The event that is signaled when the task finishes or fails.
+        """
+        
+        return self.completionEvent
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by this task.
+        
+        Frees the argument buffer, result buffer, and destroys the atomic
+        state and error flag. Must be called after the result has been
+        retrieved or the task is no longer needed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.argBuffer.free()
+        self.resultBuffer.free()
+        self.state.destroy()
+        self.hasError.destroy()
+
+public class ProcessPoolHandle<R>:
+    
+    """
+    Handle for awaiting a typed result from a process pool task.
+    
+    Provides a one-shot await mechanism that blocks until the corresponding
+    pool task completes, then returns the typed result. The handle takes
+    ownership of the task's buffers and atomics, freeing them after the
+    result is retrieved or on failure.
+    """
+    
+    protect Memory<R> taskResultBuffer
+    """ Buffer holding the typed result from the pool task. """
+    protect Event taskCompletionEvent
+    """ Event used to block until the task completes. """
+    protect AtomicI64 taskState
+    """ Atomic state of the underlying pool task. """
+    protect AtomicBoolean taskHasError
+    """ Error flag of the underlying pool task. """
+    protect Memory<I64> taskArgBuffer
+    """ Argument buffer of the underlying pool task, freed on await. """
+    protect Boolean awaited
+    """ Flag tracking whether awaitResult has already been called. """
+    protect Scheduler scheduler
+    """ Scheduler used for cooperative blocking while waiting. """
+    
+    public function ProcessPoolHandle( self, Memory<R> resultBuffer, Event completionEvent, AtomicI64 state, AtomicBoolean hasError, Memory<I64> argBuffer, Scheduler scheduler ) -> Void:
+        
+        """
+        Construct a new pool handle from the task's internal components.
+        
+        Parameters:
+            resultBuffer (Memory<R>):
+                The task's result buffer.
+            completionEvent (Event):
+                The task's completion event for blocking.
+            state (AtomicI64):
+                The task's atomic state.
+            hasError (AtomicBoolean):
+                The task's error flag.
+            argBuffer (Memory<I64>):
+                The task's argument buffer to be freed on await.
+            scheduler (Scheduler):
+                The scheduler for cooperative blocking.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.taskResultBuffer = resultBuffer
+        self.taskCompletionEvent = completionEvent
+        self.taskState = state
+        self.taskHasError = hasError
+        self.taskArgBuffer = argBuffer
+        self.awaited = False
+        self.scheduler = scheduler
+    
+    public function awaitResult( self ) -> R:
+        
+        """
+        Block until the pool task completes and return the typed result.
+        
+        Can only be called once per handle. Blocks cooperatively via the
+        scheduler if running in a scheduled context, or spin-waits otherwise.
+        Frees the task's buffers and atomics before returning or raising.
+        
+        Returns:
+            R:
+                The typed result produced by the pool task.
+        
+        Raises:
+            ProcessError:
+                If the handle has already been awaited, or if the task failed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.awaited:
+            raise new ProcessError( "ProcessPoolHandle already awaited", 1, None )
+        self.awaited = True
+        
+        while self.taskState.load() < POOL_PROC_COMPLETED:
+            I64 taskId = 0
+            if self.scheduler.getCurrentTask() != None:
+                taskId = self.scheduler.getCurrentTask().id
+            if taskId > 0:
+                Boolean shouldBlock = self.taskCompletionEvent.registerWait( taskId, 1 )
+                if shouldBlock:
+                    self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+                    self.scheduler.blockCurrent()
+            else:
+                asm volatile "pause"
+        
+        if self.taskHasError.load():
+            self.taskArgBuffer.free()
+            self.taskResultBuffer.free()
+            self.taskState.destroy()
+            self.taskHasError.destroy()
+            raise new ProcessError( "Process pool task failed", 2, None )
+        
+        R result = self.taskResultBuffer.get( 0 )
+        self.taskArgBuffer.free()
+        self.taskResultBuffer.free()
+        self.taskState.destroy()
+        self.taskHasError.destroy()
+        return result
+    
+    public function isReady( self ) -> Boolean:
+        
+        """
+        Check whether the pool task has reached a terminal state without blocking.
+        
+        Returns:
+            Boolean:
+                True if the task is completed or failed, False if still running.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.taskState.load() >= POOL_PROC_COMPLETED
+
+public class ProcessPool:
+    
+    """
+    Pool of worker processes that execute tasks submitted via a shared channel.
+    
+    Manages a fixed number of worker processes backed by a ProcessRuntime.
+    Tasks are submitted as raw pointers through a bounded channel and
+    distributed to workers. Supports shutdown with optional drain and
+    tracks submission statistics.
+    """
+    
+    protect Memory<Process> workers
+    """ Array of worker process instances. """
+    protect Memory<ProcessHandle> handles
+    """ Array of handles for the worker processes. """
+    protect I64 workerCount
+    """ Number of worker processes in the pool. """
+    protect ChannelInner<I64> workChannel
+    """ Bounded channel for distributing task pointers to workers. """
+    protect ProcessRuntime runtime
+    """ The runtime providing kernel subsystem access. """
+    protect AtomicBoolean shutdown
+    """ Flag indicating whether the pool has been shut down. """
+    protect AtomicI64 activeWorkers
+    """ Counter tracking the number of workers currently executing tasks. """
+    protect AtomicI64 totalSubmitted
+    """ Counter tracking the total number of tasks submitted to the pool. """
+    
+    public function ProcessPool( self, I64 numWorkers, I64 queueCapacity, ?ProcessRuntime runtime=None ) -> Void:
+        
+        """
+        Construct a new process pool with the specified number of workers.
+        
+        If no runtime is provided, creates a default one with a new scheduler,
+        a 1 MiB physical memory manager, a 1000-tick system clock, and a
+        maximum of 256 processes.
+        
+        Parameters:
+            numWorkers (I64):
+                Number of worker processes to create. Must be at least 1.
+            queueCapacity (I64):
+                Maximum number of pending tasks the work channel can hold.
+            runtime (ProcessRuntime):
+                Optional pre-configured runtime, or None for a default one.
+        
+        Raises:
+            ProcessPoolError:
+                If numWorkers is less than or equal to 0.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if numWorkers <= 0:
+            raise new ProcessPoolError( "Workers must be greater than or equal 1 not 0", 1, None )
+        if runtime is None:
+            Scheduler sched = new Scheduler()
+            PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
+            SystemClock clock = new SystemClock( 1000 )
+            self.runtime = new ProcessRuntime( sched, pmm, clock, 256 )
+        else:
+            self.runtime = runtime
+        self.workerCount = numWorkers
+        self.workChannel = new ChannelInner<I64>( queueCapacity, self.runtime.getScheduler() )
+        self.shutdown = new AtomicBoolean( False )
+        self.activeWorkers = new AtomicI64( 0 )
+        self.totalSubmitted = new AtomicI64( 0 )
+        self.workers = new Memory<Process>( numWorkers )
+        self.handles = new Memory<ProcessHandle>( numWorkers )
+    
+    public function submitTaskPointer( self, I64 taskPointer ) -> Void:
+        
+        """
+        Submit a raw task pointer to the pool for execution by a worker.
+        
+        The task pointer is sent through the work channel and will be
+        picked up by the next available worker process.
+        
+        Parameters:
+            taskPointer (I64):
+                Raw pointer to the task descriptor, cast to I64.
+        
+        Raises:
+            ProcessError:
+                If the pool has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdown.load():
+            raise new ProcessError( "Pool is shut down", 3, None )
+        self.workChannel.send( taskPointer )
+        self.totalSubmitted.increment()
+    
+    public function shutdownAndWait( self ) -> Void:
+        
+        """
+        Shut down the pool and wait for all pending tasks to complete.
+        
+        Sets the shutdown flag to prevent new submissions and closes the
+        work channel's receive end to signal workers to exit.
+        """
+        
+        self.shutdown.store( True )
+        self.workChannel.closeReceive()
+    
+    public function getWorkerCount( self ) -> I64:
+        
+        """
+        Return the number of worker processes in the pool.
+        
+        Returns:
+            I64:
+                The fixed worker count configured at construction.
+        """
+        
+        return self.workerCount
+    
+    public function getTotalSubmitted( self ) -> I64:
+        
+        """
+        Return the total number of tasks submitted to the pool.
+        
+        Returns:
+            I64:
+                The cumulative count of all submitted tasks.
+        """
+        
+        return self.totalSubmitted.load()
+    
+    public function isShutdown( self ) -> Boolean:
+        
+        """
+        Check whether the pool has been shut down.
+        
+        Returns:
+            Boolean:
+                True if shutdown has been called, False otherwise.
+        """
+        
+        return self.shutdown.load()
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by the pool.
+        
+        Frees worker and handle arrays, destroys the work channel, and
+        tears down all atomic counters. Must be called after shutdown.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.workers.free()
+        self.handles.free()
+        self.workChannel.destroy()
+        self.shutdown.destroy()
+        self.activeWorkers.destroy()
+        self.totalSubmitted.destroy()
+
+export {
+    ProcessPoolTask,
+    ProcessPoolHandle,
+    ProcessPool,
+    POOL_PROC_PENDING,
+    POOL_PROC_RUNNING,
+    POOL_PROC_COMPLETED,
+    POOL_PROC_FAILED
+}
