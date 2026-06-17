@@ -1,0 +1,87 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/errors/exception.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Exception class, representing a recoverable error condition that applications may catch and handle.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.exception
+
+from uranite.errors.throwable import Throwable
+from uranite.errors.traceback import Traceback
+
+public Readonly class Exception implements Throwable:
+    
+    """
+    Recoverable error condition that applications may catch and handle.
+    
+    Exceptions represent problems that a well-written application should
+    anticipate and recover from, such as invalid input, file-not-found errors,
+    or network failures. They implement the Throwable interface for use with
+    the raise and catch mechanism.
+    """
+    
+    protect I64 code
+    protect String file
+    protect I64 line
+    protect String message
+    protect ?Throwable previous
+    protect ?Traceback traceback
+    
+    public function Exception( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Create a new exception with a message, error code, and optional chained cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the exception condition.
+            code (I64):
+                A numeric error code identifying the type of exception.
+            previous (?Throwable):
+                An optional previous throwable that caused this exception, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.code = code
+        self.file = ""
+        self.line = 0
+        self.message = message
+        self.previous = previous
+    
+    public function getCode( self ) -> I64:
+        return self.code
+    
+    public function getFile( self ) -> String:
+        return self.file
+    
+    public function getLine( self ) -> I64:
+        return self.line
+    
+    public function getMessage( self ) -> String:
+        return self.message
+    
+    public function getPrevious( self ) -> ?Throwable:
+        return self.previous
+    
+    public function getTraceback( self ) -> ?Traceback:
+        return self.traceback
+    
+    public function toString( self ) -> String:
+        return self.message
