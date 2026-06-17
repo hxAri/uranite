@@ -1,0 +1,32 @@
+package testing
+
+from uranite.os.syscall.number import SyscallNumber
+from uranite.os.syscall.result import SyscallResult
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Syscall Tests ===" )
+
+    assertEqualI64( 1, SyscallNumber.HandleDuplicate.value, "HandleDuplicate" )
+    assertEqualI64( 10, SyscallNumber.ObjectRead.value, "ObjectRead" )
+    assertEqualI64( 30, SyscallNumber.MemoryMap.value, "MemoryMap" )
+    assertEqualI64( 40, SyscallNumber.PortCreate.value, "PortCreate" )
+    assertEqualI64( 51, SyscallNumber.ClockGet.value, "ClockGet" )
+    putsln( "SyscallNumber OK" )
+
+    SyscallResult ok = new SyscallResult( 42 )
+    assertEqualI64( 42, ok.value(), "value 42" )
+    assertTrue( ok.isOk(), "isOk" )
+    assertFalse( ok.isError(), "not error" )
+
+    SyscallResult err = new SyscallResult( 0 - 3 )
+    assertTrue( err.isError(), "isError" )
+    assertFalse( err.isOk(), "not ok" )
+    assertEqualI64( 3, err.errorCode(), "errorCode 3" )
+    putsln( "SyscallResult OK" )
+
+    putsln( "=== All syscall tests passed ===" )
+    return 0
