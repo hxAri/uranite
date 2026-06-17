@@ -1,0 +1,151 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Demonstrates operator overloading in Aether classes.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+
+
+class Vector2:
+    
+    """ A 2D vector class with operator overloading """
+    
+    public F64 x
+    public F64 y
+
+    public function Vector2( self, F64 x, F64 y ):
+        
+        """
+        Initializes a new Vector2 instance.
+        
+        Parameters:
+            x: The x coordinate.
+            y: The y coordinate.
+        """
+        
+        self.x = x
+        self.y = y
+
+    public function add( self, Vector2 other ) -> Vector2:
+        
+        """
+        Overloads the '+' operator.
+        
+        Parameters:
+            other: The other Vector2 to add.
+        
+        Returns:
+            A new Vector2 representing the sum.
+        """
+        
+        return new Vector2( self.x + other.x, self.y + other.y )
+
+    public function subtract( self, Vector2 other ) -> Vector2:
+        
+        """
+        Overloads the '-' operator.
+        
+        Parameters:
+            other: The other Vector2 to subtract.
+        
+        Returns:
+            A new Vector2 representing the difference.
+        """
+        
+        return new Vector2( self.x - other.x, self.y - other.y )
+
+    public function multiply( self, Vector2 other ) -> Vector2:
+        
+        """
+        Overloads the '*' operator.
+        
+        Parameters:
+            other: The other Vector2 to multiply with.
+        
+        Returns:
+            A new Vector2 representing the product.
+        """
+        
+        return new Vector2( self.x * other.x, self.y * other.y )
+
+    public function equals( self, Vector2 other ) -> Boolean:
+        
+        """
+        Overloads the '==' operator.
+        
+        Parameters:
+            other: The other Vector2 to compare with.
+        
+        Returns:
+            True if components are equal, False otherwise.
+        """
+        
+        return self.x == other.x and self.y == other.y
+
+    public function negate( self ) -> Vector2:
+        
+        """
+        Overloads the unary '-' operator.
+        
+        Returns:
+            A new Vector2 representing the negation.
+        """
+        
+        return new Vector2( 0.0 - self.x, 0.0 - self.y )
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the operator overloading demonstration.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    Vector2 a = new Vector2( 1.0, 2.0 )
+    Vector2 b = new Vector2( 3.0, 4.0 )
+
+    puts( "=== Operator overloading ===" )
+
+    Vector2 sum = a + b
+    puts( "(1,2) + (3,4) = (", sum.x, ", ", sum.y, ")" )
+
+    Vector2 diff = a - b
+    puts( "(1,2) - (3,4) = (", diff.x, ", ", diff.y, ")" )
+
+    Vector2 prod = a * b
+    puts( "(1,2) * (3,4) = (", prod.x, ", ", prod.y, ")" )
+
+    Vector2 neg = -a
+    puts( "-(1,2) = (", neg.x, ", ", neg.y, ")" )
+
+    Boolean eq = a == b
+    if eq:
+        puts( "a == b: True" )
+    else:
+        puts( "a == b: False" )
+
+    Boolean eq2 = a == a
+    if eq2:
+        puts( "a == a: True" )
+    else:
+        puts( "a == a: False" )
+
+    return 0
