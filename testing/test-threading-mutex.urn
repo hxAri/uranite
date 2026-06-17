@@ -1,0 +1,34 @@
+package testing
+
+from uranite.functions.runtime import {
+    uraniteMutexCreate, uraniteMutexLock, uraniteMutexUnlock,
+    uraniteMutexTryLock, uraniteMutexDestroy
+}
+from uranite.testing.assertions import {
+    assertGreaterThan, assertEqualI64
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Threading Mutex Tests ===" )
+
+    I64 mtx = uraniteMutexCreate()
+    assertGreaterThan( mtx, 0, "mutex handle" )
+    putsln( "create OK" )
+
+    uraniteMutexLock( mtx )
+    putsln( "lock OK" )
+
+    uraniteMutexUnlock( mtx )
+    putsln( "unlock OK" )
+
+    I32 tryResult = uraniteMutexTryLock( mtx )
+    assertEqualI64( 1, tryResult as I64, "tryLock success" )
+    uraniteMutexUnlock( mtx )
+    putsln( "tryLock OK" )
+
+    uraniteMutexDestroy( mtx )
+    putsln( "destroy OK" )
+
+    putsln( "=== All mutex tests passed ===" )
+    return 0
