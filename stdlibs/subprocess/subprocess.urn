@@ -1,0 +1,450 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/subprocess/subprocess.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Subprocess management: fork + execve + wait with stdin/stdout/stderr
+# pipes for IPC. Zero C runtime dependency, all via raw syscalls.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.subprocess.subprocess
+
+from uranite.os.syscall.invoke import syscall0, syscall1, syscall2, syscall3, syscall4
+from uranite.os.syscall.result import SyscallResult
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    memoryToPtr,
+    readI32At,
+    writeI32At,
+    writeI64At,
+    sysRead,
+    sysWrite,
+    sysClose,
+    sysPipe2,
+    stringToPtr,
+    stringLen,
+    readByteAt,
+    writeByteAt
+}
+from uranite.memory.allocator import alloc, dealloc
+from uranite.functions.builtin import ptrToString
+from uranite.errors.error import Error
+
+const I64 SYS_FORK = 57
+""" Linux syscall number for fork. """
+
+const I64 SYS_EXECVE = 59
+""" Linux syscall number for execve. """
+
+const I64 SYS_WAIT4 = 61
+""" Linux syscall number for wait4. """
+
+const I64 SYS_EXIT_GROUP = 231
+""" Linux syscall number for exit_group. """
+
+const I64 SYS_DUP2 = 33
+""" Linux syscall number for dup2. """
+
+public class SubprocessError extends Error:
+
+    """
+    Raised when a subprocess operation fails.
+
+    Covers failures in fork, execve, wait, kill, and pipe I/O operations
+    related to subprocess management.
+    """
+
+    public function SubprocessError( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct a new SubprocessError.
+
+        Parameters:
+            message (String):
+                Human-readable description of the subprocess failure.
+            code (I64):
+                Numeric error code, typically the negated errno from the
+                failed syscall.
+            cause (Error):
+                Optional underlying error that caused this failure, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        parent( message, code, cause )
+
+public class SubprocessResult:
+
+    """
+    Immutable result of a completed subprocess execution.
+
+    Contains the exit code and captured standard output and standard error
+    streams from the subprocess.
+    """
+
+    public I64 exitCode
+    """ The exit code returned by the subprocess (0 typically indicates success). """
+    public String stdout
+    """ Captured standard output from the subprocess. """
+    public String stderr
+    """ Captured standard error from the subprocess. """
+
+    public function SubprocessResult( self, I64 exitCode, String stdout, String stderr ) -> Void:
+
+        """
+        Construct a new SubprocessResult with the given outputs.
+
+        Parameters:
+            exitCode (I64):
+                The exit code returned by the subprocess.
+            stdout (String):
+                The captured standard output.
+            stderr (String):
+                The captured standard error.
+        """
+
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+
+    public function isSuccess( self ) -> Boolean:
+
+        """
+        Check whether the subprocess exited successfully.
+
+        Returns:
+            Boolean:
+                True if the exit code is 0, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        return self.exitCode == 0
+
+public class Subprocess:
+
+    """
+    Handle for a running subprocess with stdin/stdout/stderr pipe access.
+
+    Wraps a child process created via fork+execve with connected pipes for
+    standard I/O. Provides methods to write to the child's stdin, read from
+    its stdout and stderr, wait for termination, communicate (close stdin
+    then read all output and wait), and forcefully kill the process. All
+    operations use raw Linux syscalls with zero C runtime dependency.
+    """
+
+    public I64 pid
+    """ The process ID of the child subprocess. """
+    public I64 stdinWriteFd
+    """ File descriptor for writing to the child's standard input. """
+    public I64 stdoutReadFd
+    """ File descriptor for reading the child's standard output. """
+    public I64 stderrReadFd
+    """ File descriptor for reading the child's standard error. """
+    public Boolean running
+    """ Flag indicating whether the subprocess is still running. """
+
+    public function Subprocess( self, I64 pid, I64 stdinWriteFd, I64 stdoutReadFd, I64 stderrReadFd ) -> Void:
+
+        """
+        Construct a new Subprocess handle for an already-forked child process.
+
+        Parameters:
+            pid (I64):
+                The process ID of the child.
+            stdinWriteFd (I64):
+                File descriptor for writing to the child's stdin.
+            stdoutReadFd (I64):
+                File descriptor for reading the child's stdout.
+            stderrReadFd (I64):
+                File descriptor for reading the child's stderr.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.pid = pid
+        self.stdinWriteFd = stdinWriteFd
+        self.stdoutReadFd = stdoutReadFd
+        self.stderrReadFd = stderrReadFd
+        self.running = True
+
+    public function writeStdin( self, String data ) -> Void:
+
+        """
+        Write data to the child process's standard input.
+
+        Parameters:
+            data (String):
+                The string data to send to the child's stdin.
+        """
+
+        I64 ptr = stringToPtr( data )
+        I64 len = stringLen( data )
+        sysWrite( self.stdinWriteFd, ptr, len )
+
+    public function closeStdin( self ) -> Void:
+
+        """
+        Close the write end of the stdin pipe.
+
+        Signals EOF to the child process's standard input. Must be called
+        before reading output if the child reads stdin to completion.
+        """
+
+        sysClose( self.stdinWriteFd )
+
+    public function readStdout( self, I64 maxLen ) -> String:
+
+        """
+        Read up to maxLen bytes from the child's standard output.
+
+        Blocks until data is available or the child closes its stdout.
+
+        Parameters:
+            maxLen (I64):
+                Maximum number of bytes to read.
+
+        Returns:
+            String:
+                The data read from stdout, or an empty string on EOF.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 readBuffer = alloc( maxLen + 1 )
+        I64 bytesRead = sysRead( self.stdoutReadFd, readBuffer, maxLen )
+        if bytesRead <= 0:
+            writeByteAt( readBuffer, 0, 0 )
+            return ptrToString( readBuffer )
+        writeByteAt( readBuffer, bytesRead, 0 )
+        return ptrToString( readBuffer )
+
+    public function readStderr( self, I64 maxLen ) -> String:
+
+        """
+        Read up to maxLen bytes from the child's standard error.
+
+        Blocks until data is available or the child closes its stderr.
+
+        Parameters:
+            maxLen (I64):
+                Maximum number of bytes to read.
+
+        Returns:
+            String:
+                The data read from stderr, or an empty string on EOF.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 readBuffer = alloc( maxLen + 1 )
+        I64 bytesRead = sysRead( self.stderrReadFd, readBuffer, maxLen )
+        if bytesRead <= 0:
+            writeByteAt( readBuffer, 0, 0 )
+            return ptrToString( readBuffer )
+        writeByteAt( readBuffer, bytesRead, 0 )
+        return ptrToString( readBuffer )
+
+    public function wait( self ) -> I64:
+
+        """
+        Block until the child process terminates and return its exit code.
+
+        Uses the wait4 syscall to wait for the specific child PID. Extracts
+        the exit code from the raw wait status using WEXITSTATUS semantics.
+
+        Returns:
+            I64:
+                The exit code of the child process.
+
+        Raises:
+            SubprocessError:
+                If the wait4 syscall fails.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        Memory<I64> statusMem = new Memory<I64>( 1 )
+        I64 statusPtr = memoryToPtr( statusMem )
+        writeI32At( statusPtr, 0, 0 )
+        SyscallResult syscallResult = syscall4( SYS_WAIT4, self.pid, statusPtr, 0, 0 )
+        if syscallResult.isError():
+            raise new SubprocessError( "wait4 failed", syscallResult.errorCode(), None )
+        self.running = False
+        I64 rawStatus = readI32At( statusPtr, 0 )
+        I64 exitCode = ( rawStatus / 256 ) % 256
+        return exitCode
+
+    public function communicate( self ) -> SubprocessResult:
+
+        """
+        Close stdin, read all output, wait for termination, and return results.
+
+        Convenience method that performs the standard communicate pattern:
+        closes the stdin pipe to signal EOF, reads up to 64 KiB from both
+        stdout and stderr, waits for the child to exit, closes the output
+        pipe file descriptors, and returns a SubprocessResult.
+
+        Returns:
+            SubprocessResult:
+                The exit code and captured stdout/stderr of the child process.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.closeStdin()
+        String out = self.readStdout( 65536 )
+        String err = self.readStderr( 65536 )
+        I64 code = self.wait()
+        sysClose( self.stdoutReadFd )
+        sysClose( self.stderrReadFd )
+        return new SubprocessResult( code, out, err )
+
+    public function kill( self ) -> Void:
+
+        """
+        Forcefully terminate the child process with SIGKILL (signal 9).
+
+        Raises:
+            SubprocessError:
+                If the kill syscall fails.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        SyscallResult syscallResult = syscall2( 62, self.pid, 9 )
+        if syscallResult.isError():
+            raise new SubprocessError( "kill failed", syscallResult.errorCode(), None )
+
+public function run( String command, String arguments ) -> SubprocessResult:
+
+    """
+    Execute a command with arguments, wait for completion, and return
+    the captured result. Forks a child process, sets up stdin/stdout/stderr
+    pipes, execves the command, captures all output, and waits for exit.
+
+    The arguments string is split by spaces into an argv array. The command
+    must be an absolute path to the executable.
+
+    Parameters:
+        command (String):
+            Absolute path to the executable (e.g., "/bin/ls").
+        arguments (String):
+            Space-separated argument string (may be empty).
+
+    Returns:
+        SubprocessResult:
+            Contains exitCode, stdout, and stderr.
+
+    Raises:
+        SubprocessError:
+            If fork, pipe setup, or execve fails.
+
+    Complexity:
+        Time: O(n) where n is output size
+        Space: O(n)
+    """
+
+    I64 stdinPipeRead = 0
+    I64 stdinPipeWrite = 0
+    I64 stdoutPipeRead = 0
+    I64 stdoutPipeWrite = 0
+    I64 stderrPipeRead = 0
+    I64 stderrPipeWrite = 0
+    Memory<I64> stdinPipe = sysPipe2( 0 )
+    stdinPipeRead = stdinPipe.get( 0 )
+    stdinPipeWrite = stdinPipe.get( 1 )
+    stdinPipe.free()
+    Memory<I64> stdoutPipe = sysPipe2( 0 )
+    stdoutPipeRead = stdoutPipe.get( 0 )
+    stdoutPipeWrite = stdoutPipe.get( 1 )
+    stdoutPipe.free()
+    Memory<I64> stderrPipe = sysPipe2( 0 )
+    stderrPipeRead = stderrPipe.get( 0 )
+    stderrPipeWrite = stderrPipe.get( 1 )
+    stderrPipe.free()
+    SyscallResult forkResult = syscall0( SYS_FORK )
+    if forkResult.isError():
+        raise new SubprocessError( "fork failed", forkResult.errorCode(), None )
+    I64 childPid = forkResult.value()
+    if childPid == 0:
+        sysClose( stdinPipeWrite )
+        sysClose( stdoutPipeRead )
+        sysClose( stderrPipeRead )
+        syscall2( 33, stdinPipeRead, 0 )
+        syscall2( 33, stdoutPipeWrite, 1 )
+        syscall2( 33, stderrPipeWrite, 2 )
+        sysClose( stdinPipeRead )
+        sysClose( stdoutPipeWrite )
+        sysClose( stderrPipeWrite )
+        I64 argCount = 1
+        I64 argLen = stringLen( arguments )
+        I64 argPtr = stringToPtr( arguments )
+        for Int scanOffset = 0; scanOffset < argLen; scanOffset++:
+            if readByteAt( argPtr, scanOffset ) == 32:
+                argCount = argCount + 1
+        I64 argvSize = ( argCount + 2 ) * 8
+        I64 argvBuf = alloc( argvSize )
+        writeI64At( argvBuf, 0, stringToPtr( command ) )
+        I64 argIndex = 1
+        I64 segStart = 0
+        for Int scanOffset = 0; scanOffset <= argLen; scanOffset++:
+            Boolean atEnd = scanOffset == argLen
+            Boolean atSpace = False
+            if not atEnd:
+                atSpace = readByteAt( argPtr, scanOffset ) == 32
+            if atEnd or atSpace:
+                if scanOffset > segStart:
+                    I64 segLen = scanOffset - segStart
+                    I64 segBuf = alloc( segLen + 1 )
+                    for Int byteIndex = 0; byteIndex < segLen; byteIndex++:
+                        writeByteAt( segBuf, byteIndex, readByteAt( argPtr, segStart + byteIndex ) )
+                    writeByteAt( segBuf, segLen, 0 )
+                    writeI64At( argvBuf, argIndex * 8, segBuf )
+                    argIndex = argIndex + 1
+                segStart = scanOffset + 1
+        writeI64At( argvBuf, argIndex * 8, 0 )
+        I64 envpBuf = alloc( 8 )
+        writeI64At( envpBuf, 0, 0 )
+        syscall3( SYS_EXECVE, stringToPtr( command ), argvBuf, envpBuf )
+        syscall1( 60, 127 )
+    sysClose( stdinPipeRead )
+    sysClose( stdoutPipeWrite )
+    sysClose( stderrPipeWrite )
+    Subprocess process = new Subprocess( childPid, stdinPipeWrite, stdoutPipeRead, stderrPipeRead )
+    return process.communicate()
+
+export {
+    SubprocessError,
+    SubprocessResult,
+    Subprocess,
+    run
+}
