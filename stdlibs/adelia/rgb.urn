@@ -1,0 +1,152 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/rgb.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the RGB struct representing a color in the Red-Green-Blue color space
+# with integer component values ranging from 0 to 255. Includes percentage-based
+# accessors for each channel and standard equality and string conversion methods.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.rgb
+
+from uranite.language.boolean import Boolean
+from uranite.language.string import String
+
+public struct RGB:
+    
+    """
+    Represents a color in the Red-Green-Blue color space where each channel
+    is stored as a 32-bit integer value in the range 0 to 255. RGB is the
+    most common color representation used by displays, image formats, and
+    graphics APIs. Red, green, and blue are the three additive primary colors
+    that combine at full intensity to produce white light.
+    """
+    
+    public I32 red
+    public I32 green
+    public I32 blue
+    
+    public function RGB( self, I32 red, I32 green, I32 blue ) -> Void:
+        
+        """
+        Construct a new RGB color from individual red, green, and blue channel
+        values. Each component should be in the range 0 to 255, where 0 represents
+        no intensity and 255 represents full intensity for that channel.
+        
+        Parameters:
+            red (I32):
+                The red channel intensity, from 0 (no red) to 255 (full red).
+            green (I32):
+                The green channel intensity, from 0 (no green) to 255 (full green).
+            blue (I32):
+                The blue channel intensity, from 0 (no blue) to 255 (full blue).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.red = red
+        self.green = green
+        self.blue = blue
+    
+    public property redPercent( self ) -> F64:
+        
+        """
+        Return the red channel value as a percentage of the maximum intensity,
+        computed as red divided by 255.0 multiplied by 100.0.
+        
+        Returns:
+            F64:
+                The red channel as a percentage from 0.0 to 100.0.
+        """
+        
+        return self.red / 255.0 * 100.0
+    
+    public property greenPercent( self ) -> F64:
+        
+        """
+        Return the green channel value as a percentage of the maximum intensity,
+        computed as green divided by 255.0 multiplied by 100.0.
+        
+        Returns:
+            F64:
+                The green channel as a percentage from 0.0 to 100.0.
+        """
+        
+        F64 g = self.green
+        return g / 255.0 * 100.0
+    
+    public property bluePercent( self ) -> F64:
+        
+        """
+        Return the blue channel value as a percentage of the maximum intensity,
+        computed as blue divided by 255.0 multiplied by 100.0.
+        
+        Returns:
+            F64:
+                The blue channel as a percentage from 0.0 to 100.0.
+        """
+        
+        F64 b = self.blue
+        return b / 255.0 * 100.0
+    
+    public function equals( self, Object other ) -> Boolean:
+        
+        """
+        Compare this RGB color with another object for component-wise equality.
+        Two RGB colors are considered equal if their red, green, and blue channel
+        values are all identical. Returns false if the other object is not an RGB.
+        
+        Parameters:
+            other (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is an RGB with identical channel values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if other instanceof RGB:
+            RGB otherRgb = other
+            return self.red == otherRgb.red and self.green == otherRgb.green and self.blue == otherRgb.blue
+        return False
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a human-readable string representation of this RGB color in
+        the format "RGB(red, green, blue)" showing the integer values of
+        each channel.
+        
+        Returns:
+            String:
+                A string representation such as "RGB(0, 75, 73)".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return "RGB(" + self.red + ", " + self.green + ", " + self.blue + ")"
+
+export {
+    RGB
+}
