@@ -1,0 +1,160 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/scope.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Structured concurrency scope. ScopedThread collects spawned threads
+# and joins all on scope exit, ensuring no thread outlives its scope.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.scope
+
+from uranite.memory.memory import Memory
+from uranite.threading.thread import Thread, ThreadRuntime, DEFAULT_STACK_PAGES, DEFAULT_PRIORITY
+from uranite.threading.join-handle import JoinHandle
+from uranite.threading.errors import ThreadError, PoisonError
+
+const I64 MAX_SCOPED_THREADS = 256
+"""Maximum number of threads that can be spawned within a single scope."""
+
+public class ScopedThread:
+    
+    """
+    Structured concurrency scope that collects spawned threads and joins
+    all of them when the scope exits. Guarantees that no thread outlives
+    the scope -- joinAll must be called to clean up all spawned threads.
+    
+    Threads are spawned with default stack size and priority. Each spawned
+    thread is assigned a JoinHandle that is stored internally and joined
+    during joinAll. If any thread panics, joinAll still joins all remaining
+    threads before raising a ThreadError.
+    """
+    
+    protect Memory<JoinHandle> handles
+    """Storage for join handles of all spawned threads."""
+    
+    protect I64 count
+    """Number of threads currently spawned in this scope."""
+    
+    protect I64 capacity
+    """Maximum number of threads this scope can hold."""
+    
+    protect ThreadRuntime runtime
+    """Thread runtime providing thread allocation and scheduling."""
+    
+    public function ScopedThread( self, ThreadRuntime runtime ) -> Void:
+        
+        """
+        Create a new scoped thread container with capacity for up to
+        MAX_SCOPED_THREADS threads.
+        
+        Parameters:
+            runtime (ThreadRuntime):
+                The thread runtime used to allocate and schedule threads.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.handles = new Memory<JoinHandle>( MAX_SCOPED_THREADS )
+        self.count = 0
+        self.capacity = MAX_SCOPED_THREADS
+        self.runtime = runtime
+    
+    public function spawn( self, I64 entryAddr ) -> I64:
+        
+        """
+        Spawn a new thread within this scope. The thread begins execution
+        at the given function address with the thread ID passed in rdi.
+        
+        Parameters:
+            entryAddr (I64):
+                Raw address of the entry point function. The function
+                receives the thread ID as its first argument.
+        
+        Returns:
+            I64:
+                The unique identifier assigned to the spawned thread.
+        
+        Raises:
+            ThreadError:
+                If the scope has reached its maximum thread capacity.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.count >= self.capacity:
+            raise new ThreadError( "Scope thread limit reached", 4, None )
+        
+        I64 threadId = self.runtime.allocateThreadId()
+        Thread thread = new Thread( self.runtime, threadId, DEFAULT_STACK_PAGES, DEFAULT_PRIORITY )
+        thread.start( entryAddr )
+        
+        JoinHandle handle = new JoinHandle( thread, self.runtime )
+        self.handles.set( self.count, handle )
+        self.count = self.count + 1
+        
+        return threadId
+    
+    public function joinAll( self ) -> Void:
+        
+        """
+        Join all spawned threads, blocking until every thread has finished.
+        Frees the internal handle storage after all threads are joined.
+        If one or more threads panicked, a ThreadError is raised after all
+        threads have been joined and cleaned up.
+        
+        Raises:
+            ThreadError:
+                If any spawned thread terminated due to a panic.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Boolean anyPanicked = False
+        I64 threadIndex = 0
+        while threadIndex < self.count:
+            JoinHandle handle = self.handles.get( threadIndex )
+            try:
+                handle.join()
+            except as e:
+                anyPanicked = True
+            threadIndex = threadIndex + 1
+        
+        self.handles.free()
+        
+        if anyPanicked:
+            raise new ThreadError( "One or more scoped threads panicked", 5, None )
+    
+    public function getThreadCount( self ) -> I64:
+        
+        """
+        Return the number of threads currently spawned in this scope.
+        
+        Returns:
+            I64:
+                The count of spawned threads.
+        """
+        
+        return self.count
+
+export {
+    ScopedThread
+}
