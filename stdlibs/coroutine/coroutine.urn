@@ -1,0 +1,121 @@
+package uranite.coroutine.coroutine
+
+from uranite.errors.error import Error
+from uranite.fiber.fiber import {
+    Fiber,
+    fiberSuspend,
+    fiberTrampoline,
+    FIBER_SUSPENDED,
+    FIBER_TERMINATED,
+    F_STATE
+}
+
+public class CoroutineError extends Error:
+    
+    public function CoroutineError( self, String message ) -> Void:
+        parent( message, 0, None )
+
+const I64 COROUTINE_CREATED = 0
+const I64 COROUTINE_RUNNING = 1
+const I64 COROUTINE_SUSPENDED = 2
+const I64 COROUTINE_COMPLETED = 3
+
+const I64 RESULT_YIELD = 1
+const I64 RESULT_COMPLETED = 2
+
+public interface Coroutine<In,Out>:
+    
+    public function resume( self, In value ) -> I64:
+        
+        """ Resume coroutine with value. Returns RESULT_YIELD or RESULT_COMPLETED. """
+    
+    public function value( self ) -> Out raises CoroutineError:
+        
+        """
+        Get last yielded value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+public class SimpleCoroutine implements Coroutine<I64, I64>:
+    public Fiber fiber
+    public I64 state
+    public I64 yieldedValue
+    public I64 returnValue
+    public Boolean hasYield
+    public Boolean hasReturn
+    
+    public function SimpleCoroutine( self, I64 entryFn ) -> Void:
+        self.fiber = new Fiber( entryFn )
+        self.state = COROUTINE_CREATED
+        self.yieldedValue = 0
+        self.returnValue = 0
+        self.hasYield = False
+        self.hasReturn = False
+    
+    public function resume( self, I64 value ) -> I64:
+        if self.state == COROUTINE_COMPLETED:
+            raise new CoroutineError( "cannot resume completed coroutine" )
+        if self.state == COROUTINE_CREATED:
+            self.state = COROUTINE_RUNNING
+            I64 suspended = self.fiber.start()
+            I64 fiberState = self.fiber.data.get( F_STATE )
+            if fiberState == FIBER_TERMINATED:
+                self.state = COROUTINE_COMPLETED
+                self.returnValue = self.fiber.getReturn()
+                self.hasReturn = True
+                return RESULT_COMPLETED
+            self.state = COROUTINE_SUSPENDED
+            self.yieldedValue = suspended
+            self.hasYield = True
+            return RESULT_YIELD
+        if self.state == COROUTINE_SUSPENDED:
+            self.state = COROUTINE_RUNNING
+            I64 suspended = self.fiber.resume( value )
+            I64 fiberState = self.fiber.data.get( F_STATE )
+            if fiberState == FIBER_TERMINATED:
+                self.state = COROUTINE_COMPLETED
+                self.returnValue = self.fiber.getReturn()
+                self.hasReturn = True
+                return RESULT_COMPLETED
+            self.state = COROUTINE_SUSPENDED
+            self.yieldedValue = suspended
+            self.hasYield = True
+            return RESULT_YIELD
+        raise new CoroutineError( "coroutine in invalid state" )
+    
+    public function value( self ) -> I64:
+        if self.hasYield == False:
+            raise new CoroutineError( "no yielded value available" )
+        return self.yieldedValue
+    
+    public function result( self ) -> I64:
+        if self.hasReturn == False:
+            raise new CoroutineError( "coroutine not completed" )
+        return self.returnValue
+    
+    public function isCompleted( self ) -> Boolean:
+        return self.state == COROUTINE_COMPLETED
+    
+    public function isSuspended( self ) -> Boolean:
+        return self.state == COROUTINE_SUSPENDED
+    
+    public function isCreated( self ) -> Boolean:
+        return self.state == COROUTINE_CREATED
+    
+    public function destroy( self ) -> Void:
+        self.fiber.destroy()
+
+export {
+    Coroutine,
+    CoroutineError,
+    SimpleCoroutine,
+    COROUTINE_CREATED,
+    COROUTINE_RUNNING,
+    COROUTINE_SUSPENDED,
+    COROUTINE_COMPLETED,
+    RESULT_YIELD,
+    RESULT_COMPLETED
+}
