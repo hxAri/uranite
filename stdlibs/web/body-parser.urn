@@ -1,0 +1,92 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/body-parser.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.body-parser
+
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+from uranite.web.middleware import Middleware
+from uranite.io.syscall import stringLen
+
+public class BodyParserMiddleware implements Middleware:
+    
+    """
+    Middleware that enforces a maximum request body size. If the body
+    exceeds the configured limit, the request is rejected with a 413
+    (Payload Too Large) response. The default limit is 10 MB.
+    """
+    
+    public I64 maxBodySize
+    """The maximum allowed request body size in bytes. Defaults to 10485760 (10 MB)."""
+    
+    public function BodyParserMiddleware( self ) -> Void:
+        
+        """
+        Create a new BodyParserMiddleware with the default maximum body
+        size of 10 MB (10485760 bytes).
+        """
+        
+        self.maxBodySize = 10485760
+    
+    public function setMaxBodySize( self, I64 size ) -> BodyParserMiddleware:
+        
+        """
+        Set the maximum allowed request body size.
+        
+        Parameters:
+            size (I64):
+                The maximum body size in bytes.
+        
+        Returns:
+            This BodyParserMiddleware instance for method chaining.
+        """
+        
+        self.maxBodySize = size
+        return self
+    
+    public function process( self, HttpRequest req, HttpResponse res ) -> Boolean:
+        
+        """
+        Check the request body size against the configured limit. If the body
+        exceeds the limit, a 413 JSON error response is sent and processing
+        is halted.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request to validate.
+            res (HttpResponse):
+                The HTTP response to populate if the body is too large.
+        
+        Returns:
+            True if the body size is within the limit and processing should
+            continue, False if the request was rejected.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 bodyLen = stringLen( req.body )
+        if bodyLen > self.maxBodySize:
+            res.status( 413 ).json( "{\"error\":\"request body too large\"}" )
+            return False
+        return True
+
+export {
+    BodyParserMiddleware
+}
