@@ -1,0 +1,48 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/double.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Double class, a 64-bit double-precision floating-point type extending Float.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.double
+
+from uranite.language.float import Float
+
+final class Double extends Float:
+    
+    """
+    64-bit double-precision floating-point type.
+    Extends Float and serves as an alias for F64, providing double-precision arithmetic.
+    """
+    
+    public function Double( self, F64 value ) -> Void:
+        
+        """ Construct a new Double from the given F64 value. """
+        
+        self.value = value
+    
+    public function toDouble( self ) -> F64:
+        
+        """ Return the underlying F64 value of this Double. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this Double's numeric value. """
+        
+        return self.value as String
