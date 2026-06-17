@@ -1,0 +1,94 @@
+package uranite.async.timer
+
+from uranite.async.errors import AsyncRuntimeError
+from uranite.io.syscall import memoryToPtr, sysClose, sysRead, writeI64At
+from uranite.memory.memory import Memory
+from uranite.os.syscall.invoke import syscall2, syscall4
+from uranite.os.syscall.result import SyscallResult
+
+const I64 SYS_TIMERFD_CREATE = 283
+""" Syscall number for timerfd_create on x86-64 Linux. """
+
+const I64 SYS_TIMERFD_SETTIME = 286
+""" Syscall number for timerfd_settime on x86-64 Linux. """
+
+const I64 CLOCK_MONOTONIC = 1
+""" Clock source for monotonic time, unaffected by system clock adjustments. """
+
+const I64 TFD_CLOEXEC = 524288
+""" Flag to automatically close the timerfd on exec. """
+
+public function timerfdCreate() -> I64:
+    
+    """
+    Create a new timer file descriptor using the monotonic clock.
+    The returned fd fires readable events when the timer expires.
+    
+    Returns:
+        I64:
+            The file descriptor for the new timer.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the timerfd_create syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall2( SYS_TIMERFD_CREATE, CLOCK_MONOTONIC, TFD_CLOEXEC )
+    if syscallResult.isError():
+        raise new AsyncRuntimeError( "timerfd_create failed", 0, None )
+    return syscallResult.value()
+
+public function timerfdSettime( I64 fd, I64 milliseconds ) -> Void:
+    
+    """
+    Arm a timer file descriptor to fire once after the specified delay.
+    Converts milliseconds to the itimerspec format (seconds + nanoseconds)
+    and writes it via the timerfd_settime syscall.
+    
+    Parameters:
+        fd (I64):
+            The timer file descriptor to arm.
+        milliseconds (I64):
+            Delay in milliseconds before the timer fires.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the timerfd_settime syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> spec = new Memory<I64>( 4 )
+    I64 specPtr = memoryToPtr( spec )
+    I64 seconds = milliseconds / 1000
+    I64 nanoseconds = ( milliseconds - seconds * 1000 ) * 1000000
+    writeI64At( specPtr, 0, 0 )
+    writeI64At( specPtr, 8, 0 )
+    writeI64At( specPtr, 16, seconds )
+    writeI64At( specPtr, 24, nanoseconds )
+    SyscallResult syscallResult = syscall4( SYS_TIMERFD_SETTIME, fd, 0, specPtr, 0 )
+    spec.free()
+    if syscallResult.isError():
+        raise new AsyncRuntimeError( "timerfd_settime failed", 0, None )
+
+public function timerfdClose( I64 fd ) -> Void:
+    
+    """
+    Close a timer file descriptor, releasing its kernel resources.
+    
+    Parameters:
+        fd (I64):
+            The timer file descriptor to close.
+    """
+    
+    sysClose( fd )
+
+export {
+    timerfdCreate, timerfdSettime, timerfdClose
+}
