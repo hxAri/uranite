@@ -1,0 +1,186 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-15 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/requests/headers.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Case-insensitive HTTP headers container for the requests library.
+# Keys are stored and matched in lowercase. Built on HashMap.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.requests.headers
+
+from uranite.collection.hash-map import HashMap
+from uranite.collection.array-list import ArrayList
+from uranite.functions.builtin import {
+    toLower, indexOf, substring, length, trim
+}
+from uranite.functions.strings import split
+
+public class Headers:
+
+    """
+    Case-insensitive HTTP header collection. All header names are stored
+    and looked up in lowercase to conform to HTTP/1.1 semantics where
+    header field names are case-insensitive (RFC 7230 Section 3.2).
+    """
+
+    private HashMap<String, String> entries
+    """Internal map storing lowercase header names to their values."""
+
+    public function Headers( self ) -> Void:
+
+        """
+        Create an empty Headers collection.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.entries = new HashMap<String, String>()
+
+    public function set( self, String name, String value ) -> Headers:
+
+        """
+        Set a header value, replacing any existing value for the same name.
+
+        Parameters:
+            name (String):
+                The header name (case-insensitive).
+            value (String):
+                The header value.
+
+        Returns:
+            Headers:
+                This instance for method chaining.
+        """
+
+        self.entries.put( toLower( name ), value )
+        return self
+
+    public function get( self, String name ) -> String:
+
+        """
+        Retrieve the value of a header by name.
+
+        Parameters:
+            name (String):
+                The header name (case-insensitive).
+
+        Returns:
+            String:
+                The header value, or empty string if not present.
+        """
+
+        String lowerName = toLower( name )
+        if self.entries.containsKey( lowerName ):
+            return self.entries.get( lowerName )
+        return ""
+
+    public function has( self, String name ) -> Boolean:
+
+        """
+        Check whether a header exists by name.
+
+        Parameters:
+            name (String):
+                The header name (case-insensitive).
+
+        Returns:
+            Boolean:
+                True if the header is present.
+        """
+
+        return self.entries.containsKey( toLower( name ) )
+
+    public function remove( self, String name ) -> Void:
+
+        """
+        Remove a header by name.
+
+        Parameters:
+            name (String):
+                The header name (case-insensitive).
+        """
+
+        self.entries.remove( toLower( name ) )
+
+    public function toString( self ) -> String:
+
+        """
+        Serialize all headers into HTTP wire format (Name: Value\\r\\n pairs).
+
+        Returns:
+            String:
+                The serialized headers.
+
+        Complexity:
+            Time: O(n) where n is number of headers
+            Space: O(n)
+        """
+
+        String result = ""
+        ArrayList<String> headerKeys = self.entries.keys()
+        I64 keyIndex = 0
+        while keyIndex < headerKeys.length:
+            String headerName = headerKeys.get( keyIndex )
+            result = result + headerName + ": " + self.entries.get( headerName ) + "\r\n"
+            keyIndex = keyIndex + 1
+        return result
+
+    public function destroy( self ) -> Void:
+
+        """Release resources held by the internal map."""
+
+        self.entries.destroy()
+
+public function parseHeaders( String rawHeaders ) -> Headers:
+
+    """
+    Parse a raw HTTP header block into a Headers object.
+
+    Splits the raw string on CRLF boundaries and extracts name-value
+    pairs separated by the first colon in each line.
+
+    Parameters:
+        rawHeaders (String):
+            The raw headers string from an HTTP response.
+
+    Returns:
+        Headers:
+            A populated Headers collection.
+
+    Complexity:
+        Time: O(n) where n is raw header string length
+        Space: O(h) where h is number of distinct headers
+    """
+
+    Headers headers = new Headers()
+    ArrayList<String> lines = split( rawHeaders, "\r\n" )
+    I64 lineIndex = 0
+    while lineIndex < lines.length:
+        String line = lines.get( lineIndex )
+        I64 colonPosition = indexOf( line, ":" )
+        if colonPosition > 0:
+            String headerName = trim( substring( line, 0, colonPosition ) )
+            String headerValue = trim( substring( line, colonPosition + 1, length( line ) ) )
+            headers.set( headerName, headerValue )
+        lineIndex = lineIndex + 1
+    return headers
+
+export {
+    Headers,
+    parseHeaders
+}
