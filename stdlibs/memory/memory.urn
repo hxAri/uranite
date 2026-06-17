@@ -1,0 +1,104 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/memory/memory.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Memory generic class, a raw typed pointer abstraction that maps
+# directly to LLVM memory operations for allocation, deallocation, and element access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.memory.memory
+
+from uranite.language.void import Void
+from uranite.language.int import Int
+
+public final native class Memory<T>:
+    
+    """
+    Raw typed pointer abstraction that serves as a compiler intrinsic for
+    direct memory management. Each method translates directly to LLVM
+    instructions without any runtime overhead.
+    """
+    
+    public native function Memory( self, Int capacity ) -> Void:
+        
+        """
+        Allocate a contiguous memory block for the given number of elements.
+        
+        Translates to a call to malloc(capacity * sizeof(T)) at the LLVM level.
+        
+        Parameters:
+            capacity (Int):
+                The number of elements of type T to allocate space for.
+        """
+    
+    public native function free( self ) -> Void:
+        
+        """
+        Release the memory block back to the allocator.
+        
+        Translates to a call to free(pointer) at the LLVM level. After calling
+        free, the Memory instance must not be used again.
+        """
+    
+    public native function get( self, Int index ) -> T:
+        
+        """
+        Read a value at the given element offset.
+        
+        Translates to a getelementptr followed by a load instruction at the
+        LLVM level.
+        
+        Parameters:
+            index (Int):
+                The zero-based element offset to read from.
+        
+        Returns:
+            T:
+                The value stored at the given index.
+        """
+    
+    public native function set( self, Int index, T value ) -> Void:
+        
+        """
+        Write a value at the given element offset.
+        
+        Translates to a getelementptr followed by a store instruction at the
+        LLVM level.
+        
+        Parameters:
+            index (Int):
+                The zero-based element offset to write to.
+            value (T):
+                The value to store at the given index.
+        """
+    
+    public native function copyTo( self, Memory<T> destination, Int length ) -> Void:
+        
+        """
+        Copy elements from this memory block to a destination memory block.
+        
+        Translates to an llvm.memcpy intrinsic call for bulk copy optimization.
+        
+        Parameters:
+            destination (Memory<T>):
+                The target memory block to copy elements into.
+            length (Int):
+                The number of elements to copy.
+        """
+
+export {
+    Memory
+}
