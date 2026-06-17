@@ -1,0 +1,35 @@
+package testing
+
+from uranite.security.capability import CapabilitySet, Capability
+from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Security Capability Tests ===" )
+
+    CapabilitySet caps = new CapabilitySet()
+    assertTrue( caps.isEmpty(), "empty initially" )
+    assertEqualI64( 0, caps.getMask(), "mask 0" )
+    putsln( "CapabilitySet constructed OK" )
+
+    caps.grant( 1 )
+    assertTrue( caps.check( 1 ), "has read after grant" )
+    assertFalse( caps.check( 2 ), "no write" )
+    assertFalse( caps.isEmpty(), "not empty after grant" )
+    putsln( "grant OK" )
+
+    caps.grant( 2 )
+    assertTrue( caps.check( 2 ), "has write after grant" )
+    putsln( "second grant OK" )
+
+    caps.revoke( 1 )
+    assertFalse( caps.check( 1 ), "read revoked" )
+    assertTrue( caps.check( 2 ), "write still present" )
+    putsln( "revoke OK" )
+
+    Capability snapshot = caps.getCapability()
+    assertTrue( caps.containsAll( snapshot ), "contains own snapshot" )
+    putsln( "containsAll OK" )
+
+    putsln( "=== All Security Capability Tests Passed ===" )
+    return 0
