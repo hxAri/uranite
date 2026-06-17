@@ -1,0 +1,32 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/security/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all public symbols from the security submodules including capability
+# tokens, capability flags, handle entries, and per-process handle tables.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.security
+
+from uranite.os.security.capability import CapabilityFlag, Capability
+from uranite.os.security.handle import HandleEntry, HandleTable
+
+export {
+    CapabilityFlag,
+    Capability,
+    HandleEntry,
+    HandleTable
+}
