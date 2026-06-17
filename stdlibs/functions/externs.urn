@@ -1,0 +1,81 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/functions/externs.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Declares extern bindings to standard C library (libc) functions for I/O,
+# memory management, string operations, and process control.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.functions.externs
+
+extern function calloc( I64 count, I64 size ) -> *Void;
+""" Allocate memory for an array of count elements each of the given size, initializing all bytes to zero. """
+
+extern function clock() -> I64;
+""" Return the processor time consumed by the program as a clock tick count. """
+
+extern function exit( I32 status ) -> Void;
+""" Terminate the calling process with the given exit status code. """
+
+extern function free( *Void ptr ) -> Void;
+""" Release a previously allocated memory block back to the system. """
+
+extern function malloc( I64 size ) -> *Void;
+""" Allocate a contiguous block of memory of the given size in bytes, returning a pointer to the allocated block. """
+
+extern function memcpy( *Void dest, *Void src, I64 size ) -> *Void;
+""" Copy a block of memory from source to destination, returning a pointer to the destination. """
+
+extern function memset( *Void ptr, I32 value, I64 size ) -> *Void;
+""" Fill a block of memory with the given byte value, returning a pointer to the memory block. """
+
+extern function printf( String format, ... ) -> I32;
+""" Print a formatted string to standard output, returning the number of characters written. """
+
+extern function puts( String string ) -> I32;
+""" Write a string followed by a newline to standard output, returning a non-negative value on success. """
+
+extern function realloc( *Void ptr, I64 size ) -> *Void;
+""" Resize a previously allocated memory block to a new size, returning a pointer to the reallocated block. """
+
+extern function snprintf( String buffer, I64 size, String format, ... ) -> I32;
+""" Write a formatted string into a buffer with a maximum size limit, returning the number of characters that would have been written. """
+
+extern function strcat( String dest, String src ) -> String;
+""" Append the source string to the end of the destination string, returning a pointer to the destination. """
+
+extern function strcmp( String a, String b ) -> I32;
+""" Compare two null-terminated strings lexicographically, returning zero if equal, a negative value if the first is less, or a positive value if the first is greater. """
+
+extern function strlen( String str ) -> I64;
+""" Compute the length of a null-terminated string, not including the terminating null character. """
+
+export {
+    calloc,
+    clock,
+    exit,
+    free,
+    malloc,
+    memcpy,
+    memset,
+    printf,
+    puts,
+    realloc,
+    snprintf,
+    strcat,
+    strcmp,
+    strlen
+}
