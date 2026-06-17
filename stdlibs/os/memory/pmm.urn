@@ -1,0 +1,234 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/memory/pmm.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Bitmap-based physical frame allocator for managing 4KB physical memory pages. Tracks frame usage with a compact bitmap where each bit represents one frame, supporting single-frame and contiguous multi-frame allocation, region reservation, and region freeing.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.memory.pmm
+
+from uranite.memory.memory import Memory
+
+public class PhysicalMemoryManager:
+    
+    """
+    Bitmap-based physical frame allocator for managing 4KB physical memory pages.
+    Each bit in the bitmap represents one 4KB frame: a set bit means the frame
+    is in use, and a clear bit means it is free. The allocator is bootstrap-safe,
+    meaning the bitmap region itself must be pre-allocated before initialization.
+    All frames start as used, and the bootloader's memory map should call
+    freeRegion() to mark usable physical ranges as available.
+    """
+    
+    protect Memory<I64> bitmap
+    protect Memory<I64> pool
+    protect I64 poolBase
+    protect I64 totalFrames
+    protect I64 usedFrames
+    protect I64 bitmapSize
+    
+    public function PhysicalMemoryManager( self, I64 memorySize ) -> Void:
+        
+        """
+        Initialize the physical memory manager with the total amount of
+        physical memory in bytes. Computes the number of 4KB frames and
+        allocates a bitmap to track their usage. A real heap-backed memory
+        pool is allocated so that returned frame addresses are valid
+        dereferenceable pointers. All frames start as free and available.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.totalFrames = memorySize / 4096
+        self.bitmapSize = ( self.totalFrames + 63 ) / 64
+        self.bitmap = new Memory<I64>( self.bitmapSize )
+        I64 wordIndex = 0
+        while wordIndex < self.bitmapSize:
+            self.bitmap.set( wordIndex, 0 )
+            wordIndex = wordIndex + 1
+        self.usedFrames = 0
+        self.pool = new Memory<I64>( memorySize / 8 )
+        self.poolBase = 0
+        asm volatile "movq $1, $0" : output( "=r" self.poolBase ) : input( "r" self.pool ) : clobber()
+    
+    public function allocFrame( self ) -> I64:
+        
+        """
+        Allocate a single 4KB physical frame by scanning the bitmap for
+        the first clear bit. Returns the physical address of the allocated
+        frame, or 0 if no free frames are available.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 wordIndex = 0
+        while wordIndex < self.bitmapSize:
+            I64 word = self.bitmap.get( wordIndex )
+            if word != -1:
+                I64 bitIndex = 0
+                while bitIndex < 64:
+                    I64 mask = 1 << bitIndex
+                    if ( word & mask ) == 0:
+                        self.bitmap.set( wordIndex, word | mask )
+                        self.usedFrames = self.usedFrames + 1
+                        I64 frameIndex = wordIndex * 64 + bitIndex
+                        return self.poolBase + frameIndex * 4096
+                    bitIndex = bitIndex + 1
+            wordIndex = wordIndex + 1
+        return 0
+    
+    public function freeFrame( self, I64 physAddr ) -> Void:
+        
+        """
+        Free a single 4KB physical frame by clearing its corresponding
+        bit in the bitmap. The physical address is converted to a frame
+        index and the appropriate bit is cleared if it was set.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 frameIndex = ( physAddr - self.poolBase ) / 4096
+        I64 wordIndex = frameIndex / 64
+        I64 bitIndex = frameIndex - ( wordIndex * 64 )
+        I64 mask = 1 << bitIndex
+        I64 word = self.bitmap.get( wordIndex )
+        if ( word & mask ) != 0:
+            self.bitmap.set( wordIndex, word & ( ~mask ) )
+            self.usedFrames = self.usedFrames - 1
+    
+    public function reserveRegion( self, I64 physAddr, I64 frameCount ) -> Void:
+        
+        """
+        Reserve a contiguous region of physical frames by marking them as used.
+        Used to protect reserved memory areas such as the kernel image, MMIO
+        regions, and ACPI tables from being allocated by the frame allocator.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 baseFrame = ( physAddr - self.poolBase ) / 4096
+        I64 frameOffset = 0
+        while frameOffset < frameCount:
+            I64 frameIndex = baseFrame + frameOffset
+            I64 wordIndex = frameIndex / 64
+            I64 bitIndex = frameIndex - ( wordIndex * 64 )
+            I64 mask = 1 << bitIndex
+            I64 word = self.bitmap.get( wordIndex )
+            if ( word & mask ) == 0:
+                self.bitmap.set( wordIndex, word | mask )
+                self.usedFrames = self.usedFrames + 1
+            frameOffset = frameOffset + 1
+
+    public function freeRegion( self, I64 physAddr, I64 frameCount ) -> Void:
+
+        """
+        Mark a contiguous region of physical frames as free and available
+        for allocation. Typically called during boot with ranges obtained
+        from the bootloader's memory map to indicate usable physical memory.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 baseFrame = ( physAddr - self.poolBase ) / 4096
+        I64 frameOffset = 0
+        while frameOffset < frameCount:
+            I64 frameIndex = baseFrame + frameOffset
+            I64 wordIndex = frameIndex / 64
+            I64 bitIndex = frameIndex - ( wordIndex * 64 )
+            I64 mask = 1 << bitIndex
+            I64 word = self.bitmap.get( wordIndex )
+            if ( word & mask ) != 0:
+                self.bitmap.set( wordIndex, word & ( ~mask ) )
+                self.usedFrames = self.usedFrames - 1
+            frameOffset = frameOffset + 1
+    
+    public function allocContiguous( self, I64 frameCount ) -> I64:
+        
+        """
+        Allocate a contiguous run of N physical frames by scanning the bitmap
+        for a sequence of clear bits. Returns the base physical address of
+        the allocated region, or 0 if no contiguous run of the requested
+        size is available. The allocated frames are automatically reserved.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 runStart = 0
+        I64 runLength = 0
+        I64 frameIndex = 0
+        while frameIndex < self.totalFrames:
+            I64 wordIndex = frameIndex / 64
+            I64 bitIndex = frameIndex - ( wordIndex * 64 )
+            I64 mask = 1 << bitIndex
+            I64 word = self.bitmap.get( wordIndex )
+            if ( word & mask ) == 0:
+                if runLength == 0:
+                    runStart = frameIndex
+                runLength = runLength + 1
+                if runLength >= frameCount:
+                    self.reserveRegion( self.poolBase + runStart * 4096, frameCount )
+                    return self.poolBase + runStart * 4096
+            else:
+                runLength = 0
+            frameIndex = frameIndex + 1
+        return 0
+    
+    public function usedCount( self ) -> I64:
+        
+        """ Return the number of physical frames currently in use. """
+        
+        return self.usedFrames
+    
+    public function freeCount( self ) -> I64:
+        
+        """ Return the number of physical frames currently available for allocation. """
+        
+        return self.totalFrames - self.usedFrames
+    
+    public function totalCount( self ) -> I64:
+        
+        """ Return the total number of physical frames managed by this allocator. """
+        
+        return self.totalFrames
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the bitmap and pool memory used by this allocator.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.bitmap.free()
+        self.pool.free()
+
+export {
+    PhysicalMemoryManager
+}
