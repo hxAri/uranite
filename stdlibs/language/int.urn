@@ -1,0 +1,184 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/int.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Int base class for all signed integer types, with arithmetic, comparison, and utility methods.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.int
+
+class Int:
+    
+    """
+    Base class for all signed integer types (I8, I16, I32, I64).
+    Stores the value internally as I64 and provides arithmetic, comparison, and utility methods.
+    """
+    
+    protect I64 value
+    
+    public function Int( self, I64 value ) -> Void:
+        
+        """ Construct a new Int wrapping the given I64 value. """
+        
+        self.value = value
+    
+    public function getValue( self ) -> I64:
+        
+        """ Return the underlying I64 value. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this integer value. """
+        
+        return self.value as String
+    
+    public function abs( self ) -> Int:
+        
+        """
+        Return a new Int containing the absolute value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value < 0:
+            return new Int( -self.value )
+        return new Int( self.value )
+    
+    public function negate( self ) -> Int:
+        
+        """
+        Return a new Int with the sign inverted.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Int( -self.value )
+    
+    public function add( self, Int other ) -> Int:
+        
+        """
+        Return a new Int containing the sum of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Int( self.value + other.value )
+    
+    public function subtract( self, Int other ) -> Int:
+        
+        """
+        Return a new Int containing the difference of self minus other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Int( self.value - other.value )
+    
+    public function multiply( self, Int other ) -> Int:
+        
+        """
+        Return a new Int containing the product of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Int( self.value * other.value )
+    
+    public function divide( self, Int other ) -> Int:
+        
+        """
+        Return a new Int containing the quotient of self divided by other using integer division.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Int( self.value / other.value )
+    
+    public function modulo( self, Int other ) -> Int:
+        
+        """
+        Return a new Int containing the remainder of self divided by other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Int( self.value % other.value )
+    
+    public function equals( self, Int other ) -> Boolean:
+        
+        """ Return True if self and other have the same numeric value. """
+        
+        return self.value == other.value
+    
+    public function compareTo( self, Int other ) -> I32:
+        
+        """
+        Compare self to other, returning -1 if less, 0 if equal, or 1 if greater.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value < other.value:
+            return -1
+        if self.value > other.value:
+            return 1
+        return 0
+    
+    public function min( self, Int other ) -> Int:
+        
+        """
+        Return a new Int containing the smaller of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value < other.value:
+            return new Int( self.value )
+        return new Int( other.value )
+    
+    public function max( self, Int other ) -> Int:
+        
+        """
+        Return a new Int containing the larger of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value > other.value:
+            return new Int( self.value )
+        return new Int( other.value )
