@@ -1,0 +1,363 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/console.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Standard console I/O: puts, putsln, putserr, putserrln, input, getpass, putsI64.
+# All output via raw syscalls to fd 0/1/2. No C runtime.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.console
+
+from uranite.memory.memory import Memory
+from uranite.io.stream import Stream
+from uranite.io.writer import STDIN_FD, STDOUT_FD, STDERR_FD, writeFd, writeNewlineFd, writeRawFd
+from uranite.io.syscall import {
+    stringToPtr,
+    stringLen,
+    memoryToPtr,
+    readByteAt,
+    writeByteAt,
+    readI32At,
+    writeI32At,
+    sysRead,
+    sysWrite,
+    sysIoctl,
+    TCGETS,
+    TCSETS,
+    ECHO_FLAG
+}
+from uranite.convert.convert import intToString
+
+function writeArgsToFd( I64 targetFileDescriptor, Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+
+    """
+    Core write routine that all puts variants delegate to. Writes each
+    variadic object argument to the resolved file descriptor, separated
+    by the separator string (if not None) and followed by the endline
+    string (if not None).
+
+    Parameters:
+        targetFileDescriptor (I64):
+            The default file descriptor to write to when stream is None.
+        args (Object[]):
+            The variadic object arguments to write.
+        separator (String):
+            The separator written between arguments. None to suppress.
+        endline (String):
+            The string written after all arguments. None to suppress.
+        stream (Stream):
+            An optional stream override. When not None, output goes to
+            the stream's file descriptor instead of targetFileDescriptor.
+        flush (Boolean):
+            Reserved for buffered stream support. Currently a no-op since
+            raw syscall writes are unbuffered.
+    """
+
+    I64 fileDescriptor = targetFileDescriptor
+    if stream is not None:
+        fileDescriptor = stream.fileDescriptor
+    I64 argCount = args.length()
+    I64 index = 0
+    while index < argCount:
+        if index > 0 and separator is not None:
+            writeFd( fileDescriptor, separator )
+        writeFd( fileDescriptor, args.get( index ).toString() )
+        index = index + 1
+    if endline is not None:
+        writeFd( fileDescriptor, endline )
+
+function writeI64ArgsToFd( I64 targetFileDescriptor, I64 args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+
+    """
+    Core write routine for integer arguments. Converts each I64 value
+    to its decimal string representation before writing.
+
+    Parameters:
+        targetFileDescriptor (I64):
+            The default file descriptor to write to when stream is None.
+        args (I64[]):
+            The variadic integer arguments to write.
+        separator (String):
+            The separator written between arguments. None to suppress.
+        endline (String):
+            The string written after all arguments. None to suppress.
+        stream (Stream):
+            An optional stream override.
+        flush (Boolean):
+            Reserved for buffered stream support.
+    """
+
+    I64 fileDescriptor = targetFileDescriptor
+    if stream is not None:
+        fileDescriptor = stream.fileDescriptor
+    I64 argCount = args.length()
+    I64 index = 0
+    while index < argCount:
+        if index > 0 and separator is not None:
+            writeFd( fileDescriptor, separator )
+        writeFd( fileDescriptor, intToString( args.get( index ) ) )
+        index = index + 1
+    if endline is not None:
+        writeFd( fileDescriptor, endline )
+
+public function input( String prompt ) -> String:
+
+    """
+    Display a prompt and read a line of input from stdin.
+    The trailing newline is stripped from the returned string.
+    Dynamically grows the read buffer if the input exceeds capacity.
+
+    Parameters:
+        prompt (String):
+            The prompt string displayed before reading input.
+
+    Returns:
+        String:
+            The line read from stdin, without the trailing newline.
+
+    Complexity:
+        Time: O(n) where n is the number of bytes read.
+        Space: O(n) for the dynamically grown input buffer.
+    """
+
+    writeFd( STDOUT_FD, prompt )
+    I64 capacity = 1024
+    Memory<I64> buffer = new Memory<I64>( capacity )
+    I64 bufferAddress = memoryToPtr( buffer )
+    I64 totalRead = 0
+    Boolean done = False
+    while done == False:
+        if totalRead >= capacity - 1:
+            I64 newCapacity = capacity * 2
+            Memory<I64> newBuffer = new Memory<I64>( newCapacity )
+            I64 newAddress = memoryToPtr( newBuffer )
+            I64 index = 0
+            while index < totalRead:
+                I64 byte = readByteAt( bufferAddress, index )
+                writeByteAt( newAddress, index, byte )
+                index = index + 1
+            buffer.free()
+            buffer = newBuffer
+            bufferAddress = newAddress
+            capacity = newCapacity
+        I64 bytesRead = sysRead( STDIN_FD, bufferAddress + totalRead, 1 )
+        if bytesRead == 0:
+            done = True
+        else:
+            I64 character = readByteAt( bufferAddress, totalRead )
+            totalRead = totalRead + 1
+            if character == 10:
+                totalRead = totalRead - 1
+                done = True
+    writeByteAt( bufferAddress, totalRead, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" bufferAddress ) : clobber()
+    return result
+
+public function getpass( String prompt ) -> String:
+
+    """
+    Display a prompt and read a password from stdin with echo disabled.
+    Terminal echo is temporarily turned off via ioctl TCSETS, then
+    restored after reading. The trailing newline is stripped.
+
+    Parameters:
+        prompt (String):
+            The prompt string displayed before reading the password.
+
+    Returns:
+        String:
+            The password string read from stdin, without the trailing newline.
+
+    Complexity:
+        Time: O(n) where n is the number of bytes read.
+        Space: O(n) for the password buffer plus O(1) for termios state.
+    """
+
+    writeFd( STDOUT_FD, prompt )
+    Memory<I64> termiosBuffer = new Memory<I64>( 8 )
+    I64 termiosAddress = memoryToPtr( termiosBuffer )
+    sysIoctl( STDIN_FD, TCGETS, termiosAddress )
+    Memory<I64> savedTermios = new Memory<I64>( 8 )
+    I64 savedAddress = memoryToPtr( savedTermios )
+    I64 copyIndex = 0
+    while copyIndex < 60:
+        I64 byteValue = readByteAt( termiosAddress, copyIndex )
+        writeByteAt( savedAddress, copyIndex, byteValue )
+        copyIndex = copyIndex + 1
+    I64 localFlags = readI32At( termiosAddress, 12 )
+    I64 maskedFlags = localFlags & ( 0 - 1 - ECHO_FLAG )
+    writeI32At( termiosAddress, 12, maskedFlags )
+    sysIoctl( STDIN_FD, TCSETS, termiosAddress )
+    I64 capacity = 256
+    Memory<I64> buffer = new Memory<I64>( capacity )
+    I64 bufferAddress = memoryToPtr( buffer )
+    I64 totalRead = 0
+    Boolean done = False
+    while done == False:
+        if totalRead >= capacity - 1:
+            I64 newCapacity = capacity * 2
+            Memory<I64> newBuffer = new Memory<I64>( newCapacity )
+            I64 newAddress = memoryToPtr( newBuffer )
+            I64 index = 0
+            while index < totalRead:
+                I64 byteValue = readByteAt( bufferAddress, index )
+                writeByteAt( newAddress, index, byteValue )
+                index = index + 1
+            buffer.free()
+            buffer = newBuffer
+            bufferAddress = newAddress
+            capacity = newCapacity
+        I64 bytesRead = sysRead( STDIN_FD, bufferAddress + totalRead, 1 )
+        if bytesRead == 0:
+            done = True
+        else:
+            I64 character = readByteAt( bufferAddress, totalRead )
+            totalRead = totalRead + 1
+            if character == 10:
+                totalRead = totalRead - 1
+                done = True
+    sysIoctl( STDIN_FD, TCSETS, savedAddress )
+    savedTermios.free()
+    termiosBuffer.free()
+    writeNewlineFd( STDOUT_FD )
+    writeByteAt( bufferAddress, totalRead, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" bufferAddress ) : clobber()
+    return result
+
+public function puts( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+
+    """
+    Write variadic object arguments to stdout, separated by separator
+    and followed by endline. Override the output target with stream.
+
+    Parameters:
+        args (Object[]):
+            The strings to write.
+        separator (String):
+            Written between arguments. Default space. None to suppress.
+        endline (String):
+            Written after all arguments. Default newline. None to suppress.
+        stream (Stream):
+            Optional output target. None for stdout.
+        flush (Boolean):
+            Reserved for buffered stream support.
+    """
+
+    writeArgsToFd( STDOUT_FD, args, separator, endline, stream, flush )
+
+public function putsln( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+
+    """
+    Write variadic object arguments to stdout with a trailing newline.
+    Identical to puts with default parameters.
+
+    Parameters:
+        args (Object[]):
+            The strings to write.
+        separator (String):
+            Written between arguments. Default space. None to suppress.
+        endline (String):
+            Written after all arguments. Default newline. None to suppress.
+        stream (Stream):
+            Optional output target. None for stdout.
+        flush (Boolean):
+            Reserved for buffered stream support.
+    """
+
+    writeArgsToFd( STDOUT_FD, args, separator, endline, stream, flush )
+
+public function putserr( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+
+    """
+    Write variadic object arguments to stderr, separated by separator
+    and followed by endline.
+
+    Parameters:
+        args (Object[]):
+            The strings to write.
+        separator (String):
+            Written between arguments. Default space. None to suppress.
+        endline (String):
+            Written after all arguments. Default newline. None to suppress.
+        stream (Stream):
+            Optional output target. None for stderr.
+        flush (Boolean):
+            Reserved for buffered stream support.
+    """
+
+    writeArgsToFd( STDERR_FD, args, separator, endline, stream, flush )
+
+public function putserrln( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+
+    """
+    Write variadic object arguments to stderr with a trailing newline.
+    Identical to putserr with default parameters.
+
+    Parameters:
+        args (Object[]):
+            The strings to write.
+        separator (String):
+            Written between arguments. Default space. None to suppress.
+        endline (String):
+            Written after all arguments. Default newline. None to suppress.
+        stream (Stream):
+            Optional output target. None for stderr.
+        flush (Boolean):
+            Reserved for buffered stream support.
+    """
+
+    writeArgsToFd( STDERR_FD, args, separator, endline, stream, flush )
+
+public function putsI64( I64 args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+
+    """
+    Write variadic integer arguments to stdout as decimal strings,
+    separated by separator and followed by endline.
+
+    Parameters:
+        args (I64[]):
+            The integer values to write.
+        separator (String):
+            Written between arguments. Default space. None to suppress.
+        endline (String):
+            Written after all arguments. Default newline. None to suppress.
+        stream (Stream):
+            Optional output target. None for stdout.
+        flush (Boolean):
+            Reserved for buffered stream support.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    writeI64ArgsToFd( STDOUT_FD, args, separator, endline, stream, flush )
+
+export {
+    STDIN_FD,
+    STDOUT_FD,
+    STDERR_FD,
+    Stream,
+    puts,
+    putsln,
+    putserr,
+    putserrln,
+    input,
+    getpass,
+    putsI64
+}

@@ -1,0 +1,50 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/auth.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Authentication middleware interface and basic auth implementation.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.auth
+
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+from uranite.web.middleware import Middleware
+
+public interface AuthMiddleware:
+    
+    """
+    Interface for authentication middleware. Implementations should inspect
+    the incoming request for credentials (e.g., headers, cookies, tokens)
+    and determine whether the request is authenticated.
+    """
+    
+    public function authenticate( self, HttpRequest req ) -> Boolean:
+        
+        """
+        Determine whether the given HTTP request is authenticated.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request to authenticate.
+        
+        Returns:
+            True if the request is authenticated and should proceed, False otherwise.
+        """
+
+export {
+    AuthMiddleware
+}

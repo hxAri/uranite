@@ -1,0 +1,148 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/controller.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Controller base class. Subclasses register routes in their constructor
+# via self.route("GET", "/path", self.handler). Similar to Spring Boot
+# @RequestMapping but explicit via method calls.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.controller
+
+from uranite.memory.memory import Memory
+from uranite.web.route import Route
+
+const I64 MAX_CONTROLLER_ROUTES = 64
+"""Maximum number of routes that can be registered on a single controller."""
+
+public class Controller:
+    
+    """
+    Base class for HTTP controllers. Subclasses register routes in their
+    constructor by calling the route method with an HTTP method, URL pattern,
+    and handler function address. An optional URL prefix can be set to scope
+    all routes under a common path.
+    """
+    
+    public Memory<I64> controllerRoutes
+    """Storage for the addresses of registered Route objects."""
+    
+    public I64 controllerRouteCount
+    """The number of routes currently registered on this controller."""
+    
+    public String prefix
+    """A URL path prefix prepended to all route patterns registered on this controller."""
+    
+    public function Controller( self ) -> Void:
+        
+        """
+        Create a new Controller with no prefix and an empty route list.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.controllerRoutes = new Memory<I64>( MAX_CONTROLLER_ROUTES )
+        self.controllerRouteCount = 0
+        self.prefix = ""
+    
+    public function setPrefix( self, String prefix ) -> Controller:
+        
+        """
+        Set the URL prefix for this controller. All routes registered after
+        this call will have this prefix prepended to their pattern.
+        
+        Parameters:
+            prefix (String):
+                The URL path prefix to prepend to route patterns.
+        
+        Returns:
+            This Controller instance for method chaining.
+        """
+        
+        self.prefix = prefix
+        return self
+    
+    public function route( self, String method, String pattern, I64 handlerAddr ) -> Void:
+        
+        """
+        Register a route on this controller. The pattern is combined with the
+        controller's prefix to form the full URL pattern.
+        
+        Parameters:
+            method (String):
+                The HTTP method this route responds to (e.g., "GET", "POST").
+            pattern (String):
+                The URL pattern for this route, which may include path parameters
+                prefixed with a colon (e.g., "/users/:id").
+            handlerAddr (I64):
+                The address of the handler function to invoke when this route matches.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        String fullPattern = self.prefix + pattern
+        Route route = new Route( method, fullPattern, handlerAddr )
+        I64 routeAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" routeAddr ) : input( "r" route ) : clobber()
+        self.controllerRoutes.set( self.controllerRouteCount, routeAddr )
+        self.controllerRouteCount = self.controllerRouteCount + 1
+    
+    public function getRoute( self, I64 index ) -> I64:
+        
+        """
+        Retrieve the address of the Route object at the given index.
+        
+        Parameters:
+            index (I64):
+                The zero-based index of the route to retrieve.
+        
+        Returns:
+            The memory address of the Route object.
+        """
+        
+        return self.controllerRoutes.get( index )
+    
+    public function routeCount( self ) -> I64:
+        
+        """
+        Return the number of routes registered on this controller.
+        
+        Returns:
+            The total number of registered routes.
+        """
+        
+        return self.controllerRouteCount
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release the heap-allocated route storage buffer.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.controllerRoutes.free()
+
+export {
+    Controller,
+    MAX_CONTROLLER_ROUTES
+}

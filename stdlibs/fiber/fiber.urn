@@ -1,0 +1,400 @@
+package uranite.fiber.fiber
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.os.syscall.invoke import syscall2, syscall6
+from uranite.os.syscall.result import SyscallResult
+from uranite.errors.error import Error
+from uranite.async.context import swapContext, makeContext
+
+public class FiberError extends Error:
+    
+    """
+    Error raised when a fiber operation fails, such as attempting to start
+    an already-started fiber, resuming a non-suspended fiber, or a stack
+    allocation failure during fiber creation.
+    """
+    
+    public function FiberError( self, String message ) -> Void:
+        
+        """
+        Create a new fiber error with the given message.
+        
+        Parameters:
+            message (String):
+                Description of the fiber operation that failed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        parent( message, 0, None )
+
+const I64 SYS_MMAP = 9
+"""Linux syscall number for mmap."""
+
+const I64 SYS_MUNMAP = 11
+"""Linux syscall number for munmap."""
+
+const I64 PROT_RW = 3
+"""Memory protection flags for read-write access (PROT_READ | PROT_WRITE)."""
+
+const I64 MAP_PRIVATE_ANON = 34
+"""Mmap flags for private anonymous mapping (MAP_PRIVATE | MAP_ANONYMOUS)."""
+
+const I64 DEFAULT_FIBER_STACK = 65536
+"""Default stack size for fibers in bytes (64 KB)."""
+
+const I64 FIBER_CREATED = 0
+"""Fiber state indicating it has been created but not yet started."""
+
+const I64 FIBER_STARTED = 1
+"""Fiber state indicating it has been started (transitional)."""
+
+const I64 FIBER_RUNNING = 2
+"""Fiber state indicating it is currently executing."""
+
+const I64 FIBER_SUSPENDED = 3
+"""Fiber state indicating it has yielded and is waiting to be resumed."""
+
+const I64 FIBER_TERMINATED = 4
+"""Fiber state indicating it has finished execution."""
+
+const I64 F_STATE = 0
+"""Field offset index for the fiber's state in the data array."""
+
+const I64 F_ENTRY_FN = 1
+"""Field offset index for the fiber's entry function address."""
+
+const I64 F_STACK_BASE = 2
+"""Field offset index for the fiber's stack base address."""
+
+const I64 F_STACK_SIZE = 3
+"""Field offset index for the fiber's stack size."""
+
+const I64 F_CONTEXT_RSP = 4
+"""Field offset index for the fiber's saved stack pointer (RSP)."""
+
+const I64 F_RETURN_VALUE = 5
+"""Field offset index for the fiber's return value."""
+
+const I64 F_SUSPEND_VALUE = 6
+"""Field offset index for the value passed out when suspending."""
+
+const I64 F_RESUME_VALUE = 7
+"""Field offset index for the value passed in when resuming."""
+
+const I64 F_HAS_RETURN = 8
+"""Field offset index for the flag indicating whether a return value was set."""
+
+const I64 F_ERROR = 9
+"""Field offset index for the fiber's error state."""
+
+const I64 FIBER_FIELD_COUNT = 10
+"""Total number of fields in the fiber data array."""
+
+I64 gCurrentFiberPtr = 0
+"""Global pointer to the currently executing fiber's data array. Set before each context switch into a fiber and read by fiberTrampoline and fiberSuspend."""
+
+I64 gCallerRspPtr = 0
+"""Global pointer to the caller's saved RSP buffer. Used to return control from the fiber back to the caller (scheduler or direct invoker)."""
+
+public function fiberTrampoline() -> Void:
+    
+    """
+    Entry point trampoline for newly started fibers. Called on the fiber's
+    own stack after the initial context switch. Reads the entry function
+    address from the fiber's data, invokes it via inline assembly indirect
+    call, stores the return value, marks the fiber as terminated, and swaps
+    context back to the caller.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 fnAddr = readI64At( gCurrentFiberPtr, F_ENTRY_FN * 8 )
+    I64 result = 0
+    asm volatile "call *$2" : output( "={rax}" result ) : input( "{rdi}" 0, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+    writeI64At( gCurrentFiberPtr, F_RETURN_VALUE * 8, result )
+    writeI64At( gCurrentFiberPtr, F_HAS_RETURN * 8, 1 )
+    writeI64At( gCurrentFiberPtr, F_STATE * 8, FIBER_TERMINATED )
+    I64 fiberRspPtr = gCurrentFiberPtr + F_CONTEXT_RSP * 8
+    swapContext( fiberRspPtr, gCallerRspPtr )
+
+public function fiberSuspend( I64 value ) -> I64:
+    
+    """
+    Suspend the currently executing fiber, yielding control back to the
+    caller. Stores the given value in the fiber's suspend slot so the
+    caller can read it, then performs a context switch. When the fiber is
+    later resumed, returns the resume value that was passed in.
+    
+    Parameters:
+        value (I64):
+            The value to yield to the caller. The caller receives this
+            from start() or resume().
+    
+    Returns:
+        I64:
+            The value passed by the caller when resume() is called.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    writeI64At( gCurrentFiberPtr, F_SUSPEND_VALUE * 8, value )
+    writeI64At( gCurrentFiberPtr, F_STATE * 8, FIBER_SUSPENDED )
+    I64 fiberRspPtr = gCurrentFiberPtr + F_CONTEXT_RSP * 8
+    swapContext( fiberRspPtr, gCallerRspPtr )
+    return readI64At( gCurrentFiberPtr, F_RESUME_VALUE * 8 )
+
+public class Fiber:
+    
+    """
+    Cooperative lightweight thread that runs on its own mmap-allocated stack.
+    Fibers execute a single entry function, can suspend and resume with
+    bidirectional value passing, and must be explicitly destroyed to free
+    their stack memory.
+    
+    The fiber lifecycle is: Created -> Running (via start) -> Suspended
+    (via fiberSuspend) -> Running (via resume) -> ... -> Terminated. Values
+    can be passed in both directions: the caller sends values through
+    resume(value), and the fiber sends values through fiberSuspend(value).
+    
+    Uses x86_64 context switching (callee-saved register save/restore + RSP
+    swap) for zero-overhead cooperative multitasking.
+    """
+    
+    public Memory<I64> data
+    """Flat array of I64 fields storing all fiber state (see F_* constants for field layout)."""
+    
+    public Memory<I64> callerRsp
+    """Single-element buffer holding the caller's saved RSP for context switch return."""
+    
+    public function Fiber( self, I64 entryFn ) -> Void:
+        
+        """
+        Create a new fiber that will execute the given function. Allocates
+        a 64 KB stack via mmap and prepares the initial context so that the
+        first context switch jumps to fiberTrampoline.
+        
+        Parameters:
+            entryFn (I64):
+                Raw address of the entry function. The function receives 0
+                as its first argument (rdi) and its return value is stored
+                as the fiber's return value.
+        
+        Raises:
+            FiberError:
+                If the stack allocation mmap syscall fails.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.data = new Memory<I64>( FIBER_FIELD_COUNT )
+        self.callerRsp = new Memory<I64>( 1 )
+        self.callerRsp.set( 0, 0 )
+        self.data.set( F_STATE, FIBER_CREATED )
+        self.data.set( F_ENTRY_FN, entryFn )
+        self.data.set( F_STACK_BASE, 0 )
+        self.data.set( F_STACK_SIZE, DEFAULT_FIBER_STACK )
+        self.data.set( F_CONTEXT_RSP, 0 )
+        self.data.set( F_RETURN_VALUE, 0 )
+        self.data.set( F_SUSPEND_VALUE, 0 )
+        self.data.set( F_RESUME_VALUE, 0 )
+        self.data.set( F_HAS_RETURN, 0 )
+        self.data.set( F_ERROR, 0 )
+        SyscallResult syscallResult = syscall6( SYS_MMAP, 0, DEFAULT_FIBER_STACK, PROT_RW, MAP_PRIVATE_ANON, -1, 0 )
+        if syscallResult.isError():
+            raise new FiberError( "fiber stack allocation failed" )
+        I64 stackBase = syscallResult.value()
+        self.data.set( F_STACK_BASE, stackBase )
+        I64 trampolineAddr = addressof fiberTrampoline
+        I64 rsp = makeContext( stackBase, DEFAULT_FIBER_STACK, trampolineAddr )
+        self.data.set( F_CONTEXT_RSP, rsp )
+    
+    public function start( self ) -> I64:
+        
+        """
+        Start the fiber's execution for the first time. Performs a context
+        switch from the caller to the fiber's stack, where fiberTrampoline
+        invokes the entry function. Returns when the fiber suspends or
+        terminates.
+        
+        Returns:
+            I64:
+                The suspend value yielded by the fiber via fiberSuspend,
+                or 0 if the fiber terminated without suspending.
+        
+        Raises:
+            FiberError:
+                If the fiber has already been started.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 state = self.data.get( F_STATE )
+        if state != FIBER_CREATED:
+            raise new FiberError( "fiber already started" )
+        self.data.set( F_STATE, FIBER_RUNNING )
+        I64 dataPtr = memoryToPtr( self.data )
+        I64 callerPtr = memoryToPtr( self.callerRsp )
+        gCurrentFiberPtr = dataPtr
+        gCallerRspPtr = callerPtr
+        I64 fiberRspPtr = dataPtr + F_CONTEXT_RSP * 8
+        swapContext( callerPtr, fiberRspPtr )
+        return self.data.get( F_SUSPEND_VALUE )
+    
+    public function resume( self, I64 value ) -> I64:
+        
+        """
+        Resume a suspended fiber, passing a value that becomes the return
+        value of the fiber's fiberSuspend call. Returns when the fiber
+        suspends again or terminates.
+        
+        Parameters:
+            value (I64):
+                The value to send to the fiber. The fiber receives this as
+                the return value of fiberSuspend.
+        
+        Returns:
+            I64:
+                The next suspend value yielded by the fiber, or 0 if the
+                fiber terminated.
+        
+        Raises:
+            FiberError:
+                If the fiber is not in the Suspended state.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 state = self.data.get( F_STATE )
+        if state != FIBER_SUSPENDED:
+            raise new FiberError( "fiber not suspended" )
+        self.data.set( F_RESUME_VALUE, value )
+        self.data.set( F_STATE, FIBER_RUNNING )
+        I64 dataPtr = memoryToPtr( self.data )
+        I64 callerPtr = memoryToPtr( self.callerRsp )
+        gCurrentFiberPtr = dataPtr
+        gCallerRspPtr = callerPtr
+        I64 fiberRspPtr = dataPtr + F_CONTEXT_RSP * 8
+        swapContext( callerPtr, fiberRspPtr )
+        return self.data.get( F_SUSPEND_VALUE )
+    
+    public function getReturn( self ) -> I64:
+        
+        """
+        Retrieve the return value of a terminated fiber.
+        
+        Returns:
+            I64:
+                The value returned by the fiber's entry function.
+        
+        Raises:
+            FiberError:
+                If the fiber has not terminated or did not produce a
+                return value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 state = self.data.get( F_STATE )
+        if state != FIBER_TERMINATED:
+            raise new FiberError( "fiber not terminated" )
+        I64 hasRet = self.data.get( F_HAS_RETURN )
+        if hasRet == 0:
+            raise new FiberError( "fiber has no return value" )
+        return self.data.get( F_RETURN_VALUE )
+    
+    public function isStarted( self ) -> Boolean:
+        
+        """
+        Check whether the fiber has been started.
+        
+        Returns:
+            Boolean:
+                True if the fiber has progressed past the Created state.
+        """
+        
+        I64 state = self.data.get( F_STATE )
+        return state != FIBER_CREATED
+    
+    public function isRunning( self ) -> Boolean:
+        
+        """
+        Check whether the fiber is currently executing.
+        
+        Returns:
+            Boolean:
+                True if the fiber is in the Running state.
+        """
+        
+        I64 state = self.data.get( F_STATE )
+        return state == FIBER_RUNNING
+    
+    public function isSuspended( self ) -> Boolean:
+        
+        """
+        Check whether the fiber is suspended and waiting to be resumed.
+        
+        Returns:
+            Boolean:
+                True if the fiber is in the Suspended state.
+        """
+        
+        I64 state = self.data.get( F_STATE )
+        return state == FIBER_SUSPENDED
+    
+    public function isTerminated( self ) -> Boolean:
+        
+        """
+        Check whether the fiber has finished execution.
+        
+        Returns:
+            Boolean:
+                True if the fiber is in the Terminated state.
+        """
+        
+        I64 state = self.data.get( F_STATE )
+        return state == FIBER_TERMINATED
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by the fiber. Unmaps the stack memory
+        via munmap syscall and frees the data and callerRsp buffers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 stackBase = self.data.get( F_STACK_BASE )
+        if stackBase != 0:
+            I64 stackSize = self.data.get( F_STACK_SIZE )
+            syscall2( SYS_MUNMAP, stackBase, stackSize )
+            self.data.set( F_STACK_BASE, 0 )
+        self.data.free()
+        self.callerRsp.free()
+
+export {
+    FiberError, Fiber, fiberSuspend, fiberTrampoline,
+    F_STATE, F_ENTRY_FN, F_STACK_BASE, F_STACK_SIZE,
+    F_CONTEXT_RSP, F_RETURN_VALUE, F_SUSPEND_VALUE,
+    F_RESUME_VALUE, F_HAS_RETURN, F_ERROR,
+    FIBER_FIELD_COUNT, FIBER_CREATED, FIBER_STARTED,
+    FIBER_RUNNING, FIBER_SUSPENDED, FIBER_TERMINATED,
+    DEFAULT_FIBER_STACK, gCurrentFiberPtr, gCallerRspPtr
+}

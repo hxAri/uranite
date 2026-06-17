@@ -1,0 +1,21 @@
+package testing
+
+from uranite.kernel.arch import CpuContext, DescriptorTables, PageMapper
+from uranite.testing.assertions import assertEqualI64, assertTrue
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Kernel Arch Tests ===" )
+
+    CpuContext cpu = new CpuContext()
+    assertEqualI64( 0, cpu.registers.rax, "registers rax init 0" )
+    putsln( "CpuContext constructed OK" )
+
+    DescriptorTables tables = new DescriptorTables( 8, 256 )
+    putsln( "DescriptorTables constructed OK" )
+
+    PageMapper mapper = new PageMapper()
+    putsln( "PageMapper constructed OK" )
+
+    putsln( "=== All Kernel Arch Tests Passed ===" )
+    return 0

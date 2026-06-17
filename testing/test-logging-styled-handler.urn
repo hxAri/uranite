@@ -1,0 +1,22 @@
+package testing
+
+from uranite.logging.styled-handler import StyledConsoleHandler
+from uranite.logging.level import LogLevel
+from uranite.logging.formatter import LogFormatter, simpleFormatter
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Logging Styled Handler Tests ===" )
+
+    StyledConsoleHandler handler = new StyledConsoleHandler()
+    putsln( "StyledConsoleHandler constructed OK" )
+
+    handler.setMinLevel( LogLevel.Warn )
+    putsln( "setMinLevel OK" )
+
+    LogFormatter customFormatter = simpleFormatter()
+    handler.setFormatter( customFormatter )
+    putsln( "setFormatter OK" )
+
+    putsln( "=== All Logging Styled Handler Tests Passed ===" )
+    return 0

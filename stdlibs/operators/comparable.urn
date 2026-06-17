@@ -1,0 +1,48 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/operators/comparable.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Comparable interface for types that support ordering comparisons.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.operators
+
+interface Comparable<T>:
+    
+    """
+    Interface for types that support ordering comparisons (<, >, <=, >=).
+    Implementing types must define a total ordering over their values.
+    """
+    
+    public function compareTo( self, T other ) -> I32:
+        
+        """ Return a negative, zero, or positive I32 for less-than, equal, or greater-than respectively. """
+    
+    public function lessThan( self, T other ) -> Boolean:
+        
+        """ Return True if self is strictly less than other. """
+    
+    public function greaterThan( self, T other ) -> Boolean:
+        
+        """ Return True if self is strictly greater than other. """
+    
+    public function lessOrEqual( self, T other ) -> Boolean:
+        
+        """ Return True if self is less than or equal to other. """
+    
+    public function greaterOrEqual( self, T other ) -> Boolean:
+        
+        """ Return True if self is greater than or equal to other. """

@@ -1,0 +1,604 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/regexp/regexp.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Backtracking regex engine. Supports:
+#   . (any char), * (zero+), + (one+), ? (zero/one),
+#   [] character classes, [^] negated classes,
+#   ^ (start), $ (end),
+#   \d (digit), \w (word), \s (whitespace),
+#   \D, \W, \S (negated), \. (literal dot),
+#   | (alternation), () grouping.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.regexp.regexp
+
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt
+from uranite.functions.builtin import substring
+from uranite.regexp.match import Match, noMatch
+from uranite.regexp.errors import RegexSyntaxError
+from uranite.collection.array-list import ArrayList
+
+function isWordChar( I64 codePoint ) -> Boolean:
+    
+    """Return True if the byte is a word character (alphanumeric or underscore)."""
+    
+    return ( codePoint >= 48 and codePoint <= 57 ) or ( codePoint >= 65 and codePoint <= 90 ) or ( codePoint >= 97 and codePoint <= 122 ) or codePoint == 95
+
+function isDigitChar( I64 codePoint ) -> Boolean:
+    
+    """Return True if the byte is an ASCII digit (0-9)."""
+    
+    return codePoint >= 48 and codePoint <= 57
+
+function isSpaceChar( I64 codePoint ) -> Boolean:
+    
+    """Return True if the byte is ASCII whitespace (space, tab, newline, CR, FF, VT)."""
+    
+    return codePoint == 32 or codePoint == 9 or codePoint == 10 or codePoint == 13 or codePoint == 12 or codePoint == 11
+
+function matchCharClass( I64 patternPointer, I64 patternLength, I64 patternPosition, I64 subjectCodePoint ) -> I64:
+    
+    """
+    Match a character class [...] against a single subject byte.
+    Handles ranges (a-z), negation ([^...]), and literal characters.
+
+    Parameters:
+        patternPointer (I64):
+            Raw pointer to the pattern bytes.
+        patternLength (I64):
+            Total length of the pattern.
+        patternPosition (I64):
+            Offset of the first byte after the opening bracket.
+        subjectCodePoint (I64):
+            The byte value to test against the class.
+
+    Returns:
+        The pattern offset after the closing bracket if matched,
+        or -1 if the character does not match the class.
+    """
+    
+    I64 scanOffset = patternPosition
+    Boolean negated = False
+    if scanOffset < patternLength and readByteAt( patternPointer, scanOffset ) == 94:
+        negated = True
+        scanOffset = scanOffset + 1
+    Boolean found = False
+    while scanOffset < patternLength and readByteAt( patternPointer, scanOffset ) != 93:
+        I64 classCodePoint = readByteAt( patternPointer, scanOffset )
+        if scanOffset + 2 < patternLength and readByteAt( patternPointer, scanOffset + 1 ) == 45 and readByteAt( patternPointer, scanOffset + 2 ) != 93:
+            I64 rangeLow = classCodePoint
+            I64 rangeHigh = readByteAt( patternPointer, scanOffset + 2 )
+            if subjectCodePoint >= rangeLow and subjectCodePoint <= rangeHigh:
+                found = True
+            scanOffset = scanOffset + 3
+        else:
+            if subjectCodePoint == classCodePoint:
+                found = True
+            scanOffset = scanOffset + 1
+    if scanOffset < patternLength:
+        scanOffset = scanOffset + 1
+    if negated:
+        found = found == False
+    if found:
+        return scanOffset
+    return -1
+
+function matchAtom( I64 patternPointer, I64 patternLength, I64 patternOffset, I64 subjectPointer, I64 subjectLength, I64 subjectOffset ) -> I64:
+    
+    """
+    Recursive backtracking matcher. Attempts to match the pattern
+    starting at patternOffset against the subject starting at
+    subjectOffset. Handles literal bytes, dot wildcard, escape
+    sequences, character classes, quantifiers (*, +, ?), and
+    end-of-line anchor ($).
+
+    Returns:
+        The subject offset after the match on success, or -1 on failure.
+    """
+    
+    if patternOffset >= patternLength:
+        return subjectOffset
+    I64 patternByte = readByteAt( patternPointer, patternOffset )
+    if patternByte == 36:
+        if subjectOffset == subjectLength:
+            return matchAtom( patternPointer, patternLength, patternOffset + 1, subjectPointer, subjectLength, subjectOffset )
+        return -1
+    if subjectOffset >= subjectLength:
+        if patternOffset < patternLength:
+            I64 nextPatternByte = readByteAt( patternPointer, patternOffset )
+            if patternOffset + 1 < patternLength:
+                I64 quantifier = readByteAt( patternPointer, patternOffset + 1 )
+                if quantifier == 42 or quantifier == 63:
+                    return matchAtom( patternPointer, patternLength, patternOffset + 2, subjectPointer, subjectLength, subjectOffset )
+            if nextPatternByte == 36:
+                return matchAtom( patternPointer, patternLength, patternOffset + 1, subjectPointer, subjectLength, subjectOffset )
+        return -1
+    I64 subjectByte = readByteAt( subjectPointer, subjectOffset )
+    if patternByte == 46:
+        I64 nextPatternOffset = patternOffset + 1
+        if nextPatternOffset < patternLength:
+            I64 quantifierByte = readByteAt( patternPointer, nextPatternOffset )
+            if quantifierByte == 42:
+                I64 trialOffset = subjectLength
+                while trialOffset >= subjectOffset:
+                    I64 matchResult = matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, trialOffset )
+                    if matchResult >= 0:
+                        return matchResult
+                    trialOffset = trialOffset - 1
+                return -1
+            if quantifierByte == 43:
+                I64 trialOffset = subjectLength
+                while trialOffset > subjectOffset:
+                    I64 matchResult = matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, trialOffset )
+                    if matchResult >= 0:
+                        return matchResult
+                    trialOffset = trialOffset - 1
+                return -1
+            if quantifierByte == 63:
+                I64 matchResult = matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, subjectOffset + 1 )
+                if matchResult >= 0:
+                    return matchResult
+                return matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, subjectOffset )
+        return matchAtom( patternPointer, patternLength, nextPatternOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+    if patternByte == 92:
+        if patternOffset + 1 >= patternLength:
+            raise new RegexSyntaxError( "trailing backslash", 0, None )
+        I64 escapedByte = readByteAt( patternPointer, patternOffset + 1 )
+        Boolean charMatched = False
+        if escapedByte == 100:
+            charMatched = isDigitChar( subjectByte )
+        elif escapedByte == 68:
+            charMatched = isDigitChar( subjectByte ) == False
+        elif escapedByte == 119:
+            charMatched = isWordChar( subjectByte )
+        elif escapedByte == 87:
+            charMatched = isWordChar( subjectByte ) == False
+        elif escapedByte == 115:
+            charMatched = isSpaceChar( subjectByte )
+        elif escapedByte == 83:
+            charMatched = isSpaceChar( subjectByte ) == False
+        else:
+            charMatched = subjectByte == escapedByte
+        I64 atomEndOffset = patternOffset + 2
+        if atomEndOffset < patternLength:
+            I64 quantifierByte = readByteAt( patternPointer, atomEndOffset )
+            if quantifierByte == 42:
+                if charMatched:
+                    I64 matchResult = matchAtom( patternPointer, patternLength, patternOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+                    if matchResult >= 0:
+                        return matchResult
+                return matchAtom( patternPointer, patternLength, atomEndOffset + 1, subjectPointer, subjectLength, subjectOffset )
+            if quantifierByte == 43:
+                if charMatched:
+                    I64 matchResult = matchAtom( patternPointer, patternLength, patternOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+                    if matchResult >= 0:
+                        return matchResult
+                    return matchAtom( patternPointer, patternLength, atomEndOffset + 1, subjectPointer, subjectLength, subjectOffset + 1 )
+                return -1
+            if quantifierByte == 63:
+                if charMatched:
+                    I64 matchResult = matchAtom( patternPointer, patternLength, atomEndOffset + 1, subjectPointer, subjectLength, subjectOffset + 1 )
+                    if matchResult >= 0:
+                        return matchResult
+                return matchAtom( patternPointer, patternLength, atomEndOffset + 1, subjectPointer, subjectLength, subjectOffset )
+        if charMatched:
+            return matchAtom( patternPointer, patternLength, atomEndOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+        return -1
+    if patternByte == 91:
+        I64 classEndOffset = matchCharClass( patternPointer, patternLength, patternOffset + 1, subjectByte )
+        if classEndOffset >= 0:
+            return matchAtom( patternPointer, patternLength, classEndOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+        I64 skipEndOffset = patternOffset + 1
+        while skipEndOffset < patternLength and readByteAt( patternPointer, skipEndOffset ) != 93:
+            skipEndOffset = skipEndOffset + 1
+        if skipEndOffset < patternLength:
+            skipEndOffset = skipEndOffset + 1
+        if skipEndOffset < patternLength:
+            I64 quantifierByte = readByteAt( patternPointer, skipEndOffset )
+            if quantifierByte == 42 or quantifierByte == 63:
+                return matchAtom( patternPointer, patternLength, skipEndOffset + 1, subjectPointer, subjectLength, subjectOffset )
+        return -1
+    I64 nextPatternOffset = patternOffset + 1
+    if nextPatternOffset < patternLength:
+        I64 quantifierByte = readByteAt( patternPointer, nextPatternOffset )
+        if quantifierByte == 42:
+            if subjectByte == patternByte:
+                I64 matchResult = matchAtom( patternPointer, patternLength, patternOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+                if matchResult >= 0:
+                    return matchResult
+            return matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, subjectOffset )
+        if quantifierByte == 43:
+            if subjectByte == patternByte:
+                I64 matchResult = matchAtom( patternPointer, patternLength, patternOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+                if matchResult >= 0:
+                    return matchResult
+                return matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, subjectOffset + 1 )
+            return -1
+        if quantifierByte == 63:
+            if subjectByte == patternByte:
+                I64 matchResult = matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, subjectOffset + 1 )
+                if matchResult >= 0:
+                    return matchResult
+            return matchAtom( patternPointer, patternLength, nextPatternOffset + 1, subjectPointer, subjectLength, subjectOffset )
+    if subjectByte == patternByte:
+        return matchAtom( patternPointer, patternLength, nextPatternOffset, subjectPointer, subjectLength, subjectOffset + 1 )
+    return -1
+
+function handleAlternation( I64 patternPointer, I64 patternLength, I64 subjectPointer, I64 subjectLength, I64 subjectOffset ) -> I64:
+    
+    """
+    Handle pipe-delimited alternation in a pattern. Splits the
+    pattern at top-level pipe characters and tries each branch
+    from left to right, returning the first successful match.
+
+    Returns:
+        The subject offset after the match on success, or -1 if no branch matches.
+    """
+    
+    I64 branchStart = 0
+    I64 scanIndex = 0
+    while scanIndex <= patternLength:
+        Boolean atEnd = scanIndex == patternLength
+        Boolean atPipe = False
+        if atEnd == False:
+            atPipe = readByteAt( patternPointer, scanIndex ) == 124
+        if atEnd or atPipe:
+            I64 branchLength = scanIndex - branchStart
+            I64 matchResult = matchAtom( patternPointer + branchStart, branchLength, 0, subjectPointer, subjectLength, subjectOffset )
+            if matchResult >= 0:
+                return matchResult
+            branchStart = scanIndex + 1
+        scanIndex = scanIndex + 1
+    return -1
+
+function hasAlternation( I64 patternPointer, I64 patternLength ) -> Boolean:
+    
+    """Check whether the pattern contains a top-level pipe (alternation) outside of any group."""
+    
+    I64 groupDepth = 0
+    I64 scanIndex = 0
+    while scanIndex < patternLength:
+        I64 currentByte = readByteAt( patternPointer, scanIndex )
+        if currentByte == 40:
+            groupDepth = groupDepth + 1
+        elif currentByte == 41:
+            groupDepth = groupDepth - 1
+        elif currentByte == 124 and groupDepth == 0:
+            return True
+        scanIndex = scanIndex + 1
+    return False
+
+public class RegExp:
+
+    """
+    Backtracking regular expression engine. Supports: dot (any char),
+    quantifiers (*, +, ?), character classes ([...], [^...], ranges),
+    anchors (^, $), escape sequences (\\d, \\w, \\s and negations),
+    alternation (|), and literal matching. Compiles the pattern on
+    construction and provides test, find, matches, replaceFirst, and
+    replaceAll operations.
+
+    Complexity:
+        Time: O(2^n) worst case due to backtracking on pathological patterns, linear for simple patterns
+    """
+
+    public String pattern
+    """The original pattern string."""
+    public I64 patternPtr
+    """Raw pointer to the pattern bytes for efficient access."""
+    public I64 patternLen
+    """Length of the pattern in bytes."""
+    public Boolean anchored
+    """Whether the pattern is anchored to the start of the subject (^ prefix)."""
+
+    public function RegExp( self, String pattern ) -> Void:
+        
+        """
+        Construct a regex from the given pattern string. Detects
+        whether the pattern is anchored (starts with ^).
+
+        Parameters:
+            pattern (String):
+                The regular expression pattern.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.pattern = pattern
+        self.patternPtr = stringToPtr( pattern )
+        self.patternLen = stringLen( pattern )
+        self.anchored = False
+        if self.patternLen > 0 and readByteAt( self.patternPtr, 0 ) == 94:
+            self.anchored = True
+
+    public function test( self, String input ) -> Boolean:
+        
+        """
+        Test whether the pattern matches anywhere in the input.
+
+        Parameters:
+            input (String):
+                The subject string to search.
+
+        Returns:
+            True if a match is found, False otherwise.
+        """
+        
+        Match matchResult = self.find( input )
+        return matchResult.matched
+
+    public function find( self, String input ) -> Match:
+        
+        """
+        Find the first match of the pattern in the input string.
+
+        Parameters:
+            input (String):
+                The subject string to search.
+
+        Returns:
+            A Match containing the position and matched status.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 subjectPointer = stringToPtr( input )
+        I64 subjectLength = stringLen( input )
+        I64 patternPointer = self.patternPtr
+        I64 patternLength = self.patternLen
+        I64 patternStart = 0
+        if self.anchored:
+            patternStart = 1
+        Boolean useAlternation = hasAlternation( patternPointer + patternStart, patternLength - patternStart )
+        if self.anchored:
+            I64 endPosition = -1
+            if useAlternation:
+                endPosition = handleAlternation( patternPointer + patternStart, patternLength - patternStart, subjectPointer, subjectLength, 0 )
+            else:
+                endPosition = matchAtom( patternPointer, patternLength, patternStart, subjectPointer, subjectLength, 0 )
+            if endPosition >= 0:
+                return new Match( input, 0, endPosition, True )
+            return noMatch()
+        I64 startIndex = 0
+        while startIndex <= subjectLength:
+            I64 endPosition = -1
+            if useAlternation:
+                endPosition = handleAlternation( patternPointer + patternStart, patternLength - patternStart, subjectPointer, subjectLength, startIndex )
+            else:
+                endPosition = matchAtom( patternPointer, patternLength, patternStart, subjectPointer, subjectLength, startIndex )
+            if endPosition >= 0:
+                return new Match( input, startIndex, endPosition, True )
+            startIndex = startIndex + 1
+        return noMatch()
+    
+    public function matches( self, String input ) -> Boolean:
+        
+        """
+        Check whether the pattern matches the entire input string.
+
+        Parameters:
+            input (String):
+                The subject string to test.
+
+        Returns:
+            True if the entire string matches the pattern.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 subjectPointer = stringToPtr( input )
+        I64 subjectLength = stringLen( input )
+        I64 patternStart = 0
+        if self.anchored:
+            patternStart = 1
+        I64 endPosition = matchAtom( self.patternPtr, self.patternLen, patternStart, subjectPointer, subjectLength, 0 )
+        return endPosition == subjectLength
+    
+    public function replaceFirst( self, String input, String replacement ) -> String:
+        
+        """
+        Replace the first occurrence of the pattern with the replacement.
+
+        Parameters:
+            input (String):
+                The subject string.
+            replacement (String):
+                The string to substitute for the first match.
+
+        Returns:
+            The input with the first match replaced, or the original
+            string if no match is found.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Match matchResult = self.find( input )
+        if matchResult.matched == False:
+            return input
+        String before = substring( input, 0, matchResult.start )
+        I64 inputLen = stringLen( input )
+        String after = substring( input, matchResult.end, inputLen )
+        return before + replacement + after
+    
+    public function replaceAll( self, String input, String replacement ) -> String:
+        
+        """
+        Replace all non-overlapping occurrences of the pattern with
+        the replacement. Includes a safety limit of 10000 iterations
+        to prevent infinite loops on zero-length matches.
+
+        Parameters:
+            input (String):
+                The subject string.
+            replacement (String):
+                The string to substitute for each match.
+
+        Returns:
+            The input with all matches replaced.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        String current = input
+        Boolean replacing = True
+        I64 safety = 0
+        while replacing and safety < 10000:
+            Match matchResult = self.find( current )
+            if matchResult.matched == False:
+                replacing = False
+            else:
+                String before = substring( current, 0, matchResult.start )
+                I64 currentLen = stringLen( current )
+                String after = substring( current, matchResult.end, currentLen )
+                current = before + replacement + after
+                if matchResult.start == matchResult.end:
+                    replacing = False
+            safety = safety + 1
+        return current
+
+    public function findFrom( self, String input, I64 fromOffset ) -> Match:
+
+        """
+        Find the first match of the pattern starting at or after the given offset.
+
+        Parameters:
+            input (String):
+                The subject string to search.
+            fromOffset (I64):
+                The byte offset to start searching from.
+
+        Returns:
+            Match:
+                A Match containing the position and matched status, or a
+                no-match if no occurrence is found at or after fromOffset.
+
+        Complexity:
+            Time: O(n * m) where n is the remaining input length and m is the pattern length
+        """
+
+        I64 subjectPointer = stringToPtr( input )
+        I64 subjectLength = stringLen( input )
+        I64 patternPointer = self.patternPtr
+        I64 patternLength = self.patternLen
+        I64 patternStart = 0
+        if self.anchored:
+            patternStart = 1
+        Boolean useAlternation = hasAlternation( patternPointer + patternStart, patternLength - patternStart )
+        I64 searchStart = fromOffset
+        while searchStart <= subjectLength:
+            I64 endPosition = -1
+            if useAlternation:
+                endPosition = handleAlternation( patternPointer + patternStart, patternLength - patternStart, subjectPointer, subjectLength, searchStart )
+            else:
+                endPosition = matchAtom( patternPointer, patternLength, patternStart, subjectPointer, subjectLength, searchStart )
+            if endPosition >= 0:
+                return new Match( input, searchStart, endPosition, True )
+            searchStart = searchStart + 1
+        return noMatch()
+
+    public function findAll( self, String input ) -> ArrayList<Match>:
+
+        """
+        Find all non-overlapping matches of the pattern in the input string.
+
+        Searches left to right. After each match, the next search begins
+        at the end of the previous match. Zero-length matches advance
+        by one byte to prevent infinite loops.
+
+        Parameters:
+            input (String):
+                The subject string to search.
+
+        Returns:
+            ArrayList<Match>:
+                A list of all non-overlapping Match objects found.
+
+        Complexity:
+            Time: O(n * m) where n is the input length and m is the pattern length
+        """
+
+        ArrayList<Match> results = new ArrayList<Match>()
+        I64 inputLength = stringLen( input )
+        I64 searchOffset = 0
+        I64 safetyLimit = 0
+        while searchOffset <= inputLength and safetyLimit < 10000:
+            Match currentMatch = self.findFrom( input, searchOffset )
+            if not currentMatch.matched:
+                return results
+            results.add( currentMatch )
+            if currentMatch.end == currentMatch.start:
+                searchOffset = currentMatch.end + 1
+            else:
+                searchOffset = currentMatch.end
+            safetyLimit = safetyLimit + 1
+        return results
+
+    public function split( self, String input ) -> ArrayList<String>:
+
+        """
+        Split the input string by all non-overlapping occurrences of the pattern.
+
+        The portions of the input between matches are returned as list elements.
+        If the pattern is not found, a single-element list with the full input
+        is returned.
+
+        Parameters:
+            input (String):
+                The string to split.
+
+        Returns:
+            ArrayList<String>:
+                The list of segments between matches.
+
+        Complexity:
+            Time: O(n * m) where n is the input length and m is the pattern length
+        """
+
+        ArrayList<String> segments = new ArrayList<String>()
+        I64 inputLength = stringLen( input )
+        I64 segmentStart = 0
+        I64 safetyLimit = 0
+        I64 searchOffset = 0
+        while searchOffset <= inputLength and safetyLimit < 10000:
+            Match currentMatch = self.findFrom( input, searchOffset )
+            if not currentMatch.matched:
+                segments.add( substring( input, segmentStart, inputLength ) )
+                return segments
+            segments.add( substring( input, segmentStart, currentMatch.start ) )
+            segmentStart = currentMatch.end
+            if currentMatch.end == currentMatch.start:
+                searchOffset = currentMatch.end + 1
+            else:
+                searchOffset = currentMatch.end
+            safetyLimit = safetyLimit + 1
+        if segmentStart <= inputLength:
+            segments.add( substring( input, segmentStart, inputLength ) )
+        return segments
+
+export {
+    RegExp
+}

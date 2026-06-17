@@ -1,0 +1,96 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/regexp/match.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Match result from a regex match operation. Stores matched text,
+# start/end positions, and captured groups.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.regexp.match
+
+from uranite.functions.builtin import substring
+
+public class Match:
+
+    """
+    Result of a regex match operation. Contains the original text,
+    the start and end positions of the matched region, and whether
+    a match was found at all.
+    """
+
+    public String text
+    """The original input text that was searched."""
+    public I64 start
+    """Byte offset where the match begins (inclusive)."""
+    public I64 end
+    """Byte offset where the match ends (exclusive)."""
+    public Boolean matched
+    """Whether a match was found."""
+
+    public function Match( self, String text, I64 start, I64 end, Boolean matched ) -> Void:
+        """
+        Construct a match result.
+
+        Parameters:
+            text (String):
+                The original input text.
+            start (I64):
+                Byte offset where the match begins.
+            end (I64):
+                Byte offset where the match ends.
+            matched (Boolean):
+                Whether a match was found.
+        """
+        self.text = text
+        self.start = start
+        self.end = end
+        self.matched = matched
+
+    public function group( self ) -> String:
+        """
+        Extract the matched substring from the original text.
+
+        Returns:
+            The substring from start to end of the match.
+        """
+        return substring( self.text, self.start, self.end )
+
+    public function length( self ) -> I64:
+        """
+        Return the length of the matched region in bytes.
+
+        Returns:
+            The number of bytes in the match (end - start).
+        """
+        return self.end - self.start
+
+public function noMatch() -> Match:
+    """
+    Create a Match representing no match found.
+
+    Returns:
+        A Match with matched set to False, empty text, and zero positions.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    return new Match( "", 0, 0, False )
+
+export {
+    Match,
+    noMatch
+}

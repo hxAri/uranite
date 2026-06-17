@@ -1,0 +1,63 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/exception-handler.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# ExceptionHandler base class: maps error types to HTTP responses.
+# Like Spring's @ControllerAdvice but explicit via map() method calls.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.exception-handler
+
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+
+public class ExceptionHandler:
+    
+    """
+    Base class for exception handlers that convert unhandled errors into
+    HTTP responses. Subclasses can override handleDefault or add specialized
+    handler methods for different error types. Similar to Spring's
+    ControllerAdvice pattern but uses explicit method calls.
+    """
+    
+    public function ExceptionHandler( self ) -> Void:
+        
+        """
+        Create a new ExceptionHandler with no registered error mappings.
+        """
+        
+        return
+    
+    public function handleDefault( self, HttpRequest req, HttpResponse res, String errorMessage ) -> Void:
+        
+        """
+        Handle an unhandled exception by generating a 500 Internal Server Error
+        JSON response containing the error message.
+        
+        Parameters:
+            req (HttpRequest):
+                The HTTP request that caused the exception.
+            res (HttpResponse):
+                The HTTP response to populate with the error details.
+            errorMessage (String):
+                The error message from the caught exception.
+        """
+        
+        res.status( 500 ).json( "{\"error\":\"" + errorMessage + "\"}" )
+
+export {
+    ExceptionHandler
+}

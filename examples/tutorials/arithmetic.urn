@@ -1,0 +1,91 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#  
+# Arithmetic operations, compound assignment, and unary operators.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.arithmetic
+
+from uranite.io.console import puts
+
+
+# Basic arithmetic
+public function add( I64 a, I64 b ) -> I64:
+    return a + b
+
+public function subtract( I64 a, I64 b ) -> I64:
+    return a - b
+
+public function multiply( I64 a, I64 b ) -> I64:
+    return a * b
+
+public function divide( I64 a, I64 b ) -> I64:
+    return a / b
+
+public function modulo( I64 a, I64 b ) -> I64:
+    return a - ( a / b ) * b
+
+# Compound assignment operators
+public function compound_ops( I64 x ) -> I64:
+    I64 result = x
+    result += 10
+    result -= 3
+    result *= 2
+    return result
+
+# Unary negation
+public function negate( I64 x ) -> I64:
+    return 0 - x
+
+# Floating-point arithmetic
+public function circle_area( F64 radius ) -> F64:
+    F64 pi = 3.14159265
+    return pi * radius * radius
+
+# Power (iterative)
+public function power( I64 base, I64 exp ) -> I64:
+    I64 result = 1
+    I64 i = 0
+    while i < exp:
+        result = result * base
+        i = i + 1
+    return result
+
+# Bitwise shift (strength reduction: x * 2 -> x << 1)
+public function double_val( I64 x ) -> I64:
+    return x * 2
+
+# GCD (Euclidean algorithm)
+public function gcd( I64 a, I64 b ) -> I64:
+    if b == 0:
+        return a
+    return gcd( b, a - ( a / b ) * b )
+
+public function main() -> I32:
+    puts( "add(10, 20) = ", add( 10, 20 ) )
+    puts( "subtract(50, 15) = ", subtract( 50, 15 ) )
+    puts( "multiply(6, 7) = ", multiply( 6, 7 ) )
+    puts( "divide(100, 3) = ", divide( 100, 3 ) )
+    puts( "modulo(17, 5) = ", modulo( 17, 5 ) )
+    puts( "compound_ops(5) = ", compound_ops( 5 ) )
+    puts( "negate(42) = ", negate( 42 ) )
+    puts( "circle_area(5.0) = ", circle_area( 5.0 ) )
+    puts( "power(2, 10) = ", power( 2, 10 ) )
+    puts( "double_val(21) = ", double_val( 21 ) )
+    puts( "gcd(48, 18) = ", gcd( 48, 18 ) )
+    return 0

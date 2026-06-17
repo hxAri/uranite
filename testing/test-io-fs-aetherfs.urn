@@ -1,0 +1,13 @@
+package testing
+
+from uranite.io.fs.uranitefs import AetherFsSuperblock, AetherFsInode, AetherFileSystem
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO FS AetherFS Tests ===" )
+
+    AetherFsSuperblock superblock = new AetherFsSuperblock()
+    putsln( "AetherFsSuperblock constructed OK" )
+
+    putsln( "=== All IO FS AetherFS Tests Passed ===" )
+    return 0

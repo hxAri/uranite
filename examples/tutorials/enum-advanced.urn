@@ -1,0 +1,112 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#  
+# ...
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+
+# Simple enum
+public enum Direction:
+    unit NORTH
+    unit SOUTH
+    unit EAST
+    unit WEST
+
+# Backed enum with values
+public enum HttpStatus backed I64:
+    unit OK 200
+    unit NOT_FOUND 404
+    unit SERVER_ERROR 500
+
+# Enum with per-variant method overrides
+public enum Color backed I64:
+    unit RED 0xFF0000:
+        override function label( self ) -> String:
+            return "Red"
+    unit GREEN 0x00FF00:
+        override function label( self ) -> String:
+            return "Green"
+    unit BLUE 0x0000FF:
+        override function label( self ) -> String:
+            return "Blue"
+
+    public function label( self ) -> String:
+        return "Unknown Color"
+
+# Enum with shared methods
+public enum Season backed I64:
+    unit SPRING 1:
+        override function temperature( self ) -> I64:
+            return 20
+    unit SUMMER 2:
+        override function temperature( self ) -> I64:
+            return 35
+    unit AUTUMN 3:
+        override function temperature( self ) -> I64:
+            return 15
+    unit WINTER 4:
+        override function temperature( self ) -> I64:
+            return 0
+
+    public function temperature( self ) -> I64:
+        return -1
+
+    public function isWarm( self ) -> Boolean:
+        return False
+
+public function main() -> I32:
+    # Simple enum
+    Direction d = Direction.NORTH
+    puts( "north = ", Direction.NORTH.value )
+    puts( "west = ", Direction.WEST.value )
+    puts( "north name = ", Direction.NORTH.name )
+
+    # Backed enum
+    puts( "OK = ", HttpStatus.OK.value )
+    puts( "NOT_FOUND = ", HttpStatus.NOT_FOUND.value )
+    puts( "SERVER_ERROR name = ", HttpStatus.SERVER_ERROR.name )
+
+    # Per-variant method dispatch
+    Color r = Color.RED
+    Color g = Color.GREEN
+    Color b = Color.BLUE
+    puts( "red label = ", r.label() )
+    puts( "green label = ", g.label() )
+    puts( "blue label = ", b.label() )
+
+    # Enum .value on backed
+    puts( "red hex = ", Color.RED.value )
+    puts( "blue hex = ", Color.BLUE.value )
+
+    # Per-variant methods with chaining
+    Season spring = Season.SPRING
+    Season summer = Season.SUMMER
+    Season winter = Season.WINTER
+    puts( "spring temp = ", spring.temperature() )
+    puts( "summer temp = ", summer.temperature() )
+    puts( "winter temp = ", winter.temperature() )
+
+    # Runtime .name lookup
+    puts( "spring name = ", Season.SPRING.name )
+    puts( "summer name = ", Season.SUMMER.name )
+
+    puts( "all enum tests passed" )
+    return 0

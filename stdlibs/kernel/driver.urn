@@ -1,0 +1,109 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/driver.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Device driver management framework wrapping the kernel driver registry
+# with lifecycle operations: registration, probe, attach, detach.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.kernel.driver
+
+from uranite.os.driver.driver import DriverState, Driver, DriverDescriptor, DriverRegistry
+
+public class DeviceDriverManager:
+
+    """
+    Manages the full driver lifecycle: registration, probing, and state
+    tracking. Wraps DriverRegistry with a higher-level management API.
+    """
+
+    public DriverRegistry registry
+
+    public function DeviceDriverManager( self, I64 capacity ) -> Void:
+
+        """
+        Construct a driver manager that can hold up to capacity driver registrations.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.registry = new DriverRegistry( capacity )
+
+    public function registerDriver( self, I64 driverId, I64 vendorMatch, I64 deviceMatch, I64 classMatch ) -> Boolean:
+
+        """
+        Register a driver with matching criteria. Returns True on success.
+
+        Parameters:
+            driverId (I64):
+                Unique driver identifier.
+            vendorMatch (I64):
+                Vendor ID to match against devices.
+            deviceMatch (I64):
+                Device ID to match against devices.
+            classMatch (I64):
+                Device class code to match.
+        """
+
+        return self.registry.registerDriver( driverId, vendorMatch, deviceMatch, classMatch )
+
+    public function findDriverForDevice( self, I64 vendorId, I64 deviceId, I64 classCode ) -> I64:
+
+        """
+        Find a registered driver matching the given device identifiers.
+        Returns driver ID or -1 if no match.
+        """
+
+        return self.registry.findDriverForDevice( vendorId, deviceId, classCode )
+
+    public function bindDriver( self, I64 driverId, I64 bus, I64 slot, I64 func ) -> Boolean:
+
+        """
+        Bind a driver to a specific PCI device location.
+        """
+
+        return self.registry.bindDriver( driverId, bus, slot, func )
+
+    public function getDriverState( self, I64 driverId ) -> I64:
+
+        """ Return the current state of a registered driver. """
+
+        return self.registry.getDriverState( driverId )
+
+    public function getDriverCount( self ) -> I64:
+
+        """ Return the number of registered drivers. """
+
+        return self.registry.getCount()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all resources held by the driver manager.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.registry.destroy()
+
+export {
+    DeviceDriverManager,
+    DriverState, Driver, DriverDescriptor, DriverRegistry
+}

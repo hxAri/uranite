@@ -1,0 +1,70 @@
+package testing
+
+from uranite.os.task.task import Task, TaskState, BlockReason
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Task Tests ===" )
+
+    Task t = new Task( 1, 4096, 5 )
+    assertEqualI64( 1, t.id, "id" )
+    assertEqualI64( 4096, t.stackSize, "stackSize" )
+    assertEqualI64( 5, t.priority, "priority" )
+    assertEqualI64( 0, t.timeUsed, "timeUsed 0" )
+    assertFalse( t.isRunnable(), "not runnable initially" )
+    assertFalse( t.isBlocked(), "not blocked" )
+    assertFalse( t.isTerminated(), "not terminated" )
+    assertFalse( t.isTimeSliceExpired(), "time not expired" )
+    putsln( "construct OK" )
+
+    t.makeReady()
+    assertTrue( t.isRunnable(), "runnable after makeReady" )
+
+    t.markRunning()
+    assertTrue( t.isRunnable(), "runnable while running" )
+
+    t.tick()
+    assertEqualI64( 1, t.timeUsed, "timeUsed 1" )
+    assertFalse( t.isTimeSliceExpired(), "not expired after 1" )
+
+    I64 i = 0
+    while i < 9:
+        t.tick()
+        i = i + 1
+    assertEqualI64( 10, t.timeUsed, "timeUsed 10" )
+    assertTrue( t.isTimeSliceExpired(), "expired after 10" )
+    putsln( "tick OK" )
+
+    t.block( BlockReason.Mutex )
+    assertTrue( t.isBlocked(), "blocked" )
+
+    t.unblock()
+    assertTrue( t.isRunnable(), "runnable after unblock" )
+    assertFalse( t.isBlocked(), "not blocked after unblock" )
+    putsln( "block/unblock OK" )
+
+    t.setEntryPoint( 65536, 69632 )
+    assertEqualI64( 65536, t.registers.rip, "rip" )
+    assertEqualI64( 69632, t.registers.rsp, "rsp" )
+
+    assertTrue( t.next == None, "next None" )
+
+    Task t2 = new Task( 2, 4096, 3 )
+    t.setNext( t2 )
+    assertTrue( t.next != None, "next set" )
+    t.clearNext()
+    assertTrue( t.next == None, "next cleared" )
+    putsln( "next OK" )
+
+    t.setState( TaskState.Blocked )
+    assertTrue( t.isBlocked(), "blocked via setState" )
+
+    t.terminate()
+    assertTrue( t.isTerminated(), "terminated" )
+    putsln( "lifecycle OK" )
+
+    putsln( "=== All task tests passed ===" )
+    return 0

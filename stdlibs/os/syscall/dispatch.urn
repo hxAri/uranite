@@ -1,0 +1,145 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/syscall/dispatch.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the kernel-side syscall dispatch table that maps syscall numbers to handler function addresses for routing system calls to their implementations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.syscall.dispatch
+
+from uranite.memory.memory import Memory
+from uranite.os.syscall.error import SyscallError
+
+public class SyscallDispatch:
+    
+    """
+    Kernel-side syscall dispatch table that maps syscall numbers (passed in RAX on x86_64)
+    to handler function addresses. Each handler follows the signature
+    (I64, I64, I64, I64, I64, I64) -> I64, where the six arguments correspond to the
+    register values RDI, RSI, RDX, R10, R8, and R9 as passed by the syscall instruction.
+    The table is a fixed-size array of function addresses indexed by syscall number.
+    """
+    
+    protect Memory<I64> handlers
+    protect I64 tableSize
+    
+    public function SyscallDispatch( self, I64 maxSyscalls ) -> Void:
+        
+        """
+        Constructs a new syscall dispatch table with the specified maximum number of
+        syscall entries. All handler slots are initialized to 0 (unregistered).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.tableSize = maxSyscalls
+        self.handlers = new Memory<I64>( maxSyscalls )
+        I64 slotIndex = 0
+        while slotIndex < maxSyscalls:
+            self.handlers.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function register( self, I64 number, I64 handlerAddress ) -> Boolean:
+        
+        """
+        Registers a handler function address for the given syscall number. The handler
+        will be invoked when userspace executes a syscall instruction with this number
+        in RAX. Returns True if registration succeeded, or False if the syscall number
+        is out of range.
+        """
+        
+        if number < 0 or number >= self.tableSize:
+            return False
+        self.handlers.set( number, handlerAddress )
+        return True
+    
+    public function lookup( self, I64 number ) -> I64:
+        
+        """
+        Returns the handler function address registered for the given syscall number.
+        Returns 0 if the syscall number is out of range or no handler has been registered.
+        """
+        
+        if number < 0 or number >= self.tableSize:
+            return 0
+        return self.handlers.get( number )
+    
+    public function isRegistered( self, I64 number ) -> Boolean:
+        
+        """
+        Checks whether a handler has been registered for the given syscall number.
+        Returns True if a non-zero handler address is present, or False if the number
+        is out of range or unregistered.
+        """
+        
+        if number < 0 or number >= self.tableSize:
+            return False
+        return self.handlers.get( number ) != 0
+    
+    public function unregister( self, I64 number ) -> I64:
+        
+        """
+        Unregisters the handler for the given syscall number by setting the slot to 0.
+        Returns the previously registered handler address, or 0 if the number was out
+        of range or had no handler registered.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if number < 0 or number >= self.tableSize:
+            return 0
+        I64 previous = self.handlers.get( number )
+        self.handlers.set( number, 0 )
+        return previous
+    
+    public function getTableSize( self ) -> I64:
+        
+        """ Returns the maximum number of syscall entries this dispatch table supports. """
+        
+        return self.tableSize
+    
+    public function getRegisteredCount( self ) -> I64:
+        
+        """
+        Counts and returns the number of syscall numbers that have registered handlers.
+        Iterates through all slots and counts those with non-zero handler addresses.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 count = 0
+        I64 slotIndex = 0
+        while slotIndex < self.tableSize:
+            if self.handlers.get( slotIndex ) != 0:
+                count = count + 1
+            slotIndex = slotIndex + 1
+        return count
+    
+    public function destroy( self ) -> Void:
+        
+        """ Releases the heap-allocated memory buffer used to store handler addresses. """
+        
+        self.handlers.free()
+
+export {
+    SyscallDispatch
+}

@@ -1,0 +1,18 @@
+package testing
+
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+function greet( String name, String opts{} ) -> I64:
+    I64 count = opts.length()
+    return count
+
+public function main() -> I32:
+    putsln( "=== Kwargs Basic Tests ===" )
+
+    I64 result = greet( "World", prefix="Mr", suffix="Jr" )
+    assertEqualI64( 2, result, "kwargs count = 2" )
+    putsln( "kwargs OK" )
+
+    putsln( "=== All kwargs tests passed ===" )
+    return 0

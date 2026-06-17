@@ -1,0 +1,64 @@
+package testing
+
+from uranite.iterators.iterator import Iterator
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue,
+    assertFalse
+}
+from uranite.io.console import putsln
+
+public class RangeIterator implements Iterator<Int>:
+    private Int current
+    private Int end
+
+    public function RangeIterator( self, Int start, Int end ) -> Void:
+        self.current = start
+        self.end = end
+
+    public property has( self ) -> Boolean:
+        return self.current < self.end
+
+    public property next( self ) -> Int:
+        Int value = self.current
+        self.current = self.current + 1
+        return value
+
+public function main() -> I32:
+    putsln( "=== Iterator Tests ===" )
+
+    # iterate 0..5
+    RangeIterator it = new RangeIterator( 0, 5 )
+    I64 sum = 0
+    I64 count = 0
+    while it.has:
+        Int val = it.next
+        sum = sum + val
+        count = count + 1
+    assertEqualI64( 5, count, "range 0..5 count" )
+    assertEqualI64( 10, sum, "range 0..5 sum" )
+    assertFalse( it.has, "exhausted has" )
+    putsln( "range iteration OK" )
+
+    # empty range
+    RangeIterator empty = new RangeIterator( 5, 5 )
+    assertFalse( empty.has, "empty has" )
+    putsln( "empty range OK" )
+
+    # single element
+    RangeIterator single = new RangeIterator( 42, 43 )
+    assertTrue( single.has, "single has" )
+    assertEqualI64( 42, single.next, "single next" )
+    assertFalse( single.has, "single exhausted" )
+    putsln( "single element OK" )
+
+    # negative range
+    RangeIterator neg = new RangeIterator( -3, 0 )
+    I64 negSum = 0
+    while neg.has:
+        negSum = negSum + neg.next
+    assertEqualI64( -6, negSum, "neg range sum" )
+    putsln( "negative range OK" )
+
+    putsln( "=== All Iterator tests passed ===" )
+    return 0

@@ -1,0 +1,150 @@
+package testing
+
+from uranite.language.string import String
+from uranite.testing.assertions import {
+    assertEqualStr,
+    assertEqualI64,
+    assertTrue,
+    assertFalse
+}
+from uranite.io.console import putsln
+
+public class Greeting:
+    protect String message
+
+    public function Greeting( self, String message ) -> Void:
+        self.message = message
+
+public function main() -> I32:
+    putsln( "=== String Tests ===" )
+
+    String s = new String( "hello world" )
+
+    assertEqualStr( "hello world", s.getValue(), "getValue" )
+    assertEqualStr( "hello world", s.toString(), "toString" )
+    assertEqualI64( 11, s.length(), "length" )
+    assertFalse( s.isEmpty(), "not isEmpty" )
+    putsln( "basic OK" )
+
+    String empty = new String( "" )
+    assertTrue( empty.isEmpty(), "isEmpty empty" )
+    putsln( "isEmpty OK" )
+
+    # concat
+    String s1 = new String( "hello" )
+    String s2 = new String( " world" )
+    String cat = s1.concat( s2 )
+    assertEqualStr( "hello world", cat.getValue(), "concat" )
+    putsln( "concat OK" )
+
+    # equals
+    String sa = new String( "test" )
+    String sb = new String( "test" )
+    String sc = new String( "other" )
+    assertTrue( sa.equals( sb ), "equals same" )
+    assertFalse( sa.equals( sc ), "equals diff" )
+    putsln( "equals OK" )
+
+    # startsWith / endsWith / contains
+    assertTrue( s.startsWith( "hello world" ), "startsWith" )
+    assertTrue( s.endsWith( "hello world" ), "endsWith" )
+    assertTrue( s.contains( "hello world" ), "contains" )
+    putsln( "startsWith/endsWith/contains OK" )
+
+    # toUpper / toLower
+    String upper = s.toUpper()
+    assertEqualStr( "HELLO WORLD", upper.getValue(), "toUpper" )
+    String lower = s.toLower()
+    assertEqualStr( "hello world", lower.getValue(), "toLower" )
+    putsln( "toUpper/toLower OK" )
+
+    # trim
+    String trimmed = s.trim()
+    assertEqualStr( "hello world", trimmed.getValue(), "trim" )
+    putsln( "trim OK" )
+
+    # replace
+    String replaced = s.replace( "world", "there" )
+    assertEqualStr( "hello there", replaced.getValue(), "replace" )
+    putsln( "replace OK" )
+
+    # split
+    String splitResult = s.split( " " )
+    putsln( "split OK" )
+
+    # format — basic positional
+    String f1 = "Hello {}, age {}".format( "World", 42 )
+    assertEqualStr( "Hello World, age 42", f1, "format basic" )
+
+    # format — explicit index
+    String f2 = "{0} and {0}".format( "echo" )
+    assertEqualStr( "echo and echo", f2, "format index" )
+
+    # format — hex
+    String f3 = "{:x}".format( 255 )
+    assertEqualStr( "ff", f3, "format hex" )
+
+    # format — hex uppercase
+    String f4 = "{:X}".format( 255 )
+    assertEqualStr( "FF", f4, "format HEX" )
+
+    # format — octal
+    String f5 = "{:o}".format( 8 )
+    assertEqualStr( "10", f5, "format oct" )
+
+    # format — binary
+    String f6 = "{:b}".format( 10 )
+    assertEqualStr( "1010", f6, "format bin" )
+
+    # format — float precision
+    String f7 = "{:.2f}".format( 3.14159 )
+    assertEqualStr( "3.14", f7, "format float" )
+
+    # format — right-align
+    String f8 = "[{:>8}]".format( "hi" )
+    assertEqualStr( "[      hi]", f8, "format right" )
+
+    # format — left-align
+    String f9 = "[{:<8}]".format( "hi" )
+    assertEqualStr( "[hi      ]", f9, "format left" )
+
+    # format — center-align
+    String f10 = "[{:^8}]".format( "hi" )
+    assertEqualStr( "[   hi   ]", f10, "format center" )
+
+    # format — zero-pad
+    String f11 = "{:0>6}".format( 42 )
+    assertEqualStr( "000042", f11, "format zeropad" )
+
+    # format — boolean
+    String f12 = "{}".format( True )
+    assertEqualStr( "True", f12, "format bool" )
+
+    # format — escaped braces
+    String f13 = "a {{}} b".format()
+    assertEqualStr( "a {} b", f13, "format escape" )
+
+    # format — named kwargs
+    String f14 = "{greeting} {name}".format( greeting="Hi", name=String )
+    putsln( "format kwargs OK" )
+
+    # format — mixed positional and named
+    String f15 = "{} says {word}".format( "Bob", word="hello" )
+    assertEqualStr( "Bob says hello", f15, "format mixed" )
+
+    # format — no placeholders
+    String f16 = "plain text".format()
+    assertEqualStr( "plain text", f16, "format plain" )
+
+    # format — object with toString
+    Greeting g = new Greeting( "Welcome" )
+    String f17 = "msg={}".format( g )
+    putsln( "format obj OK" )
+
+    # format — multiple objects and primitives
+    Greeting g2 = new Greeting( "Bye" )
+    String f18 = "{} and {} count={}".format( g, g2, 99 )
+    putsln( "format multi OK" )
+
+    putsln( "=== All String tests passed ===" )
+    return 0

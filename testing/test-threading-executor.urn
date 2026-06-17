@@ -1,0 +1,64 @@
+package testing
+
+from uranite.threading.executor import ThreadPoolExecutor, TaskSubmitter0, TaskSubmitter1
+from uranite.threading.future import FutureBase, Future, FutureState
+from uranite.threading.future import FUTURE_PENDING, FUTURE_FINISHED
+from uranite.threading.channel import ChannelInner
+from uranite.threading.thread import ThreadRuntime
+from uranite.threading.atomic import AtomicI64
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.time.clock import SystemClock
+from uranite.memory.memory import Memory
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse, assertGreaterThan
+}
+from uranite.io.console import putsln
+
+function computeSquare( I64 x ) -> I64:
+    return x * x
+
+function computeConstant() -> I64:
+    return 42
+
+public function main() -> I32:
+    putsln( "=== Threading Executor Tests ===" )
+
+    Scheduler sched = new Scheduler()
+    PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
+    SystemClock clock = new SystemClock( 1000 )
+    ThreadRuntime runtime = new ThreadRuntime( sched, pmm, clock, 256 )
+
+    ThreadPoolExecutor executor = new ThreadPoolExecutor( 4 )
+    assertEqualI64( 4, executor.getWorkerCount(), "worker count" )
+    assertFalse( executor.isShutdown(), "not shutdown" )
+    putsln( "executor OK" )
+
+    # Direct computation
+    I64 directResult = computeSquare( 7 )
+    assertEqualI64( 49, directResult, "computeSquare(7)" )
+    putsln( "direct compute OK" )
+
+    # FutureBase
+    FutureBase fb = new FutureBase( sched )
+    assertFalse( fb.isDone(), "initially not done" )
+
+    fb.completeRaw( directResult )
+    assertTrue( fb.isDone(), "done after complete" )
+    assertEqualI64( 49, fb.getRawResult(), "raw result" )
+    putsln( "future OK" )
+
+    # Future wrapper
+    Future<I64> future = new Future<I64>( fb )
+    assertTrue( future.isDone(), "wrapped done" )
+    putsln( "Future wrapper OK" )
+
+    # Submitters
+    I64 constAddr = addressof computeConstant
+    assertGreaterThan( constAddr, 0, "function addr" )
+    TaskSubmitter1<I64, I64> submitter1 = new TaskSubmitter1<I64, I64>( executor )
+    TaskSubmitter0<I64> submitter0 = new TaskSubmitter0<I64>( executor )
+    putsln( "submitters OK" )
+
+    putsln( "=== All executor tests passed ===" )
+    return 0

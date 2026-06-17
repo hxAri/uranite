@@ -1,0 +1,97 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/random.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cryptographically secure random number generation backed by hardware
+# entropy (RDRAND/RDSEED) via the kernel CSPRNG primitive.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.crypto.random
+
+from uranite.os.crypto.rng import Csprng
+
+public class SecureRandom:
+
+    """
+    Cryptographically secure random number generator using hardware entropy
+    sources (RDRAND/RDSEED on x86-64). Wraps the kernel Csprng with a
+    safe, high-level API.
+    """
+
+    protect Csprng generator
+
+    public function SecureRandom( self ) -> Void:
+
+        """
+        Construct and seed the random generator from hardware entropy.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.generator = new Csprng()
+        self.generator.seedFromHardware()
+
+    public function nextI64( self ) -> I64:
+
+        """ Generate a random 64-bit integer. """
+
+        return self.generator.next()
+
+    public function nextBounded( self, I64 bound ) -> I64:
+
+        """
+        Generate a random integer in [0, bound). Uses modular reduction
+        on the raw CSPRNG output.
+        """
+
+        return self.generator.nextBounded( bound )
+
+    public function nextInRange( self, I64 minimum, I64 maximum ) -> I64:
+
+        """
+        Generate a random integer in [minimum, maximum). Delegates to
+        nextBounded with the range width.
+        """
+
+        I64 range = maximum - minimum
+        return minimum + self.generator.nextBounded( range )
+
+    public function fillRandom( self, I64 count ) -> I64:
+
+        """
+        Generate count random bytes and return a pointer to the filled buffer.
+        """
+
+        return self.generator.fillRandom( count )
+
+    public function isInitialized( self ) -> Boolean:
+
+        """
+        Return whether the generator has been successfully seeded.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.generator.isInitialized()
+
+export {
+    SecureRandom,
+    Csprng
+}

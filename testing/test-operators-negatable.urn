@@ -1,0 +1,37 @@
+package testing
+
+from uranite.operators.negatable import Negatable
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public class Number implements Negatable<Number>:
+    public Int value
+
+    public function Number( self, Int value ) -> Void:
+        self.value = value
+
+    public function negate( self ) -> Number:
+        return new Number( -self.value )
+
+public function main() -> I32:
+    putsln( "=== Negatable Tests ===" )
+
+    Number a = new Number( 42 )
+
+    Number b = a.negate()
+    assertEqualI64( -42, b.value, "negate positive" )
+
+    Number c = b.negate()
+    assertEqualI64( 42, c.value, "negate negative" )
+
+    Number zero = new Number( 0 )
+    Number d = zero.negate()
+    assertEqualI64( 0, d.value, "negate zero" )
+
+    Number big = new Number( 1000000 )
+    Number e = big.negate()
+    assertEqualI64( -1000000, e.value, "negate large" )
+    putsln( "negate OK" )
+
+    putsln( "=== All Negatable tests passed ===" )
+    return 0

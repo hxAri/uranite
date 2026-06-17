@@ -1,0 +1,43 @@
+package testing
+
+from uranite.adelia.hsl import HSL
+from uranite.testing.assertions import {
+    assertEqualF64,
+    assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia HSL Tests ===" )
+
+    # constructor + fields
+    HSL color = new HSL( 180.0, 0.5, 0.5 )
+    assertEqualF64( 180.0, color.hue, 0.0001, "hue" )
+    assertEqualF64( 0.5, color.saturation, 0.0001, "saturation" )
+    assertEqualF64( 0.5, color.lightness, 0.0001, "lightness" )
+    putsln( "constructor OK" )
+
+    # equals
+    HSL same = new HSL( 180.0, 0.5, 0.5 )
+    assertTrue( color.equals( same ), "equals same" )
+    HSL diff = new HSL( 0.0, 1.0, 0.5 )
+    assertFalse( color.equals( diff ), "equals diff" )
+    putsln( "equals OK" )
+
+    # toString
+    String str = color.toString()
+    assertTrue( str != "", "toString not empty" )
+    putsln( "toString OK" )
+
+    # black
+    HSL black = new HSL( 0.0, 0.0, 0.0 )
+    assertEqualF64( 0.0, black.lightness, 0.0001, "black lightness" )
+    putsln( "black OK" )
+
+    # white
+    HSL white = new HSL( 0.0, 0.0, 1.0 )
+    assertEqualF64( 1.0, white.lightness, 0.0001, "white lightness" )
+    putsln( "white OK" )
+
+    putsln( "=== All HSL tests passed ===" )
+    return 0

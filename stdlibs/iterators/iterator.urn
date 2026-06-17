@@ -1,0 +1,73 @@
+#
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/iterators/iterator.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the Iterator generic interface, a stateful cursor that yields elements
+# of type T one at a time from a collection or data source. Provides the has
+# property to check for remaining elements and the next property to retrieve
+# the current element and advance the cursor position.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.iterators.iterator
+
+from uranite.language import Boolean
+
+public interface Iterator<T>:
+    
+    """
+    Stateful cursor interface that yields elements of type T one at a time
+    from a collection or data source. An Iterator maintains an internal
+    position that advances with each call to next, and provides the has
+    property to check whether more elements remain before attempting to
+    retrieve them. Once all elements have been consumed (has returns false),
+    calling next produces undefined behavior. Iterators are single-use and
+    forward-only; to traverse a collection again, obtain a new Iterator
+    from the Iterable interface.
+    """
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether this iterator has more elements remaining to yield.
+        Returns true if a subsequent call to next will produce a valid element,
+        or false if the iterator has been exhausted and all elements have been
+        consumed. This should be checked before each call to next to avoid
+        accessing past the end of the underlying data source.
+        
+        Returns:
+            Boolean:
+                True if more elements remain, false if the iterator is exhausted.
+        """
+    
+    public property next( self ) -> T:
+
+        """
+        Return the current element and advance the iterator cursor to the next
+        position. Implementations must raise StateError when called on an
+        exhausted iterator (when has returns false). The returned element is
+        of the generic type T matching the collection's element type.
+
+        Returns:
+            T:
+                The current element at the iterator's position before advancing.
+
+        Raises:
+            StateError: If the iterator has been exhausted and no elements remain.
+        """
+
+export {
+    Iterator
+}

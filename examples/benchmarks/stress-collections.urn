@@ -1,0 +1,45 @@
+package testing
+
+from uranite.collection.array-list import ArrayList
+from uranite.collection.hash-map import HashMap
+from uranite.convert.convert import intToString
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Stress Collections Test ===" )
+    
+    # ArrayList: insert 10K elements
+    ArrayList<I64> list = new ArrayList<I64>()
+    I64 i = 0
+    while i < 10000:
+        list.add( i )
+        i = i + 1
+    putsln( "ArrayList 10K inserts OK" )
+    
+    I64 sum = 0
+    i = 0
+    while i < 10000:
+        sum = sum + list.get( i )
+        i = i + 1
+    putsln( "ArrayList 10K reads OK" )
+    
+    # HashMap: insert 10K entries
+    HashMap<String, I64> map = new HashMap<String, I64>()
+    i = 0
+    while i < 10000:
+        String key = intToString( i )
+        map.put( key, i )
+        i = i + 1
+    putsln( "HashMap 10K inserts OK" )
+    
+    I64 found = 0
+    i = 0
+    while i < 10000:
+        String key = intToString( i )
+        if map.containsKey( key ):
+            found = found + 1
+        i = i + 1
+    putsln( "HashMap 10K lookups OK" )
+    
+    putsln( "=== Stress collections test PASSED ===" )
+    return 0

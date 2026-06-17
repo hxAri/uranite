@@ -1,0 +1,87 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/math/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Arithmetic error hierarchy for numeric operation failures.
+# Covers division by zero, integer overflow, and integer underflow
+# conditions detected at runtime by compiler-inserted checks.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.math.errors
+
+from uranite.errors.throwable import Throwable
+from uranite.errors.error import Error
+
+public Readonly class ArithmeticError extends Error:
+    
+    """
+    Base class for errors arising from failed arithmetic operations.
+    
+    Subclasses identify specific failure modes: division by zero,
+    integer overflow, and integer underflow. The compiler inserts
+    runtime checks that raise these errors automatically.
+    """
+    
+    public function ArithmeticError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        parent( message, code, previous )
+
+public Readonly class ZeroDivisionError extends ArithmeticError:
+    
+    """
+    Raised when a division or modulo operation has a zero divisor.
+    
+    The compiler inserts a zero-check before every integer and float
+    division and modulo operation. When the right operand is zero,
+    this error is raised instead of producing undefined behavior.
+    """
+    
+    public function ZeroDivisionError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        parent( message, code, previous )
+
+public Readonly class OverflowError extends ArithmeticError:
+    
+    """
+    Raised when an integer arithmetic operation exceeds the maximum
+    representable value for the result type.
+    
+    The compiler uses hardware overflow detection to check addition,
+    subtraction, and multiplication on signed integer types. When
+    overflow is detected, this error is raised instead of silently
+    wrapping the result.
+    """
+    
+    public function OverflowError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        parent( message, code, previous )
+
+public Readonly class UnderflowError extends ArithmeticError:
+    
+    """
+    Raised when an integer arithmetic operation falls below the minimum
+    representable value for the result type.
+    
+    Applies to signed integer subtraction and other operations that can
+    produce a result smaller than the type's minimum value.
+    """
+    
+    public function UnderflowError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        parent( message, code, previous )
+
+export {
+    ArithmeticError,
+    ZeroDivisionError,
+    OverflowError,
+    UnderflowError
+}

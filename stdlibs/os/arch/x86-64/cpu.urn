@@ -1,0 +1,331 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/cpu.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides direct access to x86-64 CPU state including general-purpose registers,
+# control registers (CR0-CR4), model-specific registers, RFLAGS, and the time stamp
+# counter, as well as interrupt control and TLB management instructions.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.x86-64.cpu
+
+public class Registers:
+    
+    """
+    Full x86_64 CPU register context including all general-purpose registers,
+    the instruction pointer, flags register, and segment selectors. This
+    structure is saved and restored during context switches between tasks
+    and when entering or returning from interrupt handlers.
+    """
+    
+    public I64 rax
+    public I64 rbx
+    public I64 rcx
+    public I64 rdx
+    public I64 rsi
+    public I64 rdi
+    public I64 rbp
+    public I64 rsp
+    public I64 r8
+    public I64 r9
+    public I64 r10
+    public I64 r11
+    public I64 r12
+    public I64 r13
+    public I64 r14
+    public I64 r15
+    public I64 rip
+    public I64 rflags
+    public I64 cs
+    public I64 ss
+    
+    public function Registers( self ) -> Void:
+        
+        """
+        Construct a zeroed register context with all general-purpose registers,
+        instruction pointer, flags, and segment selectors initialized to zero.
+        This represents a clean CPU state suitable for a newly created task.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.rax = 0
+        self.rbx = 0
+        self.rcx = 0
+        self.rdx = 0
+        self.rsi = 0
+        self.rdi = 0
+        self.rbp = 0
+        self.rsp = 0
+        self.r8 = 0
+        self.r9 = 0
+        self.r10 = 0
+        self.r11 = 0
+        self.r12 = 0
+        self.r13 = 0
+        self.r14 = 0
+        self.r15 = 0
+        self.rip = 0
+        self.rflags = 0
+        self.cs = 0
+        self.ss = 0
+
+public function halt() -> Void:
+    
+    """ Halt the CPU until the next interrupt arrives, reducing power consumption while idle. """
+    
+    asm volatile "hlt"
+
+public function enableInterrupts() -> Void:
+    
+    """ Enable maskable interrupts by setting the IF flag in RFLAGS via the sti instruction. """
+    
+    asm volatile "sti"
+
+public function disableInterrupts() -> Void:
+    
+    """ Disable maskable interrupts by clearing the IF flag in RFLAGS via the cli instruction. """
+    
+    asm volatile "cli"
+
+public function readCr0() -> I64:
+    
+    """ Read control register CR0 which contains paging, protected mode, and FPU control flags. """
+    
+    I64 result = 0
+    asm "mov %cr0, $0" : output( "=r" result )
+    return result
+
+public function writeCr0( I64 value ) -> Void:
+    
+    """
+    Write a new value to control register CR0 to enable or disable paging,
+    protected mode, and FPU emulation settings.
+    
+    Parameters:
+        value (I64):
+            The new CR0 register value to write.
+    """
+    
+    asm volatile "mov $0, %cr0" : : input( "r" value )
+
+public function readCr2() -> I64:
+    
+    """ Read control register CR2 which contains the linear address that caused the last page fault. """
+    
+    I64 result = 0
+    asm "mov %cr2, $0" : output( "=r" result )
+    return result
+
+public function readCr3() -> I64:
+    
+    """
+    Read control register CR3 which holds the physical base address of the
+    top-level page table (PML4 in x86_64 long mode). The lower 12 bits of
+    CR3 contain process-context identifier and cache control flags, while
+    the upper bits point to the 4KB-aligned PML4 table used by the MMU
+    for virtual-to-physical address translation.
+    
+    Returns:
+        I64:
+            The current CR3 register value containing the PML4 physical address.
+    """
+    
+    I64 result = 0
+    asm "mov %cr3, $0" : output( "=r" result )
+    return result
+
+public function writeCr3( I64 value ) -> Void:
+    
+    """
+    Write a new physical address into control register CR3 to switch the
+    active page table hierarchy. Writing CR3 implicitly flushes the entire
+    Translation Lookaside Buffer (TLB), forcing the processor to re-walk
+    the page tables for all subsequent memory accesses. This is the primary
+    mechanism for switching between process address spaces during a context
+    switch, and should be used sparingly due to the TLB flush cost.
+    
+    Parameters:
+        value (I64):
+            The physical address of the new PML4 table to activate.
+    """
+    
+    asm volatile "mov $0, %cr3" : : input( "r" value )
+
+public function readCr4() -> I64:
+    
+    """
+    Read control register CR4 which contains flags controlling extended CPU
+    features including Physical Address Extension (PAE), Page Size Extension
+    (PSE), Supervisor Mode Execution Prevention (SMEP), and various other
+    processor capabilities. These flags must be configured correctly during
+    boot before enabling paging or entering long mode.
+    
+    Returns:
+        I64:
+            The current CR4 register value.
+    """
+    
+    I64 result = 0
+    asm "mov %cr4, $0" : output( "=r" result )
+    return result
+
+public function writeCr4( I64 value ) -> Void:
+    
+    """
+    Write a new value to control register CR4 to enable or disable extended
+    CPU features. Changes to CR4 take effect immediately and may alter the
+    processor's behavior for paging, memory protection, and instruction
+    execution. Some CR4 bits require specific CPUID feature flags to be
+    present before they can be set.
+    
+    Parameters:
+        value (I64):
+            The new CR4 register value to write.
+    """
+    
+    asm volatile "mov $0, %cr4" : : input( "r" value )
+
+public function invlpg( I64 virtualAddress ) -> Void:
+    
+    """
+    Invalidate a single Translation Lookaside Buffer entry for the specified
+    virtual address. Unlike writing CR3 which flushes the entire TLB, invlpg
+    selectively removes only the cached page table entry for one virtual page.
+    This is used after unmapping or remapping a single page to ensure the
+    processor does not continue using stale translation data from the TLB.
+    
+    Parameters:
+        virtualAddress (I64):
+            The virtual address whose TLB entry should be invalidated.
+    """
+    
+    asm volatile "invlpg ($0)" : : input( "r" virtualAddress ) : clobber( "memory" )
+
+public function readMsr( I64 msr ) -> I64:
+    
+    """
+    Read a Model-Specific Register identified by its index number. The MSR
+    index is loaded into ECX, and the rdmsr instruction returns the 64-bit
+    value split across EDX (high 32 bits) and EAX (low 32 bits), which are
+    then combined into a single I64 result. Common MSR indices include
+    EFER (0xC0000080) for enabling long mode and NX bit, STAR (0xC0000081)
+    for syscall segment selectors, and LSTAR (0xC0000082) for the syscall
+    entry point address.
+    
+    Parameters:
+        msr (I64):
+            The MSR index number to read.
+    
+    Returns:
+        I64:
+            The 64-bit value stored in the specified MSR.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 low = 0
+    I64 high = 0
+    asm "rdmsr" : output( "={eax}" low, "={edx}" high ) : input( "{ecx}" msr )
+    I64 result = ( high << 32 ) | low
+    return result
+
+public function writeMsr( I64 msr, I64 value ) -> Void:
+    
+    """
+    Write a 64-bit value to a Model-Specific Register identified by its index.
+    The value is split into its low 32 bits (loaded into EAX) and high 32 bits
+    (loaded into EDX), with the MSR index in ECX, before executing the wrmsr
+    instruction. Writing to MSRs can fundamentally change processor behavior
+    including enabling syscall/sysret, configuring APIC base addresses, and
+    setting up performance monitoring counters.
+    
+    Parameters:
+        msr (I64):
+            The MSR index number to write.
+        value (I64):
+            The 64-bit value to store in the specified MSR.
+    """
+    
+    I64 low = value & 4294967295
+    I64 high = value >> 32
+    asm volatile "wrmsr" : : input( "{ecx}" msr, "{eax}" low, "{edx}" high )
+
+public function readRflags() -> I64:
+    
+    """
+    Read the current value of the RFLAGS register by pushing it onto the stack
+    and popping it into a general-purpose register. RFLAGS contains arithmetic
+    status flags (carry, zero, sign, overflow), the interrupt enable flag (IF),
+    the direction flag (DF), and privilege level indicators. This is useful for
+    saving and restoring interrupt state around critical sections.
+    
+    Returns:
+        I64:
+            The current RFLAGS register value.
+    """
+    
+    I64 result = 0
+    asm "pushfq; pop $0" : output( "=r" result )
+    return result
+
+public function readTsc() -> I64:
+    
+    """
+    Read the processor's Time Stamp Counter using the rdtsc instruction, which
+    returns the number of CPU cycles elapsed since the last processor reset.
+    The 64-bit counter value is returned split across EDX (high) and EAX (low),
+    then combined into a single I64. This provides the highest-resolution
+    timing available on x86_64 and is commonly used for performance measurement,
+    random seed generation, and busy-wait calibration in kernel code.
+    
+    Returns:
+        I64:
+            The current 64-bit time stamp counter value.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 low = 0
+    I64 high = 0
+    asm volatile "rdtsc" : output( "={eax}" low, "={edx}" high )
+    I64 result = ( high << 32 ) | low
+    return result
+
+export {
+    Registers,
+    halt,
+    enableInterrupts,
+    disableInterrupts,
+    readCr0,
+    writeCr0,
+    readCr2,
+    readCr3,
+    writeCr3,
+    readCr4,
+    writeCr4,
+    invlpg,
+    readMsr,
+    writeMsr,
+    readRflags,
+    readTsc
+}

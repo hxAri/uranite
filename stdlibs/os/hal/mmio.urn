@@ -1,0 +1,158 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/hal/mmio.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Memory-Mapped I/O access functions for reading and writing device registers at physical memory addresses. All operations use volatile inline assembly to prevent compiler optimization. Also provides memory fence instructions for ordering guarantees.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.hal.mmio
+
+from uranite.memory.memory import Memory
+
+public function mmioRead8( I64 address ) -> I64:
+    
+    """
+    Read an 8-bit value from the given memory-mapped I/O address using a
+    volatile movb instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this read.
+    """
+    
+    I64 result = 0
+    asm volatile "movzbq ($1), $0" : output( "=r" result ) : input( "r" address ) : clobber( "memory" )
+    return result
+
+public function mmioWrite8( I64 address, I64 value ) -> Void:
+    
+    """
+    Write an 8-bit value to the given memory-mapped I/O address using a
+    volatile movb instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this write.
+    """
+    
+    asm volatile "movb ${0:b}, ($1)" : : input( "r" value, "r" address ) : clobber( "memory" )
+
+public function mmioRead16( I64 address ) -> I64:
+    
+    """
+    Read a 16-bit value from the given memory-mapped I/O address using a
+    volatile movw instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this read.
+    """
+    
+    I64 result = 0
+    asm volatile "movzwq ($1), $0" : output( "=r" result ) : input( "r" address ) : clobber( "memory" )
+    return result
+
+public function mmioWrite16( I64 address, I64 value ) -> Void:
+    
+    """
+    Write a 16-bit value to the given memory-mapped I/O address using a
+    volatile movw instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this write.
+    """
+    
+    asm volatile "movw ${0:w}, ($1)" : : input( "r" value, "r" address ) : clobber( "memory" )
+
+public function mmioRead32( I64 address ) -> I64:
+    
+    """
+    Read a 32-bit value from the given memory-mapped I/O address using a
+    volatile movl instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this read.
+    """
+    
+    I64 result = 0
+    asm volatile "movl ($1), ${0:k}" : output( "=r" result ) : input( "r" address ) : clobber( "memory" )
+    return result
+
+public function mmioWrite32( I64 address, I64 value ) -> Void:
+    
+    """
+    Write a 32-bit value to the given memory-mapped I/O address using a
+    volatile movl instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this write.
+    """
+    
+    asm volatile "movl ${0:k}, ($1)" : : input( "r" value, "r" address ) : clobber( "memory" )
+
+public function mmioRead64( I64 address ) -> I64:
+    
+    """
+    Read a 64-bit value from the given memory-mapped I/O address using a
+    volatile movq instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this read.
+    """
+    
+    I64 result = 0
+    asm volatile "movq ($1), $0" : output( "=r" result ) : input( "r" address ) : clobber( "memory" )
+    return result
+
+public function mmioWrite64( I64 address, I64 value ) -> Void:
+    
+    """
+    Write a 64-bit value to the given memory-mapped I/O address using a
+    volatile movq instruction. The memory clobber ensures the compiler does
+    not reorder or eliminate this write.
+    """
+    
+    asm volatile "movq $0, ($1)" : : input( "r" value, "r" address ) : clobber( "memory" )
+
+public function memoryFence() -> Void:
+    
+    """
+    Execute an MFENCE instruction to ensure all prior memory reads and writes
+    are completed before any subsequent memory operations. This is a full
+    memory barrier that orders both loads and stores.
+    """
+    
+    asm volatile "mfence" : : : clobber( "memory" )
+
+public function storeFence() -> Void:
+    
+    """
+    Execute an SFENCE instruction to ensure all prior store operations are
+    globally visible before any subsequent stores. This is a write-only
+    memory barrier.
+    """
+    
+    asm volatile "sfence" : : : clobber( "memory" )
+
+public function loadFence() -> Void:
+    
+    """
+    Execute an LFENCE instruction to ensure all prior load operations have
+    completed before any subsequent loads. This is a read-only memory barrier.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    asm volatile "lfence" : : : clobber( "memory" )
+
+export {
+    mmioRead8,
+    mmioWrite8,
+    mmioRead16,
+    mmioWrite16,
+    mmioRead32,
+    mmioWrite32,
+    mmioRead64,
+    mmioWrite64,
+    memoryFence,
+    storeFence,
+    loadFence
+}

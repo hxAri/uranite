@@ -1,0 +1,260 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/time/timer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level timer scheduling with one-shot and periodic modes.
+# Wraps the kernel TimerWheel and SystemClock with a unified
+# interface that computes absolute deadlines from relative delays.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.time.timer
+
+from uranite.os.time.timer import {
+    TIMER_ONE_SHOT, TIMER_PERIODIC, TIMER_INACTIVE, TIMER_ACTIVE, TIMER_EXPIRED,
+    TimerEntry, TimerWheel
+}
+from uranite.os.time.clock import SystemClock
+from uranite.os.syscall.invoke import syscall2
+from uranite.os.syscall.result import SyscallResult
+from uranite.memory.memory import Memory
+from uranite.io.syscall import memoryToPtr, writeI64At
+
+public class Timer:
+
+    """
+    High-level timer with one-shot and periodic scheduling. Combines
+    a kernel TimerWheel with a SystemClock to compute absolute deadlines
+    from relative delay values. Drives expiration via tick advancement.
+    """
+
+    protect TimerWheel wheel
+    protect SystemClock clock
+
+    public function Timer( self, I64 maxTimers, I64 tickFrequency ) -> Void:
+
+        """
+        Construct a timer with the given capacity and clock frequency.
+
+        Parameters:
+            maxTimers (I64):
+                Maximum number of concurrent timer slots.
+            tickFrequency (I64):
+                Clock ticks per second (e.g., 1000 for millisecond resolution).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.wheel = new TimerWheel( maxTimers )
+        self.clock = new SystemClock( tickFrequency )
+
+    public function scheduleOnce( self, I64 callbackId, I64 delayTicks ) -> I64:
+
+        """
+        Schedule a one-shot timer that fires after delayTicks from now.
+        Returns timer ID on success, -1 if wheel is full.
+
+        Parameters:
+            callbackId (I64):
+                Application-defined callback identifier dispatched on fire.
+            delayTicks (I64):
+                Number of ticks from now until the timer fires.
+
+        Returns:
+            I64:
+                Timer ID on success, -1 if no slots available.
+        """
+
+        I64 deadline = self.clock.getTicks() + delayTicks
+        return self.wheel.scheduleOneShot( deadline, callbackId )
+
+    public function schedulePeriodic( self, I64 callbackId, I64 intervalTicks ) -> I64:
+
+        """
+        Schedule a periodic timer that first fires after intervalTicks
+        from now, then repeats at the same interval.
+
+        Parameters:
+            callbackId (I64):
+                Application-defined callback identifier dispatched on fire.
+            intervalTicks (I64):
+                Interval in ticks between each firing.
+
+        Returns:
+            I64:
+                Timer ID on success, -1 if no slots available.
+        """
+
+        I64 deadline = self.clock.getTicks() + intervalTicks
+        return self.wheel.schedulePeriodic( deadline, intervalTicks, callbackId )
+
+    public function cancel( self, I64 slot ) -> Boolean:
+
+        """
+        Cancel an active timer at the given slot. Returns True on success.
+
+        Parameters:
+            slot (I64):
+                Timer slot index to cancel.
+        """
+
+        return self.wheel.cancel( slot )
+
+    public function tick( self ) -> I64:
+
+        """
+        Advance the clock by one tick and fire any expired timers.
+        Returns the number of timers that fired.
+        """
+
+        self.clock.tick()
+        return self.wheel.fire( self.clock.getTicks() )
+
+    public function advanceTicks( self, I64 count ) -> I64:
+
+        """
+        Advance the clock by multiple ticks (catch-up after sleep)
+        and fire any expired timers.
+
+        Parameters:
+            count (I64):
+                Number of ticks to advance.
+
+        Returns:
+            I64:
+                Number of timers that fired.
+        """
+
+        self.clock.advance( count )
+        return self.wheel.fire( self.clock.getTicks() )
+
+    public function drain( self ) -> I64:
+
+        """
+        Reclaim all expired one-shot timer slots for reuse.
+        Returns the number of slots drained.
+        """
+
+        return self.wheel.drain()
+
+    public function getTimerState( self, I64 slot ) -> I64:
+
+        """
+        Return state of timer at slot (0=inactive, 1=active, 2=expired).
+
+        Parameters:
+            slot (I64):
+                Timer slot index.
+        """
+
+        return self.wheel.getState( slot )
+
+    public function getTimerCallback( self, I64 slot ) -> I64:
+
+        """
+        Return callback ID associated with timer at slot.
+
+        Parameters:
+            slot (I64):
+                Timer slot index.
+        """
+
+        return self.wheel.getCallbackId( slot )
+
+    public function getActiveCount( self ) -> I64:
+
+        """ Return number of active and expired timers in the wheel. """
+
+        return self.wheel.getCount()
+
+    public function getUptimeMillis( self ) -> I64:
+
+        """ Return total elapsed milliseconds since timer construction. """
+
+        return self.clock.uptimeMillis()
+
+    public function getUptimeMicros( self ) -> I64:
+
+        """ Return total elapsed microseconds since timer construction. """
+
+        return self.clock.uptimeMicros()
+
+    public function getCurrentTick( self ) -> I64:
+
+        """ Return raw tick count since timer construction. """
+
+        return self.clock.getTicks()
+
+    public function destroy( self ) -> Void:
+
+        """ Release all resources held by the timer wheel. """
+
+        self.wheel.destroy()
+
+const I64 SYS_NANOSLEEP = 35
+
+public function sleep( I64 milliseconds ) -> Void:
+
+    """
+    Suspend the current thread for the specified duration.
+
+    Uses the nanosleep syscall. The actual sleep may be slightly longer
+    due to scheduling granularity.
+
+    Parameters:
+        milliseconds (I64):
+            The number of milliseconds to sleep.
+
+    Complexity:
+        Time: O(1) (blocks for the specified duration)
+        Space: O(1)
+    """
+
+    I64 seconds = milliseconds / 1000
+    I64 remainingMillis = milliseconds - seconds * 1000
+    I64 nanoseconds = remainingMillis * 1000000
+    Memory<I64> timespec = new Memory<I64>( 2 )
+    I64 timespecAddr = memoryToPtr( timespec )
+    writeI64At( timespecAddr, 0, seconds )
+    writeI64At( timespecAddr, 8, nanoseconds )
+    SyscallResult result = syscall2( SYS_NANOSLEEP, timespecAddr, 0 )
+    timespec.free()
+
+public function sleepSeconds( I64 seconds ) -> Void:
+
+    """
+    Suspend the current thread for the specified number of seconds.
+
+    Parameters:
+        seconds (I64):
+            The number of seconds to sleep.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    sleep( seconds * 1000 )
+
+export {
+    Timer,
+    TIMER_ONE_SHOT, TIMER_PERIODIC, TIMER_INACTIVE, TIMER_ACTIVE, TIMER_EXPIRED,
+    TimerEntry, TimerWheel,
+    SystemClock,
+    sleep,
+    sleepSeconds
+}

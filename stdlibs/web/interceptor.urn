@@ -1,0 +1,81 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/interceptor.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# HandlerInterceptor: preHandle, postHandle, afterCompletion lifecycle
+# hooks like Spring's HandlerInterceptor.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.interceptor
+
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+
+public interface HandlerInterceptor:
+    
+    """
+    Interface for intercepting request handling at three lifecycle points:
+    before the handler executes (preHandle), after the handler executes
+    (postHandle), and after the response is fully complete (afterCompletion).
+    Modeled after Spring's HandlerInterceptor pattern.
+    """
+    
+    public function preHandle( self, HttpRequest req, HttpResponse res ) -> Boolean:
+        
+        """
+        Called before the route handler executes. Can short-circuit request
+        processing by returning False.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request.
+            res (HttpResponse):
+                The HTTP response that can be populated to short-circuit handling.
+        
+        Returns:
+            True to continue processing to the handler, False to stop.
+        """
+    
+    public function postHandle( self, HttpRequest req, HttpResponse res ) -> Void:
+        
+        """
+        Called after the route handler has executed successfully but before
+        the response is sent to the client.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request.
+            res (HttpResponse):
+                The HTTP response produced by the handler.
+        """
+    
+    public function afterCompletion( self, HttpRequest req, HttpResponse res ) -> Void:
+        
+        """
+        Called after the complete request-response cycle is finished,
+        regardless of whether the handler succeeded or threw an exception.
+        Suitable for resource cleanup.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request.
+            res (HttpResponse):
+                The HTTP response that was sent to the client.
+        """
+
+export {
+    HandlerInterceptor
+}

@@ -1,0 +1,42 @@
+package testing
+
+from uranite.io.directory import makedirs, DirectoryIterator, DirectoryEntry
+from uranite.io.file import writeFileString
+from uranite.io.syscall import sysUnlink, sysRmdir, stringToPtr
+from uranite.io.path import exists
+from uranite.sys.process import exit
+from uranite.testing.assertions import {
+    assertGreaterOrEqual,
+    assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO Directory Tests ===" )
+
+    String testDir = "/tmp/uranite-test-dir-io"
+    makedirs( testDir, 493 )
+    writeFileString( "/tmp/uranite-test-dir-io/a.txt", "aaa" )
+    writeFileString( "/tmp/uranite-test-dir-io/b.txt", "bbb" )
+
+    DirectoryIterator iter = new DirectoryIterator( testDir )
+    I64 count = 0
+    while iter.has:
+        DirectoryEntry entry = iter.next
+        count = count + 1
+    iter.close()
+    assertGreaterOrEqual( count, 2, "dir entry count >= 2" )
+    putsln( "directory iteration OK" )
+
+    # cleanup
+    I64 p1 = stringToPtr( "/tmp/uranite-test-dir-io/a.txt" )
+    sysUnlink( p1 )
+    I64 p2 = stringToPtr( "/tmp/uranite-test-dir-io/b.txt" )
+    sysUnlink( p2 )
+    I64 p3 = stringToPtr( "/tmp/uranite-test-dir-io" )
+    sysRmdir( p3 )
+    putsln( "cleanup OK" )
+
+    putsln( "=== All IO directory tests passed ===" )
+    exit( 0 )
+    return 0

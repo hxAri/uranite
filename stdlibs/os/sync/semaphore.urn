@@ -1,0 +1,112 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/sync/semaphore.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Counting semaphore for managing access to a limited pool of kernel resources. Uses tryWait/signal semantics with a spinlock-protected internal state, where the count represents the number of available resource slots.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.sync.semaphore
+
+from uranite.os.sync.spinlock import Spinlock
+
+public class Semaphore:
+    
+    """
+    Counting semaphore for managing access to a limited pool of resources.
+    The count represents the number of available resource slots. tryWait()
+    decrements the count and returns True if a slot is available, or
+    increments the wait count and returns False if the caller must block.
+    signal() increments the count and returns True if waiters exist,
+    indicating the caller should wake one blocked task.
+    """
+    
+    protect Spinlock guard
+    protect I64 count
+    protect I64 waitCount
+    
+    public function Semaphore( self, I64 initial ) -> Void:
+        
+        """
+        Construct a semaphore with the given initial count representing
+        the number of available resource slots. The wait count starts at zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard = new Spinlock()
+        self.count = initial
+        self.waitCount = 0
+    
+    public function tryWait( self ) -> Boolean:
+        
+        """
+        Attempt to decrement the semaphore count by one.
+        Returns True if a resource slot was available and successfully acquired.
+        Returns False if the count was zero, in which case the wait count is
+        incremented and the caller should block the current task via the scheduler.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        if self.count > 0:
+            self.count = self.count - 1
+            self.guard.unlock()
+            return True
+        self.waitCount = self.waitCount + 1
+        self.guard.unlock()
+        return False
+    
+    public function signal( self ) -> Boolean:
+        
+        """
+        Increment the semaphore count by one, releasing a resource slot.
+        Returns True if there are waiting tasks, indicating the caller should
+        wake one of them. Returns False if there are no waiters.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        if self.waitCount > 0:
+            self.waitCount = self.waitCount - 1
+            self.guard.unlock()
+            return True
+        self.count = self.count + 1
+        self.guard.unlock()
+        return False
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the current number of available resource slots. """
+        
+        return self.count
+    
+    public function getWaitCount( self ) -> I64:
+        
+        """ Return the number of tasks currently waiting for a resource slot. """
+        
+        return self.waitCount
+
+export {
+    Semaphore
+}

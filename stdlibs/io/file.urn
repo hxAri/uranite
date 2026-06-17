@@ -1,0 +1,783 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/file.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# File class implementing InputStream and OutputStream interfaces.
+# Wraps a file descriptor with read/write/seek/close operations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.file
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
+    sysOpen, sysClose, sysRead, sysWrite, sysLseek, sysFsync, sysFtruncate, sysFstat,
+    readI64At, readI32At,
+    O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND,
+    SEEK_SET, SEEK_CUR, SEEK_END
+}
+from uranite.io.stream import InputStream, OutputStream
+from uranite.collection.array-list import ArrayList
+from uranite.io.stat import FileStat, fstatFd
+from uranite.io.errors import IOError
+
+const I64 DEFAULT_FILE_PERMISSIONS = 420
+"""Default file permission mode (octal 0644: owner read/write, group/other read)."""
+
+public class File implements InputStream, OutputStream:
+    
+    """
+    A file handle that implements both InputStream and OutputStream interfaces.
+    Wraps a Linux file descriptor with read, write, seek, truncate, stat, and
+    close operations. All operations raise IOError if the file has been closed.
+    """
+    
+    protect I64 fd
+    """The underlying Linux file descriptor."""
+    protect String filePath
+    """The filesystem path this file was opened from."""
+    protect Boolean closed
+    """Whether this file has been closed."""
+    
+    public function File( self, String path, I64 flags, I64 mode ) -> Void:
+        
+        """
+        Open a file at the given path with the specified flags and permission mode.
+        
+        Parameters:
+            path (String):
+                The filesystem path of the file to open.
+            flags (I64):
+                Bitwise OR of open flags (O_RDONLY, O_WRONLY, O_RDWR, O_CREAT,
+                O_TRUNC, O_APPEND, etc.).
+            mode (I64):
+                The permission mode bits used when creating a new file
+                (e.g., 420 for 0644). Ignored if O_CREAT is not set.
+        
+        Raises:
+            IOError: If the file cannot be opened.
+        """
+        
+        I64 pathPtr = stringToPtr( path )
+        self.fd = sysOpen( pathPtr, flags, mode )
+        self.filePath = path
+        self.closed = False
+    
+    public function read( self, Memory<I64> buffer, I64 offset, I64 length ) -> I64:
+        
+        """
+        Read up to the specified number of bytes from the file into a Memory buffer.
+        Bytes are read into a temporary buffer first, then copied element-by-element
+        into the destination.
+        
+        Parameters:
+            buffer (Memory<I64>):
+                The destination buffer to read bytes into.
+            offset (I64):
+                The starting offset within the destination buffer.
+            length (I64):
+                The maximum number of bytes to read.
+        
+        Returns:
+            The actual number of bytes read, which may be less than length at
+            end of file.
+        
+        Raises:
+            IOError: If the file is closed or the read fails.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.closed:
+            raise new IOError( "read on closed file", 9, None )
+        Memory<I64> tmpBuf = new Memory<I64>( length )
+        I64 tmpAddr = memoryToPtr( tmpBuf )
+        I64 bytesRead = sysRead( self.fd, tmpAddr, length )
+        I64 byteIndex = 0
+        while byteIndex < bytesRead:
+            I64 byteValue = readByteAt( tmpAddr, byteIndex )
+            buffer.set( offset + byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        tmpBuf.free()
+        return bytesRead
+
+    public function write( self, Memory<I64> buffer, I64 offset, I64 length ) -> I64:
+        
+        """
+        Write the specified number of bytes from a Memory buffer to the file.
+        Bytes are copied from the source buffer into a temporary buffer first,
+        then written to the file descriptor. Handles partial writes by retrying.
+        
+        Parameters:
+            buffer (Memory<I64>):
+                The source buffer containing bytes to write.
+            offset (I64):
+                The starting offset within the source buffer.
+            length (I64):
+                The number of bytes to write.
+        
+        Returns:
+            The total number of bytes written.
+        
+        Raises:
+            IOError: If the file is closed or the write fails.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.closed:
+            raise new IOError( "write on closed file", 9, None )
+        Memory<I64> tmpBuf = new Memory<I64>( length )
+        I64 tmpAddr = memoryToPtr( tmpBuf )
+        I64 byteIndex = 0
+        while byteIndex < length:
+            I64 byteValue = buffer.get( offset + byteIndex )
+            writeByteAt( tmpAddr, byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        I64 totalWritten = 0
+        while totalWritten < length:
+            I64 chunkWritten = sysWrite( self.fd, tmpAddr + totalWritten, length - totalWritten )
+            totalWritten = totalWritten + chunkWritten
+        tmpBuf.free()
+        return totalWritten
+    
+    public function flush( self ) -> Void:
+        
+        """
+        Flush all buffered data to the underlying storage device by
+        calling fsync on the file descriptor.
+        
+        Raises:
+            IOError: If the file is closed or the fsync fails.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed:
+            raise new IOError( "flush on closed file", 9, None )
+        sysFsync( self.fd )
+    
+    public function readBytes( self, I64 count ) -> Memory<I64>:
+        
+        """
+        Read up to the specified number of bytes from the file, returning them
+        in a newly allocated Memory buffer sized to the actual number of bytes read.
+        
+        Parameters:
+            count (I64):
+                The maximum number of bytes to read.
+        
+        Returns:
+            A newly allocated Memory buffer containing the bytes that were read.
+            The buffer size matches the actual byte count, not the requested count.
+        
+        Raises:
+            IOError: If the file is closed or the read fails.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.closed:
+            raise new IOError( "readBytes on closed file", 9, None )
+        Memory<I64> tmpBuf = new Memory<I64>( count )
+        I64 tmpAddr = memoryToPtr( tmpBuf )
+        I64 bytesRead = sysRead( self.fd, tmpAddr, count )
+        Memory<I64> result = new Memory<I64>( bytesRead )
+        I64 byteIndex = 0
+        while byteIndex < bytesRead:
+            I64 byteValue = readByteAt( tmpAddr, byteIndex )
+            result.set( byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        tmpBuf.free()
+        return result
+    
+    public function readAll( self ) -> Memory<I64>:
+        
+        """
+        Read all remaining bytes from the current file position to the end
+        of the file. Uses fstat to determine the file size and calculates
+        the remaining byte count.
+        
+        Returns:
+            A newly allocated Memory buffer containing all remaining file contents.
+        
+        Raises:
+            IOError: If the file is closed or any operation fails.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.closed:
+            raise new IOError( "readAll on closed file", 9, None )
+        FileStat st = fstatFd( self.fd )
+        I64 fileSize = st.getSize()
+        I64 currentPos = sysLseek( self.fd, 0, SEEK_CUR )
+        I64 remaining = fileSize - currentPos
+        if remaining <= 0:
+            remaining = 0
+        Memory<I64> tmpBuf = new Memory<I64>( remaining + 1 )
+        I64 tmpAddr = memoryToPtr( tmpBuf )
+        I64 totalRead = 0
+        while totalRead < remaining:
+            I64 chunkRead = sysRead( self.fd, tmpAddr + totalRead, remaining - totalRead )
+            if chunkRead == 0:
+                remaining = totalRead
+            else:
+                totalRead = totalRead + chunkRead
+        Memory<I64> result = new Memory<I64>( totalRead )
+        I64 byteIndex = 0
+        while byteIndex < totalRead:
+            I64 byteValue = readByteAt( tmpAddr, byteIndex )
+            result.set( byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        tmpBuf.free()
+        return result
+
+    public function readString( self ) -> String:
+        
+        """
+        Read all remaining bytes from the current file position to the end
+        of the file and return them as a null-terminated String. Uses fstat
+        to determine the file size.
+        
+        Returns:
+            The remaining file contents as a String.
+        
+        Raises:
+            IOError: If the file is closed or any operation fails.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.closed:
+            raise new IOError( "readString on closed file", 9, None )
+        FileStat st = fstatFd( self.fd )
+        I64 fileSize = st.getSize()
+        I64 currentPos = sysLseek( self.fd, 0, SEEK_CUR )
+        I64 remaining = fileSize - currentPos
+        if remaining <= 0:
+            remaining = 0
+        I64 allocBytes = remaining + 1
+        I64 allocWords = ( allocBytes + 7 ) / 8
+        Memory<I64> buf = new Memory<I64>( allocWords )
+        I64 bufAddr = memoryToPtr( buf )
+        I64 totalRead = 0
+        while totalRead < remaining:
+            I64 chunkRead = sysRead( self.fd, bufAddr + totalRead, remaining - totalRead )
+            if chunkRead == 0:
+                remaining = totalRead
+            else:
+                totalRead = totalRead + chunkRead
+        writeByteAt( bufAddr, totalRead, 0 )
+        String result = ""
+        asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" bufAddr ) : clobber()
+        return result
+    
+    public function writeString( self, String data ) -> I64:
+        
+        """
+        Write all bytes of a string to the file. Handles partial writes
+        by retrying until the full string is written.
+        
+        Parameters:
+            data (String):
+                The string to write to the file.
+        
+        Returns:
+            The total number of bytes written.
+        
+        Raises:
+            IOError: If the file is closed or the write fails.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.closed:
+            raise new IOError( "writeString on closed file", 9, None )
+        I64 dataPointer = stringToPtr( data )
+        I64 dataLength = stringLen( data )
+        I64 totalWritten = 0
+        while totalWritten < dataLength:
+            I64 chunkWritten = sysWrite( self.fd, dataPointer + totalWritten, dataLength - totalWritten )
+            totalWritten = totalWritten + chunkWritten
+        return totalWritten
+    
+    public function seek( self, I64 offset, I64 whence ) -> I64:
+        
+        """
+        Reposition the file offset within the open file.
+        
+        Parameters:
+            offset (I64):
+                The byte offset relative to the whence position.
+            whence (I64):
+                The reference point for the offset: SEEK_SET (0) for file start,
+                SEEK_CUR (1) for current position, SEEK_END (2) for file end.
+        
+        Returns:
+            The resulting absolute byte offset from the start of the file.
+        
+        Raises:
+            IOError: If the file is closed or the seek fails.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed:
+            raise new IOError( "seek on closed file", 9, None )
+        return sysLseek( self.fd, offset, whence )
+    
+    public function seekStart( self, I64 offset ) -> I64:
+        
+        """
+        Seek to an absolute byte offset from the start of the file.
+        
+        Parameters:
+            offset (I64):
+                The absolute byte offset from the beginning of the file.
+        
+        Returns:
+            The resulting absolute byte offset from the start of the file.
+        """
+        
+        return self.seek( offset, SEEK_SET )
+    
+    public function seekEnd( self, I64 offset ) -> I64:
+        
+        """
+        Seek to a byte offset relative to the end of the file.
+        
+        Parameters:
+            offset (I64):
+                The byte offset relative to the end of the file (typically
+                zero or negative).
+        
+        Returns:
+            The resulting absolute byte offset from the start of the file.
+        """
+        
+        return self.seek( offset, SEEK_END )
+    
+    public function seekCurrent( self, I64 offset ) -> I64:
+        
+        """
+        Seek to a byte offset relative to the current file position.
+        
+        Parameters:
+            offset (I64):
+                The byte offset relative to the current position (positive
+                moves forward, negative moves backward).
+        
+        Returns:
+            The resulting absolute byte offset from the start of the file.
+        """
+        
+        return self.seek( offset, SEEK_CUR )
+    
+    public function tell( self ) -> I64:
+        
+        """
+        Return the current byte offset within the file.
+        
+        Returns:
+            The current absolute byte offset from the start of the file.
+        """
+        
+        return self.seek( 0, SEEK_CUR )
+    
+    public function truncate( self, I64 length ) -> Void:
+        
+        """
+        Truncate the file to the specified length in bytes. If the file is
+        larger than the given length, the extra data is lost. If smaller,
+        the file is extended with zero bytes.
+        
+        Parameters:
+            length (I64):
+                The desired file size in bytes after truncation.
+        
+        Raises:
+            IOError: If the file is closed or the truncation fails.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed:
+            raise new IOError( "truncate on closed file", 9, None )
+        sysFtruncate( self.fd, length )
+    
+    public function stat( self ) -> FileStat:
+        
+        """
+        Retrieve file status information for this open file using fstat.
+        
+        Returns:
+            A FileStat object containing the file metadata (size, mode,
+            timestamps, etc.).
+        
+        Raises:
+            IOError: If the file is closed or the fstat fails.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed:
+            raise new IOError( "stat on closed file", 9, None )
+        return fstatFd( self.fd )
+    
+    public function getSize( self ) -> I64:
+        
+        """
+        Return the current size of the file in bytes.
+        
+        Returns:
+            The file size in bytes as reported by fstat.
+        """
+        
+        FileStat st = self.stat()
+        return st.getSize()
+    
+    public function getFd( self ) -> I64:
+        
+        """
+        Return the underlying Linux file descriptor number.
+        
+        Returns:
+            The raw file descriptor integer.
+        """
+        
+        return self.fd
+    
+    public function getPath( self ) -> String:
+        
+        """
+        Return the filesystem path this file was opened from.
+        
+        Returns:
+            The original path string passed to the constructor.
+        """
+        
+        return self.filePath
+    
+    public function isClosed( self ) -> Boolean:
+        
+        """
+        Check whether this file has been closed.
+        
+        Returns:
+            True if the file has been closed, False otherwise.
+        """
+        
+        return self.closed
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close this file, releasing the underlying file descriptor.
+        Subsequent calls after the first close are no-ops.
+        """
+        
+        if self.closed == False:
+            sysClose( self.fd )
+            self.closed = True
+    
+    public function readLines( self ) -> ArrayList<String>:
+
+        """
+        Read all remaining content and split into a list of lines.
+
+        Newline characters are stripped from each line. Resets the file
+        position to the beginning before reading.
+
+        Returns:
+            ArrayList<String>:
+                List of lines in the file.
+
+        Raises:
+            IOError:
+                If the file has been closed or cannot be read.
+
+        Complexity:
+            Time: O(n) where n is the file size
+            Space: O(n)
+        """
+
+        if self.closed:
+            raise new IOError( "cannot read from closed file", 0, None )
+        self.seekStart( 0 )
+        String content = self.readString()
+        ArrayList<String> lines = new ArrayList<String>()
+        I64 contentLength = stringLen( content )
+        I64 lineStart = 0
+        I64 scanOffset = 0
+        while scanOffset < contentLength:
+            I64 charByte = content.charCodeAt( scanOffset )
+            if charByte == 10:
+                String line = content.substring( lineStart, scanOffset )
+                lines.add( line )
+                lineStart = scanOffset + 1
+            scanOffset = scanOffset + 1
+        if lineStart < contentLength:
+            String lastLine = content.substring( lineStart, contentLength )
+            lines.add( lastLine )
+        return lines
+
+    public function writeLines( self, ArrayList<String> lines ) -> Void:
+
+        """
+        Write all lines to the file, separating each with a newline character.
+
+        Parameters:
+            lines (ArrayList<String>):
+                The lines to write.
+
+        Raises:
+            IOError:
+                If the file has been closed or cannot be written.
+
+        Complexity:
+            Time: O(n) where n is the total length of all lines
+        """
+
+        if self.closed:
+            raise new IOError( "cannot write to closed file", 0, None )
+        I64 lineIndex = 0
+        while lineIndex < lines.length:
+            self.writeString( lines.get( lineIndex ) )
+            self.writeString( "\n" )
+            lineIndex = lineIndex + 1
+
+    public function copyTo( self, String destinationPath ) -> Void:
+
+        """
+        Copy the entire contents of this file to a new file at the given path.
+
+        Creates or truncates the destination file. Resets the source file
+        position to the beginning before reading.
+
+        Parameters:
+            destinationPath (String):
+                The path where the copy should be written.
+
+        Raises:
+            IOError:
+                If either file cannot be read or written.
+
+        Complexity:
+            Time: O(n) where n is the file size
+        """
+
+        if self.closed:
+            raise new IOError( "cannot copy from closed file", 0, None )
+        self.seekStart( 0 )
+        String content = self.readString()
+        writeFileString( destinationPath, content )
+
+    public function destroy( self ) -> Void:
+
+        """
+        Destructor that delegates to close to ensure resource cleanup.
+        """
+
+        self.close()
+
+public function openFile( String path ) -> File:
+    
+    """
+    Open an existing file for reading only.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file to open.
+    
+    Returns:
+        A File handle opened in read-only mode.
+    
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        IOError: If the file cannot be opened.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new File( path, O_RDONLY, 0 )
+
+public function createFile( String path, I64 mode ) -> File:
+    
+    """
+    Create a new file or truncate an existing one, opened for writing only.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file to create.
+        mode (I64):
+            The permission mode bits for the new file (e.g., 420 for 0644).
+    
+    Returns:
+        A File handle opened in write-only mode with create and truncate flags.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new File( path, O_WRONLY | O_CREAT | O_TRUNC, mode )
+
+public function appendFile( String path ) -> File:
+    
+    """
+    Open a file for appending. Creates the file if it does not exist.
+    All writes are appended to the end of the file.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file to open for appending.
+    
+    Returns:
+        A File handle opened in write-only append mode with permission 0644.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new File( path, O_WRONLY | O_CREAT | O_APPEND, 420 )
+
+public function readFileString( String path ) -> String:
+    
+    """
+    Read the entire contents of a file as a String. Opens the file,
+    reads all content, closes the file, and returns the content.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file to read.
+    
+    Returns:
+        The entire file contents as a String.
+    
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        IOError: If the file cannot be read.
+    """
+    
+    File fileHandle = openFile( path )
+    String content = fileHandle.readString()
+    fileHandle.close()
+    return content
+
+public function writeFileString( String path, String content ) -> Void:
+    
+    """
+    Write a string to a file, creating or truncating it. Opens the file
+    in write mode with create and truncate flags, writes the content,
+    and closes the file.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file to write.
+        content (String):
+            The string content to write to the file.
+    """
+    
+    File fileHandle = createFile( path, DEFAULT_FILE_PERMISSIONS )
+    fileHandle.writeString( content )
+    fileHandle.close()
+
+public function openForReadWrite( String path ) -> File:
+
+    """
+    Open an existing file for both reading and writing.
+
+    Parameters:
+        path (String):
+            The filesystem path of the file to open.
+
+    Returns:
+        File:
+            A File handle opened in read-write mode.
+
+    Raises:
+        IOError:
+            If the file does not exist or cannot be opened.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return new File( path, O_RDWR, 0 )
+
+public function openOrCreate( String path, I64 mode ) -> File:
+
+    """
+    Open an existing file for read-write, creating it if absent.
+
+    Parameters:
+        path (String):
+            The filesystem path of the file.
+        mode (I64):
+            The permission mode bits for the new file if created
+            (e.g., 420 for 0644).
+
+    Returns:
+        File:
+            A File handle opened in read-write mode.
+
+    Raises:
+        IOError:
+            If the file cannot be opened or created.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return new File( path, O_RDWR | O_CREAT, mode )
+
+export {
+    File,
+    DEFAULT_FILE_PERMISSIONS,
+    openFile,
+    createFile,
+    appendFile,
+    readFileString,
+    writeFileString,
+    openForReadWrite,
+    openOrCreate
+}

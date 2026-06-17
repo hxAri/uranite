@@ -1,0 +1,103 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/cipher.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# AES block cipher with 128-bit and 256-bit key support, wrapping the
+# kernel AES context with a high-level encrypt/decrypt interface.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.crypto.cipher
+
+from uranite.os.crypto.aes import AES_128, AES_256, AES_BLOCK_SIZE, AesContext
+
+public class AesCipher:
+
+    """
+    AES block cipher supporting 128-bit and 256-bit key sizes. Provides
+    single-block encrypt and decrypt operations. Wraps the kernel AesContext
+    with initialization validation.
+    """
+
+    protect AesContext context
+    protect I64 keyBits
+
+    public function AesCipher( self, I64 keyBits ) -> Void:
+
+        """
+        Construct an AES cipher with the specified key size (AES_128 or AES_256).
+
+        Parameters:
+            keyBits (I64):
+                Key size in bits. Use AES_128 (128) or AES_256 (256).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.context = new AesContext( keyBits )
+        self.keyBits = keyBits
+
+    public function init( self, I64 k0, I64 k1, I64 k2, I64 k3 ) -> Void:
+
+        """
+        Initialize the cipher with a key specified as four 64-bit words.
+        For AES-128, only k0 and k1 are used. For AES-256, all four words
+        form the full key.
+        """
+
+        self.context.init( k0, k1, k2, k3 )
+
+    public function hasHardwareSupport( self ) -> Boolean:
+
+        """ Return whether AES-NI hardware acceleration is available. """
+
+        return self.context.hasHardwareSupport()
+
+    public function getRounds( self ) -> I64:
+
+        """ Return the number of AES rounds (10 for 128, 14 for 256). """
+
+        return self.context.getRounds()
+
+    public function getKeySize( self ) -> I64:
+
+        """ Return the configured key size in bits. """
+
+        return self.context.getKeySize()
+
+    public function isInitialized( self ) -> Boolean:
+
+        """ Return whether the cipher has been initialized with a key. """
+
+        return self.context.isInitialized()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Securely destroy the cipher context and key material.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.context.destroy()
+
+export {
+    AesCipher,
+    AES_128, AES_256, AES_BLOCK_SIZE, AesContext
+}

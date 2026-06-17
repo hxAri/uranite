@@ -1,0 +1,161 @@
+# 
+# @author hxAri (hxari)
+# @create 2026-05-01 15:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# The core operating system module for Uranite, providing high-level 
+# abstractions for memory management, security, task scheduling, 
+# and hardware communication.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os
+
+from uranite.os.bus import PciBus, PciDevice
+from uranite.os.driver import {
+    Driver, 
+    DriverDescriptor, 
+    DriverRegistry, 
+    DriverState
+}
+from uranite.os.hal import InterruptTable, IrqEntry
+from uranite.os.identity import ProcessIdentity
+from uranite.os.io import {
+    BufferCache, 
+    BufferEntry, 
+    DmaChannel, 
+    DmaDescriptor, 
+    IoRequestQueue
+}
+from uranite.os.ipc import {
+    Event, 
+    Message, 
+    Port, 
+    SharedMemoryRegistry, 
+    SharedRegion
+}
+from uranite.os.memory import {
+    AddressSpace, 
+    KernelHeap, 
+    KernelObject, 
+    ObjectOps, 
+    ObjectType, 
+    PhysicalMemoryManager
+}
+from uranite.os.scheduler import Scheduler
+from uranite.os.security import {
+    Capability, 
+    CapabilityFlag, 
+    HandleEntry, 
+    HandleTable
+}
+from uranite.os.syscall import {
+    SyscallDispatch, 
+    SyscallError, 
+    SyscallNumber, 
+    SyscallResult
+}
+from uranite.os.sync import {
+    KernelMutex, 
+    ReadWriteLock, 
+    Semaphore, 
+    Spinlock
+}
+from uranite.os.task import Task, TaskState
+from uranite.os.vfs import {
+    FileDescriptor, 
+    FileDescriptorTable, 
+    FileSystem, 
+    FileSystemType, 
+    MountEntry, 
+    MountTable, 
+    VNode, 
+    VNodeCache, 
+    VNodeType
+}
+
+export {
+    
+    # Hardware Abstraction & Bus: Low-level interrupt and bus management
+    InterruptTable,
+    IrqEntry,
+    PciBus,
+    PciDevice,
+
+    # Driver Framework: Infrastructure for device drivers
+    Driver,
+    DriverDescriptor,
+    DriverRegistry,
+    DriverState,
+
+    # Identity: Process credentials and ownership
+    ProcessIdentity,
+
+    # I/O Subsystem: High-performance data transfer and DMA
+    BufferCache,
+    BufferEntry,
+    DmaChannel,
+    DmaDescriptor,
+    IoRequestQueue,
+
+    # IPC: Inter-Process Communication mechanisms
+    Event,
+    Message,
+    Port,
+    SharedMemoryRegistry,
+    SharedRegion,
+
+    # Memory Management: Logic for physical/virtual memory and object lifecycle
+    AddressSpace,
+    KernelHeap,
+    KernelObject,
+    ObjectOps,
+    ObjectType,
+    PhysicalMemoryManager,
+
+    # Tasking & Scheduling: Execution units and CPU scheduling logic
+    Scheduler,
+    Task,
+    TaskState,
+
+    # Security: Capability-based access control and handle management
+    Capability,
+    CapabilityFlag,
+    HandleEntry,
+    HandleTable,
+
+    # System Interface: Gateway for userland-to-kernel communication
+    SyscallDispatch,
+    SyscallError,
+    SyscallNumber,
+    SyscallResult,
+
+    # Synchronization: Primitives for multi-core concurrency control
+    KernelMutex,
+    ReadWriteLock,
+    Semaphore,
+    Spinlock,
+
+    # Virtual File System: Abstraction for storage and filesystems
+    FileDescriptor,
+    FileDescriptorTable,
+    FileSystem,
+    FileSystemType,
+    MountEntry,
+    MountTable,
+    VNode,
+    VNodeCache,
+    VNodeType
+    
+}

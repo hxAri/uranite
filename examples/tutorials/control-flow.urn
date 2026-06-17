@@ -1,0 +1,106 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#  
+# Control Flow: if/elif/else, match statements, nested conditionals, boolean logic.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.control-flow
+
+from uranite.io.console import puts
+
+# Simple if/else
+public function abs_value( I64 x ) -> I64:
+    if x < 0:
+        return 0 - x
+    return x
+
+# If/elif/else chain
+public function sign( I64 x ) -> I64:
+    if x > 0:
+        return 1
+    elif x == 0:
+        return 0
+    else:
+        return 0 - 1
+
+# Nested conditionals
+public function classify( I64 x ) -> I64:
+    if x > 100:
+        if x > 1000:
+            return 3
+        else:
+            return 2
+    elif x > 0:
+        return 1
+    elif x == 0:
+        return 0
+    else:
+        return 0 - 1
+
+# Clamping with elif
+public function clamp( I64 val, I64 lo, I64 hi ) -> I64:
+    if val < lo:
+        return lo
+    elif val > hi:
+        return hi
+    else:
+        return val
+
+# Boolean operators: and, or
+public function is_in_range( I64 x, I64 lo, I64 hi ) -> Boolean:
+    if x >= lo and x <= hi:
+        return True
+    return False
+
+public function is_extreme( I64 x ) -> Boolean:
+    if x > 100 or x < 0 - 100:
+        return True
+    return False
+
+# Match on enum
+enum Season:
+    unit Spring
+    unit Summer
+    unit Autumn
+    unit Winter
+
+public function season_temp( Season s ) -> I64:
+    return match s in \
+        Season.Spring => 20, \
+        Season.Summer => 35, \
+        Season.Autumn => 15, \
+        Season.Winter => 0, \
+        * => 0
+
+public function main() -> I32:
+    puts( "abs_value(-42) = ", abs_value( 0 - 42 ) )
+    puts( "sign(99) = ", sign( 99 ) )
+    puts( "sign(0) = ", sign( 0 ) )
+    puts( "sign(-5) = ", sign( 0 - 5 ) )
+    puts( "classify(5000) = ", classify( 5000 ) )
+    puts( "classify(50) = ", classify( 50 ) )
+    puts( "classify(0) = ", classify( 0 ) )
+    puts( "clamp(150, 0, 100) = ", clamp( 150, 0, 100 ) )
+
+    Season summer = Season.Summer
+    puts( "season_temp(Summer) = ", season_temp( summer ) )
+
+    Season winter = Season.Winter
+    puts( "season_temp(Winter) = ", season_temp( winter ) )
+
+    return 0

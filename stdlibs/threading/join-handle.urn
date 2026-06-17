@@ -1,0 +1,161 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/join-handle.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# JoinHandle owns a Thread and enforces cleanup on join or detach.
+# Exactly one JoinHandle per Thread. join() always calls cleanup().
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.join-handle
+
+from uranite.os.task.task import BlockReason
+from uranite.os.ipc.signal import Event
+from uranite.threading.thread import Thread, ThreadRuntime
+from uranite.threading.errors import ThreadError, ThreadPoisonError
+
+public class JoinHandle:
+    
+    """
+    Ownership handle for a spawned thread. Enforces that every thread is
+    either joined or detached exactly once. Joining blocks the caller until
+    the thread finishes, retrieves its result, and performs stack cleanup.
+    Detaching releases ownership so the thread runs independently.
+    
+    Exactly one JoinHandle exists per Thread. Attempting to join a thread
+    that has already been joined or detached raises a ThreadError.
+    """
+    
+    protect Thread thread
+    """The owned thread instance."""
+    
+    protect ThreadRuntime runtime
+    """Thread runtime providing scheduler access for cooperative blocking."""
+    
+    protect Boolean joined
+    """Flag tracking whether join or detach has already been called."""
+    
+    public function JoinHandle( self, Thread thread, ThreadRuntime runtime ) -> Void:
+        
+        """
+        Create a new join handle owning the given thread.
+        
+        Parameters:
+            thread (Thread):
+                The thread to take ownership of.
+            runtime (ThreadRuntime):
+                The thread runtime used for cooperative blocking during join.
+        """
+        
+        self.thread = thread
+        self.runtime = runtime
+        self.joined = False
+    
+    public function join( self ) -> I64:
+        
+        """
+        Block the calling task until the owned thread finishes, then return
+        its result. Performs thread cleanup (stack deallocation, task
+        unregistration) before returning. If the thread panicked, cleanup
+        is still performed but a ThreadPoisonError is raised.
+        
+        Returns:
+            I64:
+                The result value set by the thread before it finished.
+        
+        Raises:
+            ThreadError:
+                If the thread has already been joined or detached.
+            ThreadPoisonError:
+                If the thread terminated due to a panic.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.joined:
+            raise new ThreadError( "Thread already joined", 1, None )
+        
+        self.joined = True
+        
+        if self.thread.isFinished() == False:
+            Event completionEvent = self.thread.getCompletionEvent()
+            I64 taskId = 0
+            if self.runtime.getScheduler().getCurrentTask() != None:
+                taskId = self.runtime.getScheduler().getCurrentTask().id
+            if taskId > 0:
+                Boolean shouldBlock = completionEvent.registerWait( taskId, 1 )
+                if shouldBlock:
+                    self.runtime.getScheduler().getCurrentTask().block( BlockReason.Semaphore )
+                    self.runtime.getScheduler().blockCurrent()
+        
+        if self.thread.hasPanicked():
+            self.thread.cleanup()
+            raise new ThreadPoisonError( "Thread panicked", 2, None )
+        
+        I64 result = self.thread.getResult()
+        self.thread.cleanup()
+        return result
+    
+    public function isFinished( self ) -> Boolean:
+        
+        """
+        Check whether the owned thread has finished execution without
+        blocking.
+        
+        Returns:
+            Boolean:
+                True if the thread has reached the Finished or Detached state.
+        """
+        
+        return self.thread.isFinished()
+    
+    public function getThreadId( self ) -> I64:
+        
+        """
+        Return the unique identifier of the owned thread.
+        
+        Returns:
+            I64:
+                The thread's numeric identifier.
+        """
+        
+        return self.thread.getThreadId()
+    
+    public function detach( self ) -> Void:
+        
+        """
+        Release ownership of the thread, allowing it to run independently.
+        The thread's resources will not be cleaned up by this handle after
+        detaching. Cannot be called after join.
+        
+        Raises:
+            ThreadError:
+                If the thread has already been joined.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.joined:
+            raise new ThreadError( "Thread already joined, cannot detach", 3, None )
+        self.joined = True
+        self.thread.detach()
+
+export {
+    JoinHandle
+}

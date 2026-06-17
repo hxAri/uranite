@@ -1,0 +1,132 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/once.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# One-time initialization primitive. Ensures a callable runs exactly once
+# even when called concurrently from multiple threads.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.once
+
+from uranite.os.sync.spinlock import Spinlock
+from uranite.threading.atomic import AtomicI64
+
+const I64 ONCE_NOT_CALLED = 0
+"""State value indicating the initializer has not yet been called."""
+
+const I64 ONCE_IN_PROGRESS = 1
+"""State value indicating the initializer is currently executing."""
+
+const I64 ONCE_COMPLETED = 2
+"""State value indicating the initializer has finished execution."""
+
+public class Once:
+    
+    """
+    One-time initialization primitive that guarantees a callable runs
+    exactly once, even when callOnce is invoked concurrently from multiple
+    threads. The first thread to call callOnce executes the initializer
+    while all other threads spin-wait until initialization is complete.
+    
+    Uses a spinlock to protect the state transition from NotCalled to
+    InProgress, and atomic state to allow lock-free fast-path checks
+    once initialization is complete.
+    """
+    
+    protect AtomicI64 state
+    """Atomic state tracking the initialization lifecycle."""
+    
+    protect Spinlock guard
+    """Spinlock protecting the state transition to InProgress."""
+    
+    public function Once( self ) -> Void:
+        
+        """
+        Create a new Once instance in the NotCalled state.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.state = new AtomicI64( ONCE_NOT_CALLED )
+        self.guard = new Spinlock()
+    
+    public function callOnce( self, I64 initializerAddr ) -> Void:
+        
+        """
+        Execute the initializer function exactly once. If the initializer
+        has already completed, this returns immediately. If another thread
+        is currently running the initializer, this spins until completion.
+        If no thread has started initialization, this thread acquires the
+        lock, runs the initializer, and marks initialization as complete.
+        
+        Parameters:
+            initializerAddr (I64):
+                Raw address of the zero-argument function to call. The
+                function is invoked via inline assembly indirect call.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 current = self.state.load()
+        if current == ONCE_COMPLETED:
+            return
+        
+        self.guard.lock()
+        current = self.state.load()
+        if current == ONCE_COMPLETED:
+            self.guard.unlock()
+            return
+        
+        if current == ONCE_NOT_CALLED:
+            self.state.store( ONCE_IN_PROGRESS )
+            self.guard.unlock()
+            
+            asm volatile "callq *$0" : : input( "r" initializerAddr ) : clobber( "memory" )
+            
+            self.state.store( ONCE_COMPLETED )
+            return
+        
+        self.guard.unlock()
+        while self.state.load() != ONCE_COMPLETED:
+            asm volatile "pause"
+    
+    public function isCompleted( self ) -> Boolean:
+        
+        """
+        Check whether the initializer has finished execution.
+        
+        Returns:
+            Boolean:
+                True if callOnce has successfully completed, False otherwise.
+        """
+        
+        return self.state.load() == ONCE_COMPLETED
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release resources held by the atomic state variable.
+        """
+        
+        self.state.destroy()
+
+export {
+    Once
+}

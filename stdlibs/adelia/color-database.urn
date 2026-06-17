@@ -1,0 +1,411 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/color-database.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the ColorDatabase class containing a built-in database of over 140
+# named colors encompassing the standard CSS/HTML named color set plus extended
+# colors. Supports exact hex-to-name lookup, name-to-hex lookup, and closest
+# named color search using perceptual distance metrics. The database is populated
+# entirely inline with no external file I/O, making it suitable for both hosted
+# and freestanding compilation targets.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.color-database
+
+from uranite.adelia.color-distance import ColorDistance
+from uranite.adelia.color-name-entry import ColorNameEntry
+from uranite.adelia.rgb import RGB
+from uranite.collection.array-list import ArrayList
+from uranite.language.boolean import Boolean
+from uranite.language.string import String
+
+public class ColorDatabase:
+    
+    """
+    In-memory database of named colors populated with the 140 standard CSS/HTML
+    named colors plus additional distinctive named colors. All color data is
+    stored inline in the constructor as sequential add operations on an ArrayList,
+    requiring no external file or network access. The database provides exact
+    lookup by hex code or name, and nearest-match lookup using the perceptual
+    redmean distance algorithm to find the closest named color for any arbitrary
+    hex value.
+    """
+    
+    protect ArrayList<ColorNameEntry> entries
+    
+    public function ColorDatabase( self ) -> Void:
+        
+        """
+        Construct a new color database and populate it with all named colors.
+        The database is split into two population phases: basic CSS colors
+        and extended named colors. After construction, the database is ready
+        for immediate lookup operations.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.entries = new ArrayList<ColorNameEntry>()
+        self.populateBasicColors()
+        self.populateExtendedColors()
+    
+    private function populateBasicColors( self ) -> Void:
+        
+        """
+        Populate the database with the 140 standard CSS/HTML named colors.
+        These colors are defined by the CSS Color Module Level 4 specification
+        and are universally supported by web browsers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.entries.append( new ColorNameEntry( "Alice Blue", 0xF0F8FF ) )
+        self.entries.append( new ColorNameEntry( "Antique White", 0xFAEBD7 ) )
+        self.entries.append( new ColorNameEntry( "Aqua", 0x00FFFF ) )
+        self.entries.append( new ColorNameEntry( "Aquamarine", 0x7FFFD4 ) )
+        self.entries.append( new ColorNameEntry( "Azure", 0xF0FFFF ) )
+        self.entries.append( new ColorNameEntry( "Beige", 0xF5F5DC ) )
+        self.entries.append( new ColorNameEntry( "Bisque", 0xFFE4C4 ) )
+        self.entries.append( new ColorNameEntry( "Black", 0x000000 ) )
+        self.entries.append( new ColorNameEntry( "Blanched Almond", 0xFFEBCD ) )
+        self.entries.append( new ColorNameEntry( "Blue", 0x0000FF ) )
+        self.entries.append( new ColorNameEntry( "Blue Violet", 0x8A2BE2 ) )
+        self.entries.append( new ColorNameEntry( "Brown", 0xA52A2A ) )
+        self.entries.append( new ColorNameEntry( "Burly Wood", 0xDEB887 ) )
+        self.entries.append( new ColorNameEntry( "Cadet Blue", 0x5F9EA0 ) )
+        self.entries.append( new ColorNameEntry( "Chartreuse", 0x7FFF00 ) )
+        self.entries.append( new ColorNameEntry( "Chocolate", 0xD2691E ) )
+        self.entries.append( new ColorNameEntry( "Coral", 0xFF7F50 ) )
+        self.entries.append( new ColorNameEntry( "Cornflower Blue", 0x6495ED ) )
+        self.entries.append( new ColorNameEntry( "Cornsilk", 0xFFF8DC ) )
+        self.entries.append( new ColorNameEntry( "Crimson", 0xDC143C ) )
+        self.entries.append( new ColorNameEntry( "Cyan", 0x00FFFF ) )
+        self.entries.append( new ColorNameEntry( "Dark Blue", 0x00008B ) )
+        self.entries.append( new ColorNameEntry( "Dark Cyan", 0x008B8B ) )
+        self.entries.append( new ColorNameEntry( "Dark Goldenrod", 0xB8860B ) )
+        self.entries.append( new ColorNameEntry( "Dark Gray", 0xA9A9A9 ) )
+        self.entries.append( new ColorNameEntry( "Dark Green", 0x006400 ) )
+        self.entries.append( new ColorNameEntry( "Dark Khaki", 0xBDB76B ) )
+        self.entries.append( new ColorNameEntry( "Dark Magenta", 0x8B008B ) )
+        self.entries.append( new ColorNameEntry( "Dark Olive Green", 0x556B2F ) )
+        self.entries.append( new ColorNameEntry( "Dark Orange", 0xFF8C00 ) )
+        self.entries.append( new ColorNameEntry( "Dark Orchid", 0x9932CC ) )
+        self.entries.append( new ColorNameEntry( "Dark Red", 0x8B0000 ) )
+        self.entries.append( new ColorNameEntry( "Dark Salmon", 0xE9967A ) )
+        self.entries.append( new ColorNameEntry( "Dark Sea Green", 0x8FBC8F ) )
+        self.entries.append( new ColorNameEntry( "Dark Slate Blue", 0x483D8B ) )
+        self.entries.append( new ColorNameEntry( "Dark Slate Gray", 0x2F4F4F ) )
+        self.entries.append( new ColorNameEntry( "Dark Turquoise", 0x00CED1 ) )
+        self.entries.append( new ColorNameEntry( "Dark Violet", 0x9400D3 ) )
+        self.entries.append( new ColorNameEntry( "Deep Pink", 0xFF1493 ) )
+        self.entries.append( new ColorNameEntry( "Deep Sky Blue", 0x00BFFF ) )
+        self.entries.append( new ColorNameEntry( "Dim Gray", 0x696969 ) )
+        self.entries.append( new ColorNameEntry( "Dodger Blue", 0x1E90FF ) )
+        self.entries.append( new ColorNameEntry( "Firebrick", 0xB22222 ) )
+        self.entries.append( new ColorNameEntry( "Floral White", 0xFFFAF0 ) )
+        self.entries.append( new ColorNameEntry( "Forest Green", 0x228B22 ) )
+        self.entries.append( new ColorNameEntry( "Fuchsia", 0xFF00FF ) )
+        self.entries.append( new ColorNameEntry( "Gainsboro", 0xDCDCDC ) )
+        self.entries.append( new ColorNameEntry( "Ghost White", 0xF8F8FF ) )
+        self.entries.append( new ColorNameEntry( "Gold", 0xFFD700 ) )
+        self.entries.append( new ColorNameEntry( "Goldenrod", 0xDAA520 ) )
+        self.entries.append( new ColorNameEntry( "Gray", 0x808080 ) )
+        self.entries.append( new ColorNameEntry( "Green", 0x008000 ) )
+        self.entries.append( new ColorNameEntry( "Green Yellow", 0xADFF2F ) )
+        self.entries.append( new ColorNameEntry( "Honeydew", 0xF0FFF0 ) )
+        self.entries.append( new ColorNameEntry( "Hot Pink", 0xFF69B4 ) )
+        self.entries.append( new ColorNameEntry( "Indian Red", 0xCD5C5C ) )
+        self.entries.append( new ColorNameEntry( "Indigo", 0x4B0082 ) )
+        self.entries.append( new ColorNameEntry( "Ivory", 0xFFFFF0 ) )
+        self.entries.append( new ColorNameEntry( "Khaki", 0xF0E68C ) )
+        self.entries.append( new ColorNameEntry( "Lavender", 0xE6E6FA ) )
+        self.entries.append( new ColorNameEntry( "Lavender Blush", 0xFFF0F5 ) )
+        self.entries.append( new ColorNameEntry( "Lawn Green", 0x7CFC00 ) )
+        self.entries.append( new ColorNameEntry( "Lemon Chiffon", 0xFFFACD ) )
+        self.entries.append( new ColorNameEntry( "Light Blue", 0xADD8E6 ) )
+        self.entries.append( new ColorNameEntry( "Light Coral", 0xF08080 ) )
+        self.entries.append( new ColorNameEntry( "Light Cyan", 0xE0FFFF ) )
+        self.entries.append( new ColorNameEntry( "Light Goldenrod Yellow", 0xFAFAD2 ) )
+        self.entries.append( new ColorNameEntry( "Light Gray", 0xD3D3D3 ) )
+        self.entries.append( new ColorNameEntry( "Light Green", 0x90EE90 ) )
+        self.entries.append( new ColorNameEntry( "Light Pink", 0xFFB6C1 ) )
+        self.entries.append( new ColorNameEntry( "Light Salmon", 0xFFA07A ) )
+        self.entries.append( new ColorNameEntry( "Light Sea Green", 0x20B2AA ) )
+        self.entries.append( new ColorNameEntry( "Light Sky Blue", 0x87CEFA ) )
+        self.entries.append( new ColorNameEntry( "Light Slate Gray", 0x778899 ) )
+        self.entries.append( new ColorNameEntry( "Light Steel Blue", 0xB0C4DE ) )
+        self.entries.append( new ColorNameEntry( "Light Yellow", 0xFFFFE0 ) )
+        self.entries.append( new ColorNameEntry( "Lime", 0x00FF00 ) )
+        self.entries.append( new ColorNameEntry( "Lime Green", 0x32CD32 ) )
+        self.entries.append( new ColorNameEntry( "Linen", 0xFAF0E6 ) )
+        self.entries.append( new ColorNameEntry( "Magenta", 0xFF00FF ) )
+        self.entries.append( new ColorNameEntry( "Maroon", 0x800000 ) )
+        self.entries.append( new ColorNameEntry( "Medium Aquamarine", 0x66CDAA ) )
+        self.entries.append( new ColorNameEntry( "Medium Blue", 0x0000CD ) )
+        self.entries.append( new ColorNameEntry( "Medium Orchid", 0xBA55D3 ) )
+        self.entries.append( new ColorNameEntry( "Medium Purple", 0x9370DB ) )
+        self.entries.append( new ColorNameEntry( "Medium Sea Green", 0x3CB371 ) )
+        self.entries.append( new ColorNameEntry( "Medium Slate Blue", 0x7B68EE ) )
+        self.entries.append( new ColorNameEntry( "Medium Spring Green", 0x00FA9A ) )
+        self.entries.append( new ColorNameEntry( "Medium Turquoise", 0x48D1CC ) )
+        self.entries.append( new ColorNameEntry( "Medium Violet Red", 0xC71585 ) )
+        self.entries.append( new ColorNameEntry( "Midnight Blue", 0x191970 ) )
+        self.entries.append( new ColorNameEntry( "Mint Cream", 0xF5FFFA ) )
+        self.entries.append( new ColorNameEntry( "Misty Rose", 0xFFE4E1 ) )
+        self.entries.append( new ColorNameEntry( "Moccasin", 0xFFE4B5 ) )
+        self.entries.append( new ColorNameEntry( "Navajo White", 0xFFDEAD ) )
+        self.entries.append( new ColorNameEntry( "Navy", 0x000080 ) )
+        self.entries.append( new ColorNameEntry( "Old Lace", 0xFDF5E6 ) )
+        self.entries.append( new ColorNameEntry( "Olive", 0x808000 ) )
+        self.entries.append( new ColorNameEntry( "Olive Drab", 0x6B8E23 ) )
+        self.entries.append( new ColorNameEntry( "Orange", 0xFFA500 ) )
+        self.entries.append( new ColorNameEntry( "Orange Red", 0xFF4500 ) )
+        self.entries.append( new ColorNameEntry( "Orchid", 0xDA70D6 ) )
+        self.entries.append( new ColorNameEntry( "Pale Goldenrod", 0xEEE8AA ) )
+        self.entries.append( new ColorNameEntry( "Pale Green", 0x98FB98 ) )
+        self.entries.append( new ColorNameEntry( "Pale Turquoise", 0xAFEEEE ) )
+        self.entries.append( new ColorNameEntry( "Pale Violet Red", 0xDB7093 ) )
+        self.entries.append( new ColorNameEntry( "Papaya Whip", 0xFFEFD5 ) )
+        self.entries.append( new ColorNameEntry( "Peach Puff", 0xFFDAB9 ) )
+        self.entries.append( new ColorNameEntry( "Peru", 0xCD853F ) )
+        self.entries.append( new ColorNameEntry( "Pink", 0xFFC0CB ) )
+        self.entries.append( new ColorNameEntry( "Plum", 0xDDA0DD ) )
+        self.entries.append( new ColorNameEntry( "Powder Blue", 0xB0E0E6 ) )
+        self.entries.append( new ColorNameEntry( "Purple", 0x800080 ) )
+        self.entries.append( new ColorNameEntry( "Rebecca Purple", 0x663399 ) )
+        self.entries.append( new ColorNameEntry( "Red", 0xFF0000 ) )
+        self.entries.append( new ColorNameEntry( "Rosy Brown", 0xBC8F8F ) )
+        self.entries.append( new ColorNameEntry( "Royal Blue", 0x4169E1 ) )
+        self.entries.append( new ColorNameEntry( "Saddle Brown", 0x8B4513 ) )
+        self.entries.append( new ColorNameEntry( "Salmon", 0xFA8072 ) )
+        self.entries.append( new ColorNameEntry( "Sandy Brown", 0xF4A460 ) )
+        self.entries.append( new ColorNameEntry( "Sea Green", 0x2E8B57 ) )
+        self.entries.append( new ColorNameEntry( "Sea Shell", 0xFFF5EE ) )
+        self.entries.append( new ColorNameEntry( "Sienna", 0xA0522D ) )
+        self.entries.append( new ColorNameEntry( "Silver", 0xC0C0C0 ) )
+        self.entries.append( new ColorNameEntry( "Sky Blue", 0x87CEEB ) )
+        self.entries.append( new ColorNameEntry( "Slate Blue", 0x6A5ACD ) )
+        self.entries.append( new ColorNameEntry( "Slate Gray", 0x708090 ) )
+        self.entries.append( new ColorNameEntry( "Snow", 0xFFFAFA ) )
+        self.entries.append( new ColorNameEntry( "Spring Green", 0x00FF7F ) )
+        self.entries.append( new ColorNameEntry( "Steel Blue", 0x4682B4 ) )
+        self.entries.append( new ColorNameEntry( "Tan", 0xD2B48C ) )
+        self.entries.append( new ColorNameEntry( "Teal", 0x008080 ) )
+        self.entries.append( new ColorNameEntry( "Thistle", 0xD8BFD8 ) )
+        self.entries.append( new ColorNameEntry( "Tomato", 0xFF6347 ) )
+        self.entries.append( new ColorNameEntry( "Turquoise", 0x40E0D0 ) )
+        self.entries.append( new ColorNameEntry( "Violet", 0xEE82EE ) )
+        self.entries.append( new ColorNameEntry( "Wheat", 0xF5DEB3 ) )
+        self.entries.append( new ColorNameEntry( "White", 0xFFFFFF ) )
+        self.entries.append( new ColorNameEntry( "White Smoke", 0xF5F5F5 ) )
+        self.entries.append( new ColorNameEntry( "Yellow", 0xFFFF00 ) )
+        self.entries.append( new ColorNameEntry( "Yellow Green", 0x9ACD32 ) )
+    
+    private function populateExtendedColors( self ) -> Void:
+        
+        """
+        Populate the database with additional distinctive named colors beyond
+        the CSS standard set. These include colors commonly found on color
+        reference sites like color-hex.com with well-known or evocative names.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.entries.append( new ColorNameEntry( "Deep Jungle Green", 0x004B49 ) )
+        self.entries.append( new ColorNameEntry( "Amber", 0xFFBF00 ) )
+        self.entries.append( new ColorNameEntry( "Amethyst", 0x9966CC ) )
+        self.entries.append( new ColorNameEntry( "Apricot", 0xFBCEB1 ) )
+        self.entries.append( new ColorNameEntry( "Ash Gray", 0xB2BEB5 ) )
+        self.entries.append( new ColorNameEntry( "Baby Blue", 0x89CFF0 ) )
+        self.entries.append( new ColorNameEntry( "Barn Red", 0x7C0A02 ) )
+        self.entries.append( new ColorNameEntry( "Burgundy", 0x800020 ) )
+        self.entries.append( new ColorNameEntry( "Byzantine", 0xBD33A4 ) )
+        self.entries.append( new ColorNameEntry( "Canary Yellow", 0xFFEF00 ) )
+        self.entries.append( new ColorNameEntry( "Carmine", 0x960018 ) )
+        self.entries.append( new ColorNameEntry( "Celadon", 0xACE1AF ) )
+        self.entries.append( new ColorNameEntry( "Cerulean", 0x007BA7 ) )
+        self.entries.append( new ColorNameEntry( "Champagne", 0xF7E7CE ) )
+        self.entries.append( new ColorNameEntry( "Cobalt Blue", 0x0047AB ) )
+        self.entries.append( new ColorNameEntry( "Copper", 0xB87333 ) )
+        self.entries.append( new ColorNameEntry( "Denim", 0x1560BD ) )
+        self.entries.append( new ColorNameEntry( "Eggplant", 0x614051 ) )
+        self.entries.append( new ColorNameEntry( "Emerald", 0x50C878 ) )
+        self.entries.append( new ColorNameEntry( "Fern Green", 0x4F7942 ) )
+        self.entries.append( new ColorNameEntry( "Flame", 0xE25822 ) )
+        self.entries.append( new ColorNameEntry( "Jade", 0x00A86B ) )
+        self.entries.append( new ColorNameEntry( "Jasmine", 0xF8DE7E ) )
+        self.entries.append( new ColorNameEntry( "Lapis Lazuli", 0x26619C ) )
+        self.entries.append( new ColorNameEntry( "Mauve", 0xE0B0FF ) )
+        self.entries.append( new ColorNameEntry( "Midnight Green", 0x004953 ) )
+        self.entries.append( new ColorNameEntry( "Moss Green", 0x8A9A5B ) )
+        self.entries.append( new ColorNameEntry( "Mustard", 0xFFDB58 ) )
+        self.entries.append( new ColorNameEntry( "Onyx", 0x353839 ) )
+        self.entries.append( new ColorNameEntry( "Peridot", 0xE6E200 ) )
+        self.entries.append( new ColorNameEntry( "Persian Blue", 0x1C39BB ) )
+        self.entries.append( new ColorNameEntry( "Pine Green", 0x01796F ) )
+        self.entries.append( new ColorNameEntry( "Pistachio", 0x93C572 ) )
+        self.entries.append( new ColorNameEntry( "Raspberry", 0xE30B5C ) )
+        self.entries.append( new ColorNameEntry( "Rose", 0xFF007F ) )
+        self.entries.append( new ColorNameEntry( "Ruby", 0xE0115F ) )
+        self.entries.append( new ColorNameEntry( "Rust", 0xB7410E ) )
+        self.entries.append( new ColorNameEntry( "Saffron", 0xF4C430 ) )
+        self.entries.append( new ColorNameEntry( "Sage", 0xBCB88A ) )
+        self.entries.append( new ColorNameEntry( "Sapphire", 0x0F52BA ) )
+        self.entries.append( new ColorNameEntry( "Scarlet", 0xFF2400 ) )
+        self.entries.append( new ColorNameEntry( "Sepia", 0x704214 ) )
+        self.entries.append( new ColorNameEntry( "Tangerine", 0xFF9966 ) )
+        self.entries.append( new ColorNameEntry( "Taupe", 0x483C32 ) )
+        self.entries.append( new ColorNameEntry( "Ultramarine", 0x3F00FF ) )
+        self.entries.append( new ColorNameEntry( "Vermilion", 0xE34234 ) )
+        self.entries.append( new ColorNameEntry( "Viridian", 0x40826D ) )
+        self.entries.append( new ColorNameEntry( "Wine", 0x722F37 ) )
+        self.entries.append( new ColorNameEntry( "Wisteria", 0xC9A0DC ) )
+        self.entries.append( new ColorNameEntry( "Zaffre", 0x0014A8 ) )
+    
+    public function closestName( self, I32 hex ) -> String:
+        
+        """
+        Find the named color with the smallest perceptual distance to the given
+        hex value and return its name. Uses the redmean weighted distance algorithm
+        for better perceptual accuracy. If the database is empty, returns an
+        empty string.
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value to find the closest name for.
+        
+        Returns:
+            String:
+                The name of the closest matching color in the database.
+        """
+        
+        ColorNameEntry entry = self.closestEntry( hex )
+        return entry.name
+    
+    public function closestEntry( self, I32 hex ) -> ColorNameEntry:
+        
+        """
+        Find the named color entry with the smallest perceptual distance to the
+        given hex value and return the full ColorNameEntry. Iterates through all
+        entries computing the redmean distance and tracks the minimum.
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value to find the closest entry for.
+        
+        Returns:
+            ColorNameEntry:
+                The database entry with the smallest perceptual distance.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I32 targetR = ( hex >> 16 ) & 255
+        I32 targetG = ( hex >> 8 ) & 255
+        I32 targetB = hex & 255
+        RGB targetRgb = new RGB( targetR, targetG, targetB )
+        F64 minDist = 999999.0
+        ColorNameEntry closest = self.entries.get( 0 )
+        for I64 i=0; i<self.entries.length; i++:
+            ColorNameEntry entry = self.entries.get( i )
+            I32 eR = ( entry.hex >> 16 ) & 255
+            I32 eG = ( entry.hex >> 8 ) & 255
+            I32 eB = entry.hex & 255
+            RGB entryRgb = new RGB( eR, eG, eB )
+            F64 dist = ColorDistance.redmean( targetRgb, entryRgb )
+            if dist < minDist:
+                minDist = dist
+                closest = entry
+        return closest
+    
+    public function nameForHex( self, I32 hex ) -> String:
+        
+        """
+        Look up the exact name for a given hex color value. Performs a linear
+        scan through the database for an exact hex match. Returns an empty
+        string if no exact match is found.
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value to look up.
+        
+        Returns:
+            String:
+                The name of the color if an exact match exists, or "" if not found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for I64 i=0; i<self.entries.length; i++:
+            ColorNameEntry entry = self.entries.get( i )
+            if entry.hex == hex:
+                return entry.name
+        return ""
+    
+    public function hexForName( self, String name ) -> I32:
+        
+        """
+        Look up the hex color value for a given color name. Performs a linear
+        scan through the database for an exact string match. Returns -1 if
+        no match is found. Name matching is case-sensitive.
+        
+        Parameters:
+            name (String):
+                The color name to look up, such as "Deep Jungle Green".
+        
+        Returns:
+            I32:
+                The hex value if found, or -1 if no color with that name exists.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for I64 i=0; i<self.entries.length; i++:
+            ColorNameEntry entry = self.entries.get( i )
+            if entry.name == name:
+                return entry.hex
+        return -1
+    
+    public property count( self ) -> I64:
+        
+        """
+        Return the total number of named color entries in this database.
+        
+        Returns:
+            I64:
+                The number of entries in the database.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return self.entries.length
+
+export {
+    ColorDatabase
+}

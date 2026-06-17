@@ -1,0 +1,295 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/functions/runtime.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Declares extern bindings to the Uranite C runtime functions for threading,
+# mutexes, atomics, condition variables, semaphores, read-write locks, async
+# task scheduling, subprocess management, pipes, and shared memory.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.functions.runtime
+
+extern function uraniteAtomicAdd( I64 ptr, I64 val ) -> I64;
+""" Atomically add a value to the 64-bit integer at the given pointer, returning the previous value. """
+
+extern function uraniteAtomicCompareExchange( I64 ptr, I64 expected, I64 desired ) -> I32;
+""" Atomically compare the value at the pointer with expected and, if equal, replace it with desired, returning non-zero on success. """
+
+extern function uraniteAtomicLoad( I64 ptr ) -> I64;
+""" Atomically load and return the 64-bit integer value at the given pointer. """
+
+extern function uraniteAtomicStore( I64 ptr, I64 val ) -> Void;
+""" Atomically store a 64-bit integer value at the given pointer. """
+
+extern function uraniteAtomicSub( I64 ptr, I64 val ) -> I64;
+""" Atomically subtract a value from the 64-bit integer at the given pointer, returning the previous value. """
+
+extern function uraniteAwaitFD( I32 fd, U32 events ) -> Void;
+""" Suspend the current task until the given file descriptor is ready for the specified events. """
+
+extern function uraniteAwaitTask( I64 taskId ) -> I64;
+""" Suspend the calling task until the task with the given identifier completes, returning its result. """
+
+extern function uraniteCondVarBroadcast( I64 cv ) -> Void;
+""" Wake all threads waiting on the condition variable. """
+
+extern function uraniteCondVarCreate() -> I64;
+""" Create a new condition variable and return an opaque handle to it. """
+
+extern function uraniteCondVarDestroy( I64 cv ) -> Void;
+""" Destroy the condition variable and release its associated resources. """
+
+extern function uraniteCondVarSignal( I64 cv ) -> Void;
+""" Wake one thread waiting on the condition variable. """
+
+extern function uraniteCondVarTimedWait( I64 cv, I64 mutex, I64 timeoutMs ) -> I32;
+""" Wait on the condition variable with a timeout in milliseconds, returning non-zero if the wait timed out. """
+
+extern function uraniteCondVarWait( I64 cv, I64 mutex ) -> Void;
+""" Atomically release the mutex and block the calling thread until the condition variable is signaled. """
+
+extern function uraniteHasPendingTasks() -> I32;
+""" Check whether any tasks are still pending in the scheduler, returning non-zero if tasks remain. """
+
+extern function uraniteMutexCreate() -> I64;
+""" Create a new mutex and return an opaque handle to it. """
+
+extern function uraniteMutexDestroy( I64 mutex ) -> Void;
+""" Destroy the mutex and release its associated resources. """
+
+extern function uraniteMutexLock( I64 mutex ) -> Void;
+""" Acquire the mutex lock, blocking until the lock becomes available. """
+
+extern function uraniteMutexTryLock( I64 mutex ) -> I32;
+""" Attempt to acquire the mutex lock without blocking, returning non-zero on success and zero on failure. """
+
+extern function uraniteMutexUnlock( I64 mutex ) -> Void;
+""" Release the mutex lock, allowing other threads to acquire it. """
+
+extern function uranitePipeCloseRead( I64 pipe ) -> Void;
+""" Close the read end of the pipe. """
+
+extern function uranitePipeCloseWrite( I64 pipe ) -> Void;
+""" Close the write end of the pipe. """
+
+extern function uranitePipeCreate() -> I64;
+""" Create a new unidirectional pipe and return an opaque handle to it. """
+
+extern function uranitePipeDestroy( I64 pipe ) -> Void;
+""" Destroy the pipe and release all associated resources. """
+
+extern function uranitePipeRead( I64 pipe, String buffer, I64 maxBytes ) -> I64;
+""" Read up to maxBytes from the pipe into the buffer, returning the number of bytes actually read. """
+
+extern function uranitePipeReadFd( I64 pipe ) -> I32;
+""" Return the raw file descriptor for the read end of the pipe. """
+
+extern function uranitePipeWrite( I64 pipe, String data, I64 length ) -> I64;
+""" Write data of the given length to the pipe, returning the number of bytes actually written. """
+
+extern function uranitePipeWriteFd( I64 pipe ) -> I32;
+""" Return the raw file descriptor for the write end of the pipe. """
+
+extern function uraniteProcessExec( String command ) -> I64;
+""" Execute a shell command synchronously and return its exit code. """
+
+extern function uraniteProcessFree( I64 process ) -> Void;
+""" Free the memory associated with an asynchronous process handle. """
+
+extern function uraniteProcessIsRunning( I64 process ) -> I32;
+""" Check whether the specified child process is still running, returning non-zero if it is. """
+
+extern function uraniteProcessKill( I64 process ) -> Void;
+""" Send a kill signal to the specified child process. """
+
+extern function uraniteProcessPid( I64 process ) -> I64;
+""" Return the process identifier of the specified child process. """
+
+extern function uraniteProcessResultFree( I64 result ) -> Void;
+""" Free the memory associated with a synchronous process result handle. """
+
+extern function uraniteProcessRun( String command ) -> I64;
+""" Run a shell command synchronously and return an opaque handle to the result containing stdout, stderr, and exit code. """
+
+extern function uraniteProcessSpawn( String command ) -> I64;
+""" Spawn a shell command as an asynchronous child process, returning an opaque process handle. """
+
+extern function uraniteProcessWait( I64 process ) -> I64;
+""" Block until the specified child process exits, returning its exit code. """
+
+extern function uraniteRunScheduler() -> Void;
+""" Run the scheduler event loop, executing tasks until all pending tasks complete. """
+
+extern function uraniteRWLockCreate() -> I64;
+""" Create a new read-write lock and return an opaque handle to it. """
+
+extern function uraniteRWLockDestroy( I64 rwl ) -> Void;
+""" Destroy the read-write lock and release its associated resources. """
+
+extern function uraniteRWLockReadLock( I64 rwl ) -> Void;
+""" Acquire a shared read lock, blocking until no writer holds the lock. """
+
+extern function uraniteRWLockUnlock( I64 rwl ) -> Void;
+""" Release the read or write lock currently held by the calling thread. """
+
+extern function uraniteRWLockWriteLock( I64 rwl ) -> Void;
+""" Acquire an exclusive write lock, blocking until no reader or writer holds the lock. """
+
+extern function uraniteSchedulerInit() -> Void;
+""" Initialize the global async task scheduler. """
+
+extern function uraniteSemaphoreAcquire( I64 sem ) -> Void;
+""" Acquire a permit from the semaphore, blocking if no permits are available. """
+
+extern function uraniteSemaphoreCreate( I64 initial ) -> I64;
+""" Create a new counting semaphore initialized with the given permit count, returning an opaque handle. """
+
+extern function uraniteSemaphoreDestroy( I64 sem ) -> Void;
+""" Destroy the semaphore and release its associated resources. """
+
+extern function uraniteSemaphoreRelease( I64 sem ) -> Void;
+""" Release a permit back to the semaphore, potentially waking a blocked thread. """
+
+extern function uraniteSemaphoreTryAcquire( I64 sem ) -> I32;
+""" Attempt to acquire a permit without blocking, returning non-zero on success and zero on failure. """
+
+extern function uraniteSharedMemoryClose( I64 shm ) -> Void;
+""" Unmap and close the shared memory handle. """
+
+extern function uraniteSharedMemoryCreate( String name, I64 size ) -> I64;
+""" Create a new named shared memory region of the given size, returning an opaque handle. """
+
+extern function uraniteSharedMemoryOpen( String name, I64 size ) -> I64;
+""" Open an existing named shared memory region of the given size, returning an opaque handle. """
+
+extern function uraniteSharedMemoryPtr( I64 shm ) -> I64;
+""" Return a raw pointer to the mapped shared memory region. """
+
+extern function uraniteSharedMemorySize( I64 shm ) -> I64;
+""" Return the size in bytes of the shared memory region. """
+
+extern function uraniteSharedMemoryUnlink( String name ) -> Void;
+""" Remove the named shared memory object from the filesystem namespace. """
+
+extern function uraniteSleep( U64 milliseconds ) -> Void;
+""" Suspend the current task for the specified number of milliseconds. """
+
+extern function uraniteSpawnTask( I64 func, I64 userData ) -> I64;
+""" Spawn a new async task with the given function and user data, returning a unique task identifier. """
+
+extern function uraniteTaskComplete( I64 task, I64 result ) -> Void;
+""" Mark a task as completed with the given result value. """
+
+extern function uraniteTaskError( I64 task, String message ) -> Void;
+""" Record an error message on the given task, marking it as failed. """
+
+extern function uraniteTaskGetError( I64 taskId ) -> String;
+""" Retrieve the error message string from the task with the given identifier. """
+
+extern function uraniteTaskHasError( I64 taskId ) -> I32;
+""" Check whether the task with the given identifier has an error, returning non-zero if an error exists. """
+
+extern function uraniteTaskYield() -> Void;
+""" Yield execution from the current task, allowing the scheduler to run other tasks. """
+
+extern function uraniteThreadCreate( I64 entry, I64 arg ) -> I64;
+""" Create a new OS thread that executes the given entry function with the provided argument, returning an opaque thread handle. """
+
+extern function uraniteThreadDetach( I64 thread ) -> Void;
+""" Detach the specified thread so its resources are automatically reclaimed upon completion. """
+
+extern function uraniteThreadDestroy( I64 thread ) -> Void;
+""" Destroy the thread handle and release associated resources. """
+
+extern function uraniteThreadId( I64 thread ) -> I64;
+""" Return the unique numeric identifier of the specified thread. """
+
+extern function uraniteThreadJoin( I64 thread ) -> Void;
+""" Block the calling thread until the specified thread completes execution. """
+
+extern function uraniteThreadSleep( I64 milliseconds ) -> Void;
+""" Suspend the calling thread for the specified number of milliseconds. """
+
+
+export {
+    uraniteAtomicAdd,
+    uraniteAtomicCompareExchange,
+    uraniteAtomicLoad,
+    uraniteAtomicStore,
+    uraniteAtomicSub,
+    uraniteAwaitFD,
+    uraniteAwaitTask,
+    uraniteCondVarBroadcast,
+    uraniteCondVarCreate,
+    uraniteCondVarDestroy,
+    uraniteCondVarSignal,
+    uraniteCondVarTimedWait,
+    uraniteCondVarWait,
+    uraniteHasPendingTasks,
+    uraniteMutexCreate,
+    uraniteMutexDestroy,
+    uraniteMutexLock,
+    uraniteMutexTryLock,
+    uraniteMutexUnlock,
+    uranitePipeCloseRead,
+    uranitePipeCloseWrite,
+    uranitePipeCreate,
+    uranitePipeDestroy,
+    uranitePipeRead,
+    uranitePipeReadFd,
+    uranitePipeWrite,
+    uranitePipeWriteFd,
+    uraniteProcessExec,
+    uraniteProcessFree,
+    uraniteProcessIsRunning,
+    uraniteProcessKill,
+    uraniteProcessPid,
+    uraniteProcessResultFree,
+    uraniteProcessRun,
+    uraniteProcessSpawn,
+    uraniteProcessWait,
+    uraniteRWLockCreate,
+    uraniteRWLockDestroy,
+    uraniteRWLockReadLock,
+    uraniteRWLockUnlock,
+    uraniteRWLockWriteLock,
+    uraniteRunScheduler,
+    uraniteSchedulerInit,
+    uraniteSemaphoreAcquire,
+    uraniteSemaphoreCreate,
+    uraniteSemaphoreDestroy,
+    uraniteSemaphoreRelease,
+    uraniteSemaphoreTryAcquire,
+    uraniteSharedMemoryClose,
+    uraniteSharedMemoryCreate,
+    uraniteSharedMemoryOpen,
+    uraniteSharedMemoryPtr,
+    uraniteSharedMemorySize,
+    uraniteSharedMemoryUnlink,
+    uraniteSleep,
+    uraniteSpawnTask,
+    uraniteTaskComplete,
+    uraniteTaskError,
+    uraniteTaskGetError,
+    uraniteTaskHasError,
+    uraniteTaskYield,
+    uraniteThreadCreate,
+    uraniteThreadDestroy,
+    uraniteThreadDetach,
+    uraniteThreadId,
+    uraniteThreadJoin,
+    uraniteThreadSleep
+}

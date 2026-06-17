@@ -1,0 +1,86 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#  
+# Functions: recursion, nested functions, defer, variadic extern.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.functions
+
+from uranite.io.console import puts
+
+# Recursive function
+public function factorial( I64 n ) -> I64:
+    if n <= 1:
+        return 1
+    return n * factorial( n - 1 )
+
+# Mutual recursion style
+public function fib( I64 n ) -> I64:
+    if n <= 0:
+        return 0
+    if n == 1:
+        return 1
+    return fib( n - 1 ) + fib( n - 2 )
+
+# Nested function
+public function outer( I64 x ) -> I64:
+    function inner( I64 y ) -> I64:
+        return y * y
+    return inner( x ) + 1
+
+# Multiple nested functions
+public function compute( I64 a, I64 b ) -> I64:
+    function square( I64 x ) -> I64:
+        return x * x
+    function add( I64 x, I64 y ) -> I64:
+        return x + y
+    return add( square( a ), square( b ) )
+
+# Defer (LIFO order)
+public function with_defer() -> Void:
+    defer puts( "third: cleanup" )
+    defer puts( "second: release" )
+    puts( "first: work" )
+
+# Defer block
+public function with_defer_block() -> Void:
+    defer:
+        puts( "deferred block executed" )
+    puts( "main work done" )
+
+# Higher-order style (function as computation)
+public function apply_twice( I64 x ) -> I64:
+    function double( I64 n ) -> I64:
+        return n * 2
+    return double( double( x ) )
+
+public function main() -> I32:
+    puts( "factorial(5) = ", factorial( 5 ) )
+    puts( "factorial(10) = ", factorial( 10 ) )
+    puts( "fib(10) = ", fib( 10 ) )
+    puts( "outer(5) = ", outer( 5 ), " (5^2 + 1)" )
+    puts( "compute(3, 4) = ", compute( 3, 4 ), " (3^2 + 4^2)" )
+    puts( "apply_twice(3) = ", apply_twice( 3 ), " (3*2*2)" )
+
+    puts( "\nDefer order:" )
+    with_defer()
+
+    puts( "\nDefer block:" )
+    with_defer_block()
+
+    return 0

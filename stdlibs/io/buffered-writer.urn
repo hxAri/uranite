@@ -1,0 +1,196 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/buffered-writer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Buffered writer wrapping a file descriptor. Accumulates writes and
+# flushes in chunks for efficiency. Uses raw sysWrite.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.buffered-writer
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    memoryToPtr, readByteAt, writeByteAt, stringToPtr, stringLen,
+    sysWrite, sysClose, sysFsync
+}
+
+public class BufferedWriter:
+    
+    """
+    Buffered writer that wraps a raw file descriptor and accumulates
+    write operations in an internal buffer. The buffer is flushed to
+    the underlying file descriptor when full or when flush is called
+    explicitly. Uses raw sysWrite syscalls for output.
+    """
+    
+    protect I64 fd
+    """The underlying file descriptor to write to."""
+    protect Memory<I64> rawBuffer
+    """Internal buffer for accumulating bytes before flushing."""
+    protect I64 rawAddr
+    """Raw pointer address of the internal buffer."""
+    protect I64 bufferCapacity
+    """Maximum number of bytes the internal buffer can hold."""
+    protect I64 writePosition
+    """Current write offset within the buffer (number of buffered bytes)."""
+    protect Boolean closed
+    """Whether this writer has been closed."""
+    protect Boolean ownsFd
+    """Whether this writer owns the file descriptor and should close it on cleanup."""
+    
+    public function BufferedWriter( self, I64 fd, I64 bufferSize, Boolean ownsFd ) -> Void:
+        
+        """
+        Construct a new BufferedWriter wrapping the given file descriptor.
+        
+        Parameters:
+            fd (I64):
+                The file descriptor to write to.
+            bufferSize (I64):
+                The size in bytes of the internal write buffer.
+            ownsFd (Boolean):
+                Whether this writer owns the file descriptor. If True, the
+                file descriptor will be closed when this writer is closed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.fd = fd
+        self.bufferCapacity = bufferSize
+        self.rawBuffer = new Memory<I64>( bufferSize )
+        self.rawAddr = memoryToPtr( self.rawBuffer )
+        self.writePosition = 0
+        self.closed = False
+        self.ownsFd = ownsFd
+    
+    public function writeByte( self, I64 byteValue ) -> Void:
+        
+        """
+        Write a single byte to the internal buffer. Automatically flushes
+        the buffer to the file descriptor when the buffer becomes full.
+        
+        Parameters:
+            byteValue (I64):
+                The byte value to write, in the range 0 to 255.
+        """
+        
+        writeByteAt( self.rawAddr, self.writePosition, byteValue )
+        self.writePosition = self.writePosition + 1
+        if self.writePosition >= self.bufferCapacity:
+            self.flush()
+    
+    public function writeFrom( self, Memory<I64> data, I64 offset, I64 length ) -> Void:
+        
+        """
+        Write bytes from a Memory buffer into this writer. Each byte is
+        individually buffered and may trigger automatic flushes.
+        
+        Parameters:
+            data (Memory<I64>):
+                The source buffer containing bytes to write.
+            offset (I64):
+                The starting offset within the source buffer.
+            length (I64):
+                The number of bytes to write from the source buffer.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 byteIndex = 0
+        while byteIndex < length:
+            I64 byteValue = data.get( offset + byteIndex )
+            self.writeByte( byteValue )
+            byteIndex = byteIndex + 1
+    
+    public function writeString( self, String text ) -> Void:
+        
+        """
+        Write all bytes of a string to this writer. Each byte is individually
+        buffered and may trigger automatic flushes.
+        
+        Parameters:
+            text (String):
+                The string whose bytes will be written.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 ptr = stringToPtr( text )
+        I64 len = stringLen( text )
+        I64 byteIndex = 0
+        while byteIndex < len:
+            I64 byteValue = readByteAt( ptr, byteIndex )
+            self.writeByte( byteValue )
+            byteIndex = byteIndex + 1
+    
+    public function flush( self ) -> Void:
+        
+        """
+        Flush all buffered data to the underlying file descriptor. Handles
+        partial writes by retrying until all buffered bytes are written.
+        Resets the write position to zero after flushing. Also calls fsync
+        to ensure data is persisted to storage.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if self.writePosition > 0:
+            I64 written = 0
+            while written < self.writePosition:
+                I64 bytesWritten = sysWrite( self.fd, self.rawAddr + written, self.writePosition - written )
+                written = written + bytesWritten
+            self.writePosition = 0
+        sysFsync( self.fd )
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close this writer, flushing any remaining buffered data and freeing
+        the internal buffer. If this writer owns the file descriptor, the
+        descriptor is also closed. Subsequent calls after the first close
+        are no-ops.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed == False:
+            self.flush()
+            if self.ownsFd:
+                sysClose( self.fd )
+            self.rawBuffer.free()
+            self.closed = True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Destructor that delegates to close to ensure resource cleanup.
+        """
+        
+        self.close()
+
+export {
+    BufferedWriter
+}

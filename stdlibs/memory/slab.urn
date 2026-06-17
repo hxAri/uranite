@@ -1,0 +1,112 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/memory/slab.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Slab-based memory allocator for fixed-size object pools. Wraps the
+# kernel SlabCache with a high-level allocation interface and exposes
+# KernelHeap for multi-size slab routing.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.memory.slab
+
+from uranite.os.memory.heap import SlabCache, KernelHeap
+
+public class SlabAllocator:
+
+    """
+    Slab-based memory allocator for fixed-size object pools. Provides
+    O(1) allocation and deallocation via a free-list backed slab cache.
+    Each allocator serves objects of a single size.
+    """
+
+    protect SlabCache cache
+
+    public function SlabAllocator( self, I64 objectSize, I64 pageCount ) -> Void:
+
+        """
+        Construct a slab allocator for objects of the given size.
+
+        Parameters:
+            objectSize (I64):
+                Size in bytes of each object this allocator serves.
+            pageCount (I64):
+                Number of 4KB pages backing this cache.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.cache = new SlabCache( objectSize, pageCount )
+
+    public function allocate( self ) -> I64:
+
+        """ Allocate one object slot. Returns slot index on success, -1 if full. """
+
+        return self.cache.allocate()
+
+    public function deallocate( self, I64 slot ) -> Void:
+
+        """
+        Return an object slot to the free list.
+
+        Parameters:
+            slot (I64):
+                Slot index to free.
+        """
+
+        self.cache.deallocate( slot )
+
+    public function getObjectSize( self ) -> I64:
+
+        """ Return the fixed object size in bytes. """
+
+        return self.cache.getObjectSize()
+
+    public function getUsed( self ) -> I64:
+
+        """ Return the number of currently allocated slots. """
+
+        return self.cache.getUsed()
+
+    public function getCapacity( self ) -> I64:
+
+        """ Return total number of available slots. """
+
+        return self.cache.getCapacity()
+
+    public function isFull( self ) -> Boolean:
+
+        """ Return whether all slots are allocated. """
+
+        return self.cache.isFull()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Free all backing memory.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.cache.destroy()
+
+export {
+    SlabAllocator,
+    SlabCache, KernelHeap
+}

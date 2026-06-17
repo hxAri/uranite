@@ -1,0 +1,30 @@
+package testing
+
+from uranite.os.bus.pci import {
+    PciDevice, PCI_CONFIG_ADDRESS, PCI_CONFIG_DATA,
+    PCI_NO_DEVICE, pciAddress
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Bus PCI Tests ===" )
+
+    assertEqualI64( 3320, PCI_CONFIG_ADDRESS, "config address 0xCF8" )
+    assertEqualI64( 3324, PCI_CONFIG_DATA, "config data 0xCFC" )
+    assertEqualI64( 65535, PCI_NO_DEVICE, "no device 0xFFFF" )
+    putsln( "constants OK" )
+
+    I64 addr = pciAddress( 0, 2, 0, 0 )
+    assertEqualI64( 2147487744, addr, "pciAddress(0,2,0,0)" )
+    putsln( "pciAddress OK" )
+
+    PciDevice dev = new PciDevice()
+    assertEqualI64( 0, dev.vendorId, "vendorId init 0" )
+    assertFalse( dev.isMultifunction(), "not multifunction" )
+    putsln( "PciDevice OK" )
+
+    putsln( "=== All PCI tests passed ===" )
+    return 0

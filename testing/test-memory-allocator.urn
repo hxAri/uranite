@@ -1,0 +1,91 @@
+package testing
+
+from uranite.memory.allocator import alloc, dealloc, realloc, allocZeroed
+from uranite.io.syscall import writeByteAt, readByteAt, writeI64At, readI64At
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue,
+    assertGreaterThan
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Memory Allocator Tests ===" )
+
+    # Basic alloc/dealloc
+    I64 ptr = alloc( 64 )
+    assertGreaterThan( ptr, 0, "alloc returns non-zero pointer" )
+    writeByteAt( ptr, 0, 42 )
+    assertEqualI64( 42, readByteAt( ptr, 0 ), "write/read byte" )
+    putsln( "basic alloc OK" )
+
+    # Sequential bytes
+    I64 i = 0
+    while i < 64:
+        writeByteAt( ptr, i, i )
+        i = i + 1
+    i = 0
+    while i < 64:
+        assertEqualI64( i, readByteAt( ptr, i ), "sequential byte" )
+        i = i + 1
+    dealloc( ptr )
+    putsln( "sequential bytes OK" )
+
+    # allocZeroed
+    I64 zptr = allocZeroed( 128 )
+    i = 0
+    while i < 128:
+        assertEqualI64( 0, readByteAt( zptr, i ), "zeroed byte" )
+        i = i + 1
+    dealloc( zptr )
+    putsln( "allocZeroed OK" )
+
+    # realloc preserves data
+    I64 rptr = alloc( 32 )
+    i = 0
+    while i < 32:
+        writeByteAt( rptr, i, i + 10 )
+        i = i + 1
+    I64 rptr2 = realloc( rptr, 128 )
+    i = 0
+    while i < 32:
+        assertEqualI64( i + 10, readByteAt( rptr2, i ), "realloc preserved" )
+        i = i + 1
+    dealloc( rptr2 )
+    putsln( "realloc OK" )
+
+    # I64 read/write
+    I64 i64ptr = alloc( 64 )
+    writeI64At( i64ptr, 0, 1234567890 )
+    writeI64At( i64ptr, 8, -42 )
+    assertEqualI64( 1234567890, readI64At( i64ptr, 0 ), "I64 read/write 1" )
+    assertEqualI64( -42, readI64At( i64ptr, 8 ), "I64 read/write 2" )
+    dealloc( i64ptr )
+    putsln( "I64 read/write OK" )
+
+    # Large allocation
+    I64 bigptr = alloc( 65536 )
+    writeByteAt( bigptr, 0, 1 )
+    writeByteAt( bigptr, 65535, 255 )
+    assertEqualI64( 1, readByteAt( bigptr, 0 ), "large alloc first byte" )
+    assertEqualI64( 255, readByteAt( bigptr, 65535 ), "large alloc last byte" )
+    dealloc( bigptr )
+    putsln( "large alloc OK" )
+
+    # Multiple small allocations
+    I64 p1 = alloc( 8 )
+    I64 p2 = alloc( 16 )
+    I64 p3 = alloc( 32 )
+    writeByteAt( p1, 0, 1 )
+    writeByteAt( p2, 0, 2 )
+    writeByteAt( p3, 0, 3 )
+    assertEqualI64( 1, readByteAt( p1, 0 ), "multi alloc p1" )
+    assertEqualI64( 2, readByteAt( p2, 0 ), "multi alloc p2" )
+    assertEqualI64( 3, readByteAt( p3, 0 ), "multi alloc p3" )
+    dealloc( p1 )
+    dealloc( p2 )
+    dealloc( p3 )
+    putsln( "multiple small allocs OK" )
+
+    putsln( "=== All allocator tests passed ===" )
+    return 0

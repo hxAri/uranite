@@ -1,0 +1,104 @@
+
+#
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# ...
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package main
+
+from uranite.io.console import puts
+from uranite.errors.exception import Exception
+
+# Basic async function
+async function fetchValue() -> Future<I64>:
+    return 42
+
+# Async with parameters
+async function multiply( I64 a, I64 b ) -> Future<I64>:
+    return a * b
+
+# Async chaining — await inside async
+async function pipeline( I64 x ) -> Future<I64>:
+    I64 doubled = await multiply( x, 2 )
+    I64 base = await fetchValue()
+    return doubled + base
+
+# Async with error handling
+async function safeDivide( I64 a, I64 b ) -> Future<I64>:
+    if b == 0:
+        raise new Exception( "division by zero", 0, None )
+    return a / b
+
+# Async void
+async function logMessage( String msg ) -> Future<Void>:
+    puts( msg )
+
+# Class with async methods
+class DataStore:
+    public I64 base
+
+    public function DataStore( self, I64 base ) -> Void:
+        self.base = base
+
+    public async function load( self, I64 id ) -> Future<I64>:
+        return self.base + id
+
+    public async function transform( self, I64 value ) -> Future<I64>:
+        I64 loaded = await self.load( value )
+        return loaded * 3
+
+public async function main() -> Future<I32>:
+    # Basic await
+    I64 val = await fetchValue()
+    puts( "fetchValue = ", val )
+
+    # Await with args
+    I64 product = await multiply( 6, 7 )
+    puts( "multiply(6, 7) = ", product )
+
+    # Chained async pipeline
+    I64 result = await pipeline( 10 )
+    puts( "pipeline(10) = ", result )
+
+    # Nested await
+    I64 nested = await multiply( await fetchValue(), 3 )
+    puts( "nested = ", nested )
+
+    # Async void
+    await logMessage( "async void works" )
+
+    # Async error handling
+    try:
+        I64 good = await safeDivide( 100, 5 )
+        puts( "100 / 5 = ", good )
+        I64 bad = await safeDivide( 10, 0 )
+    except as e:
+        puts( "caught async division error" )
+
+    # Async class methods
+    DataStore store = new DataStore( 1000 )
+    I64 transformed = await store.transform( 5 )
+    puts( "store.transform(5) = ", transformed )
+
+    # Fire-and-forget: call async without await
+    Future<I64> pending = multiply( 10, 10 )
+    I64 pendingResult = await pending
+    puts( "pending = ", pendingResult )
+
+    puts( "all async tests passed" )
+    return 0

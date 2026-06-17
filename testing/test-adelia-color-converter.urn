@@ -1,0 +1,114 @@
+package testing
+
+from uranite.adelia.color-converter import ColorConverter
+from uranite.adelia.rgb import RGB
+from uranite.adelia.hsl import HSL
+from uranite.adelia.hsv import HSV
+from uranite.adelia.cmyk import CMYK
+from uranite.testing.assertions import {
+    assertEqualI64, assertEqualF64,
+    assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia ColorConverter Tests ===" )
+
+    # rgbToHex: 255*65536 + 128*256 + 0 = 16744448
+    I32 hex = ColorConverter.rgbToHex( 255, 128, 0 )
+    assertEqualI64( 16744448, hex as I64, "rgbToHex" )
+    putsln( "rgbToHex OK" )
+
+    # hexToRgb
+    RGB rgb = ColorConverter.hexToRgb( 16744448 )
+    assertEqualI64( 255, rgb.red, "hexToRgb red" )
+    assertEqualI64( 128, rgb.green, "hexToRgb green" )
+    assertEqualI64( 0, rgb.blue, "hexToRgb blue" )
+    putsln( "hexToRgb OK" )
+
+    # rgbToHsl (pure red → h=0, s=1, l=0.5)
+    HSL hsl = ColorConverter.rgbToHsl( 255, 0, 0 )
+    assertEqualF64( 0.0, hsl.hue, 0.0001, "rgbToHsl hue" )
+    assertEqualF64( 1.0, hsl.saturation, 0.0001, "rgbToHsl sat" )
+    assertEqualF64( 0.5, hsl.lightness, 0.01, "rgbToHsl light" )
+    putsln( "rgbToHsl OK" )
+
+    # hslToRgb (pure red)
+    RGB fromHsl = ColorConverter.hslToRgb( 0.0, 1.0, 0.5 )
+    assertEqualI64( 255, fromHsl.red, "hslToRgb red" )
+    assertEqualI64( 0, fromHsl.green, "hslToRgb green" )
+    assertEqualI64( 0, fromHsl.blue, "hslToRgb blue" )
+    putsln( "hslToRgb OK" )
+
+    # rgbToHsv (pure green → h=120, s=1, v=1)
+    HSV hsv = ColorConverter.rgbToHsv( 0, 255, 0 )
+    assertEqualF64( 120.0, hsv.hue, 0.0001, "rgbToHsv hue" )
+    assertEqualF64( 1.0, hsv.saturation, 0.0001, "rgbToHsv sat" )
+    assertEqualF64( 1.0, hsv.value, 0.0001, "rgbToHsv val" )
+    putsln( "rgbToHsv OK" )
+
+    # hsvToRgb (pure green)
+    RGB fromHsv = ColorConverter.hsvToRgb( 120.0, 1.0, 1.0 )
+    assertEqualI64( 0, fromHsv.red, "hsvToRgb red" )
+    assertEqualI64( 255, fromHsv.green, "hsvToRgb green" )
+    assertEqualI64( 0, fromHsv.blue, "hsvToRgb blue" )
+    putsln( "hsvToRgb OK" )
+
+    # rgbToCmyk (pure red → c=0, m=1, y=1, k=0)
+    CMYK cmyk = ColorConverter.rgbToCmyk( 255, 0, 0 )
+    assertEqualF64( 0.0, cmyk.cyan, 0.0001, "rgbToCmyk cyan" )
+    assertEqualF64( 1.0, cmyk.magenta, 0.0001, "rgbToCmyk magenta" )
+    assertEqualF64( 1.0, cmyk.yellow, 0.0001, "rgbToCmyk yellow" )
+    assertEqualF64( 0.0, cmyk.key, 0.0001, "rgbToCmyk key" )
+    putsln( "rgbToCmyk OK" )
+
+    # cmykToRgb (pure red)
+    RGB fromCmyk = ColorConverter.cmykToRgb( 0.0, 1.0, 1.0, 0.0 )
+    assertEqualI64( 255, fromCmyk.red, "cmykToRgb red" )
+    assertEqualI64( 0, fromCmyk.green, "cmykToRgb green" )
+    assertEqualI64( 0, fromCmyk.blue, "cmykToRgb blue" )
+    putsln( "cmykToRgb OK" )
+
+    # hexToHsl (red)
+    HSL hsl2 = ColorConverter.hexToHsl( 16711680 )
+    assertEqualF64( 0.0, hsl2.hue, 0.0001, "hexToHsl hue" )
+    putsln( "hexToHsl OK" )
+
+    # hslToHex (red)
+    I32 hexFromHsl = ColorConverter.hslToHex( 0.0, 1.0, 0.5 )
+    assertEqualI64( 16711680, hexFromHsl as I64, "hslToHex red" )
+    putsln( "hslToHex OK" )
+
+    # hexToHsv (green = 65280)
+    HSV hsv2 = ColorConverter.hexToHsv( 65280 )
+    assertEqualF64( 120.0, hsv2.hue, 0.0001, "hexToHsv hue" )
+    putsln( "hexToHsv OK" )
+
+    # hsvToHex (green)
+    I32 hexFromHsv = ColorConverter.hsvToHex( 120.0, 1.0, 1.0 )
+    assertEqualI64( 65280, hexFromHsv as I64, "hsvToHex green" )
+    putsln( "hsvToHex OK" )
+
+    # hexToCmyk (red)
+    CMYK cmyk2 = ColorConverter.hexToCmyk( 16711680 )
+    assertEqualF64( 0.0, cmyk2.cyan, 0.0001, "hexToCmyk cyan" )
+    putsln( "hexToCmyk OK" )
+
+    # cmykToHex (red)
+    I32 hexFromCmyk = ColorConverter.cmykToHex( 0.0, 1.0, 1.0, 0.0 )
+    assertEqualI64( 16711680, hexFromCmyk as I64, "cmykToHex red" )
+    putsln( "cmykToHex OK" )
+
+    # gray roundtrip
+    HSL grayHsl = ColorConverter.rgbToHsl( 128, 128, 128 )
+    assertEqualF64( 0.0, grayHsl.hue, 0.0001, "gray hue" )
+    assertEqualF64( 0.0, grayHsl.saturation, 0.0001, "gray saturation" )
+    putsln( "gray roundtrip OK" )
+
+    # black cmyk
+    CMYK blackCmyk = ColorConverter.rgbToCmyk( 0, 0, 0 )
+    assertEqualF64( 1.0, blackCmyk.key, 0.0001, "black cmyk key" )
+    putsln( "black cmyk OK" )
+
+    putsln( "=== All ColorConverter tests passed ===" )
+    return 0

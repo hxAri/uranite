@@ -1,0 +1,58 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/adelia.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Adelia class, a final readonly type representing the core
+# Adelia graphics entity with a color attribute.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.adelia
+
+from uranite.language import {
+    Integer, 
+    String, 
+    Void
+}
+
+public final Readonly class Adelia:
+    
+    """
+    Core Adelia entity representing a graphical object with a color attribute.
+    This class is declared as final and readonly, meaning it cannot be subclassed
+    and its fields cannot be modified after construction.
+    """
+    
+    public I32 color
+    
+    public function Adelia( self, I32 color ) -> Void:
+        
+        """
+        Construct a new Adelia instance with the given color value.
+        
+        Parameters:
+            color (I32):
+                The color value for this Adelia entity.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.color = color
+
+export {
+    Adelia
+}

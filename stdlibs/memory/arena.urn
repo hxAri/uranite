@@ -1,0 +1,89 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/memory/arena.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Arena generic class, a bulk bump-pointer pool allocator that
+# allocates a contiguous memory region upfront and sub-allocates via pointer bumping.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.memory.arena
+
+from uranite.language.void import Void
+from uranite.language.int import Int
+
+public final native class Arena<T>:
+    
+    """
+    Bulk arena allocator that allocates a contiguous memory region upfront
+    and sub-allocates individual elements via pointer bumping. All allocations
+    can be freed in constant time by resetting the bump pointer.
+    """
+    
+    public native function Arena( self, Int capacity ) -> Void:
+        
+        """
+        Construct a new arena with the given capacity.
+        
+        Allocates a contiguous memory block of capacity * sizeof(T) bytes
+        and initializes the bump pointer to zero.
+        
+        Parameters:
+            capacity (Int):
+                The maximum number of elements the arena can hold.
+        """
+    
+    public native function alloc( self ) -> T:
+        
+        """
+        Bump-allocate one element from the arena.
+        
+        Advances the internal bump pointer by one slot and returns a pointer
+        to the newly allocated slot. Behavior is undefined if the arena is full.
+        
+        Returns:
+            T:
+                A pointer to the newly allocated element slot.
+        """
+    
+    public native function freeAll( self ) -> Void:
+        
+        """
+        Reset the bump pointer to zero, logically freeing all allocations.
+        
+        This operation runs in constant time regardless of the number of
+        allocated elements. The underlying memory block is retained for reuse.
+        """
+    
+    public native function destroy( self ) -> Void:
+        
+        """
+        Free the underlying memory block allocated by the arena.
+        
+        After calling destroy, the arena must not be used again. This releases
+        all memory back to the system.
+        """
+    
+    public native function count( self ) -> Int:
+        
+        """ Return the number of currently allocated element slots in the arena. """
+    
+    public native function capacity( self ) -> Int:
+        
+        """ Return the total capacity of the arena in number of element slots. """
+
+export {
+    Arena
+}

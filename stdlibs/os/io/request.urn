@@ -1,0 +1,362 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/io/request.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides an asynchronous I/O request queue for submitting read, write, and flush
+# operations to the block device layer, with a state machine lifecycle of
+# Pending, Active, Completed, and Failed.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.io.request
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public enum RequestType backed I64:
+    
+    """ Enumerates the types of I/O requests that can be submitted to the block device layer. """
+    
+    unit Read 1
+    unit Write 2
+    unit Flush 3
+
+public enum RequestStatus backed I64:
+    
+    """ Enumerates the lifecycle states of an I/O request in the queue. """
+    
+    unit Pending 0
+    unit Active 1
+    unit Completed 2
+    unit Failed 3
+
+public class IoRequestQueue:
+    
+    """
+    Fixed-size ring buffer of asynchronous I/O requests submitted by the VFS or
+    device drivers and processed by the block device layer. Each request tracks
+    its type, target device, block number, buffer address, transfer length, status,
+    and a caller-provided correlation tag.
+    """
+    
+    protect Memory<I64> requestTypes
+    protect Memory<I64> deviceIds
+    protect Memory<I64> blockNumbers
+    protect Memory<I64> bufferAddresses
+    protect Memory<I64> lengths
+    protect Memory<I64> statuses
+    protect Memory<I64> tags
+    protect I64 capacity
+    protect I64 head
+    protect I64 tail
+    protect I64 pending
+    protect I64 completedCount
+    protect Spinlock lock
+    
+    public function IoRequestQueue( self, I64 queueSize ) -> Void:
+        
+        """
+        Construct a new I/O request queue with the given maximum capacity.
+        All request slots are initialized to zero.
+        
+        Parameters:
+            queueSize (I64):
+                The maximum number of concurrent I/O requests the queue can hold.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = queueSize
+        self.head = 0
+        self.tail = 0
+        self.pending = 0
+        self.completedCount = 0
+        self.lock = new Spinlock()
+        self.requestTypes = new Memory<I64>( queueSize )
+        self.deviceIds = new Memory<I64>( queueSize )
+        self.blockNumbers = new Memory<I64>( queueSize )
+        self.bufferAddresses = new Memory<I64>( queueSize )
+        self.lengths = new Memory<I64>( queueSize )
+        self.statuses = new Memory<I64>( queueSize )
+        self.tags = new Memory<I64>( queueSize )
+        I64 slotIndex = 0
+        while slotIndex < queueSize:
+            self.requestTypes.set( slotIndex, 0 )
+            self.deviceIds.set( slotIndex, 0 )
+            self.blockNumbers.set( slotIndex, 0 )
+            self.bufferAddresses.set( slotIndex, 0 )
+            self.lengths.set( slotIndex, 0 )
+            self.statuses.set( slotIndex, 0 )
+            self.tags.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function submit( self, I64 reqType, I64 deviceId, I64 blockNumber, I64 bufferAddr, I64 length, I64 tag ) -> I64:
+        
+        """
+        Submit an I/O request to the queue. The request is placed at the tail of
+        the ring buffer with an initial status of pending.
+        
+        Parameters:
+            reqType (I64):
+                The request type (use requestRead, requestWrite, or requestFlush).
+            deviceId (I64):
+                The identifier of the target block device.
+            blockNumber (I64):
+                The starting block number for the operation.
+            bufferAddr (I64):
+                The memory address of the data buffer.
+            length (I64):
+                The number of bytes to transfer.
+            tag (I64):
+                A caller-provided correlation identifier for tracking the request.
+        
+        Returns:
+            I64:
+                The request index on success, or -1 if the queue is full.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.pending >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 idx = self.tail
+        self.requestTypes.set( idx, reqType )
+        self.deviceIds.set( idx, deviceId )
+        self.blockNumbers.set( idx, blockNumber )
+        self.bufferAddresses.set( idx, bufferAddr )
+        self.lengths.set( idx, length )
+        self.statuses.set( idx, 0 )
+        self.tags.set( idx, tag )
+        self.tail = ( self.tail + 1 ) % self.capacity
+        self.pending = self.pending + 1
+        self.lock.unlock()
+        return idx
+    
+    public function dequeue( self ) -> I64:
+        
+        """
+        Get the next pending request index at the head of the queue for processing.
+        Transitions the request status from pending to active.
+        
+        Returns:
+            I64:
+                The request index of the next pending request, or -1 if none are available.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.pending == 0:
+            self.lock.unlock()
+            return 0 - 1
+        I64 idx = self.head
+        if self.statuses.get( idx ) != 0:
+            self.lock.unlock()
+            return 0 - 1
+        self.statuses.set( idx, 1 )
+        self.lock.unlock()
+        return idx
+    
+    public function complete( self, I64 index ) -> Boolean:
+        
+        """
+        Mark the request at the given index as completed and increment the
+        completed request counter.
+        
+        Parameters:
+            index (I64):
+                The request index to mark as completed.
+        
+        Returns:
+            Boolean:
+                True if the request was successfully marked, False if the index
+                is out of bounds.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return False
+        self.lock.lock()
+        self.statuses.set( index, 2 )
+        self.completedCount = self.completedCount + 1
+        self.lock.unlock()
+        return True
+    
+    public function fail( self, I64 index ) -> Boolean:
+        
+        """
+        Mark the request at the given index as failed.
+        
+        Parameters:
+            index (I64):
+                The request index to mark as failed.
+        
+        Returns:
+            Boolean:
+                True if the request was successfully marked, False if the index
+                is out of bounds.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return False
+        self.lock.lock()
+        self.statuses.set( index, 3 )
+        self.lock.unlock()
+        return True
+    
+    public function drain( self ) -> I64:
+        
+        """
+        Advance the head pointer past all completed or failed requests at the
+        front of the ring buffer, freeing those slots for reuse. Stops at the
+        first request that is still pending or active.
+        
+        Returns:
+            I64:
+                The number of requests that were drained.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 drained = 0
+        while self.head != self.tail:
+            I64 status = self.statuses.get( self.head )
+            if status < 2:
+                return drained
+            self.head = ( self.head + 1 ) % self.capacity
+            self.pending = self.pending - 1
+            drained = drained + 1
+        return drained
+    
+    public function getStatus( self, I64 index ) -> I64:
+        
+        """
+        Return the current status of the request at the given index.
+        
+        Parameters:
+            index (I64):
+                The request index to query.
+        
+        Returns:
+            I64:
+                The status value (0=pending, 1=active, 2=completed, 3=failed),
+                or -1 if the index is out of bounds.
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return 0 - 1
+        return self.statuses.get( index )
+    
+    public function getTag( self, I64 index ) -> I64:
+        
+        """
+        Return the caller-provided correlation tag for the request at the given index.
+        
+        Parameters:
+            index (I64):
+                The request index to query.
+        
+        Returns:
+            I64:
+                The tag value, or 0 if the index is out of bounds.
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return 0
+        return self.tags.get( index )
+    
+    public function getRequestType( self, I64 index ) -> I64:
+        
+        """
+        Return the request type for the request at the given index.
+        
+        Parameters:
+            index (I64):
+                The request index to query.
+        
+        Returns:
+            I64:
+                The request type value (1=read, 2=write, 3=flush), or 0 if the
+                index is out of bounds.
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return 0
+        return self.requestTypes.get( index )
+    
+    public function getPending( self ) -> I64:
+        
+        """ Return the number of pending requests currently in the queue. """
+        
+        return self.pending
+    
+    public function getCompletedCount( self ) -> I64:
+        
+        """ Return the total number of requests that have been completed since queue creation. """
+        
+        return self.completedCount
+    
+    public function isFull( self ) -> Boolean:
+        
+        """ Return True if the request queue is full and cannot accept new submissions. """
+        
+        return self.pending >= self.capacity
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """ Return True if there are no pending requests in the queue. """
+        
+        return self.pending == 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all memory buffers allocated by this I/O request queue.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.requestTypes.free()
+        self.deviceIds.free()
+        self.blockNumbers.free()
+        self.bufferAddresses.free()
+        self.lengths.free()
+        self.statuses.free()
+        self.tags.free()
+
+export {
+    RequestType,
+    RequestStatus,
+    IoRequestQueue
+}

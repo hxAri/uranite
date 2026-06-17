@@ -1,0 +1,29 @@
+package testing
+
+from uranite.crypto.random import SecureRandom
+from uranite.testing.assertions import assertTrue
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Crypto Random Tests ===" )
+
+    SecureRandom rng = new SecureRandom()
+    assertTrue( rng.isInitialized(), "rng initialized" )
+    putsln( "SecureRandom constructed and seeded OK" )
+
+    I64 value1 = rng.nextI64()
+    I64 value2 = rng.nextI64()
+    putsln( "Generated two random values OK" )
+
+    I64 bounded = rng.nextBounded( 100 )
+    assertTrue( bounded >= 0, "bounded >= 0" )
+    assertTrue( bounded < 100, "bounded < 100" )
+    putsln( "nextBounded OK" )
+
+    I64 ranged = rng.nextInRange( 10, 20 )
+    assertTrue( ranged >= 10, "ranged >= 10" )
+    assertTrue( ranged < 20, "ranged < 20" )
+    putsln( "nextInRange OK" )
+
+    putsln( "=== All Crypto Random Tests Passed ===" )
+    return 0

@@ -1,0 +1,177 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/crypto/rng.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cryptographically Secure Pseudo-Random Number Generator using the xoshiro256** algorithm seeded from hardware RNG (RDRAND/RDSEED). Provides thread-safe random number generation with a period of 2^256 - 1.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.crypto.rng
+
+from uranite.os.sync.spinlock import Spinlock
+
+public class Csprng:
+    
+    """
+    Cryptographically Secure Pseudo-Random Number Generator implementing the
+    xoshiro256** algorithm. The internal state consists of four 64-bit words
+    (s0 through s3) providing a period of 2^256 - 1. Can be seeded from hardware
+    RNG via the RDRAND instruction or manually for testing. All state mutations
+    are protected by a spinlock for thread-safe concurrent access.
+    """
+    
+    public I64 s0
+    public I64 s1
+    public I64 s2
+    public I64 s3
+    public I64 initialized
+    public Spinlock lock
+    
+    public function Csprng( self ) -> Void:
+        
+        """
+        Construct an uninitialized CSPRNG with all state words set to zero.
+        Call seedFromHardware() or seed() before generating random values,
+        as the all-zero state is a fixed point of the xoshiro256** algorithm.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.s0 = 0
+        self.s1 = 0
+        self.s2 = 0
+        self.s3 = 0
+        self.initialized = 0
+        self.lock = new Spinlock()
+    
+    public function seedFromHardware( self ) -> Boolean:
+        
+        """
+        Seed the CSPRNG from the hardware random number generator using the
+        RDRAND instruction. Each of the four state words is seeded independently
+        with a hardware-generated random value. Returns True if the seeding
+        completed successfully.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 r0 = 0
+        I64 r1 = 0
+        I64 r2 = 0
+        I64 r3 = 0
+        asm volatile "rdrand $0" : output( "=r" r0 )
+        asm volatile "rdrand $0" : output( "=r" r1 )
+        asm volatile "rdrand $0" : output( "=r" r2 )
+        asm volatile "rdrand $0" : output( "=r" r3 )
+        self.s0 = r0
+        self.s1 = r1
+        self.s2 = r2
+        self.s3 = r3
+        self.initialized = 1
+        return True
+    
+    public function seed( self, I64 seed0, I64 seed1, I64 seed2, I64 seed3 ) -> Void:
+
+        """
+        Manually seed the CSPRNG with four 64-bit values. This is intended
+        for testing or for platforms that do not support the RDRAND instruction.
+        The provided values should have high entropy to ensure good random output.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.s0 = seed0
+        self.s1 = seed1
+        self.s2 = seed2
+        self.s3 = seed3
+        self.initialized = 1
+    
+    public function next( self ) -> I64:
+        
+        """
+        Generate the next 64-bit pseudo-random value using the xoshiro256**
+        algorithm. The result is computed as rotl(s1 * 5, 7) * 9. The internal
+        state is advanced atomically under the spinlock to ensure thread safety.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        I64 result = self.s1 * 5
+        result = ( ( result << 7 ) | ( result >> 57 ) ) * 9
+        I64 shifted = self.s1 << 17
+        self.s2 = self.s2 ^ self.s0
+        self.s3 = self.s3 ^ self.s1
+        self.s1 = self.s1 ^ self.s2
+        self.s0 = self.s0 ^ self.s3
+        self.s2 = self.s2 ^ shifted
+        self.s3 = ( self.s3 << 45 ) | ( self.s3 >> 19 )
+        self.lock.unlock()
+        return result
+    
+    public function nextBounded( self, I64 bound ) -> I64:
+        
+        """
+        Generate a pseudo-random value uniformly distributed in the range
+        [0, bound). Returns 0 if bound is less than or equal to zero.
+        The value is derived from next() with modulo reduction.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if bound <= 0:
+            return 0
+        I64 val = self.next()
+        if val < 0:
+            val = 0 - val
+        return val % bound
+    
+    public function fillRandom( self, I64 count ) -> I64:
+        
+        """
+        Generate the specified number of random bytes by calling next()
+        repeatedly (each call produces 8 bytes). Returns the total number
+        of bytes generated, which may exceed the requested count by up to 7.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 generated = 0
+        while generated < count:
+            self.next()
+            generated = generated + 8
+        return generated
+    
+    public function isInitialized( self ) -> Boolean:
+        
+        """ Return whether this CSPRNG has been seeded and is ready for use. """
+        
+        return self.initialized != 0
+
+export {
+    Csprng
+}

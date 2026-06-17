@@ -1,0 +1,109 @@
+package uranite.coroutine.task
+
+from uranite.errors.error import Error
+from uranite.fiber.fiber import {
+    Fiber,
+    fiberTrampoline,
+    FIBER_CREATED,
+    FIBER_RUNNING,
+    FIBER_SUSPENDED,
+    FIBER_TERMINATED,
+    F_STATE,
+    F_ERROR
+}
+
+public class TaskError extends Error:
+    
+    public function TaskError( self, String message ) -> Void:
+        parent( message, 0, None )
+
+public enum TaskState:
+    
+    unit Created
+    unit Running
+    unit Suspended
+    unit Completed
+    unit Failed
+
+public interface Task<T>:
+    
+    public function id( self ) -> I64:
+        
+        """ Return unique task identifier. """
+    
+    public function state( self ) -> TaskState:
+        
+        """ Return current lifecycle state. """
+    
+    public function cancel( self ) -> Void raises TaskError:
+        
+        """ Cancel task execution. """
+    
+    public function result( self ) -> T raises TaskError:
+        
+        """ Get result value. Raises if not completed. """
+
+public class SimpleTask implements Task<I64>:
+    public Fiber fiber
+    public I64 taskId
+    public Boolean started
+    
+    public function SimpleTask( self, I64 taskId, I64 entryFn ) -> Void:
+        self.fiber = new Fiber( entryFn )
+        self.taskId = taskId
+        self.started = False
+    
+    public function id( self ) -> I64:
+        return self.taskId
+    
+    public function state( self ) -> TaskState:
+        I64 fiberState = self.fiber.data.get( F_STATE )
+        if fiberState == FIBER_CREATED:
+            return TaskState.Created
+        if fiberState == FIBER_RUNNING:
+            return TaskState.Running
+        if fiberState == FIBER_SUSPENDED:
+            return TaskState.Suspended
+        if fiberState == FIBER_TERMINATED:
+            I64 hasErr = self.fiber.data.get( F_ERROR )
+            if hasErr != 0:
+                return TaskState.Failed
+            return TaskState.Completed
+        return TaskState.Created
+    
+    public function cancel( self ) -> Void:
+        raise new TaskError( "task cancellation not supported" )
+    
+    public function result( self ) -> I64:
+        I64 fiberState = self.fiber.data.get( F_STATE )
+        if fiberState != FIBER_TERMINATED:
+            raise new TaskError( "task not yet completed" )
+        I64 hasErr = self.fiber.data.get( F_ERROR )
+        if hasErr != 0:
+            raise new TaskError( "task failed" )
+        return self.fiber.getReturn()
+    
+    public function block( self ) -> I64:
+        if self.started == False:
+            self.started = True
+            self.fiber.start()
+        I64 fiberState = self.fiber.data.get( F_STATE )
+        while fiberState == FIBER_SUSPENDED:
+            self.fiber.resume( 0 )
+            fiberState = self.fiber.data.get( F_STATE )
+        if fiberState == FIBER_TERMINATED:
+            I64 hasErr = self.fiber.data.get( F_ERROR )
+            if hasErr != 0:
+                raise new TaskError( "task failed" )
+            return self.fiber.getReturn()
+        raise new TaskError( "task in unexpected state" )
+    
+    public function destroy( self ) -> Void:
+        self.fiber.destroy()
+
+export {
+    Task,
+    TaskState,
+    TaskError,
+    SimpleTask
+}

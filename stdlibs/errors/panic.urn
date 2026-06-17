@@ -1,0 +1,125 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/errors/panic.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Unrecoverable error handler with diagnostic context capture. Wraps
+# the kernel PanicContext with a high-level interface for triggering
+# panics with reason codes and inspecting crash state.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.panic
+
+from uranite.os.debug.panic import PanicReason, PanicContext
+
+public class PanicHandler:
+
+    """
+    Unrecoverable error handler with diagnostic context capture. Wraps
+    the kernel PanicContext to capture register state, stack backtrace,
+    and faulting address before halting the CPU. Use for fatal conditions
+    where recovery is impossible.
+    """
+
+    protect PanicContext context
+
+    public function PanicHandler( self, I64 maxStackFrames ) -> Void:
+
+        """
+        Construct a panic handler with capacity for the given number of
+        stack backtrace frames.
+
+        Parameters:
+            maxStackFrames (I64):
+                Maximum number of stack frames to capture on panic.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.context = new PanicContext( maxStackFrames )
+
+    public function panic( self, I64 reason, I64 faultAddress ) -> Void:
+
+        """
+        Trigger an unrecoverable panic. Captures register state and stack
+        backtrace, then halts the CPU. Does not return.
+
+        Parameters:
+            reason (I64):
+                PanicReason backed value identifying the fault category.
+            faultAddress (I64):
+                Address associated with the fault (e.g., null pointer).
+        """
+
+        self.context.panic( reason, faultAddress )
+
+    public function isPanicked( self ) -> Boolean:
+
+        """ Return whether a panic has been triggered. """
+
+        return self.context.isPanicked()
+
+    public function getReason( self ) -> I64:
+
+        """ Return the panic reason code. """
+
+        return self.context.getReason()
+
+    public function getFaultAddress( self ) -> I64:
+
+        """ Return the faulting address from the panic. """
+
+        return self.context.getAddress()
+
+    public function getFrameCount( self ) -> I64:
+
+        """ Return the number of stack frames captured. """
+
+        return self.context.getFrameCount()
+
+    public function getFrame( self, I64 index ) -> I64:
+
+        """
+        Return stack frame address at the given backtrace index.
+
+        Parameters:
+            index (I64):
+                Zero-based index into the captured stack frames.
+
+        Returns:
+            I64:
+                Frame address, or 0 if index is out of range.
+        """
+
+        return self.context.getFrame( index )
+
+    public function destroy( self ) -> Void:
+
+        """
+        Free all resources held by the panic context.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.context.destroy()
+
+export {
+    PanicHandler,
+    PanicReason, PanicContext
+}

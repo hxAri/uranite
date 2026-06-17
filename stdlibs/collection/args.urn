@@ -1,0 +1,199 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-28 01:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/args.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Variadic parameter container. Wraps a Memory<T> buffer with a count.
+# Constructed by the compiler at call sites for Type name[] parameters.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.args
+
+from uranite.iterators.iterator import Iterator
+from uranite.memory.memory import Memory
+
+public class Args<T> implements Iterator<T>:
+    
+    """
+    A read-only container for variadic function parameters. Wraps a
+    contiguous Memory<T> buffer with an element count. Instances are
+    constructed automatically by the compiler at call sites when a
+    function accepts a variadic parameter (Type name[]). Implements
+    the Iterator interface for sequential traversal.
+    """
+    
+    protect Memory<T> data
+    """ The underlying memory buffer holding the variadic arguments. """
+    
+    protect I64 count
+    """ The number of elements in this argument list. """
+    
+    protect I64 position
+    """ The current iterator position for sequential traversal. """
+    
+    public function Args( self, Memory<T> data, I64 count ) -> Void:
+        
+        """
+        Create a new Args wrapping a memory buffer with the given
+        element count. The iterator position is initialized to zero.
+        
+        Parameters:
+            data (Memory<T>):
+                The memory buffer containing the argument values.
+            count (I64):
+                The number of elements in the buffer.
+        """
+        
+        self.data = data
+        self.count = count
+        self.position = 0
+    
+    public function get( self, I64 index ) -> T:
+        
+        """
+        Retrieve the element at the given index.
+        
+        Parameters:
+            index (I64):
+                The zero-based index of the element to retrieve.
+        
+        Returns:
+            The element at the specified index.
+        """
+        
+        return self.data.get( index )
+    
+    public function length( self ) -> I64:
+        
+        """
+        Return the number of elements in this argument list.
+        
+        Returns:
+            The element count.
+        """
+        
+        return self.count
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """
+        Check whether this argument list contains no elements.
+        
+        Returns:
+            True if the count is zero, False otherwise.
+        """
+        
+        return self.count == 0
+    
+    public function first( self ) -> T:
+        
+        """
+        Return the first element in the argument list.
+        
+        Returns:
+            The element at index zero.
+        """
+        
+        return self.data.get( 0 )
+    
+    public function last( self ) -> T:
+        
+        """
+        Return the last element in the argument list.
+        
+        Returns:
+            The element at index count minus one.
+        """
+        
+        return self.data.get( self.count - 1 )
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether the iterator has more elements to yield.
+        
+        Returns:
+            True if the current position is less than the count.
+        """
+        
+        return self.position < self.count
+    
+    public property next( self ) -> T:
+        
+        """
+        Return the next element and advance the iterator position
+        by one.
+        
+        Returns:
+            The element at the current position before advancing.
+        """
+        
+        T element = self.data.get( self.position )
+        self.position = self.position + 1
+        return element
+    
+    public function contains( self, T element ) -> Boolean:
+        
+        """
+        Check whether the argument list contains the given element
+        using equality comparison.
+        
+        Parameters:
+            element (T):
+                The element to search for.
+        
+        Returns:
+            True if the element is found, False otherwise.
+        
+        Complexity:
+            Time: O(n) where n is the number of elements
+        """
+        
+        for I64 elementIndex=0; elementIndex<self.count; elementIndex++:
+            if self.data.get( elementIndex ) == element:
+                return True
+        return False
+
+    public function indexOf( self, T element ) -> I64:
+
+        """
+        Find the index of the first occurrence of the given element.
+
+        Parameters:
+            element (T):
+                The element to search for.
+
+        Returns:
+            The zero-based index of the first occurrence, or -1 if
+            the element is not found.
+
+        Complexity:
+            Time: O(n) where n is the number of elements
+        """
+
+        for I64 elementIndex=0; elementIndex<self.count; elementIndex++:
+            if self.data.get( elementIndex ) == element:
+                return elementIndex
+        return 0 - 1
+
+    public function destroy( self ) -> Void:
+
+        """ Release the heap-allocated data buffer held by this variadic container. """
+
+        self.data.free()
+
+export {
+    Args
+}

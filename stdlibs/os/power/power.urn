@@ -1,0 +1,289 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/power/power.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides power management facilities for CPU power states, system suspend/resume, shutdown, and reboot operations with callback registration for power event notification.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.power
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public const I64 CPU_STATE_ACTIVE = 0
+""" CPU C-state for active operation (C0). Fully operational, executing instructions at normal speed. """
+
+public const I64 CPU_STATE_HALT = 1
+""" CPU C-state for halt (C1). HLT instruction stops CPU until next interrupt, fast wake-up. """
+
+public const I64 CPU_STATE_STOP_CLOCK = 2
+""" CPU C-state for stop-clock (C2). Core clock stopped, deeper savings than C1, slightly higher wake-up latency. """
+
+public const I64 CPU_STATE_DEEP_SLEEP = 3
+""" CPU C-state for deep sleep (C3). Caches flushed, deepest idle mode, maximum savings, significant wake-up latency. """
+
+public const I64 SYSTEM_RUNNING = 0
+""" System power state for running (S0). Normal operating state, fully powered and active. """
+
+public const I64 SYSTEM_STANDBY = 1
+""" System power state for standby (S1). CPU stopped, RAM and peripherals powered, fast resume. """
+
+public const I64 SYSTEM_SUSPEND = 3
+""" System power state for suspend-to-RAM (S3). Only RAM powered, CPU and peripherals off. """
+
+public const I64 SYSTEM_OFF = 5
+""" System power state for powered-off (S5). Completely shut down except wake-on-LAN circuits. """
+
+public const I64 POWER_EVENT_SUSPEND = 1
+""" Power event type for suspend. Broadcast before system enters suspended state. """
+
+public const I64 POWER_EVENT_RESUME = 2
+""" Power event type for resume. Broadcast after system resumes from suspended state. """
+
+public const I64 POWER_EVENT_SHUTDOWN = 3
+""" Power event type for shutdown. Broadcast before system powers off for cleanup. """
+
+public const I64 POWER_EVENT_REBOOT = 4
+""" Power event type for reboot. Broadcast before system performs hardware reset. """
+
+public class PowerManager:
+    
+    """
+    Manages system and CPU power states, including transitions between active, suspend,
+    and shutdown states. Provides a callback registration mechanism so that kernel
+    subsystems and drivers can be notified of power events (suspend, resume, shutdown,
+    reboot) and perform necessary cleanup or state preservation. The power manager uses
+    a spinlock for thread-safe callback registration and state transitions.
+    """
+    
+    public I64 systemState
+    public I64 cpuState
+    public Memory<I64> callbackIds
+    public Memory<I64> callbackEvents
+    public I64 callbackCapacity
+    public I64 callbackCount
+    public Spinlock lock
+    
+    public function PowerManager( self, I64 maxCallbacks ) -> Void:
+        
+        """
+        Constructs a new power manager with the specified maximum number of callback
+        registrations. The system starts in the running state (S0) with the CPU in
+        the active state (C0).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.systemState = 0
+        self.cpuState = 0
+        self.callbackCapacity = maxCallbacks
+        self.callbackCount = 0
+        self.lock = new Spinlock()
+        self.callbackIds = new Memory<I64>( maxCallbacks )
+        self.callbackEvents = new Memory<I64>( maxCallbacks )
+        I64 slotIndex = 0
+        while slotIndex < maxCallbacks:
+            self.callbackIds.set( slotIndex, 0 )
+            self.callbackEvents.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function registerCallback( self, I64 event, I64 callbackId ) -> I64:
+        
+        """
+        Registers a callback to be notified when the specified power event occurs. The
+        callback is identified by its callbackId, which the power event dispatcher uses
+        to invoke the appropriate handler. Returns the slot index on success, or -1 if
+        the callback table is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.callbackCount >= self.callbackCapacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 slotIndex = 0
+        while slotIndex < self.callbackCapacity:
+            if self.callbackIds.get( slotIndex ) == 0:
+                self.callbackIds.set( slotIndex, callbackId )
+                self.callbackEvents.set( slotIndex, event )
+                self.callbackCount = self.callbackCount + 1
+                self.lock.unlock()
+                return slotIndex
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return 0 - 1
+    
+    public function unregisterCallback( self, I64 slot ) -> Boolean:
+        
+        """
+        Unregisters the callback at the specified slot index, freeing the slot for reuse.
+        Returns True if the callback was successfully unregistered, or False if the slot
+        index is out of bounds or the slot is already empty.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if slot < 0 or slot >= self.callbackCapacity:
+            return False
+        if self.callbackIds.get( slot ) == 0:
+            return False
+        self.lock.lock()
+        self.callbackIds.set( slot, 0 )
+        self.callbackEvents.set( slot, 0 )
+        self.callbackCount = self.callbackCount - 1
+        self.lock.unlock()
+        return True
+    
+    public function countCallbacksForEvent( self, I64 event ) -> I64:
+        
+        """
+        Counts and returns the number of callbacks currently registered for the specified
+        power event type. This is useful for determining how many subsystems need to be
+        notified before a power state transition.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 count = 0
+        I64 slotIndex = 0
+        while slotIndex < self.callbackCapacity:
+            if self.callbackEvents.get( slotIndex ) == event and self.callbackIds.get( slotIndex ) != 0:
+                count = count + 1
+            slotIndex = slotIndex + 1
+        return count
+    
+    public function cpuHalt( self ) -> Void:
+        
+        """
+        Enters the CPU halt state (C1) by issuing the x86 HLT instruction. The CPU
+        stops executing instructions and enters a low-power idle state until the next
+        hardware interrupt arrives, at which point execution resumes.
+        """
+        
+        self.cpuState = 1
+        asm volatile "hlt"
+    
+    public function suspend( self ) -> Boolean:
+        
+        """
+        Requests a system suspend to S3 (suspend-to-RAM). The system must be in the
+        running state (S0) for the transition to proceed. Returns True if the state
+        was successfully changed to suspended, or False if the system is not in the
+        running state.
+        """
+        
+        if self.systemState != 0:
+            return False
+        self.systemState = 3
+        return True
+    
+    public function resume( self ) -> Boolean:
+        
+        """
+        Resumes the system from the suspended state (S3) back to the running state (S0).
+        The CPU state is also reset to active (C0). Returns True if the resume succeeded,
+        or False if the system was not in the suspended state.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.systemState != 3:
+            return False
+        self.systemState = 0
+        self.cpuState = 0
+        return True
+    
+    public function shutdown( self ) -> Boolean:
+        
+        """
+        Requests a system shutdown, transitioning to the powered-off state (S5). Returns
+        True if the state was successfully changed, or False if the system is already in
+        the powered-off state.
+        """
+        
+        if self.systemState == 5:
+            return False
+        self.systemState = 5
+        return True
+    
+    public function reboot( self ) -> Void:
+        
+        """
+        Performs a hardware reboot by writing the reset command to the keyboard controller
+        port. This issues an OUT instruction to port 0x64 (100 decimal) with value 0xFE
+        (254 decimal), which triggers a CPU reset on x86 systems.
+        """
+        
+        asm volatile "outb $0, $1" : : input( "{ax}" 254 as I8, "N{dx}" 100 as I16 )
+    
+    public function getSystemState( self ) -> I64:
+        
+        """ Returns the current system power state (S0, S1, S3, or S5). """
+        
+        return self.systemState
+    
+    public function getCpuState( self ) -> I64:
+        
+        """ Returns the current CPU C-state (C0, C1, C2, or C3). """
+        
+        return self.cpuState
+    
+    public function getCallbackCount( self ) -> I64:
+        
+        """ Returns the total number of currently registered power event callbacks. """
+        
+        return self.callbackCount
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the power manager, including
+        the callback ID and callback event arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.callbackIds.free()
+        self.callbackEvents.free()
+
+export {
+    CPU_STATE_ACTIVE,
+    CPU_STATE_HALT,
+    CPU_STATE_STOP_CLOCK,
+    CPU_STATE_DEEP_SLEEP,
+    SYSTEM_RUNNING,
+    SYSTEM_STANDBY,
+    SYSTEM_SUSPEND,
+    SYSTEM_OFF,
+    POWER_EVENT_SUSPEND,
+    POWER_EVENT_RESUME,
+    POWER_EVENT_SHUTDOWN,
+    POWER_EVENT_REBOOT,
+    PowerManager
+}

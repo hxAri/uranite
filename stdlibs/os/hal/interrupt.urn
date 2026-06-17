@@ -1,0 +1,258 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/hal/interrupt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Interrupt routing table that maps IRQ numbers to handler addresses with support for masking and unmasking individual IRQ lines. Covers up to 256 IRQ lines for legacy PIC and IOAPIC configurations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.hal.interrupt
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public const I64 MAX_IRQ_COUNT = 256
+""" The maximum number of supported IRQ lines, covering legacy PIC and IOAPIC. """
+
+public class IrqEntry:
+    
+    """
+    Represents a single IRQ handler entry storing the handler function address,
+    IRQ number, enabled state, and trigger count for tracking how many times
+    the interrupt has fired.
+    """
+    
+    public I64 handlerAddress
+    public I64 irqNumber
+    public Boolean enabled
+    public I64 triggerCount
+    
+    public function IrqEntry( self ) -> Void:
+        
+        """
+        Construct an IRQ entry with no handler registered, disabled,
+        and zero trigger count.
+        """
+        
+        self.handlerAddress = 0
+        self.irqNumber = 0
+        self.enabled = False
+        self.triggerCount = 0
+    
+    public function isRegistered( self ) -> Boolean:
+        
+        """ Return whether a handler function has been registered for this IRQ. """
+        
+        return self.handlerAddress != 0
+    
+    public function incrementTrigger( self ) -> Void:
+        
+        """
+        Increment the trigger count by one, recording that the interrupt has fired.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.triggerCount = self.triggerCount + 1
+
+public class InterruptTable:
+    
+    """
+    Interrupt routing table that maps up to 256 IRQ numbers to handler function
+    addresses. Supports registering, unregistering, masking (disabling), and
+    unmasking (enabling) individual IRQ lines. Each IRQ also tracks its trigger
+    count for diagnostic purposes. All registration and unregistration operations
+    are protected by a spinlock for interrupt-safe concurrent access.
+    """
+    
+    protect Memory<I64> handlers
+    protect Memory<I64> enabled
+    protect Memory<I64> triggerCounts
+    protect I64 capacity
+    protect I64 registeredCount
+    protect Spinlock lock
+    
+    public function InterruptTable( self ) -> Void:
+        
+        """
+        Construct an interrupt table with capacity for 256 IRQ lines.
+        All handlers are initialized to null (0), all IRQs are disabled,
+        and all trigger counts are zeroed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = 256
+        self.registeredCount = 0
+        self.lock = new Spinlock()
+        self.handlers = new Memory<I64>( self.capacity )
+        self.enabled = new Memory<I64>( self.capacity )
+        self.triggerCounts = new Memory<I64>( self.capacity )
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            self.handlers.set( slotIndex, 0 )
+            self.enabled.set( slotIndex, 0 )
+            self.triggerCounts.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function registerHandler( self, I64 irq, I64 handlerAddress ) -> Boolean:
+        
+        """
+        Register an interrupt handler at the given function address for the
+        specified IRQ number. The IRQ is automatically enabled after registration.
+        Returns True on success, False if the IRQ number is out of range.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if irq < 0 or irq >= self.capacity:
+            return False
+        self.lock.lock()
+        self.handlers.set( irq, handlerAddress )
+        self.enabled.set( irq, 1 )
+        self.registeredCount = self.registeredCount + 1
+        self.lock.unlock()
+        return True
+    
+    public function unregisterHandler( self, I64 irq ) -> I64:
+        
+        """
+        Unregister the interrupt handler for the specified IRQ number.
+        Returns the previously registered handler address, or 0 if no
+        handler was registered or the IRQ number is out of range.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if irq < 0 or irq >= self.capacity:
+            return 0
+        self.lock.lock()
+        I64 previous = self.handlers.get( irq )
+        self.handlers.set( irq, 0 )
+        self.enabled.set( irq, 0 )
+        if previous != 0:
+            self.registeredCount = self.registeredCount - 1
+        self.lock.unlock()
+        return previous
+    
+    public function getHandler( self, I64 irq ) -> I64:
+        
+        """ Return the handler address for the given IRQ number, or 0 if none is registered or the IRQ is out of range. """
+        
+        if irq < 0 or irq >= self.capacity:
+            return 0
+        return self.handlers.get( irq )
+    
+    public function mask( self, I64 irq ) -> Boolean:
+        
+        """
+        Mask (disable) the specified IRQ, stopping delivery of interrupts
+        without removing the registered handler. Returns True on success,
+        False if the IRQ number is out of range.
+        """
+        
+        if irq < 0 or irq >= self.capacity:
+            return False
+        self.enabled.set( irq, 0 )
+        return True
+    
+    public function unmask( self, I64 irq ) -> Boolean:
+        
+        """
+        Unmask (enable) the specified IRQ, resuming delivery of interrupts.
+        Only succeeds if a handler is registered for the IRQ. Returns True
+        on success, False if the IRQ is out of range or has no handler.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if irq < 0 or irq >= self.capacity:
+            return False
+        if self.handlers.get( irq ) == 0:
+            return False
+        self.enabled.set( irq, 1 )
+        return True
+    
+    public function isEnabled( self, I64 irq ) -> Boolean:
+        
+        """ Return whether the specified IRQ is currently enabled (unmasked). """
+        
+        if irq < 0 or irq >= self.capacity:
+            return False
+        return self.enabled.get( irq ) == 1
+    
+    public function isRegistered( self, I64 irq ) -> Boolean:
+        
+        """ Return whether a handler has been registered for the specified IRQ. """
+        
+        if irq < 0 or irq >= self.capacity:
+            return False
+        return self.handlers.get( irq ) != 0
+    
+    public function recordTrigger( self, I64 irq ) -> Void:
+        
+        """
+        Record that the specified IRQ has fired by incrementing its trigger
+        count. This is called from the interrupt service routine dispatcher
+        for diagnostic and performance monitoring purposes.
+        """
+        
+        if irq >= 0 and irq < self.capacity:
+            I64 count = self.triggerCounts.get( irq )
+            self.triggerCounts.set( irq, count + 1 )
+    
+    public function getTriggerCount( self, I64 irq ) -> I64:
+        
+        """ Return the number of times the specified IRQ has been triggered, or 0 if out of range. """
+        
+        if irq < 0 or irq >= self.capacity:
+            return 0
+        return self.triggerCounts.get( irq )
+    
+    public function getRegisteredCount( self ) -> I64:
+        
+        """ Return the total number of registered interrupt handlers. """
+        
+        return self.registeredCount
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all Memory arrays used for storing handler, enabled, and trigger count data.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.handlers.free()
+        self.enabled.free()
+        self.triggerCounts.free()
+
+export {
+    MAX_IRQ_COUNT,
+    IrqEntry,
+    InterruptTable
+}

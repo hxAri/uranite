@@ -1,0 +1,171 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/shared.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Atomic reference-counted shared ownership. Shared<T> allows multiple
+# owners to read/write a value with spinlock protection and automatic
+# cleanup when the last reference is released.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.shared
+
+from uranite.memory.memory import Memory
+from uranite.threading.atomic import AtomicI64
+from uranite.os.sync.spinlock import Spinlock
+
+public class Shared<T>:
+    
+    """
+    Thread-safe reference-counted shared ownership container. Wraps a
+    value of type T with atomic reference counting and spinlock-protected
+    read/write access. Multiple owners can hold clones of the same Shared
+    instance, all pointing to the same underlying storage. The storage is
+    automatically freed when the last reference is released.
+    
+    Access to the value is serialized through a spinlock, making both get
+    and set operations atomic with respect to concurrent threads.
+    """
+    
+    protect Memory<T> storage
+    """Single-element memory buffer holding the shared value."""
+    
+    protect AtomicI64 refCount
+    """Atomic reference count tracking the number of live owners."""
+    
+    protect Spinlock accessLock
+    """Spinlock serializing concurrent read and write access to the value."""
+    
+    public function Shared( self, T value ) -> Void:
+        
+        """
+        Create a new shared container with an initial reference count of 1.
+        
+        Parameters:
+            value (T):
+                The initial value to store in the shared container.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.storage = new Memory<T>( 1 )
+        self.storage.set( 0, value )
+        self.refCount = new AtomicI64( 1 )
+        self.accessLock = new Spinlock()
+    
+    public function clone( self ) -> Shared<T>:
+        
+        """
+        Create a new Shared instance that shares the same underlying storage,
+        reference count, and access lock. Increments the reference count
+        atomically. The returned clone and this instance both point to the
+        same data.
+        
+        Returns:
+            Shared<T>:
+                A new Shared instance sharing ownership of the same value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.refCount.increment()
+        Shared<T> copy = new Shared<T>( self.get() )
+        copy.storage.free()
+        copy.refCount.destroy()
+        copy.storage = self.storage
+        copy.refCount = self.refCount
+        copy.accessLock = self.accessLock
+        return copy
+    
+    public function get( self ) -> T:
+        
+        """
+        Read the shared value under spinlock protection.
+        
+        Returns:
+            T:
+                The current value stored in the shared container.
+        """
+        
+        self.accessLock.lock()
+        T value = self.storage.get( 0 )
+        self.accessLock.unlock()
+        return value
+    
+    public function set( self, T value ) -> Void:
+        
+        """
+        Write a new value to the shared container under spinlock protection.
+        
+        Parameters:
+            value (T):
+                The new value to store.
+        """
+        
+        self.accessLock.lock()
+        self.storage.set( 0, value )
+        self.accessLock.unlock()
+    
+    public function getRefCount( self ) -> I64:
+        
+        """
+        Return the current reference count.
+        
+        Returns:
+            I64:
+                The number of live owners sharing this container.
+        """
+        
+        return self.refCount.load()
+    
+    public function release( self ) -> Boolean:
+        
+        """
+        Decrement the reference count and free the underlying storage if
+        this was the last reference. After calling release, this instance
+        must not be used again.
+        
+        Returns:
+            Boolean:
+                True if this was the last reference and storage was freed,
+                False if other references remain.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 old = self.refCount.fetchSub( 1 )
+        if old <= 1:
+            self.storage.free()
+            self.refCount.destroy()
+            return True
+        return False
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release this reference. Equivalent to calling release().
+        """
+        
+        self.release()
+
+export {
+    Shared
+}

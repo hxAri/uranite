@@ -1,0 +1,1203 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/filesystem.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level filesystem operations: copy, move, rename, remove, symlinks,
+# pipes, file locking, terminal control, permissions, filesystem info,
+# working directory, temp files.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.filesystem
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
+    readI32At, writeI32At, readI64At,
+    sysOpen, sysClose, sysRead, sysWrite, sysRename, sysUnlink, sysLink,
+    sysSymlink, sysReadlink, sysChmod, sysFchmod, sysChown, sysFchown,
+    sysGetcwd, sysChdir, sysStatfs, sysFlock, sysIoctl, sysPipe2, sysMkdir, sysGetdents64,
+    O_RDONLY, O_WRONLY, O_CREAT, O_EXCL, O_TRUNC, O_CLOEXEC, O_RDWR,
+    LOCK_SH, LOCK_EX, LOCK_UN, LOCK_NB,
+    TCGETS, TCSETS, TIOCGWINSZ, ECHO_FLAG, ICANON_FLAG,
+    SYS_RENAME, SYS_FLOCK, SYS_OPEN, SYS_MKDIR, SYS_GETDENTS64
+}
+from uranite.os.syscall.invoke import syscall0, syscall2, syscall3
+from uranite.os.syscall.result import SyscallResult
+from uranite.os.vfs.vnode import {
+    VNodeType, VNode, VNodeCache,
+    PERM_READ, PERM_WRITE, PERM_EXECUTE,
+    PERM_OWNER_READ, PERM_OWNER_WRITE, PERM_OWNER_EXECUTE
+}
+from uranite.os.vfs.file-descriptor import {
+    FileDescriptor, FileDescriptorTable,
+    FLAG_READ, FLAG_WRITE, FLAG_APPEND, FLAG_CREATE, FLAG_TRUNCATE
+}
+from uranite.os.vfs.mount import MountEntry, MountTable, MOUNT_READ_ONLY, MOUNT_NO_EXEC, MOUNT_NO_SUID
+from uranite.io.file import File
+from uranite.io.errors import IOError
+from uranite.collection.array-list import ArrayList
+from uranite.io.path import join
+
+const I64 SYS_GETPID = 39
+
+public function copy( String source, String dest ) -> Void:
+    
+    """
+    Copy a file from the source path to the destination path. Reads in
+    4096-byte chunks and writes them to the destination, handling partial
+    writes. The destination file is created with permission mode 0644,
+    or truncated if it already exists.
+    
+    Parameters:
+        source (String):
+            The filesystem path of the source file to copy.
+        dest (String):
+            The filesystem path of the destination file.
+    
+    Raises:
+        IOError: If the source cannot be read or the destination cannot be written.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    I64 sourcePointer = stringToPtr( source )
+    I64 sourceFd = sysOpen( sourcePointer, O_RDONLY, 0 )
+    I64 destPointer = stringToPtr( dest )
+    I64 destFd = sysOpen( destPointer, O_WRONLY | O_CREAT | O_TRUNC, 420 )
+    I64 chunkSize = 4096
+    I64 chunkWords = chunkSize / 8
+    Memory<I64> chunkBuffer = new Memory<I64>( chunkWords )
+    I64 chunkAddress = memoryToPtr( chunkBuffer )
+    Boolean finished = False
+    while finished == False:
+        I64 bytesRead = sysRead( sourceFd, chunkAddress, chunkSize )
+        if bytesRead == 0:
+            finished = True
+        else:
+            I64 bytesWritten = 0
+            while bytesWritten < bytesRead:
+                I64 chunkWritten = sysWrite( destFd, chunkAddress + bytesWritten, bytesRead - bytesWritten )
+                bytesWritten = bytesWritten + chunkWritten
+    chunkBuffer.free()
+    sysClose( destFd )
+    sysClose( sourceFd )
+
+public function moveFile( String source, String dest ) -> Void:
+    
+    """
+    Move a file from the source path to the destination path. Attempts
+    an atomic rename first; if the rename fails (e.g., cross-device move),
+    falls back to copy-then-delete.
+    
+    Parameters:
+        source (String):
+            The filesystem path of the file to move.
+        dest (String):
+            The target filesystem path.
+    
+    Raises:
+        IOError: If both the rename and the copy-delete fallback fail.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 sourcePointer = stringToPtr( source )
+    I64 destPointer = stringToPtr( dest )
+    SyscallResult renameResult = syscall2( SYS_RENAME, sourcePointer, destPointer )
+    if renameResult.isOk():
+        return
+    copy( source, dest )
+    sysUnlink( sourcePointer )
+
+public function rename( String oldPath, String newPath ) -> Void:
+    
+    """
+    Rename a file or directory from the old path to the new path.
+    
+    Parameters:
+        oldPath (String):
+            The current filesystem path.
+        newPath (String):
+            The new filesystem path.
+    
+    Raises:
+        IOError: If the rename fails.
+    """
+    
+    I64 oldPtr = stringToPtr( oldPath )
+    I64 newPtr = stringToPtr( newPath )
+    sysRename( oldPtr, newPtr )
+
+public function remove( String path ) -> Void:
+    
+    """
+    Remove (unlink) a file at the specified path.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file to remove.
+    
+    Raises:
+        IOError: If the file cannot be removed.
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    sysUnlink( pathPtr )
+
+public function symlink( String target, String linkPath ) -> Void:
+    
+    """
+    Create a symbolic link at linkPath pointing to target.
+    
+    Parameters:
+        target (String):
+            The path that the symbolic link will point to.
+        linkPath (String):
+            The filesystem path where the symbolic link will be created.
+    
+    Raises:
+        IOError: If the symlink cannot be created.
+    """
+    
+    I64 targetPtr = stringToPtr( target )
+    I64 linkPtr = stringToPtr( linkPath )
+    sysSymlink( targetPtr, linkPtr )
+
+public function hardlink( String source, String linkPath ) -> Void:
+    
+    """
+    Create a hard link at linkPath pointing to the same inode as source.
+    
+    Parameters:
+        source (String):
+            The existing file to create a hard link to.
+        linkPath (String):
+            The filesystem path where the hard link will be created.
+    
+    Raises:
+        IOError: If the hard link cannot be created.
+    """
+    
+    I64 srcPtr = stringToPtr( source )
+    I64 linkPtr = stringToPtr( linkPath )
+    sysLink( srcPtr, linkPtr )
+
+public function readlink( String path ) -> String:
+    
+    """
+    Read the target path of a symbolic link.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the symbolic link to read.
+    
+    Returns:
+        The target path that the symbolic link points to.
+    
+    Raises:
+        IOError: If the readlink fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 pathPointer = stringToPtr( path )
+    I64 readBufferSize = 4096
+    I64 readBufferWords = ( readBufferSize + 8 ) / 8
+    Memory<I64> readBuffer = new Memory<I64>( readBufferWords )
+    I64 readBufferAddress = memoryToPtr( readBuffer )
+    I64 bytesRead = sysReadlink( pathPointer, readBufferAddress, readBufferSize )
+    writeByteAt( readBufferAddress, bytesRead, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
+    return result
+
+public function lockShared( I64 fd ) -> Void:
+    
+    """
+    Acquire a shared (read) lock on the given file descriptor. Multiple
+    processes may hold a shared lock simultaneously. Blocks until the
+    lock is acquired.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor to lock.
+    
+    Raises:
+        IOError: If the lock operation fails.
+    """
+    
+    sysFlock( fd, LOCK_SH )
+
+public function lockExclusive( I64 fd ) -> Void:
+    
+    """
+    Acquire an exclusive (write) lock on the given file descriptor. Only
+    one process may hold an exclusive lock at a time. Blocks until the
+    lock is acquired.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor to lock.
+    
+    Raises:
+        IOError: If the lock operation fails.
+    """
+    
+    sysFlock( fd, LOCK_EX )
+
+public function unlock( I64 fd ) -> Void:
+    
+    """
+    Release any lock (shared or exclusive) held on the given file descriptor.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor to unlock.
+    
+    Raises:
+        IOError: If the unlock operation fails.
+    """
+    
+    sysFlock( fd, LOCK_UN )
+
+public function tryLockExclusive( I64 fd ) -> Boolean:
+    
+    """
+    Attempt to acquire an exclusive lock without blocking. Returns
+    immediately whether or not the lock was acquired.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor to attempt to lock.
+    
+    Returns:
+        True if the exclusive lock was successfully acquired, False if the
+        lock is held by another process.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    SyscallResult lockResult = syscall2( SYS_FLOCK, fd, LOCK_EX | LOCK_NB )
+    return lockResult.isOk()
+
+public class Pipe:
+    
+    """
+    A unidirectional byte pipe backed by two file descriptors (one for
+    reading, one for writing). Created with the O_CLOEXEC flag so both
+    ends are automatically closed on exec. Useful for inter-process or
+    inter-thread communication.
+    """
+    
+    protect I64 readFd
+    """File descriptor for the read end of the pipe."""
+    protect I64 writeFd
+    """File descriptor for the write end of the pipe."""
+    protect Boolean closed
+    """Whether both ends of the pipe have been closed."""
+    
+    public function Pipe( self ) -> Void:
+        
+        """
+        Create a new pipe with the O_CLOEXEC flag set on both ends.
+        Allocates temporary memory for the pipe2 syscall, reads the two
+        file descriptors, and frees the temporary buffer.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Memory<I64> fds = new Memory<I64>( 1 )
+        I64 fdsAddr = memoryToPtr( fds )
+        sysPipe2( fdsAddr, O_CLOEXEC )
+        self.readFd = readI32At( fdsAddr, 0 )
+        self.writeFd = readI32At( fdsAddr, 4 )
+        self.closed = False
+        fds.free()
+    
+    public function getReadFd( self ) -> I64:
+        
+        """
+        Return the file descriptor for the read end of the pipe.
+        
+        Returns:
+            The read-end file descriptor.
+        """
+        
+        return self.readFd
+    
+    public function getWriteFd( self ) -> I64:
+        
+        """
+        Return the file descriptor for the write end of the pipe.
+        
+        Returns:
+            The write-end file descriptor.
+        """
+        
+        return self.writeFd
+    
+    public function readBytes( self, Memory<I64> buf, I64 length ) -> I64:
+        
+        """
+        Read up to the specified number of bytes from the read end of the pipe
+        into a Memory buffer. Uses a temporary buffer for the raw read, then
+        copies bytes element-by-element into the destination.
+        
+        Parameters:
+            buf (Memory<I64>):
+                The destination buffer to read bytes into.
+            length (I64):
+                The maximum number of bytes to read.
+        
+        Returns:
+            The actual number of bytes read, which may be less than length.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 temporarySize = length
+        Memory<I64> temporaryBuffer = new Memory<I64>( temporarySize )
+        I64 temporaryAddress = memoryToPtr( temporaryBuffer )
+        I64 bytesRead = sysRead( self.readFd, temporaryAddress, length )
+        I64 byteIndex = 0
+        while byteIndex < bytesRead:
+            I64 byteValue = readByteAt( temporaryAddress, byteIndex )
+            buf.set( byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        temporaryBuffer.free()
+        return bytesRead
+    
+    public function writeBytes( self, Memory<I64> buf, I64 length ) -> I64:
+        
+        """
+        Write the specified number of bytes from a Memory buffer to the write
+        end of the pipe. Copies bytes into a temporary buffer before writing.
+        
+        Parameters:
+            buf (Memory<I64>):
+                The source buffer containing bytes to write.
+            length (I64):
+                The number of bytes to write.
+        
+        Returns:
+            The actual number of bytes written to the pipe.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Memory<I64> temporaryBuffer = new Memory<I64>( length )
+        I64 temporaryAddress = memoryToPtr( temporaryBuffer )
+        I64 byteIndex = 0
+        while byteIndex < length:
+            I64 byteValue = buf.get( byteIndex )
+            writeByteAt( temporaryAddress, byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        I64 bytesWritten = sysWrite( self.writeFd, temporaryAddress, length )
+        temporaryBuffer.free()
+        return bytesWritten
+    
+    public function writeString( self, String data ) -> I64:
+        
+        """
+        Write all bytes of a string to the write end of the pipe.
+        
+        Parameters:
+            data (String):
+                The string to write to the pipe.
+        
+        Returns:
+            The number of bytes written.
+        """
+        
+        I64 dataPointer = stringToPtr( data )
+        I64 dataLength = stringLen( data )
+        return sysWrite( self.writeFd, dataPointer, dataLength )
+    
+    public function closeRead( self ) -> Void:
+        
+        """
+        Close only the read end of the pipe. Useful when a process only
+        needs the write end after forking.
+        """
+        
+        sysClose( self.readFd )
+    
+    public function closeWrite( self ) -> Void:
+        
+        """
+        Close only the write end of the pipe. Useful when a process only
+        needs the read end after forking.
+        """
+        
+        sysClose( self.writeFd )
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close both ends of the pipe. Subsequent calls after the first
+        close are no-ops.
+        """
+        
+        if self.closed == False:
+            sysClose( self.readFd )
+            sysClose( self.writeFd )
+            self.closed = True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Destructor that delegates to close to ensure resource cleanup.
+        """
+        
+        self.close()
+
+public function getTerminalSize() -> I64:
+    
+    """
+    Query the terminal dimensions using the TIOCGWINSZ ioctl on stdout.
+    Returns both rows and columns packed into a single I64 value: the
+    lower 32 bits contain the row count and the upper 32 bits contain
+    the column count.
+    
+    Returns:
+        A packed I64 where (result & 4294967295) gives rows and
+        (result / 4294967296) gives columns.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> winBuf = new Memory<I64>( 1 )
+    I64 winAddr = memoryToPtr( winBuf )
+    sysIoctl( 1, TIOCGWINSZ, winAddr )
+    I64 rows = readByteAt( winAddr, 0 ) | ( readByteAt( winAddr, 1 ) * 256 )
+    I64 cols = readByteAt( winAddr, 2 ) | ( readByteAt( winAddr, 3 ) * 256 )
+    winBuf.free()
+    return rows | ( cols * 4294967296 )
+
+public function getTerminalRows() -> I64:
+    
+    """
+    Return the number of rows in the terminal.
+    
+    Returns:
+        The terminal row count.
+    """
+    
+    I64 packed = getTerminalSize()
+    return packed & 4294967295
+
+public function getTerminalCols() -> I64:
+    
+    """
+    Return the number of columns in the terminal.
+    
+    Returns:
+        The terminal column count.
+    """
+    
+    I64 packed = getTerminalSize()
+    return packed / 4294967296
+
+public function setRawMode( I64 fd ) -> Memory<I64>:
+    
+    """
+    Set the terminal associated with the given file descriptor to raw mode
+    by disabling the ECHO and ICANON flags in the termios local flags.
+    Saves and returns the original termios settings so they can be restored
+    later with restoreMode.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor of the terminal to configure.
+    
+    Returns:
+        A Memory buffer containing the saved original termios settings.
+        Pass this to restoreMode to restore the terminal to its previous state.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    Memory<I64> termios = new Memory<I64>( 8 )
+    I64 termAddr = memoryToPtr( termios )
+    sysIoctl( fd, TCGETS, termAddr )
+    Memory<I64> saved = new Memory<I64>( 8 )
+    I64 savedAddr = memoryToPtr( saved )
+    I64 copyIndex = 0
+    while copyIndex < 60:
+        I64 byteValue = readByteAt( termAddr, copyIndex )
+        writeByteAt( savedAddr, copyIndex, byteValue )
+        copyIndex = copyIndex + 1
+    I64 lflag = readI32At( termAddr, 12 )
+    I64 newLflag = lflag & ( 0 - 1 - ECHO_FLAG - ICANON_FLAG )
+    writeI32At( termAddr, 12, newLflag )
+    sysIoctl( fd, TCSETS, termAddr )
+    termios.free()
+    return saved
+
+public function restoreMode( I64 fd, Memory<I64> saved ) -> Void:
+    
+    """
+    Restore terminal settings from a previously saved termios buffer,
+    undoing the effect of setRawMode. Frees the saved buffer after
+    restoring.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor of the terminal to restore.
+        saved (Memory<I64>):
+            The saved termios buffer returned by setRawMode. This buffer
+            is freed after use and must not be used again.
+    """
+    
+    I64 savedAddr = memoryToPtr( saved )
+    sysIoctl( fd, TCSETS, savedAddr )
+    saved.free()
+
+public function chmod( String path, I64 mode ) -> Void:
+    
+    """
+    Change the permission mode of a file or directory.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file or directory.
+        mode (I64):
+            The new permission mode bits (e.g., 493 for 0755).
+    
+    Raises:
+        IOError: If the chmod operation fails.
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    sysChmod( pathPtr, mode )
+
+public function fchmod( I64 fd, I64 mode ) -> Void:
+    
+    """
+    Change the permission mode of a file referenced by file descriptor.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor of the open file.
+        mode (I64):
+            The new permission mode bits.
+    
+    Raises:
+        IOError: If the fchmod operation fails.
+    """
+    
+    sysFchmod( fd, mode )
+
+public function chown( String path, I64 uid, I64 gid ) -> Void:
+    
+    """
+    Change the owner and group of a file or directory.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the file or directory.
+        uid (I64):
+            The new owner user ID.
+        gid (I64):
+            The new group ID.
+    
+    Raises:
+        IOError: If the chown operation fails.
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    sysChown( pathPtr, uid, gid )
+
+public function fchown( I64 fd, I64 uid, I64 gid ) -> Void:
+    
+    """
+    Change the owner and group of a file referenced by file descriptor.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor of the open file.
+        uid (I64):
+            The new owner user ID.
+        gid (I64):
+            The new group ID.
+    
+    Raises:
+        IOError: If the fchown operation fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    sysFchown( fd, uid, gid )
+
+public Readonly class FilesystemInfo:
+    
+    """
+    Immutable snapshot of filesystem statistics as returned by the statfs
+    syscall. Contains information about the filesystem type, block sizes,
+    and space/inode availability.
+    """
+    
+    public I64 fsType
+    """The filesystem type identifier (e.g., EXT4_SUPER_MAGIC)."""
+    public I64 blockSize
+    """The optimal transfer block size in bytes."""
+    public I64 totalBlocks
+    """The total number of data blocks on the filesystem."""
+    public I64 freeBlocks
+    """The number of free blocks available to all users."""
+    public I64 availableBlocks
+    """The number of free blocks available to unprivileged users."""
+    public I64 totalFiles
+    """The total number of inodes (file slots) on the filesystem."""
+    public I64 freeFiles
+    """The number of free inodes available."""
+    
+    public function FilesystemInfo( self, I64 fsType, I64 blockSize, I64 totalBlocks, I64 freeBlocks, I64 availableBlocks, I64 totalFiles, I64 freeFiles ) -> Void:
+        
+        """
+        Construct a new FilesystemInfo with all filesystem statistics.
+        
+        Parameters:
+            fsType (I64):
+                The filesystem type identifier.
+            blockSize (I64):
+                The optimal transfer block size in bytes.
+            totalBlocks (I64):
+                The total number of data blocks.
+            freeBlocks (I64):
+                The number of free blocks for all users.
+            availableBlocks (I64):
+                The number of free blocks for unprivileged users.
+            totalFiles (I64):
+                The total number of inodes.
+            freeFiles (I64):
+                The number of free inodes.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.fsType = fsType
+        self.blockSize = blockSize
+        self.totalBlocks = totalBlocks
+        self.freeBlocks = freeBlocks
+        self.availableBlocks = availableBlocks
+        self.totalFiles = totalFiles
+        self.freeFiles = freeFiles
+    
+    public function getFsType( self ) -> I64:
+        
+        """
+        Return the filesystem type identifier.
+        
+        Returns:
+            The filesystem type magic number.
+        """
+        
+        return self.fsType
+    
+    public function getBlockSize( self ) -> I64:
+        
+        """
+        Return the optimal transfer block size in bytes.
+        
+        Returns:
+            The block size in bytes.
+        """
+        
+        return self.blockSize
+    
+    public function getTotalBlocks( self ) -> I64:
+        
+        """
+        Return the total number of data blocks on the filesystem.
+        
+        Returns:
+            The total block count.
+        """
+        
+        return self.totalBlocks
+    
+    public function getFreeBlocks( self ) -> I64:
+        
+        """
+        Return the number of free blocks available to all users.
+        
+        Returns:
+            The free block count.
+        """
+        
+        return self.freeBlocks
+    
+    public function getAvailableBlocks( self ) -> I64:
+        
+        """
+        Return the number of free blocks available to unprivileged users.
+        
+        Returns:
+            The available block count (may be less than free blocks due
+            to reserved space).
+        """
+        
+        return self.availableBlocks
+    
+    public function getTotalFiles( self ) -> I64:
+        
+        """
+        Return the total number of inodes on the filesystem.
+        
+        Returns:
+            The total inode count.
+        """
+        
+        return self.totalFiles
+    
+    public function getFreeFiles( self ) -> I64:
+        
+        """
+        Return the number of free inodes available.
+        
+        Returns:
+            The free inode count.
+        """
+        
+        return self.freeFiles
+    
+    public function getTotalSpace( self ) -> I64:
+        
+        """
+        Calculate the total storage space on the filesystem in bytes.
+        
+        Returns:
+            The total space in bytes (totalBlocks * blockSize).
+        """
+        
+        return self.totalBlocks * self.blockSize
+    
+    public function getFreeSpace( self ) -> I64:
+        
+        """
+        Calculate the free storage space on the filesystem in bytes.
+        
+        Returns:
+            The free space in bytes (freeBlocks * blockSize).
+        """
+        
+        return self.freeBlocks * self.blockSize
+    
+    public function getAvailableSpace( self ) -> I64:
+        
+        """
+        Calculate the storage space available to unprivileged users in bytes.
+        
+        Returns:
+            The available space in bytes (availableBlocks * blockSize).
+        """
+        
+        return self.availableBlocks * self.blockSize
+
+public function statfs( String path ) -> FilesystemInfo:
+    
+    """
+    Retrieve filesystem statistics for the filesystem containing the
+    given path. Parses the Linux statfs struct (x86_64 layout) into
+    a FilesystemInfo object.
+    
+    Parameters:
+        path (String):
+            Any path on the target filesystem.
+    
+    Returns:
+        A FilesystemInfo object with the filesystem statistics.
+    
+    Raises:
+        IOError: If the statfs syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    Memory<I64> buf = new Memory<I64>( 15 )
+    I64 bufAddr = memoryToPtr( buf )
+    sysStatfs( pathPtr, bufAddr )
+    I64 fsType = readI64At( bufAddr, 0 )
+    I64 blockSize = readI64At( bufAddr, 8 )
+    I64 totalBlocks = readI64At( bufAddr, 16 )
+    I64 freeBlocks = readI64At( bufAddr, 24 )
+    I64 availableBlocks = readI64At( bufAddr, 32 )
+    I64 totalFiles = readI64At( bufAddr, 40 )
+    I64 freeFiles = readI64At( bufAddr, 48 )
+    buf.free()
+    return new FilesystemInfo( fsType, blockSize, totalBlocks, freeBlocks, availableBlocks, totalFiles, freeFiles )
+
+public function getcwd() -> String:
+    
+    """
+    Return the current working directory as a String.
+    
+    Returns:
+        The absolute path of the current working directory.
+    
+    Raises:
+        IOError: If the getcwd syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 cwdSize = 4096
+    I64 cwdWords = ( cwdSize + 8 ) / 8
+    Memory<I64> buf = new Memory<I64>( cwdWords )
+    I64 bufAddr = memoryToPtr( buf )
+    sysGetcwd( bufAddr, cwdSize )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" bufAddr ) : clobber()
+    return result
+
+public function chdir( String path ) -> Void:
+    
+    """
+    Change the current working directory to the specified path.
+    
+    Parameters:
+        path (String):
+            The filesystem path to change to.
+    
+    Raises:
+        IOError: If the chdir syscall fails.
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    sysChdir( pathPtr )
+
+public function tempFile( String prefix ) -> File:
+    
+    """
+    Create a temporary file in /tmp with a unique name constructed from
+    the given prefix and a numeric suffix derived from the process ID.
+    Tries up to 1000 candidate names using O_CREAT | O_EXCL to avoid
+    race conditions.
+    
+    Parameters:
+        prefix (String):
+            A prefix string for the temporary filename (e.g., "myapp_").
+    
+    Returns:
+        A File handle opened in read-write mode for the newly created
+        temporary file.
+    
+    Raises:
+        IOError: If a unique temporary file cannot be created after 1000 attempts.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    I64 attemptCount = 0
+    SyscallResult pidResult = syscall0( SYS_GETPID )
+    I64 processId = pidResult.value()
+    I64 randomSeed = processId * 31 + 12345
+    String temporaryDirectory = "/tmp/"
+    I64 prefixPointer = stringToPtr( prefix )
+    I64 prefixLength = stringLen( prefix )
+    I64 temporaryDirPointer = stringToPtr( temporaryDirectory )
+    I64 temporaryDirLength = stringLen( temporaryDirectory )
+    I64 suffixLength = 8
+    I64 totalLength = temporaryDirLength + prefixLength + suffixLength
+    I64 allocationWords = ( totalLength + 8 ) / 8
+    while attemptCount <= 1000:
+        Memory<I64> nameBuffer = new Memory<I64>( allocationWords )
+        I64 nameAddress = memoryToPtr( nameBuffer )
+        I64 writePosition = 0
+        I64 dirCopyIndex = 0
+        while dirCopyIndex < temporaryDirLength:
+            I64 byteValue = readByteAt( temporaryDirPointer, dirCopyIndex )
+            writeByteAt( nameAddress, writePosition, byteValue )
+            writePosition = writePosition + 1
+            dirCopyIndex = dirCopyIndex + 1
+        I64 prefixCopyIndex = 0
+        while prefixCopyIndex < prefixLength:
+            I64 byteValue = readByteAt( prefixPointer, prefixCopyIndex )
+            writeByteAt( nameAddress, writePosition, byteValue )
+            writePosition = writePosition + 1
+            prefixCopyIndex = prefixCopyIndex + 1
+        I64 suffixValue = randomSeed + attemptCount
+        I64 suffixDigitIndex = 0
+        while suffixDigitIndex < suffixLength:
+            I64 digitValue = suffixValue - ( suffixValue / 10 ) * 10
+            if digitValue < 0:
+                digitValue = 0 - digitValue
+            writeByteAt( nameAddress, writePosition, digitValue + 48 )
+            writePosition = writePosition + 1
+            suffixValue = suffixValue / 10 + attemptCount
+            suffixDigitIndex = suffixDigitIndex + 1
+        writeByteAt( nameAddress, writePosition, 0 )
+        SyscallResult openResult = syscall3( SYS_OPEN, nameAddress, O_CREAT | O_EXCL | O_RDWR, 420 )
+        if openResult.isOk():
+            sysClose( openResult.value() )
+            String temporaryPath = ""
+            asm volatile "movq $1, $0" : output( "=r" temporaryPath ) : input( "r" nameAddress ) : clobber()
+            return new File( temporaryPath, O_RDWR, 0 )
+        attemptCount = attemptCount + 1
+        nameBuffer.free()
+        delete nameBuffer
+    raise new IOError( "could not create temp file", 0, None )
+
+public function tempDir( String prefix ) -> String:
+    
+    """
+    Create a temporary directory in /tmp with a unique name constructed
+    from the given prefix and a numeric suffix derived from the process ID.
+    Tries up to 1000 candidate names. The directory is created with
+    permission mode 0700 (owner-only access).
+    
+    Parameters:
+        prefix (String):
+            A prefix string for the temporary directory name (e.g., "myapp_").
+    
+    Returns:
+        The filesystem path of the newly created temporary directory.
+    
+    Raises:
+        IOError: If a unique temporary directory cannot be created after
+        1000 attempts.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    I64 attemptCount = 0
+    SyscallResult pidResult = syscall0( SYS_GETPID )
+    I64 processId = pidResult.value()
+    I64 randomSeed = processId * 37 + 54321
+    String temporaryDirectory = "/tmp/"
+    I64 prefixPointer = stringToPtr( prefix )
+    I64 prefixLength = stringLen( prefix )
+    I64 temporaryDirPointer = stringToPtr( temporaryDirectory )
+    I64 temporaryDirLength = stringLen( temporaryDirectory )
+    I64 suffixLength = 8
+    I64 totalLength = temporaryDirLength + prefixLength + suffixLength
+    I64 allocationWords = ( totalLength + 8 ) / 8
+    while attemptCount <= 1000:
+        Memory<I64> nameBuffer = new Memory<I64>( allocationWords )
+        I64 nameAddress = memoryToPtr( nameBuffer )
+        I64 writePosition = 0
+        I64 dirCopyIndex = 0
+        while dirCopyIndex < temporaryDirLength:
+            I64 byteValue = readByteAt( temporaryDirPointer, dirCopyIndex )
+            writeByteAt( nameAddress, writePosition, byteValue )
+            writePosition = writePosition + 1
+            dirCopyIndex = dirCopyIndex + 1
+        I64 prefixCopyIndex = 0
+        while prefixCopyIndex < prefixLength:
+            I64 byteValue = readByteAt( prefixPointer, prefixCopyIndex )
+            writeByteAt( nameAddress, writePosition, byteValue )
+            writePosition = writePosition + 1
+            prefixCopyIndex = prefixCopyIndex + 1
+        I64 suffixValue = randomSeed + attemptCount
+        I64 suffixDigitIndex = 0
+        while suffixDigitIndex < suffixLength:
+            I64 digitValue = suffixValue - ( suffixValue / 10 ) * 10
+            if digitValue < 0:
+                digitValue = 0 - digitValue
+            writeByteAt( nameAddress, writePosition, digitValue + 48 )
+            writePosition = writePosition + 1
+            suffixValue = suffixValue / 10 + attemptCount
+            suffixDigitIndex = suffixDigitIndex + 1
+        writeByteAt( nameAddress, writePosition, 0 )
+        SyscallResult mkdirResult = syscall2( SYS_MKDIR, nameAddress, 448 )
+        if mkdirResult.isOk():
+            String directoryPath = ""
+            asm volatile "movq $1, $0" : output( "=r" directoryPath ) : input( "r" nameAddress ) : clobber()
+            return directoryPath
+        attemptCount = attemptCount + 1
+        nameBuffer.free()
+        delete nameBuffer
+    raise new IOError( "could not create temp directory", 0, None )
+
+public function listDirectory( String path ) -> ArrayList<String>:
+
+    """
+    List all entries in a directory, excluding "." and "..".
+
+    Uses the getdents64 syscall to read directory entries directly.
+    Each entry name is extracted from the raw dirent64 struct.
+
+    Parameters:
+        path (String):
+            The filesystem path of the directory to list.
+
+    Returns:
+        ArrayList<String>:
+            A list of entry names (files, subdirectories, etc.).
+
+    Raises:
+        IOError:
+            If the directory cannot be opened or read.
+
+    Complexity:
+        Time: O(n) where n is the number of directory entries
+        Space: O(n)
+    """
+
+    I64 pathPtr = stringToPtr( path )
+    I64 dirFd = sysOpen( pathPtr, O_RDONLY, 0 )
+    if dirFd < 0:
+        raise new IOError( "cannot open directory: " + path, 0, None )
+    ArrayList<String> entries = new ArrayList<String>()
+    I64 bufferSize = 4096
+    I64 bufferWords = ( bufferSize + 8 ) / 8
+    Memory<I64> buffer = new Memory<I64>( bufferWords )
+    I64 bufferAddress = memoryToPtr( buffer )
+    I64 bytesRead = sysGetdents64( dirFd, bufferAddress, bufferSize )
+    while bytesRead > 0:
+        I64 entryOffset = 0
+        while entryOffset < bytesRead:
+            I64 rawRecordWord = readI32At( bufferAddress, entryOffset + 16 )
+            I64 recordLength = rawRecordWord % 65536
+            I64 nameStartOffset = entryOffset + 19
+            String entryName = ""
+            I64 nameLength = 0
+            I64 scanPosition = 0
+            I64 maxNameLength = recordLength - 19
+            while scanPosition < maxNameLength:
+                I64 nameByte = readByteAt( bufferAddress, nameStartOffset + scanPosition )
+                if nameByte == 0:
+                    nameLength = scanPosition
+                    scanPosition = maxNameLength
+                else:
+                    scanPosition = scanPosition + 1
+            if nameLength > 0:
+                Memory<I64> nameBuffer = new Memory<I64>( ( nameLength + 8 ) / 8 )
+                I64 nameBufferAddress = memoryToPtr( nameBuffer )
+                I64 copyIndex = 0
+                while copyIndex < nameLength:
+                    I64 copyByte = readByteAt( bufferAddress, nameStartOffset + copyIndex )
+                    writeByteAt( nameBufferAddress, copyIndex, copyByte )
+                    copyIndex = copyIndex + 1
+                writeByteAt( nameBufferAddress, nameLength, 0 )
+                asm volatile "movq $1, $0" : output( "=r" entryName ) : input( "r" nameBufferAddress ) : clobber()
+                if entryName != "." and entryName != "..":
+                    entries.add( entryName )
+            entryOffset = entryOffset + recordLength
+        bytesRead = sysGetdents64( dirFd, bufferAddress, bufferSize )
+    sysClose( dirFd )
+    buffer.free()
+    return entries
+
+public function makeDirectories( String path, I64 mode ) -> Void:
+
+    """
+    Create a directory and all necessary parent directories.
+
+    Walks the path from left to right, creating each component that
+    does not yet exist. Silently succeeds if the directory already exists.
+
+    Parameters:
+        path (String):
+            The directory path to create, including all parents.
+        mode (I64):
+            The permission mode bits for newly created directories
+            (e.g., 493 for 0755).
+
+    Raises:
+        IOError:
+            If a directory component cannot be created.
+
+    Complexity:
+        Time: O(d) where d is the depth of the path
+    """
+
+    I64 pathPtr = stringToPtr( path )
+    I64 pathLength = stringLen( path )
+    I64 componentEnd = 0
+    while componentEnd < pathLength:
+        componentEnd = componentEnd + 1
+        I64 currentByte = readByteAt( pathPtr, componentEnd )
+        if currentByte == 47 or componentEnd == pathLength:
+            Memory<I64> componentBuffer = new Memory<I64>( ( componentEnd + 8 ) / 8 )
+            I64 componentAddress = memoryToPtr( componentBuffer )
+            I64 copyPosition = 0
+            while copyPosition < componentEnd:
+                writeByteAt( componentAddress, copyPosition, readByteAt( pathPtr, copyPosition ) )
+                copyPosition = copyPosition + 1
+            writeByteAt( componentAddress, componentEnd, 0 )
+            SyscallResult mkdirResult = syscall2( SYS_MKDIR, componentAddress, mode )
+            componentBuffer.free()
+
+export {
+    copy,
+    moveFile,
+    rename,
+    remove,
+    symlink,
+    hardlink,
+    readlink,
+    lockShared,
+    lockExclusive,
+    unlock,
+    tryLockExclusive,
+    Pipe,
+    getTerminalSize,
+    getTerminalRows,
+    getTerminalCols,
+    setRawMode,
+    restoreMode,
+    chmod,
+    fchmod,
+    chown,
+    fchown,
+    FilesystemInfo,
+    statfs,
+    getcwd,
+    chdir,
+    tempFile,
+    tempDir,
+    listDirectory,
+    makeDirectories,
+    VNodeType, VNode, VNodeCache,
+    PERM_READ, PERM_WRITE, PERM_EXECUTE,
+    PERM_OWNER_READ, PERM_OWNER_WRITE, PERM_OWNER_EXECUTE,
+    FileDescriptor, FileDescriptorTable,
+    FLAG_READ, FLAG_WRITE, FLAG_APPEND, FLAG_CREATE, FLAG_TRUNCATE,
+    MountEntry, MountTable, MOUNT_READ_ONLY, MOUNT_NO_EXEC, MOUNT_NO_SUID
+}

@@ -1,0 +1,238 @@
+package uranite.fiber.fiber-scheduler
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.fiber.fiber import {
+    FiberError,
+    Fiber,
+    fiberSuspend,
+    fiberTrampoline,
+    gCurrentFiberPtr,
+    gCallerRspPtr,
+    FIBER_CREATED,
+    FIBER_RUNNING,
+    FIBER_SUSPENDED,
+    FIBER_TERMINATED,
+    F_STATE,
+    F_CONTEXT_RSP
+}
+from uranite.async.context import swapContext
+from uranite.coroutine.scheduler import Scheduler
+
+const I64 MAX_FIBERS = 256
+"""Maximum number of fibers that can be managed by a single scheduler."""
+
+public class FiberScheduler implements Scheduler:
+    
+    """
+    Cooperative scheduler for lightweight fibers. Manages a fixed-size pool
+    of fiber slots and round-robin schedules fibers that are in the Created
+    or Suspended state. Each call to runOnce picks the next eligible fiber
+    and context-switches into it. The run method loops until all fibers
+    have terminated.
+    
+    The scheduler maintains its own main RSP buffer so that fibers can
+    return control to the scheduler's context after suspending or terminating.
+    """
+    
+    public Memory<I64> fiberSlots
+    """Fixed-size array mapping slot indices to raw fiber data pointers. A zero value indicates an empty slot."""
+    
+    public I64 fiberCount
+    """Number of fibers currently registered in the scheduler."""
+    
+    public I64 nextFiberId
+    """Monotonically increasing counter for assigning fiber identifiers."""
+    
+    public I64 currentIdx
+    """Index of the currently executing fiber slot, or -1 if no fiber is running."""
+    
+    public Memory<I64> mainRspBuf
+    """Single-element buffer holding the scheduler's saved RSP for context switching."""
+    
+    public function FiberScheduler( self ) -> Void:
+        
+        """
+        Create a new fiber scheduler with empty fiber slots and capacity
+        for up to MAX_FIBERS concurrent fibers.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.fiberSlots = new Memory<I64>( MAX_FIBERS )
+        self.fiberCount = 0
+        self.nextFiberId = 1
+        self.currentIdx = -1
+        self.mainRspBuf = new Memory<I64>( 1 )
+        self.mainRspBuf.set( 0, 0 )
+        I64 slotIndex = 0
+        while slotIndex < MAX_FIBERS:
+            self.fiberSlots.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+
+    public function spawn( self, I64 entryFn ) -> I64:
+        
+        """
+        Create a new fiber and register it in the scheduler's slot array.
+        The fiber is created in the Created state and will be picked up
+        by the next runOnce call.
+        
+        Parameters:
+            entryFn (I64):
+                Raw address of the entry function for the fiber.
+        
+        Returns:
+            I64:
+                A unique fiber identifier assigned to the new fiber.
+        
+        Raises:
+            FiberError:
+                If the maximum fiber count has been reached or no free
+                slot is available.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.fiberCount >= MAX_FIBERS:
+            raise new FiberError( "maximum fiber count reached" )
+        Fiber fiber = new Fiber( entryFn )
+        I64 fiberId = self.nextFiberId
+        self.nextFiberId = self.nextFiberId + 1
+        I64 fiberAddr = memoryToPtr( fiber.data )
+        I64 slotIndex = 0
+        while slotIndex < MAX_FIBERS:
+            I64 slot = self.fiberSlots.get( slotIndex )
+            if slot == 0:
+                self.fiberSlots.set( slotIndex, fiberAddr )
+                self.fiberCount = self.fiberCount + 1
+                return fiberId
+            slotIndex = slotIndex + 1
+        raise new FiberError( "no free fiber slot" )
+    
+    public function yieldCurrent( self ) -> Void:
+        
+        """
+        Yield the currently executing fiber back to the scheduler. If no
+        fiber is currently running (currentIdx < 0), this is a no-op.
+        The fiber transitions to the Suspended state and control returns
+        to the scheduler.
+        """
+        
+        if self.currentIdx < 0:
+            return
+        fiberSuspend( 0 )
+    
+    public function hasPending( self ) -> Boolean:
+        
+        """
+        Check whether any fibers are still eligible for execution.
+        
+        Returns:
+            Boolean:
+                True if at least one fiber is in the Created or Suspended
+                state, False if all fibers have terminated or no fibers
+                are registered.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < MAX_FIBERS:
+            I64 fiberAddr = self.fiberSlots.get( slotIndex )
+            if fiberAddr != 0:
+                I64 state = readI64At( fiberAddr, F_STATE * 8 )
+                if state == FIBER_CREATED or state == FIBER_SUSPENDED:
+                    return True
+            slotIndex = slotIndex + 1
+        return False
+
+    public function runOnce( self ) -> Void:
+
+        """
+        Find the next eligible fiber (Created or Suspended) and context-switch
+        into it. The fiber runs until it suspends or terminates, at which
+        point control returns to this method. If no eligible fiber is found,
+        returns immediately without switching.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 slotIndex = 0
+        while slotIndex < MAX_FIBERS:
+            I64 fiberAddr = self.fiberSlots.get( slotIndex )
+            if fiberAddr != 0:
+                I64 state = readI64At( fiberAddr, F_STATE * 8 )
+                if state == FIBER_CREATED or state == FIBER_SUSPENDED:
+                    self.currentIdx = slotIndex
+                    writeI64At( fiberAddr, F_STATE * 8, FIBER_RUNNING )
+                    I64 mainPtr = memoryToPtr( self.mainRspBuf )
+                    I64 fiberRspPtr = fiberAddr + F_CONTEXT_RSP * 8
+                    gCurrentFiberPtr = fiberAddr
+                    gCallerRspPtr = mainPtr
+                    swapContext( mainPtr, fiberRspPtr )
+                    self.currentIdx = -1
+                    return
+            slotIndex = slotIndex + 1
+    
+    public function run( self ) -> Void:
+        
+        """
+        Run all registered fibers to completion. Repeatedly calls runOnce
+        in a loop until no fibers remain in the Created or Suspended state,
+        then performs cleanup.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        while self.hasPending():
+            self.runOnce()
+        self.cleanup()
+    
+    public function cleanup( self ) -> Void:
+        
+        """
+        Clear all fiber slots and reset the fiber count to zero. Does not
+        free the fiber stack memory -- individual fibers must be destroyed
+        separately if their stacks need to be reclaimed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < MAX_FIBERS:
+            I64 fiberAddr = self.fiberSlots.get( slotIndex )
+            if fiberAddr != 0:
+                self.fiberSlots.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+        self.fiberCount = 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by the scheduler. Performs cleanup of
+        fiber slots, then frees the slot array and main RSP buffer.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.cleanup()
+        self.fiberSlots.free()
+        self.mainRspBuf.free()
+
+export {
+    FiberScheduler, MAX_FIBERS
+}

@@ -1,0 +1,379 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/ipc/message.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides kernel IPC message passing primitives including fixed-size messages with
+# word-based payloads and port objects for capability-gated message delivery via
+# circular ring buffers.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.ipc.message
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public class Message:
+    
+    """
+    Fixed-size kernel IPC message consisting of a header (sender identifier,
+    message type, payload length) and a data payload stored as an array of
+    word-sized values. The maximum payload capacity is set at construction time.
+    """
+    
+    public I64 senderId
+    public I64 messageType
+    public I64 length
+    protect Memory<I64> data
+    protect I64 capacity
+    
+    public function Message( self, I64 maxWords ) -> Void:
+        
+        """
+        Construct a new message with the given maximum payload capacity in words.
+        
+        Parameters:
+            maxWords (I64):
+                The maximum number of word-sized values this message can carry.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.senderId = 0
+        self.messageType = 0
+        self.length = 0
+        self.capacity = maxWords
+        self.data = new Memory<I64>( maxWords )
+    
+    public function setWord( self, I64 index, I64 value ) -> Boolean:
+        
+        """
+        Set a word in the message payload at the given index. If the index extends
+        beyond the current length, the length is automatically expanded.
+        
+        Parameters:
+            index (I64):
+                The zero-based word index within the payload.
+            value (I64):
+                The word value to store.
+        
+        Returns:
+            Boolean:
+                True on success, False if the index is out of the message capacity.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return False
+        self.data.set( index, value )
+        if index >= self.length:
+            self.length = index + 1
+        return True
+    
+    public function getWord( self, I64 index ) -> I64:
+        
+        """
+        Retrieve a word from the message payload at the given index.
+        
+        Parameters:
+            index (I64):
+                The zero-based word index within the payload.
+        
+        Returns:
+            I64:
+                The word value at the given index, or 0 if the index is out of range.
+        """
+        
+        if index < 0 or index >= self.length:
+            return 0
+        return self.data.get( index )
+    
+    public function getCapacity( self ) -> I64:
+        
+        """ Return the maximum number of words this message can hold. """
+        
+        return self.capacity
+    
+    public function getLength( self ) -> I64:
+        
+        """ Return the current number of words stored in this message payload. """
+        
+        return self.length
+    
+    public function clear( self ) -> Void:
+        
+        """ Reset the message header fields to zero without freeing the underlying data buffer. """
+        
+        self.senderId = 0
+        self.messageType = 0
+        self.length = 0
+    
+    public function copyFrom( self, Message source ) -> Boolean:
+        
+        """
+        Copy the entire payload and header from a source message into this message.
+        
+        Parameters:
+            source (Message):
+                The source message to copy data from.
+        
+        Returns:
+            Boolean:
+                True if the copy succeeded, False if the source payload exceeds
+                this message's capacity.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if source.length > self.capacity:
+            return False
+        self.senderId = source.senderId
+        self.messageType = source.messageType
+        self.length = source.length
+        I64 wordIndex = 0
+        while wordIndex < source.length:
+            self.data.set( wordIndex, source.data.get( wordIndex ) )
+            wordIndex = wordIndex + 1
+        return True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the underlying data buffer allocated by this message.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.data.free()
+
+public class Port:
+    
+    """
+    Kernel port object for IPC message delivery. Uses a circular ring buffer of
+    fixed-size message slots where each slot contains a serialized message header
+    (senderId, messageType, length) followed by the payload words. Access to
+    send and receive operations is controlled by the capability system, and
+    concurrent access is protected by a spinlock.
+    """
+    
+    protect I64 portId
+    protect Memory<I64> buffer
+    protect I64 slotSize
+    protect I64 slotCount
+    protect I64 head
+    protect I64 tail
+    protect I64 count
+    protect I64 ownerTaskId
+    protect Spinlock lock
+    
+    public function Port( self, I64 id, I64 owner, I64 slots, I64 wordsPerSlot ) -> Void:
+        
+        """
+        Construct a new port with the given identifier, owner task, slot count,
+        and words per message slot. Each slot stores a 3-word header (senderId,
+        messageType, length) followed by the payload words.
+        
+        Parameters:
+            id (I64):
+                The unique port identifier.
+            owner (I64):
+                The task identifier of the port owner.
+            slots (I64):
+                The number of message slots in the ring buffer.
+            wordsPerSlot (I64):
+                The maximum number of payload words per message slot (excluding header).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.portId = id
+        self.ownerTaskId = owner
+        self.slotSize = wordsPerSlot + 3
+        self.slotCount = slots
+        self.head = 0
+        self.tail = 0
+        self.count = 0
+        self.buffer = new Memory<I64>( slots * self.slotSize )
+        self.lock = new Spinlock()
+        I64 bufferIndex = 0
+        I64 totalWords = slots * self.slotSize
+        while bufferIndex < totalWords:
+            self.buffer.set( bufferIndex, 0 )
+            bufferIndex = bufferIndex + 1
+    
+    public function isFull( self ) -> Boolean:
+        
+        """ Return True if the port ring buffer is full and cannot accept new messages. """
+        
+        return self.count == self.slotCount
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """ Return True if the port ring buffer contains no messages. """
+        
+        return self.count == 0
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the number of messages currently queued in this port. """
+        
+        return self.count
+    
+    public function getPortId( self ) -> I64:
+        
+        """ Return the unique identifier of this port. """
+        
+        return self.portId
+    
+    public function getOwnerTaskId( self ) -> I64:
+        
+        """ Return the task identifier of the task that owns this port. """
+        
+        return self.ownerTaskId
+    
+    public function send( self, Message msg ) -> Boolean:
+        
+        """
+        Enqueue a message into the port ring buffer by serializing its header
+        and payload into the next available slot. Protected by a spinlock.
+        
+        Parameters:
+            msg (Message):
+                The message to enqueue.
+        
+        Returns:
+            Boolean:
+                True if the message was successfully enqueued, False if the port is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.count == self.slotCount:
+            self.lock.unlock()
+            return False
+        I64 base = self.tail * self.slotSize
+        self.buffer.set( base, msg.senderId )
+        self.buffer.set( base + 1, msg.messageType )
+        self.buffer.set( base + 2, msg.length )
+        I64 wordIndex = 0
+        while wordIndex < msg.length:
+            self.buffer.set( base + 3 + wordIndex, msg.getWord( wordIndex ) )
+            wordIndex = wordIndex + 1
+        self.tail = ( self.tail + 1 ) % self.slotCount
+        self.count = self.count + 1
+        self.lock.unlock()
+        return True
+    
+    public function receive( self, Message dest ) -> Boolean:
+        
+        """
+        Dequeue the oldest message from the port ring buffer by deserializing
+        its header and payload into the destination message object. The slot is
+        freed for reuse. Protected by a spinlock.
+        
+        Parameters:
+            dest (Message):
+                The destination message object to populate with the dequeued data.
+        
+        Returns:
+            Boolean:
+                True if a message was successfully dequeued, False if the port is empty.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.count == 0:
+            self.lock.unlock()
+            return False
+        I64 base = self.head * self.slotSize
+        dest.senderId = self.buffer.get( base )
+        dest.messageType = self.buffer.get( base + 1 )
+        dest.length = self.buffer.get( base + 2 )
+        I64 wordIndex = 0
+        while wordIndex < dest.length:
+            dest.setWord( wordIndex, self.buffer.get( base + 3 + wordIndex ) )
+            wordIndex = wordIndex + 1
+        self.head = ( self.head + 1 ) % self.slotCount
+        self.count = self.count - 1
+        self.lock.unlock()
+        return True
+
+    public function peek( self, Message dest ) -> Boolean:
+
+        """
+        Read the oldest message from the port ring buffer without removing it.
+        The message remains in the queue for a subsequent receive call.
+
+        Parameters:
+            dest (Message):
+                The destination message object to populate with the peeked data.
+
+        Returns:
+            Boolean:
+                True if a message was available to peek, False if the port is empty.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        self.lock.lock()
+        if self.count == 0:
+            self.lock.unlock()
+            return False
+        I64 base = self.head * self.slotSize
+        dest.senderId = self.buffer.get( base )
+        dest.messageType = self.buffer.get( base + 1 )
+        dest.length = self.buffer.get( base + 2 )
+        I64 wordIndex = 0
+        while wordIndex < dest.length:
+            dest.setWord( wordIndex, self.buffer.get( base + 3 + wordIndex ) )
+            wordIndex = wordIndex + 1
+        self.lock.unlock()
+        return True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the ring buffer memory allocated by this port.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.buffer.free()
+
+export {
+    Message,
+    Port
+}

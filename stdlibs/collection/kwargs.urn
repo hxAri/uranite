@@ -1,0 +1,690 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-28 01:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/kwargs.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Keyword parameter container. Wraps parallel key/value Memory<T> buffers.
+# Constructed by the compiler at call sites for Type name{} parameters.
+# Implements ImmutableMapping which inherits Map, Collection, and Iterable.
+# Mutation methods are no-ops since this container is immutable after construction.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.kwargs
+
+from uranite.memory.memory import Memory
+from uranite.collection.collection import Collection
+from uranite.collection.immutable-mapping import ImmutableMapping
+from uranite.collection.pair import Pair
+from uranite.collection.set import Set
+from uranite.collection.sequence import Sequence
+from uranite.collection.hash-set import HashSet
+from uranite.collection.array-list import ArrayList
+from uranite.iterators.iterator import Iterator
+from uranite.language.boolean import Boolean
+from uranite.language.callable import Callable
+from uranite.language.void import Void
+from uranite.errors.lookup import KeyError
+
+public class Kwargs<T> implements ImmutableMapping<String,T>:
+    
+    """
+    Immutable keyword argument container mapping String keys to values of type T.
+    
+    Constructed by the compiler at call sites for keyword parameter declarations.
+    Wraps parallel Memory buffers for keys and values with a fixed count.
+    All mutation methods inherited from Collection are no-ops since the
+    container is immutable after construction.
+    """
+    
+    protect Memory<String> keys
+    protect Memory<T> values
+    protect I64 count
+    protect I64 position
+    
+    public function Kwargs( self, Memory<String> keys, Memory<T> values, I64 count ) -> Void:
+        
+        """
+        Create a new keyword argument container from parallel key and value buffers.
+        
+        Parameters:
+            keys (Memory<String>):
+                The buffer containing parameter names.
+            values (Memory<T>):
+                The buffer containing parameter values corresponding to each key.
+            count (I64):
+                The number of key-value pairs in the container.
+        """
+        
+        self.keys = keys
+        self.values = values
+        self.count = count
+        self.position = 0
+    
+    # =======================================================================================
+    # ImmutableMapping / Map methods
+    # =======================================================================================
+    
+    public function set( self, String key, T value ) -> Void:
+        
+        """ No-op for immutable keyword arguments. """
+    
+    public function remove( self, String key ) -> Void:
+        
+        """ No-op for immutable keyword arguments. """
+    
+    public function get( self, String key ) -> T:
+
+        """
+        Retrieve the value associated with the given key by scanning all entries.
+
+        Parameters:
+            key (String):
+                The parameter name to look up.
+
+        Returns:
+            T:
+                The value associated with the key.
+
+        Raises:
+            KeyError:
+                If the key is not present in the keyword arguments.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            if self.keys.get( entryIndex ) == key:
+                return self.values.get( entryIndex )
+            entryIndex = entryIndex + 1
+        raise new KeyError( key )
+
+    public function getOrDefault( self, String key, T defaultValue ) -> T:
+
+        """
+        Retrieve the value for the given key, or return the default if absent.
+
+        Parameters:
+            key (String):
+                The parameter name to look up.
+            defaultValue (T):
+                The value to return if the key is not present.
+
+        Returns:
+            T:
+                The associated value, or the default.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            if self.keys.get( entryIndex ) == key:
+                return self.values.get( entryIndex )
+            entryIndex = entryIndex + 1
+        return defaultValue
+    
+    public function contains( self, String key ) -> Boolean:
+        
+        """
+        Check whether the given key exists in the keyword arguments.
+        
+        Parameters:
+            key (String):
+                The parameter name to search for.
+        
+        Returns:
+            Boolean:
+                True if the key is present, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            if self.keys.get( entryIndex ) == key:
+                return True
+            entryIndex = entryIndex + 1
+        return False
+
+    public function containsKey( self, String key ) -> Boolean:
+
+        """
+        Check whether the given key exists in the keyword arguments.
+
+        Parameters:
+            key (String):
+                The parameter name to search for.
+
+        Returns:
+            Boolean:
+                True if the key is present, False otherwise.
+        """
+
+        return self.contains( key )
+
+    public function containsValue( self, T value ) -> Boolean:
+
+        """
+        Check whether the given value exists in the keyword arguments via
+        linear scan of all values.
+
+        Parameters:
+            value (T):
+                The value to search for.
+
+        Returns:
+            Boolean:
+                True if the value is found, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            if self.values.get( entryIndex ) == value:
+                return True
+            entryIndex = entryIndex + 1
+        return False
+    
+    public property keys( self ) -> Set<String>:
+        
+        """
+        Return a set containing all parameter names in the keyword arguments.
+        
+        Returns:
+            Set<String>:
+                A HashSet of all keys.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashSet<String> result = new HashSet<String>( self.count )
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            result.add( self.keys.get( entryIndex ) )
+            entryIndex = entryIndex + 1
+        return result
+    
+    public property values( self ) -> Sequence<T>:
+        
+        """
+        Return a sequence containing all parameter values in the keyword arguments.
+        
+        Returns:
+            Sequence<T>:
+                An ArrayList of all values.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        ArrayList<T> result = new ArrayList<T>( self.count )
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            result.add( self.values.get( entryIndex ) )
+            entryIndex = entryIndex + 1
+        return result
+    
+    public property entries( self ) -> Set<Pair<String, T>>:
+        
+        """
+        Return a set of all key-value pairs in the keyword arguments.
+        
+        Returns:
+            Set<Pair<String, T>>:
+                A HashSet of Pair objects representing each entry.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashSet<Pair<String, T>> result = new HashSet<Pair<String, T>>( self.count )
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            result.add( new Pair<String, T>( self.keys.get( entryIndex ), self.values.get( entryIndex ) ) )
+            entryIndex = entryIndex + 1
+        return result
+    
+    public function forEach( self, Callable<Void,<String,T>> action ) -> Void:
+        
+        """
+        Execute an action for each key-value pair in the keyword arguments.
+        
+        Parameters:
+            action (Callable<Void,<String,T>>):
+                The action to execute, receiving the key and value as arguments.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            action( self.keys.get( entryIndex ), self.values.get( entryIndex ) )
+            entryIndex = entryIndex + 1
+    
+    # =======================================================================================
+    # Collection methods
+    # =======================================================================================
+    
+    public function append( self, T element ) -> Collection<T>:
+        
+        """
+        No-op for immutable keyword arguments; returns self unchanged.
+        
+        Parameters:
+            element (T):
+                The element that would be appended (ignored).
+        
+        Returns:
+            Collection<T>:
+                This container unchanged.
+        """
+        
+        return self
+    
+    public function append( self, T element[] ) -> Collection<T>:
+        
+        """
+        No-op for immutable keyword arguments; returns self unchanged.
+        
+        Parameters:
+            element (T[]):
+                The elements that would be appended (ignored).
+        
+        Returns:
+            Collection<T>:
+                This container unchanged.
+        """
+        
+        return self
+    
+    public function clear( self ) -> Void:
+        
+        """ No-op for immutable keyword arguments. """
+    
+    public property copy( self ) -> Collection<T>:
+        
+        """
+        Return a shallow copy of this keyword argument container.
+        
+        Returns:
+            Collection<T>:
+                A new Kwargs with copies of the key and value buffers.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Memory<String> newKeys = new Memory<String>( self.count )
+        Memory<T> newValues = new Memory<T>( self.count )
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            newKeys.set( entryIndex, self.keys.get( entryIndex ) )
+            newValues.set( entryIndex, self.values.get( entryIndex ) )
+            entryIndex = entryIndex + 1
+        return new Kwargs<T>( newKeys, newValues, self.count )
+    
+    public property empty( self ) -> Boolean:
+        
+        """
+        Check whether the keyword arguments contain no entries.
+        
+        Returns:
+            Boolean:
+                True if the container has zero entries, False otherwise.
+        """
+        
+        return self.count == 0
+    
+    public function equals( self, Object object ) -> Boolean:
+        
+        """
+        Compare this keyword argument container with another object for
+        structural equality of all key-value pairs.
+        
+        Parameters:
+            object (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is a Kwargs with identical entries.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if object instanceof Kwargs:
+            Kwargs<T> other = object as Kwargs<T>
+            if self.count != other.count:
+                return False
+            I64 entryIndex = 0
+            while entryIndex < self.count:
+                if self.keys.get( entryIndex ) != other.keys.get( entryIndex ):
+                    return False
+                if self.values.get( entryIndex ) != other.values.get( entryIndex ):
+                    return False
+                entryIndex = entryIndex + 1
+            return True
+        return False
+    
+    public function exists( self, T element ) -> Boolean:
+        
+        """
+        Check whether the given value exists among the keyword argument values.
+        
+        Parameters:
+            element (T):
+                The value to search for.
+        
+        Returns:
+            Boolean:
+                True if the value is found, False otherwise.
+        """
+        
+        return self.containsValue( element )
+    
+    public function exists( self, T element[] ) -> Boolean:
+        
+        """
+        Check whether all of the given values exist among the keyword argument values.
+        
+        Parameters:
+            element (T[]):
+                The values to search for.
+        
+        Returns:
+            Boolean:
+                True if every element is found, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 elementIndex = 0
+        I64 elementCount = element.length()
+        while elementIndex < elementCount:
+            if self.containsValue( element.get( elementIndex ) ) == False:
+                return False
+            elementIndex = elementIndex + 1
+        return True
+    
+    public function filter( self, Callable<Boolean,<T>> callback ) -> Collection<T>:
+        
+        """
+        Return a new collection containing only entries whose values match
+        the predicate. Since Kwargs is immutable, the result is an ArrayList
+        of matching values.
+        
+        Parameters:
+            callback (Callable<Boolean,<T>>):
+                A predicate function that returns True for values to include.
+        
+        Returns:
+            Collection<T>:
+                An ArrayList containing only the matching values.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        ArrayList<T> result = new ArrayList<T>()
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            if callback( self.values.get( entryIndex ) ):
+                result.add( self.values.get( entryIndex ) )
+            entryIndex = entryIndex + 1
+        return result
+    
+    public property length( self ) -> Int:
+        
+        """
+        Return the number of key-value pairs in the keyword arguments.
+        
+        Returns:
+            Int:
+                The entry count.
+        """
+        
+        return self.count
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """
+        Check whether the keyword arguments contain no entries.
+        
+        Returns:
+            Boolean:
+                True if the container has zero entries, False otherwise.
+        """
+        
+        return self.count == 0
+    
+    public function remove( self, T element ) -> Boolean:
+        
+        """
+        No-op for immutable keyword arguments; always returns False.
+        
+        Parameters:
+            element (T):
+                The element that would be removed (ignored).
+        
+        Returns:
+            Boolean:
+                Always False since the container is immutable.
+        """
+        
+        return False
+    
+    public function remove( self, T element[] ) -> Boolean:
+        
+        """
+        No-op for immutable keyword arguments; always returns False.
+        
+        Parameters:
+            element (T[]):
+                The elements that would be removed (ignored).
+        
+        Returns:
+            Boolean:
+                Always False since the container is immutable.
+        """
+        
+        return False
+    
+    # =======================================================================================
+    # Iterable method
+    # =======================================================================================
+    
+    public property iterator( self ) -> Iterator<T>:
+        
+        """
+        Return a fresh iterator over the values in the keyword arguments.
+        
+        Returns:
+            Iterator<T>:
+                A new KwargsIterator starting from the first value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new KwargsIterator<T>( self.values, self.count )
+    
+    # =======================================================================================
+    # Extra convenience methods (not from interface chain)
+    # =======================================================================================
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether more key-value pairs remain in the built-in pair iterator.
+        
+        Returns:
+            Boolean:
+                True if the position has not reached the end.
+        """
+        
+        return self.position < self.count
+    
+    public property next( self ) -> Pair<String, T>:
+        
+        """
+        Return the current key-value pair and advance the built-in pair iterator.
+        
+        Returns:
+            Pair<String, T>:
+                The key-value pair at the current position before advancing.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        String currentKey = self.keys.get( self.position )
+        T currentValue = self.values.get( self.position )
+        self.position = self.position + 1
+        return new Pair<String, T>( currentKey, currentValue )
+
+    public property size( self ) -> Int:
+
+        """
+        Return the number of key-value pairs in the keyword arguments.
+
+        Alias for the length property to match common collection conventions.
+
+        Returns:
+            Int:
+                The entry count.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count
+
+    public property isNotEmpty( self ) -> Boolean:
+
+        """
+        Test whether the keyword arguments contain at least one entry.
+
+        Returns:
+            Boolean:
+                True if the container has one or more entries.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count > 0
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release the heap-allocated key and value buffers held by this container.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.keys.free()
+        self.values.free()
+
+
+public class KwargsIterator<T> implements Iterator<T>:
+    
+    """
+    Iterator that traverses the value buffer of a Kwargs container,
+    yielding each value in insertion order.
+    """
+    
+    protect Memory<T> data
+    protect I64 count
+    protect I64 position
+    
+    public function KwargsIterator( self, Memory<T> data, I64 count ) -> Void:
+        
+        """
+        Create an iterator over the given value buffer.
+        
+        Parameters:
+            data (Memory<T>):
+                The value storage buffer to iterate over.
+            count (I64):
+                The number of values in the buffer.
+        """
+        
+        self.data = data
+        self.count = count
+        self.position = 0
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether more values remain to be iterated.
+        
+        Returns:
+            Boolean:
+                True if the iterator has not yet reached the end.
+        """
+        
+        return self.position < self.count
+    
+    public property next( self ) -> T:
+        
+        """
+        Return the current value and advance to the next position.
+        
+        Returns:
+            T:
+                The value at the current position before advancing.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        T element = self.data.get( self.position )
+        self.position = self.position + 1
+        return element
+
+
+export {
+    Kwargs,
+    KwargsIterator
+}

@@ -1,0 +1,185 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/process/pipe.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Pipe class wrapping the pipe2 syscall for IPC between processes.
+# Provides read/write ends with close operations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.pipe
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    memoryToPtr, readI32At, sysPipe2, sysRead, sysWrite,
+    sysClose, readByteAt, writeByteAt, stringToPtr, stringLen
+}
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString
+from uranite.errors.error import Error
+
+public class PipeError extends Error:
+    
+    """
+    Raised when a pipe operation fails.
+    
+    Covers failures in pipe creation, reading, writing, or closing
+    pipe file descriptors.
+    """
+    
+    public function PipeError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Construct a new PipeError.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the pipe failure.
+            code (I64):
+                Numeric error code identifying the failure type.
+            cause (Error):
+                Optional underlying error that caused this failure, or None.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class Pipe:
+    
+    """
+    Unidirectional byte stream for inter-process communication.
+    
+    Wraps the Linux pipe2 syscall to create a pair of connected file
+    descriptors. Data written to the write end can be read from the read
+    end. Typically used to connect the output of one process to the input
+    of another, or to capture subprocess output.
+    """
+    
+    public I64 readFd
+    """ File descriptor for the read end of the pipe. """
+    public I64 writeFd
+    """ File descriptor for the write end of the pipe. """
+    
+    public function Pipe( self ) -> Void:
+        
+        """
+        Create a new pipe by invoking the pipe2 syscall.
+        
+        Allocates a pair of connected file descriptors and stores them
+        in readFd and writeFd. The pipe is created with default flags.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Memory<I64> fds = new Memory<I64>( 2 )
+        I64 fdsPtr = memoryToPtr( fds )
+        sysPipe2( fdsPtr, 0 )
+        self.readFd = readI32At( fdsPtr, 0 )
+        self.writeFd = readI32At( fdsPtr, 4 )
+    
+    public function read( self, I64 maxLen ) -> String:
+        
+        """
+        Read up to maxLen bytes from the read end of the pipe.
+        
+        Blocks until data is available or the write end is closed. Returns
+        an empty string if no data was read (write end closed or error).
+        
+        Parameters:
+            maxLen (I64):
+                Maximum number of bytes to read.
+        
+        Returns:
+            String:
+                The data read from the pipe, or an empty string on EOF.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 readBuffer = alloc( maxLen + 1 )
+        I64 bytesRead = sysRead( self.readFd, readBuffer, maxLen )
+        if bytesRead <= 0:
+            writeByteAt( readBuffer, 0, 0 )
+            return ptrToString( readBuffer )
+        writeByteAt( readBuffer, bytesRead, 0 )
+        return ptrToString( readBuffer )
+    
+    public function write( self, String data ) -> I64:
+        
+        """
+        Write data to the write end of the pipe.
+        
+        Parameters:
+            data (String):
+                The string data to write into the pipe.
+        
+        Returns:
+            I64:
+                The number of bytes actually written, or a negative value on error.
+        """
+        
+        I64 ptr = stringToPtr( data )
+        I64 len = stringLen( data )
+        return sysWrite( self.writeFd, ptr, len )
+    
+    public function closeRead( self ) -> Void:
+        
+        """
+        Close the read end of the pipe.
+        
+        After closing, no further reads can be performed. If the write end
+        is still open, writers will receive a broken pipe signal.
+        """
+        
+        sysClose( self.readFd )
+    
+    public function closeWrite( self ) -> Void:
+        
+        """
+        Close the write end of the pipe.
+        
+        After closing, readers will receive EOF once all buffered data
+        has been consumed.
+        """
+        
+        sysClose( self.writeFd )
+    
+    public function closeAll( self ) -> Void:
+        
+        """
+        Close both the read and write ends of the pipe.
+        
+        Releases both file descriptors. The pipe becomes unusable after
+        this call.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        sysClose( self.readFd )
+        sysClose( self.writeFd )
+
+export {
+    Pipe,
+    PipeError
+}

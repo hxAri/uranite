@@ -1,0 +1,114 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/byte.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Byte class, an unsigned 8-bit value with bitwise and shift operations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.byte
+
+final class Byte:
+    
+    """
+    Unsigned 8-bit value (0-255) with bitwise and shift operations.
+    Wraps a U8 value and provides methods for bitwise AND, OR, XOR, and bit shifting.
+    """
+    
+    protect U8 value
+    
+    public function Byte( self, U8 value ) -> Void:
+        
+        """ Construct a new Byte wrapping the given U8 value. """
+        
+        self.value = value
+    
+    public function getValue( self ) -> U8:
+        
+        """ Return the underlying U8 value. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this Byte's numeric value. """
+        
+        return self.value as String
+    
+    public function toInt( self ) -> I32:
+        
+        """ Convert this Byte to a signed 32-bit integer. """
+        
+        return self.value as I32
+    
+    public function bitwiseAnd( self, Byte other ) -> Byte:
+        
+        """
+        Return a new Byte with the bitwise AND of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Byte( self.value & other.value )
+    
+    public function bitwiseOr( self, Byte other ) -> Byte:
+        
+        """
+        Return a new Byte with the bitwise OR of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Byte( self.value | other.value )
+    
+    public function bitwiseXor( self, Byte other ) -> Byte:
+        
+        """
+        Return a new Byte with the bitwise XOR of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Byte( self.value ^ other.value )
+    
+    public function shiftLeft( self, I32 amount ) -> Byte:
+        
+        """
+        Return a new Byte with the bits shifted left by the given amount.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Byte( ( self.value as I32 << amount ) as U8 )
+    
+    public function shiftRight( self, I32 amount ) -> Byte:
+        
+        """
+        Return a new Byte with the bits shifted right by the given amount.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Byte( ( self.value as I32 >> amount ) as U8 )

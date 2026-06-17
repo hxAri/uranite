@@ -1,0 +1,250 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-06 04:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/string/format.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Centralized string formatting utilities: padding, zero-fill, byte
+# copying, UTC offset formatting. All modules must import from here
+# instead of defining local formatting helpers.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.string.format
+
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString
+from uranite.convert.convert import intToString
+
+public function padRight( String source, I64 width ) -> String:
+    
+    """
+    Pad a string with trailing space characters (0x20) to reach the
+    given width. Returns the original string unchanged if its length
+    is already equal to or greater than width.
+    
+    Parameters:
+        source (String):
+            The input string to pad.
+        width (I64):
+            The desired minimum total width.
+    
+    Returns:
+        String:
+            A new string of exactly width characters with trailing spaces,
+            or the original string if already wide enough.
+    
+    Complexity:
+        Time: O(width)
+        Space: O(width) for the allocated buffer.
+    """
+    
+    I64 sourceLength = stringLen( source )
+    if sourceLength >= width:
+        return source
+    I64 buffer = alloc( width + 1 )
+    I64 sourcePointer = stringToPtr( source )
+    I64 index = 0
+    while index < sourceLength:
+        writeByteAt( buffer, index, readByteAt( sourcePointer, index ) )
+        index = index + 1
+    while index < width:
+        writeByteAt( buffer, index, 32 )
+        index = index + 1
+    writeByteAt( buffer, width, 0 )
+    return ptrToString( buffer )
+
+public function padLeft( String source, I64 width ) -> String:
+    
+    """
+    Pad a string with leading space characters (0x20) to reach the
+    given width. Returns the original string unchanged if its length
+    is already equal to or greater than width.
+    
+    Parameters:
+        source (String):
+            The input string to pad.
+        width (I64):
+            The desired minimum total width.
+    
+    Returns:
+        String:
+            A new string of exactly width characters with leading spaces,
+            or the original string if already wide enough.
+    
+    Complexity:
+        Time: O(width)
+        Space: O(width) for the allocated buffer.
+    """
+    
+    I64 sourceLength = stringLen( source )
+    if sourceLength >= width:
+        return source
+    I64 buffer = alloc( width + 1 )
+    I64 padding = width - sourceLength
+    I64 index = 0
+    while index < padding:
+        writeByteAt( buffer, index, 32 )
+        index = index + 1
+    I64 sourcePointer = stringToPtr( source )
+    I64 sourceIndex = 0
+    while sourceIndex < sourceLength:
+        writeByteAt( buffer, index, readByteAt( sourcePointer, sourceIndex ) )
+        index = index + 1
+        sourceIndex = sourceIndex + 1
+    writeByteAt( buffer, width, 0 )
+    return ptrToString( buffer )
+
+public function padZero( I64 value, I64 width ) -> String:
+    
+    """
+    Format a non-negative integer with leading ASCII zero characters
+    (0x30) to reach the given width. If the string representation of
+    value is already at or beyond the target width, it is returned
+    as-is without truncation.
+    
+    Parameters:
+        value (I64):
+            The integer value to format (should be non-negative).
+        width (I64):
+            The minimum width of the resulting string.
+    
+    Returns:
+        String:
+            A zero-padded string, e.g. padZero(5, 3) returns "005".
+    
+    Complexity:
+        Time: O(width)
+        Space: O(width) for the allocated buffer.
+    """
+    
+    String formatted = intToString( value )
+    I64 formattedLength = stringLen( formatted )
+    if formattedLength >= width:
+        return formatted
+    I64 buffer = alloc( width + 1 )
+    I64 padding = width - formattedLength
+    I64 index = 0
+    while index < padding:
+        writeByteAt( buffer, index, 48 )
+        index = index + 1
+    I64 formattedPointer = stringToPtr( formatted )
+    I64 sourceIndex = 0
+    while sourceIndex < formattedLength:
+        writeByteAt( buffer, index, readByteAt( formattedPointer, sourceIndex ) )
+        index = index + 1
+        sourceIndex = sourceIndex + 1
+    writeByteAt( buffer, width, 0 )
+    return ptrToString( buffer )
+
+public function formatUtcOffset( I64 offsetSeconds ) -> String:
+    
+    """
+    Format a UTC offset given in seconds into the standard ISO 8601
+    string format +HH:MM or -HH:MM.
+    
+    Parameters:
+        offsetSeconds (I64):
+            The UTC offset in seconds. Positive values are east of UTC,
+            negative values are west. For example, 25200 represents +07:00,
+            and -18000 represents -05:00.
+    
+    Returns:
+        String:
+            The formatted offset string, e.g. "+07:00" or "-05:00".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1) for the short result string.
+    """
+    
+    if offsetSeconds == 0:
+        return "+00:00"
+    I64 absoluteOffset = offsetSeconds
+    String sign = "+"
+    if offsetSeconds < 0:
+        absoluteOffset = 0 - offsetSeconds
+        sign = "-"
+    I64 hours = absoluteOffset / 3600
+    I64 minutes = ( absoluteOffset % 3600 ) / 60
+    return sign + padZero( hours, 2 ) + ":" + padZero( minutes, 2 )
+
+public function copyBytes( I64 destination, I64 destinationOffset, I64 source, I64 sourceOffset, I64 length ) -> Void:
+    
+    """
+    Copy bytes from source memory to destination memory at the given
+    offsets. Does not handle overlapping regions — if source and
+    destination overlap, behavior is undefined.
+    
+    Parameters:
+        destination (I64):
+            The destination memory base address.
+        destinationOffset (I64):
+            The byte offset into destination where copying begins.
+        source (I64):
+            The source memory base address.
+        sourceOffset (I64):
+            The byte offset into source where reading begins.
+        length (I64):
+            The number of bytes to copy.
+    
+    Complexity:
+        Time: O(length)
+    """
+    
+    I64 index = 0
+    while index < length:
+        writeByteAt( destination, destinationOffset + index, readByteAt( source, sourceOffset + index ) )
+        index = index + 1
+
+public function appendTo( I64 buffer, I64 position, String content ) -> I64:
+    
+    """
+    Append all bytes of a string into a pre-allocated buffer at the
+    given byte position. Does not null-terminate — the caller is
+    responsible for writing the terminator after all appends.
+    
+    Parameters:
+        buffer (I64):
+            The destination buffer base address.
+        position (I64):
+            The byte offset in buffer where the string will be written.
+        content (String):
+            The string whose bytes are appended.
+    
+    Returns:
+        I64:
+            The new position (position + length of content), ready for
+            the next append.
+    
+    Complexity:
+        Time: O(n) where n is the byte length of content.
+    """
+    
+    I64 contentPointer = stringToPtr( content )
+    I64 contentLength = stringLen( content )
+    I64 index = 0
+    while index < contentLength:
+        writeByteAt( buffer, position + index, readByteAt( contentPointer, index ) )
+        index = index + 1
+    return position + contentLength
+
+export {
+    padRight,
+    padLeft,
+    padZero,
+    formatUtcOffset,
+    copyBytes,
+    appendTo
+}

@@ -1,0 +1,114 @@
+package uranite.coroutine.future
+
+from uranite.errors.error import Error
+from uranite.fiber.fiber import Fiber, fiberTrampoline, FIBER_TERMINATED, F_STATE, F_ERROR
+
+public class FutureError extends Error:
+    
+    public function FutureError( self, String message ) -> Void:
+        parent( message, 0, None )
+
+const I64 FUTURE_PENDING = 0
+const I64 FUTURE_RESOLVED = 1
+const I64 FUTURE_REJECTED = 2
+
+public enum FutureState:
+    
+    unit Pending
+    unit Resolved
+    unit Rejected
+
+public interface Future<T>:
+    
+    public function state( self ) -> FutureState:
+        
+        """ Return current lifecycle state. """
+    
+    public function resolved( self ) -> Boolean:
+        
+        """ Check whether resolved with a value. """
+    
+    public function value( self ) -> T raises FutureError:
+        
+        """ Get resolved value. Raises if pending or rejected. """
+    
+    public function block( self ) -> T:
+        
+        """
+        Block until resolved and return value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+public class SimpleFuture implements Future<I64>:
+    public Fiber fiber
+    public I64 futureState
+    public I64 resolvedValue
+    public Boolean evaluated
+    
+    public function SimpleFuture( self, I64 entryFn ) -> Void:
+        self.fiber = new Fiber( entryFn )
+        self.futureState = FUTURE_PENDING
+        self.resolvedValue = 0
+        self.evaluated = False
+    
+    public function state( self ) -> FutureState:
+        if self.futureState == FUTURE_RESOLVED:
+            return FutureState.Resolved
+        if self.futureState == FUTURE_REJECTED:
+            return FutureState.Rejected
+        return FutureState.Pending
+    
+    public function resolved( self ) -> Boolean:
+        return self.futureState == FUTURE_RESOLVED
+    
+    public function value( self ) -> I64:
+        if self.futureState == FUTURE_RESOLVED:
+            return self.resolvedValue
+        if self.futureState == FUTURE_REJECTED:
+            raise new FutureError( "future rejected" )
+        self.evaluate()
+        if self.futureState == FUTURE_RESOLVED:
+            return self.resolvedValue
+        raise new FutureError( "future rejected" )
+    
+    public function block( self ) -> I64:
+        if self.futureState == FUTURE_RESOLVED:
+            return self.resolvedValue
+        if self.futureState == FUTURE_REJECTED:
+            raise new FutureError( "future rejected" )
+        self.evaluate()
+        if self.futureState == FUTURE_RESOLVED:
+            return self.resolvedValue
+        raise new FutureError( "future evaluation failed" )
+    
+    public function evaluate( self ) -> Void:
+        if self.evaluated:
+            return
+        self.evaluated = True
+        self.fiber.start()
+        I64 fiberState = self.fiber.data.get( F_STATE )
+        if fiberState == FIBER_TERMINATED:
+            I64 hasErr = self.fiber.data.get( F_ERROR )
+            if hasErr != 0:
+                self.futureState = FUTURE_REJECTED
+                return
+            self.resolvedValue = self.fiber.getReturn()
+            self.futureState = FUTURE_RESOLVED
+            return
+        self.futureState = FUTURE_REJECTED
+    
+    public function destroy( self ) -> Void:
+        self.fiber.destroy()
+
+export {
+    Future,
+    FutureState,
+    FutureError,
+    SimpleFuture,
+    FUTURE_PENDING,
+    FUTURE_RESOLVED,
+    FUTURE_REJECTED
+}

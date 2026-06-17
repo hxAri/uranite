@@ -1,0 +1,54 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Nullable types: ?Type syntax, None literal, null checks.
+# Currently pointer-based types (?String, ?ClassName) are supported.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.nullable
+
+from uranite.io.console import puts
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the nullable types demonstration.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    # Nullable string initialized to None
+    ?String empty = None
+    if empty == None:
+        puts( "empty is None" )
+
+    # Nullable string with value
+    ?String greeting = "Hello"
+    if greeting != None:
+        puts( "greeting has a value" )
+
+    # Reassign nullable
+    ?String name = None
+    if name == None:
+        puts( "name starts as None" )
+
+    name = "Alice"
+    if name != None:
+        puts( "name is now set" )
+
+    return 0

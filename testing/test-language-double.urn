@@ -1,0 +1,67 @@
+package testing
+
+from uranite.language.double import Double
+from uranite.language.float import Float
+from uranite.testing.assertions import {
+    assertEqualF64,
+    assertEqualI64,
+    assertTrue,
+    assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Double Tests ===" )
+
+    Double a = new Double( 3.141592653589793 )
+    Double b = new Double( 2.718281828459045 )
+
+    F64 aDouble = a.toDouble()
+    assertEqualF64( 3.141592653589793, aDouble, 0.0001, "toDouble" )
+    F64 aValue = a.getValue()
+    assertEqualF64( 3.141592653589793, aValue, 0.0001, "getValue" )
+    putsln( "getValue/toDouble OK" )
+
+    # inherited arithmetic
+    Float sum = a.add( b )
+    assertEqualF64( 5.859874482, sum.getValue(), 0.001, "add" )
+    Float diff = a.subtract( b )
+    assertEqualF64( 0.423310825, diff.getValue(), 0.001, "subtract" )
+    Float prod = a.multiply( b )
+    assertEqualF64( 8.539734222, prod.getValue(), 0.001, "multiply" )
+    Float quot = a.divide( b )
+    assertEqualF64( 1.155727349, quot.getValue(), 0.001, "divide" )
+    putsln( "arithmetic OK" )
+
+    # abs / negate
+    Double neg = new Double( -1.0 )
+    Float absVal = neg.abs()
+    assertEqualF64( 1.0, absVal.getValue(), 0.001, "abs" )
+    Float negated = a.negate()
+    assertEqualF64( -3.141592653, negated.getValue(), 0.001, "negate" )
+    putsln( "abs/negate OK" )
+
+    # equals / compareTo
+    Double c = new Double( 3.141592653589793 )
+    assertTrue( a.equals( c ), "equals same" )
+    assertEqualI64( 1, a.compareTo( b ), "compareTo greater" )
+    putsln( "equals/compareTo OK" )
+
+    # isNaN / isInfinite
+    Boolean nanCheck = a.isNaN()
+    assertFalse( nanCheck, "isNaN" )
+    Boolean infCheck = a.isInfinite()
+    assertFalse( infCheck, "isInfinite" )
+
+    # floor / ceil / round / toInt
+    Float fl = a.floor()
+    assertEqualF64( 3.0, fl.getValue(), 0.001, "floor" )
+    Float ce = a.ceil()
+    assertEqualF64( 4.0, ce.getValue(), 0.001, "ceil" )
+    Float rnd = a.round()
+    assertEqualF64( 3.0, rnd.getValue(), 0.001, "round" )
+    assertEqualI64( 3, a.toInt(), "toInt" )
+    putsln( "floor/ceil/round/toInt OK" )
+
+    putsln( "=== All Double tests passed ===" )
+    return 0

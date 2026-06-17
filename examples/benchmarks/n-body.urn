@@ -1,0 +1,146 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Extreme N-Body physics simulation benchmark using Structure of Arrays (SoA) for cache efficiency.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+from uranite.math.math import sqrt
+from uranite.memory.memory import Memory
+from uranite.language.double import Double
+from uranite.language.int import Int
+
+extern function clock() -> I64;
+
+public function advance(
+        Int n, 
+        Memory<Double> x, 
+        Memory<Double> y, 
+        Memory<Double> z, 
+        Memory<Double> vx, 
+        Memory<Double> vy, 
+        Memory<Double> vz, 
+        Memory<Double> mass, 
+        Double dt
+    ) -> Void:
+    for Int i = 0; i < n; i++:
+        for Int j = i + 1; j < n; j++:
+            Double dx = x.get( i ) - x.get( j )
+            Double dy = y.get( i ) - y.get( j )
+            Double dz = z.get( i ) - z.get( j )
+            
+            Double dSquared = dx*dx + dy*dy + dz*dz
+            Double distance = sqrt( dSquared )
+            Double mag = dt / ( dSquared * distance )
+            
+            Double massI = mass.get( i )
+            Double massJ = mass.get( j )
+            
+            vx.set( i, vx.get( i ) - dx * massJ * mag )
+            vy.set( i, vy.get( i ) - dy * massJ * mag )
+            vz.set( i, vz.get( i ) - dz * massJ * mag )
+            
+            vx.set( j, vx.get( j ) + dx * massI * mag )
+            vy.set( j, vy.get( j ) + dy * massI * mag )
+            vz.set( j, vz.get( j ) + dz * massI * mag )
+            
+    for Int i = 0; i < n; i++:
+        x.set( i, x.get( i ) + dt * vx.get( i ) )
+        y.set( i, y.get( i ) + dt * vy.get( i ) )
+        z.set( i, z.get( i ) + dt * vz.get( i ) )
+
+public function main() -> I32:
+    Int n = 5
+    Int iterations = 500000
+    puts( "=== Uranite Extreme N-Body Benchmark ({} iterations, SoA) ===".format( iterations ) )
+    
+    Memory<Double> x = new Memory<Double>( n )
+    Memory<Double> y = new Memory<Double>( n )
+    Memory<Double> z = new Memory<Double>( n )
+    Memory<Double> vx = new Memory<Double>( n )
+    Memory<Double> vy = new Memory<Double>( n )
+    Memory<Double> vz = new Memory<Double>( n )
+    Memory<Double> mass = new Memory<Double>( n )
+    
+    # Initialize solar system data...
+    x.set( 0, 0.0 )
+    y.set( 0, 0.0 )
+    z.set( 0, 0.0 )
+    vx.set( 0, 0.0 )
+    vy.set( 0, 0.0 )
+    vz.set( 0, 0.0 )
+    mass.set( 0, 1.0 )
+    
+    # Jupiter
+    x.set( 1, 4.84143144246472090e+00 )
+    y.set( 1, -1.16032004402742839e+00 )
+    z.set( 1, -1.03622044471123109e-01 )
+    vx.set( 1, 1.66007664274403694e-03 * 365.24 )
+    vy.set( 1, 7.69901118419740425e-03 * 365.24 )
+    vz.set( 1, -6.90460016972063023e-05 * 365.24 )
+    mass.set( 1, 9.54791938424326609e-04 )
+    
+    # Saturn
+    x.set( 2, 8.34336671824457987e+00 )
+    y.set( 2, 4.12479856412430479e+00 )
+    z.set( 2, -4.03523417114321381e-01 )
+    vx.set( 2, -2.76742510726862411e-03 * 365.24 )
+    vy.set( 2, 4.99852801234917238e-03 * 365.24 )
+    vz.set( 2, 2.30417297573763929e-05 * 365.24 )
+    mass.set( 2, 2.85885980666130812e-04 )
+    
+    # Uranus
+    x.set( 3, 1.28943695621391310e+01 )
+    y.set( 3, -1.51111514016986312e+01 )
+    z.set( 3, -2.23307578892655734e-01 )
+    vx.set( 3, 2.96460137564761618e-03 * 365.24 )
+    vy.set( 3, 2.37847173959480950e-03 * 365.24 )
+    vz.set( 3, -2.96589568540237556e-05 * 365.24 )
+    mass.set( 3, 4.36624404335156298e-05 )
+    
+    # Neptune
+    x.set( 4, 1.53796971148509165e+01 )
+    y.set( 4, -2.59193146099879641e+01 )
+    z.set( 4, 1.79258772950371181e-01 )
+    vx.set( 4, 2.68067772490389322e-03 * 365.24 )
+    vy.set( 4, 1.62824170038242295e-03 * 365.24 )
+    vz.set( 4, -9.51592254519715870e-05 * 365.24 )
+    mass.set( 4, 5.15138902046611451e-05 )
+    
+    I64 start = clock()
+    
+    for Int i = 0; i < iterations; i++:
+        advance( n, x, y, z, vx, vy, vz, mass, 0.01 )
+        
+    I64 end = clock()
+    Double elapsed = ( end - start ) / 1000000.0
+    
+    puts( "Final pos of body 1: ", x.get( 1 ), ", ", y.get( 1 ), ", ", z.get( 1 ) )
+    puts( "Elapsed time: ", elapsed, " seconds" )
+    
+    x.free()
+    y.free()
+    z.free()
+    vx.free()
+    vy.free()
+    vz.free()
+    mass.free()
+    
+    return 0

@@ -1,0 +1,545 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/directory.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Directory operations: creation, removal, iteration, listing.
+# DirectoryIterator implements Iterator<DirectoryEntry> for lazy scanning.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.directory
+
+from uranite.memory.memory import Memory
+from uranite.iterators.iterator import Iterator
+from uranite.collection.array-list import ArrayList
+from uranite.io.syscall import {
+    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
+    readI16At, readI64At,
+    sysOpen, sysClose, sysGetdents64, sysMkdir, sysRmdir, sysUnlink,
+    O_RDONLY, O_DIRECTORY
+}
+from uranite.io.path import join, exists, dirname
+from uranite.io.stat import statPath, FileStat
+from uranite.language.callable import Callable
+from uranite.io.errors import IOError
+
+public enum EntryType:
+    
+    """
+    Enumeration of filesystem entry types as reported by the Linux
+    getdents64 syscall d_type field.
+    """
+    
+    unit Unknown 0
+    unit File 1
+    unit Directory 2
+    unit Symlink 3
+    unit Pipe 4
+    unit Socket 5
+    unit CharDevice 6
+    unit BlockDevice 7
+
+public class DirectoryEntry:
+    
+    """
+    Represents a single entry within a directory, containing its name,
+    filesystem type, and inode number as returned by the getdents64 syscall.
+    """
+    
+    public String name
+    """The name of this directory entry (filename without path)."""
+    public EntryType entryType
+    """The filesystem type of this entry (file, directory, symlink, etc.)."""
+    public I64 inodeNumber
+    """The inode number of this entry on the filesystem."""
+    
+    public function DirectoryEntry( self, String name, EntryType entryType, I64 inodeNumber ) -> Void:
+        
+        """
+        Construct a new DirectoryEntry with the given name, type, and inode number.
+        
+        Parameters:
+            name (String):
+                The filename of this entry (without directory path).
+            entryType (EntryType):
+                The filesystem type classification of this entry.
+            inodeNumber (I64):
+                The inode number as reported by the filesystem.
+        """
+        
+        self.name = name
+        self.entryType = entryType
+        self.inodeNumber = inodeNumber
+    
+    public function getName( self ) -> String:
+        
+        """
+        Return the name of this directory entry.
+        
+        Returns:
+            The filename without any directory path components.
+        """
+        
+        return self.name
+    
+    public function getType( self ) -> EntryType:
+        
+        """
+        Return the filesystem type of this directory entry.
+        
+        Returns:
+            The EntryType classification of this entry.
+        """
+        
+        return self.entryType
+    
+    public function getInodeNumber( self ) -> I64:
+        
+        """
+        Return the inode number of this directory entry.
+        
+        Returns:
+            The inode number as reported by the filesystem.
+        """
+        
+        return self.inodeNumber
+    
+    public function isFile( self ) -> Boolean:
+        
+        """
+        Check whether this entry is a regular file.
+        
+        Returns:
+            True if this entry is a regular file, False otherwise.
+        """
+        
+        return match self.entryType in \
+            EntryType.File => True, \
+            * => False
+    
+    public function isDirectory( self ) -> Boolean:
+        
+        """
+        Check whether this entry is a directory.
+        
+        Returns:
+            True if this entry is a directory, False otherwise.
+        """
+        
+        return match self.entryType in \
+            EntryType.Directory => True, \
+            * => False
+    
+    public function isSymlink( self ) -> Boolean:
+        
+        """
+        Check whether this entry is a symbolic link.
+        
+        Returns:
+            True if this entry is a symbolic link, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        return match self.entryType in \
+            EntryType.Symlink => True, \
+            * => False
+
+function dtypeToEntryType( I64 dtype ) -> EntryType:
+    if dtype == 8:
+        return EntryType.File
+    elif dtype == 4:
+        return EntryType.Directory
+    elif dtype == 10:
+        return EntryType.Symlink
+    elif dtype == 1:
+        return EntryType.Pipe
+    elif dtype == 12:
+        return EntryType.Socket
+    elif dtype == 2:
+        return EntryType.CharDevice
+    elif dtype == 6:
+        return EntryType.BlockDevice
+    return EntryType.Unknown
+
+function extractName( I64 bufAddr, I64 nameOffset ) -> String:
+    I64 nameLen = 0
+    I64 currentByte = readByteAt( bufAddr, nameOffset + nameLen )
+    while currentByte != 0:
+        nameLen = nameLen + 1
+        currentByte = readByteAt( bufAddr, nameOffset + nameLen )
+    I64 allocWords = ( nameLen + 8 ) / 8
+    Memory<I64> nameBuf = new Memory<I64>( allocWords )
+    I64 nameAddr = memoryToPtr( nameBuf )
+    I64 ci = 0
+    while ci < nameLen:
+        I64 bv = readByteAt( bufAddr, nameOffset + ci )
+        writeByteAt( nameAddr, ci, bv )
+        ci = ci + 1
+    writeByteAt( nameAddr, nameLen, 0 )
+    String name = ""
+    asm volatile "movq $1, $0" : output( "=r" name ) : input( "r" nameAddr ) : clobber()
+    return name
+
+function isDotEntry( String name ) -> Boolean:
+    I64 ptr = stringToPtr( name )
+    I64 len = stringLen( name )
+    if len == 1:
+        if readByteAt( ptr, 0 ) == 46:
+            return True
+    if len == 2:
+        if readByteAt( ptr, 0 ) == 46:
+            if readByteAt( ptr, 1 ) == 46:
+                return True
+    return False
+
+public class DirectoryIterator implements Iterator<DirectoryEntry>:
+    
+    """
+    Lazy iterator over directory entries using the Linux getdents64 syscall.
+    Reads directory entries in 4096-byte chunks and yields them one at a time,
+    automatically skipping the "." and ".." dot entries. Implements the
+    Iterator<DirectoryEntry> interface for use with standard iteration patterns.
+    """
+    
+    protect I64 fd
+    """File descriptor for the open directory."""
+    protect Memory<I64> buffer
+    """Buffer for holding raw getdents64 results."""
+    protect I64 bufferSize
+    """Size in bytes of the getdents64 read buffer."""
+    protect I64 bytesRead
+    """Number of valid bytes in the current buffer batch."""
+    protect I64 position
+    """Current parse offset within the buffer."""
+    protect Boolean exhausted
+    """Whether the getdents64 syscall has returned zero (no more entries)."""
+    protect Boolean closed
+    """Whether this iterator has been closed."""
+    protect Boolean hasPending
+    """Whether a pending entry is ready to be yielded."""
+    protect String pendingName
+    """Name of the next entry to be yielded."""
+    protect EntryType pendingType
+    """Type of the next entry to be yielded."""
+    protect I64 pendingIno
+    """Inode number of the next entry to be yielded."""
+    
+    public function DirectoryIterator( self, String path ) -> Void:
+        
+        """
+        Construct a new DirectoryIterator that lazily scans the directory
+        at the given path. Opens the directory and reads the first batch
+        of entries immediately, advancing past any dot entries.
+        
+        Parameters:
+            path (String):
+                The filesystem path of the directory to iterate over.
+        
+        Raises:
+            IOError: If the directory cannot be opened.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 pathPtr = stringToPtr( path )
+        self.fd = sysOpen( pathPtr, O_RDONLY | O_DIRECTORY, 0 )
+        self.bufferSize = 4096
+        self.buffer = new Memory<I64>( 512 )
+        I64 bufAddr = memoryToPtr( self.buffer )
+        self.bytesRead = sysGetdents64( self.fd, bufAddr, self.bufferSize )
+        self.position = 0
+        self.exhausted = self.bytesRead == 0
+        self.closed = False
+        self.hasPending = False
+        self.pendingName = ""
+        self.pendingType = EntryType.Unknown
+        self.pendingIno = 0
+        self.advance()
+    
+    protect function advance( self ) -> Void:
+        self.hasPending = False
+        while self.hasPending == False:
+            if self.position >= self.bytesRead:
+                if self.exhausted:
+                    return
+                I64 bufAddr = memoryToPtr( self.buffer )
+                self.bytesRead = sysGetdents64( self.fd, bufAddr, self.bufferSize )
+                self.position = 0
+                if self.bytesRead == 0:
+                    self.exhausted = True
+                    return
+            I64 bufAddr = memoryToPtr( self.buffer )
+            I64 entryOffset = self.position
+            I64 ino = readI64At( bufAddr, entryOffset )
+            I64 reclen = readI16At( bufAddr, entryOffset + 16 )
+            I64 dtype = readByteAt( bufAddr, entryOffset + 18 )
+            String name = extractName( bufAddr, entryOffset + 19 )
+            self.position = self.position + reclen
+            if isDotEntry( name ) == False:
+                self.pendingName = name
+                self.pendingType = dtypeToEntryType( dtype )
+                self.pendingIno = ino
+                self.hasPending = True
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether there are more directory entries available.
+        
+        Returns:
+            True if a pending entry is ready to be yielded, False if the
+            directory has been fully scanned.
+        """
+        
+        return self.hasPending
+    
+    public property next( self ) -> DirectoryEntry:
+        
+        """
+        Return the next directory entry and advance the iterator.
+        Must only be called when has is True.
+        
+        Returns:
+            The next DirectoryEntry in the directory scan.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        DirectoryEntry entry = new DirectoryEntry( self.pendingName, self.pendingType, self.pendingIno )
+        self.advance()
+        return entry
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close this iterator, releasing the directory file descriptor and
+        freeing the internal buffer. Subsequent calls are no-ops.
+        """
+        
+        if self.closed == False:
+            sysClose( self.fd )
+            self.buffer.free()
+            self.closed = True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Destructor that delegates to close to ensure resource cleanup.
+        """
+        
+        self.close()
+
+public function mkdir( String path, I64 mode ) -> Void:
+    
+    """
+    Create a single directory at the specified path with the given
+    permission mode. The parent directory must already exist.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the directory to create.
+        mode (I64):
+            The permission mode bits for the new directory (e.g., 493 for 0755).
+    
+    Raises:
+        IOError: If the directory cannot be created.
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    sysMkdir( pathPtr, mode )
+
+public function makedirs( String path, I64 mode ) -> Void:
+    
+    """
+    Recursively create a directory and all missing parent directories.
+    If the directory already exists, this function is a no-op. Equivalent
+    to the POSIX "mkdir -p" behavior.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the directory tree to create.
+        mode (I64):
+            The permission mode bits for each newly created directory.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    if exists( path ):
+        return
+    String parentDir = dirname( path )
+    I64 parentPtr = stringToPtr( parentDir )
+    I64 parentLen = stringLen( parentDir )
+    I64 pathPtr = stringToPtr( path )
+    I64 pathLen = stringLen( path )
+    if parentLen < pathLen:
+        makedirs( parentDir, mode )
+    mkdir( path, mode )
+
+public function rmdir( String path ) -> Void:
+    
+    """
+    Remove an empty directory at the specified path.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the empty directory to remove.
+    
+    Raises:
+        DirectoryNotEmptyError: If the directory is not empty.
+        IOError: If the directory cannot be removed.
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    sysRmdir( pathPtr )
+
+public function removetree( String path ) -> Void:
+    
+    """
+    Recursively remove a directory and all of its contents, including
+    subdirectories and files. Equivalent to the POSIX "rm -rf" behavior.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the directory tree to remove.
+    
+    Raises:
+        IOError: If any file or directory cannot be removed.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    DirectoryIterator iter = new DirectoryIterator( path )
+    while iter.has:
+        DirectoryEntry entry = iter.next
+        String fullPath = join( path, entry.getName() )
+        if entry.isDirectory():
+            removetree( fullPath )
+        else:
+            I64 fPtr = stringToPtr( fullPath )
+            sysUnlink( fPtr )
+    iter.close()
+    I64 pathPtr = stringToPtr( path )
+    sysRmdir( pathPtr )
+
+public function listdir( String path ) -> ArrayList<DirectoryEntry>:
+    
+    """
+    List all entries in a directory, returning them as an ArrayList.
+    Dot entries ("." and "..") are excluded from the results.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the directory to list.
+    
+    Returns:
+        An ArrayList containing a DirectoryEntry for each entry in the directory.
+    
+    Raises:
+        IOError: If the directory cannot be opened or read.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    ArrayList<DirectoryEntry> result = new ArrayList<DirectoryEntry>()
+    DirectoryIterator iter = new DirectoryIterator( path )
+    while iter.has:
+        DirectoryEntry entry = iter.next
+        result.add( entry )
+    iter.close()
+    return result
+
+public function countContents( String path ) -> I64:
+    
+    """
+    Count the number of entries in a directory, excluding dot entries.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the directory to count.
+    
+    Returns:
+        The number of entries in the directory.
+    
+    Raises:
+        IOError: If the directory cannot be opened or read.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    I64 count = 0
+    DirectoryIterator iter = new DirectoryIterator( path )
+    while iter.has:
+        DirectoryEntry entry = iter.next
+        count = count + 1
+    iter.close()
+    return count
+
+public function walkDirectory( String path, Callable<Void, <String>> visitor ) -> Void:
+
+    """
+    Recursively visit every file in a directory tree, invoking the visitor
+    callback with the full path of each regular file encountered.
+
+    Parameters:
+        path (String):
+            The root directory path to walk.
+        visitor (Callable<Void, <String>>):
+            A callback invoked once per file with the file's full path.
+
+    Raises:
+        IOError: If any directory in the tree cannot be opened or read.
+
+    Complexity:
+        Time: O(n) where n is total entries in the tree
+        Space: O(d) where d is maximum directory depth
+    """
+
+    ArrayList<DirectoryEntry> entries = listdir( path )
+    for Int entryIndex = 0; entryIndex < entries.length; entryIndex++:
+        DirectoryEntry entry = entries.get( entryIndex )
+        String fullPath = join( path, entry.getName() )
+        if entry.isDirectory():
+            walkDirectory( fullPath, visitor )
+        else:
+            visitor( fullPath )
+    entries.destroy()
+
+export {
+    EntryType,
+    DirectoryEntry,
+    DirectoryIterator,
+    mkdir,
+    makedirs,
+    rmdir,
+    removetree,
+    listdir,
+    countContents,
+    walkDirectory
+}

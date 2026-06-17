@@ -1,0 +1,91 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/requests/response.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.requests.response
+
+from uranite.requests.errors import HTTPError
+
+public class Response:
+    
+    """
+    Represents an HTTP response returned by the requests library.
+    
+    Provides convenient access to the status code, response body text,
+    raw headers, and a boolean indicating whether the request succeeded
+    (2xx status). Use raiseForStatus to convert non-success responses
+    into exceptions.
+    """
+    
+    public I64 statusCode
+    """ The HTTP status code of the response (e.g., 200, 404, 500). """
+    
+    public String text
+    """ The response body as a string. """
+    
+    public String headers
+    """ The raw response headers as a string. """
+    
+    public Boolean ok
+    """ True if the status code is in the 2xx range (200-299), False otherwise. """
+    
+    public function Response( self, I64 statusCode, String text, String headers ) -> Void:
+        
+        """
+        Construct a new Response from raw HTTP response data.
+        
+        The ok flag is automatically set to True if the status code is
+        between 200 and 299 inclusive.
+        
+        Parameters:
+            statusCode (I64):
+                The HTTP status code.
+            text (String):
+                The response body content.
+            headers (String):
+                The raw response headers.
+        """
+        
+        self.statusCode = statusCode
+        self.text = text
+        self.headers = headers
+        self.ok = statusCode >= 200 and statusCode < 300
+    
+    public function raiseForStatus( self ) -> Void:
+        
+        """
+        Raise an HTTPError if the response status code indicates failure.
+        
+        Does nothing if the status code is in the 2xx success range.
+        Otherwise, raises an HTTPError with the status code from
+        the response.
+        
+        Raises:
+            HTTPError:
+                If the response status code is outside the 2xx range.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.ok == False:
+            raise new HTTPError( "HTTP error", self.statusCode, None )
+
+export {
+    Response
+}

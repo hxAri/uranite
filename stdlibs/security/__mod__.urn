@@ -1,0 +1,25 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/security/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+
+package uranite.security
+
+from uranite.security.identity import {
+    UserIdentity, ProcessIdentity,
+    ROOT_UID, ROOT_GID, NOBODY_UID, NOBODY_GID
+}
+from uranite.security.capability import CapabilitySet, CapabilityFlag, Capability
+from uranite.security.handle import HandleEntry, HandleTable
+
+export {
+    UserIdentity, ProcessIdentity,
+    ROOT_UID, ROOT_GID, NOBODY_UID, NOBODY_GID,
+    CapabilitySet, CapabilityFlag, Capability,
+    HandleEntry, HandleTable
+}

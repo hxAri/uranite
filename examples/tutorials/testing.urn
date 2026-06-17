@@ -1,0 +1,519 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# A comprehensive showcase of Aether language syntax and features.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+from uranite.errors.exception import Exception
+
+# =======================================================================================================
+# Forward Declaration
+# =======================================================================================================
+
+class TreeNode;
+
+# =======================================================================================================
+# Enum
+# =======================================================================================================
+
+enum Direction:
+    
+    """ Represents the four cardinal directions """
+    
+    unit North
+    unit South
+    unit East
+    unit West
+
+# =======================================================================================================
+# Interface
+# =======================================================================================================
+
+interface Printable:
+    
+    """ An interface for objects that can be displayed to the console """
+    
+    public function display( self ) -> Void:
+        
+        """ Displays the object's information """
+
+# =======================================================================================================
+# Generic Class
+# =======================================================================================================
+
+class Box<T>:
+    
+    """ A simple generic container class """
+    
+    public T value
+    
+    public function Box( self, T value ) -> Void:
+        
+        """
+        Initializes a new Box with a value.
+        
+        Parameters:
+            value: The value to store in the box.
+        """
+        
+        self.value = value
+    
+    public function get( self ) -> T:
+        
+        """
+        Retrieves the value from the box.
+        
+        Returns:
+            The stored value.
+        """
+        
+        return self.value
+
+# =======================================================================================================
+# Class With Inheritance and Virtual Dispatch
+# =======================================================================================================
+
+class Shape:
+    
+    """ Base class for geometric shapes """
+    
+    public String kind
+    
+    public function Shape( self, String kind ) -> Void:
+        
+        """
+        Initializes a new Shape.
+        
+        Parameters:
+            kind: The kind of shape.
+        """
+        
+        self.kind = kind
+    
+    public virtual function area( self ) -> I64:
+        
+        """
+        Calculates the area of the shape.
+        
+        Returns:
+            The area as an I64.
+        """
+        
+        return 0
+
+class Square extends Shape implements Printable:
+    
+    """ A class representing a square, extending Shape and implementing Printable """
+    
+    public I64 side
+    
+    public function Square( self, I64 side ) -> Void:
+        
+        """
+        Initializes a new Square instance.
+        
+        Parameters:
+            side: The length of one side of the square.
+        """
+        
+        self.kind = "Square"
+        self.side = side
+    
+    public override function area( self ) -> I64:
+        
+        """
+        Calculates the area of the square.
+        
+        Returns:
+            The calculated area.
+        """
+        
+        return self.side * self.side
+    
+    public function display( self ) -> Void:
+        
+        """
+        Displays the square's information to the console.
+        """
+        
+        puts( "Square(", self.side, ") area=", self.area() )
+
+# =======================================================================================================
+# Readonly Class
+# =======================================================================================================
+
+Readonly class Config:
+    
+    """ A readonly configuration class """
+    
+    public I64 port
+    public String host
+    
+    public function Config( self, I64 port, String host ) -> Void:
+        
+        """
+        Initializes a new Config instance.
+        
+        Parameters:
+            port: The port number.
+            host: The host address.
+        """
+        
+        self.port = port
+        self.host = host
+
+# =======================================================================================================
+# Struct With Methods
+# =======================================================================================================
+
+struct Vec2:
+    
+    """ A 2D vector struct with basic methods """
+    
+    public F64 x
+    public F64 y
+    
+    public function Vec2( self, F64 x, F64 y ) -> Void:
+        
+        """
+        Initializes a new Vec2 instance.
+        
+        Parameters:
+            x: The x coordinate.
+            y: The y coordinate.
+        """
+        
+        self.x = x
+        self.y = y
+    
+    public function length_sq( self ) -> F64:
+        
+        """
+        Calculates the squared length of the vector.
+        
+        Returns:
+            The squared length as an F64.
+        """
+        
+        return self.x * self.x + self.y * self.y
+
+# =======================================================================================================
+# Forward-Declared Class Body
+# =======================================================================================================
+
+class TreeNode:
+    
+    """ A class representing a node in a tree structure """
+    
+    public I64 value
+    
+    public function TreeNode( self, I64 v ) -> Void:
+        
+        """
+        Initializes a new TreeNode.
+        
+        Parameters:
+            v: The integer value for the node.
+        """
+        
+        self.value = v
+
+# =======================================================================================================
+# Functions
+# =======================================================================================================
+
+public function factorial( I64 n ) -> I64:
+    
+    """
+    Calculates the factorial of a number recursively.
+    
+    Parameters:
+        n: The number to calculate the factorial of.
+    
+    Returns:
+        The factorial of n.
+    """
+    
+    if n <= 1:
+        return 1
+    return n * factorial( n - 1 )
+
+public function fib( I64 n ) -> I64:
+    
+    """
+    Calculates the nth Fibonacci number recursively.
+    
+    Parameters:
+        n: The position in the Fibonacci sequence.
+    
+    Returns:
+        The nth Fibonacci number.
+    """
+    
+    if n <= 0:
+        return 0
+    if n == 1:
+        return 1
+    return fib( n - 1 ) + fib( n - 2 )
+
+# =======================================================================================================
+# Match On Enum
+# =======================================================================================================
+
+public function direction_value( Direction d ) -> I32:
+    
+    """
+    Maps a Direction enum value to an integer.
+    
+    Parameters:
+        d: The Direction enum value.
+    
+    Returns:
+        An integer representing the direction.
+    """
+    
+    return match d in \
+        Direction.North => 0, \
+        Direction.South => 1, \
+        Direction.East => 2, \
+        Direction.West => 3, \
+        * => 0 - 1
+
+# =======================================================================================================
+# Main Entry Point
+# =======================================================================================================
+
+public function main() -> I32:
+    
+    """
+    The main entry point demonstrating various Aether language features.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    puts( "=== Uranite Syntax Showcase ===" )
+    
+    # ===================================================================================================
+    # Arithmetic
+    # ===================================================================================================
+    
+    I64 a = 10
+    I64 b = 20
+    I64 sum = a + b
+    I64 product = a * b
+    puts( "arithmetic: ", a, " + ", b, " = ", sum, ", ", a, " * ", b, " = ", product )
+    
+    # ===================================================================================================
+    # Compound Assignment
+    # ===================================================================================================
+    
+    I64 x = 5
+    x += 10
+    x -= 3
+    x *= 2
+    puts( "compound: 5 +10 -3 *2 = ", x )
+    
+    # ===================================================================================================
+    # Floating-Point
+    # ===================================================================================================
+    
+    F64 pi = 3.14159
+    F64 radius = 5.0
+    F64 area = pi * radius * radius
+    puts( "circle area(r=5) = ", area )
+    
+    # ===================================================================================================
+    # If/Elif/Else
+    # ===================================================================================================
+    
+    I64 val = 42
+    if val > 100:
+        puts( "big" )
+    elif val > 0:
+        puts( "positive" )
+    else:
+        puts( "non-positive" )
+    
+    # ===================================================================================================
+    # While Loop
+    # ===================================================================================================
+    
+    I64 total = 0
+    I64 i = 1
+    while i <= 10:
+        total += i
+        i += 1
+    puts( "sum(1..10) = ", total )
+    
+    # ===================================================================================================
+    # C-Style For
+    # ===================================================================================================
+    
+    puts( "c-for: " )
+    for I64 j = 0; j < 5; j++:
+        puts( j, " " )
+    puts(  )
+    
+    # ===================================================================================================
+    # Range For (Exclusive)
+    # ===================================================================================================
+    
+    puts( "range 0..5: " )
+    for I64 k in 0..5:
+        puts( k, " " )
+    puts(  )
+    
+    # ===================================================================================================
+    # Range For (Inclusive)
+    # ===================================================================================================
+    
+    puts( "range 1...5: " )
+    for I64 k in 1...5:
+        puts( k, " " )
+    puts(  )
+    
+    # ===================================================================================================
+    # String Iteration
+    # ===================================================================================================
+    
+    puts( "chars: " )
+    for Char c in "Uranite":
+        puts( c, " " )
+    puts(  )
+    
+    # ===================================================================================================
+    # Break And Continue
+    # ===================================================================================================
+    
+    I64 found = 0
+    I64 idx = 0
+    while idx < 100:
+        idx += 1
+        if idx > 7:
+            found = idx
+            break
+    puts( "first > 7: ", found )
+    
+    I64 odd_sum = 0
+    for I64 n in 1...10:
+        I64 rem = n - ( n / 2 ) * 2
+        if rem == 0:
+            continue
+        odd_sum += n
+    puts( "odd sum(1..10) = ", odd_sum )
+    
+    # ===================================================================================================
+    # Recursion
+    # ===================================================================================================
+    
+    puts( "factorial(5) = ", factorial( 5 ) )
+    puts( "fib(10) = ", fib( 10 ) )
+    
+    # ===================================================================================================
+    # Nested Function
+    # ===================================================================================================
+    
+    function helper( I64 n ) -> I64:
+        return n * n + 1
+    puts( "helper(6) = ", helper( 6 ) )
+    
+    # ===================================================================================================
+    # Defer
+    # ===================================================================================================
+    
+    defer puts( "deferred: last line" )
+    
+    # ===================================================================================================
+    # Class
+    # ===================================================================================================
+    
+    Square sq = new Square( 7 )
+    sq.display()
+    
+    # ===================================================================================================
+    # Generics
+    # ===================================================================================================
+    
+    Box<I64> box = new Box<I64>( 99 )
+    puts( "Box<", "I64", "> = ", box.get() )
+    
+    # ===================================================================================================
+    # Readonly Class
+    # ===================================================================================================
+    
+    Config cfg = new Config( 8080, "localhost" )
+    puts( "Config: ", cfg.host, ":", cfg.port )
+    
+    # ===================================================================================================
+    # Struct
+    # ===================================================================================================
+    
+    Vec2 v = new Vec2( 3.0, 4.0 )
+    puts( "Vec2(3,4) len^2 = ", v.length_sq() )
+    
+    # ===================================================================================================
+    # Enum + Match
+    # ===================================================================================================
+    
+    Direction north = Direction.North
+    Direction west = Direction.West
+    puts( "north = ", direction_value( north ), ", west = ", direction_value( west ) )
+    
+    # ===================================================================================================
+    # Forward-Declared Class
+    # ===================================================================================================
+    
+    TreeNode node = new TreeNode( 42 )
+    puts( "TreeNode = ", node.value )
+    
+    # ===================================================================================================
+    # Nullable
+    # ===================================================================================================
+    
+    ?String maybe = None
+    if maybe == None:
+        puts( "nullable: is None" )
+    ?String present = "hello"
+    if present != None:
+        puts( "nullable: has value" )
+    
+    # ===================================================================================================
+    # Error Handling
+    # ===================================================================================================
+    
+    try:
+        raise new Exception( "test error", 0, None )
+    except as e:
+        puts( "caught exception" )
+    finally:
+        puts( "finally block ran" )
+    
+    # ===================================================================================================
+    # Memory Management
+    # ===================================================================================================
+    
+    TreeNode tmp = new TreeNode( 0 )
+    delete tmp
+    puts( "memory: allocated and freed" )
+    
+    puts( "=== Done ===" )
+    
+    return 0

@@ -1,0 +1,776 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/functions/builtin.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Built-in string utility functions. All implemented in pure Uranite using
+# raw memory operations via io/syscall helpers. Zero C runtime dependency.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.functions.builtin
+
+from uranite.io.syscall import {
+    stringLen, 
+    stringToPtr, 
+    readByteAt, 
+    writeByteAt
+}
+from uranite.memory.allocator import alloc, dealloc
+from uranite.memory.memory import Memory
+from uranite.collection.array-list import ArrayList
+from uranite.string.builder import StringBuilder
+
+public function ptrToString( I64 pointer ) -> String:
+    
+    """
+    Reinterpret a raw memory pointer as a String via inline assembly.
+    The pointer must reference a valid null-terminated byte sequence.
+
+    Parameters:
+        pointer (I64):
+            Raw pointer to a null-terminated byte buffer.
+
+    Returns:
+        The bytes at the pointer interpreted as a String.
+    """
+    
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" pointer ) : clobber()
+    return result
+
+public function length( String content ) -> I64:
+    
+    """
+    Return the byte length of a string.
+
+    Parameters:
+        content (String):
+            The string to measure.
+
+    Returns:
+        The number of bytes in the string (excluding null terminator).
+    """
+    
+    return stringLen( content )
+
+public function charAt( String content, I64 index ) -> I64:
+    
+    """
+    Return the byte value at the given index in a string.
+
+    Parameters:
+        content (String):
+            The string to index into.
+        index (I64):
+            Zero-based byte offset.
+
+    Returns:
+        The byte value at the given index.
+    """
+    
+    return readByteAt( stringToPtr( content ), index )
+
+public function equals( String first, String second ) -> Boolean:
+    
+    """
+    Compare two strings for byte-level equality.
+
+    Parameters:
+        first (String):
+            The first string.
+        second (String):
+            The second string.
+
+    Returns:
+        True if both strings have the same length and identical bytes.
+
+    Complexity:
+        Time: O(n) where n is the string length
+    """
+    I64 firstLength = stringLen( first )
+    I64 secondLength = stringLen( second )
+    if firstLength != secondLength:
+        return False
+    I64 firstPointer = stringToPtr( first )
+    I64 secondPointer = stringToPtr( second )
+    I64 compareIndex = 0
+    while compareIndex < firstLength:
+        if readByteAt( firstPointer, compareIndex ) != readByteAt( secondPointer, compareIndex ):
+            return False
+        compareIndex = compareIndex + 1
+    return True
+
+public function contains( String haystack, String needle ) -> Boolean:
+    
+    """
+    Check whether the needle string appears anywhere within the haystack.
+
+    Parameters:
+        haystack (String):
+            The string to search in.
+        needle (String):
+            The string to search for.
+
+    Returns:
+        True if needle is found within haystack.
+    """
+    return indexOf( haystack, needle ) >= 0
+
+public function indexOf( String haystack, String needle ) -> I64:
+    
+    """
+    Find the first occurrence of needle within haystack.
+
+    Parameters:
+        haystack (String):
+            The string to search in.
+        needle (String):
+            The string to search for.
+
+    Returns:
+        The byte offset of the first occurrence, or -1 if not found.
+        Returns 0 for an empty needle.
+
+    Complexity:
+        Time: O(n * m) where n is haystack length and m is needle length
+    """
+    I64 haystackLength = stringLen( haystack )
+    I64 needleLength = stringLen( needle )
+    if needleLength == 0:
+        return 0
+    if needleLength > haystackLength:
+        return -1
+    I64 haystackPointer = stringToPtr( haystack )
+    I64 needlePointer = stringToPtr( needle )
+    I64 searchLimit = haystackLength - needleLength + 1
+    I64 searchIndex = 0
+    while searchIndex < searchLimit:
+        Boolean matched = True
+        I64 compareOffset = 0
+        while compareOffset < needleLength and matched:
+            if readByteAt( haystackPointer, searchIndex + compareOffset ) != readByteAt( needlePointer, compareOffset ):
+                matched = False
+            compareOffset = compareOffset + 1
+        if matched:
+            return searchIndex
+        searchIndex = searchIndex + 1
+    return -1
+
+public function lastIndexOf( String haystack, String needle ) -> I64:
+    
+    """
+    Find the last occurrence of needle within haystack.
+
+    Parameters:
+        haystack (String):
+            The string to search in.
+        needle (String):
+            The string to search for.
+
+    Returns:
+        The byte offset of the last occurrence, or -1 if not found.
+        Returns the haystack length for an empty needle.
+
+    Complexity:
+        Time: O(n * m) where n is haystack length and m is needle length
+    """
+    I64 haystackLength = stringLen( haystack )
+    I64 needleLength = stringLen( needle )
+    if needleLength == 0:
+        return haystackLength
+    if needleLength > haystackLength:
+        return -1
+    I64 haystackPointer = stringToPtr( haystack )
+    I64 needlePointer = stringToPtr( needle )
+    I64 searchIndex = haystackLength - needleLength
+    while searchIndex >= 0:
+        Boolean matched = True
+        I64 compareOffset = 0
+        while compareOffset < needleLength and matched:
+            if readByteAt( haystackPointer, searchIndex + compareOffset ) != readByteAt( needlePointer, compareOffset ):
+                matched = False
+            compareOffset = compareOffset + 1
+        if matched:
+            return searchIndex
+        searchIndex = searchIndex - 1
+    return -1
+
+public function startsWith( String content, String prefix ) -> Boolean:
+    
+    """
+    Check whether a string starts with the given prefix.
+
+    Parameters:
+        content (String):
+            The string to check.
+        prefix (String):
+            The prefix to test for.
+
+    Returns:
+        True if content begins with prefix.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 contentLength = stringLen( content )
+    I64 prefixLength = stringLen( prefix )
+    if prefixLength > contentLength:
+        return False
+    I64 contentPointer = stringToPtr( content )
+    I64 prefixPointer = stringToPtr( prefix )
+    I64 compareIndex = 0
+    while compareIndex < prefixLength:
+        if readByteAt( contentPointer, compareIndex ) != readByteAt( prefixPointer, compareIndex ):
+            return False
+        compareIndex = compareIndex + 1
+    return True
+
+public function endsWith( String content, String suffix ) -> Boolean:
+    
+    """
+    Check whether a string ends with the given suffix.
+
+    Parameters:
+        content (String):
+            The string to check.
+        suffix (String):
+            The suffix to test for.
+
+    Returns:
+        True if content ends with suffix.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 contentLength = stringLen( content )
+    I64 suffixLength = stringLen( suffix )
+    if suffixLength > contentLength:
+        return False
+    I64 contentPointer = stringToPtr( content )
+    I64 suffixPointer = stringToPtr( suffix )
+    I64 startOffset = contentLength - suffixLength
+    I64 compareIndex = 0
+    while compareIndex < suffixLength:
+        if readByteAt( contentPointer, startOffset + compareIndex ) != readByteAt( suffixPointer, compareIndex ):
+            return False
+        compareIndex = compareIndex + 1
+    return True
+
+public function substring( String content, I64 start, I64 end ) -> String:
+    
+    """
+    Extract a substring by byte range with clamping.
+
+    Parameters:
+        content (String):
+            The source string.
+        start (I64):
+            Starting byte offset (clamped to 0 if negative).
+        end (I64):
+            Ending byte offset exclusive (clamped to string length).
+
+    Returns:
+        The extracted substring, or empty string if start >= end.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 contentLength = stringLen( content )
+    I64 clampedStart = start
+    I64 clampedEnd = end
+    if clampedStart < 0:
+        clampedStart = 0
+    if clampedEnd > contentLength:
+        clampedEnd = contentLength
+    if clampedStart >= clampedEnd:
+        return ""
+    I64 resultLength = clampedEnd - clampedStart
+    I64 resultBuffer = alloc( resultLength + 1 )
+    I64 contentPointer = stringToPtr( content )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        writeByteAt( resultBuffer, copyIndex, readByteAt( contentPointer, clampedStart + copyIndex ) )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultBuffer, resultLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function trim( String content ) -> String:
+    
+    """
+    Remove leading and trailing ASCII whitespace (space, tab, newline, CR).
+
+    Parameters:
+        content (String):
+            The string to trim.
+
+    Returns:
+        The trimmed string, or empty string if content is all whitespace.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 contentLength = stringLen( content )
+    if contentLength == 0:
+        return ""
+    I64 contentPointer = stringToPtr( content )
+    I64 trimStart = 0
+    Boolean scanning = True
+    while trimStart < contentLength and scanning:
+        I64 codePoint = readByteAt( contentPointer, trimStart )
+        if codePoint == 32 or codePoint == 9 or codePoint == 10 or codePoint == 13:
+            trimStart = trimStart + 1
+        else:
+            scanning = False
+    I64 trimEnd = contentLength
+    scanning = True
+    while trimEnd > trimStart and scanning:
+        I64 codePoint = readByteAt( contentPointer, trimEnd - 1 )
+        if codePoint == 32 or codePoint == 9 or codePoint == 10 or codePoint == 13:
+            trimEnd = trimEnd - 1
+        else:
+            scanning = False
+    if trimStart >= trimEnd:
+        return ""
+    return substring( content, trimStart, trimEnd )
+
+public function toUpper( String content ) -> String:
+    
+    """
+    Convert all lowercase ASCII letters (a-z) to uppercase (A-Z).
+
+    Parameters:
+        content (String):
+            The string to convert.
+
+    Returns:
+        A new string with lowercase letters uppercased.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 contentLength = stringLen( content )
+    if contentLength == 0:
+        return ""
+    I64 contentPointer = stringToPtr( content )
+    I64 resultBuffer = alloc( contentLength + 1 )
+    I64 charIndex = 0
+    while charIndex < contentLength:
+        I64 codePoint = readByteAt( contentPointer, charIndex )
+        if codePoint >= 97 and codePoint <= 122:
+            writeByteAt( resultBuffer, charIndex, codePoint - 32 )
+        else:
+            writeByteAt( resultBuffer, charIndex, codePoint )
+        charIndex = charIndex + 1
+    writeByteAt( resultBuffer, contentLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function toLower( String content ) -> String:
+    
+    """
+    Convert all uppercase ASCII letters (A-Z) to lowercase (a-z).
+
+    Parameters:
+        content (String):
+            The string to convert.
+
+    Returns:
+        A new string with uppercase letters lowercased.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 contentLength = stringLen( content )
+    if contentLength == 0:
+        return ""
+    I64 contentPointer = stringToPtr( content )
+    I64 resultBuffer = alloc( contentLength + 1 )
+    I64 charIndex = 0
+    while charIndex < contentLength:
+        I64 codePoint = readByteAt( contentPointer, charIndex )
+        if codePoint >= 65 and codePoint <= 90:
+            writeByteAt( resultBuffer, charIndex, codePoint + 32 )
+        else:
+            writeByteAt( resultBuffer, charIndex, codePoint )
+        charIndex = charIndex + 1
+    writeByteAt( resultBuffer, contentLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function isDigit( I64 codePoint ) -> Boolean:
+    
+    """Return True if the byte value is an ASCII digit (0x30-0x39)."""
+    return codePoint >= 48 and codePoint <= 57
+
+public function isAlpha( I64 codePoint ) -> Boolean:
+    
+    """Return True if the byte value is an ASCII letter (A-Z or a-z)."""
+    return ( codePoint >= 65 and codePoint <= 90 ) or ( codePoint >= 97 and codePoint <= 122 )
+
+public function isAlphaNumeric( I64 codePoint ) -> Boolean:
+    
+    """Return True if the byte value is an ASCII letter or digit."""
+    return isAlpha( codePoint ) or isDigit( codePoint )
+
+public function isWhitespace( I64 codePoint ) -> Boolean:
+    
+    """Return True if the byte value is ASCII whitespace (space, tab, newline, CR)."""
+    return codePoint == 32 or codePoint == 9 or codePoint == 10 or codePoint == 13
+
+public function repeat( String content, I64 count ) -> String:
+    
+    """
+    Repeat a string the specified number of times.
+
+    Parameters:
+        content (String):
+            The string to repeat.
+        count (I64):
+            Number of repetitions. Returns empty string if <= 0.
+
+    Returns:
+        The repeated string.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    if count <= 0:
+        return ""
+    I64 contentLength = stringLen( content )
+    I64 totalLength = contentLength * count
+    I64 resultBuffer = alloc( totalLength + 1 )
+    I64 contentPointer = stringToPtr( content )
+    I64 writePosition = 0
+    I64 repetitionIndex = 0
+    while repetitionIndex < count:
+        I64 copyIndex = 0
+        while copyIndex < contentLength:
+            writeByteAt( resultBuffer, writePosition, readByteAt( contentPointer, copyIndex ) )
+            writePosition = writePosition + 1
+            copyIndex = copyIndex + 1
+        repetitionIndex = repetitionIndex + 1
+    writeByteAt( resultBuffer, totalLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function reverse( String content ) -> String:
+    
+    """
+    Reverse a string byte-by-byte.
+
+    Parameters:
+        content (String):
+            The string to reverse.
+
+    Returns:
+        A new string with bytes in reverse order.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 contentLength = stringLen( content )
+    if contentLength <= 1:
+        return content
+    I64 contentPointer = stringToPtr( content )
+    I64 resultBuffer = alloc( contentLength + 1 )
+    I64 charIndex = 0
+    while charIndex < contentLength:
+        writeByteAt( resultBuffer, charIndex, readByteAt( contentPointer, contentLength - 1 - charIndex ) )
+        charIndex = charIndex + 1
+    writeByteAt( resultBuffer, contentLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function concat( String first, String second ) -> String:
+    
+    """Concatenate two strings. Equivalent to the + operator."""
+    return first + second
+
+public function charToString( I64 codePoint ) -> String:
+    
+    """
+    Convert a single byte value to a one-character string.
+
+    Parameters:
+        codePoint (I64):
+            The byte value (0-255) to convert.
+
+    Returns:
+        A single-character string containing the byte.
+    """
+    I64 charBuffer = alloc( 2 )
+    writeByteAt( charBuffer, 0, codePoint )
+    writeByteAt( charBuffer, 1, 0 )
+    return ptrToString( charBuffer )
+
+public function replaceFirst( String source, String target, String replacement ) -> String:
+
+    """
+    Replace only the first occurrence of target with replacement.
+
+    Parameters:
+        source (String):
+            The original string.
+        target (String):
+            The substring to search for.
+        replacement (String):
+            The string to substitute for the first match.
+
+    Returns:
+        String:
+            The string with the first occurrence replaced, or the
+            original string if target is not found.
+
+    Complexity:
+        Time: O(n * m) where n = source length, m = target length
+    """
+
+    I64 position = indexOf( source, target )
+    if position < 0:
+        return source
+    I64 targetLength = stringLen( target )
+    I64 sourceLength = stringLen( source )
+    String before = substring( source, 0, position )
+    String after = substring( source, position + targetLength, sourceLength )
+    return before + replacement + after
+
+public function padStart( String source, I64 targetLength, String padString ) -> String:
+
+    """
+    Pad the source string from the start to reach the target length.
+
+    If the source is already at or beyond the target length, it is
+    returned unchanged. The pad string is repeated as needed.
+
+    Parameters:
+        source (String):
+            The string to pad.
+        targetLength (I64):
+            The desired minimum length.
+        padString (String):
+            The string to use for padding (typically a single character).
+
+    Returns:
+        String:
+            The padded string.
+
+    Complexity:
+        Time: O(targetLength)
+        Space: O(targetLength)
+    """
+
+    I64 sourceLength = stringLen( source )
+    if sourceLength >= targetLength:
+        return source
+    I64 padNeeded = targetLength - sourceLength
+    I64 padStringLength = stringLen( padString )
+    String padding = ""
+    I64 padded = 0
+    while padded < padNeeded:
+        padding = padding + padString
+        padded = padded + padStringLength
+    return substring( padding, 0, padNeeded ) + source
+
+public function padEnd( String source, I64 targetLength, String padString ) -> String:
+
+    """
+    Pad the source string from the end to reach the target length.
+
+    If the source is already at or beyond the target length, it is
+    returned unchanged. The pad string is repeated as needed.
+
+    Parameters:
+        source (String):
+            The string to pad.
+        targetLength (I64):
+            The desired minimum length.
+        padString (String):
+            The string to use for padding (typically a single character).
+
+    Returns:
+        String:
+            The padded string.
+
+    Complexity:
+        Time: O(targetLength)
+        Space: O(targetLength)
+    """
+
+    I64 sourceLength = stringLen( source )
+    if sourceLength >= targetLength:
+        return source
+    I64 padNeeded = targetLength - sourceLength
+    I64 padStringLength = stringLen( padString )
+    String padding = ""
+    I64 padded = 0
+    while padded < padNeeded:
+        padding = padding + padString
+        padded = padded + padStringLength
+    return source + substring( padding, 0, padNeeded )
+
+public function split( String source, String delimiter ) -> ArrayList<String>:
+
+    """
+    Split a string by the given delimiter into a list of substrings.
+
+    If the delimiter is not found, returns a single-element list containing
+    the original string. Empty segments between adjacent delimiters are
+    preserved.
+
+    Parameters:
+        source (String):
+            The string to split.
+        delimiter (String):
+            The separator to split on.
+
+    Returns:
+        ArrayList<String>:
+            The list of substrings.
+
+    Complexity:
+        Time: O(n * m) where n is source length, m is delimiter length
+        Space: O(n)
+    """
+
+    ArrayList<String> result = new ArrayList<String>()
+    I64 sourceLength = stringLen( source )
+    I64 delimiterLength = stringLen( delimiter )
+    if delimiterLength == 0:
+        result.add( source )
+        return result
+    I64 segmentStart = 0
+    I64 scanOffset = 0
+    while scanOffset <= sourceLength - delimiterLength:
+        Boolean matched = True
+        for Int compareIndex = 0; compareIndex < delimiterLength; compareIndex++:
+            if charAt( source, scanOffset + compareIndex ) != charAt( delimiter, compareIndex ):
+                matched = False
+        if matched:
+            result.add( substring( source, segmentStart, scanOffset ) )
+            scanOffset = scanOffset + delimiterLength
+            segmentStart = scanOffset
+        else:
+            scanOffset = scanOffset + 1
+    result.add( substring( source, segmentStart, sourceLength ) )
+    return result
+
+public function join( String delimiter, ArrayList<String> parts ) -> String:
+
+    """
+    Join a list of strings with the given delimiter between each element.
+
+    Parameters:
+        delimiter (String):
+            The separator to insert between elements.
+        parts (ArrayList<String>):
+            The list of strings to join.
+
+    Returns:
+        String:
+            The concatenated result.
+
+    Complexity:
+        Time: O(n) where n is total character count across all parts
+        Space: O(n)
+    """
+
+    if parts.length == 0:
+        return ""
+    StringBuilder builder = new StringBuilder()
+    for Int elementIndex = 0; elementIndex < parts.length; elementIndex++:
+        if elementIndex > 0:
+            builder.append( delimiter )
+        builder.append( parts.get( elementIndex ) )
+    return builder.build()
+
+public function replace( String source, String target, String replacement ) -> String:
+
+    """
+    Replace all occurrences of target in source with replacement.
+
+    Parameters:
+        source (String):
+            The original string.
+        target (String):
+            The substring to find and replace.
+        replacement (String):
+            The string to substitute for each occurrence.
+
+    Returns:
+        String:
+            The string with all replacements applied.
+
+    Complexity:
+        Time: O(n * m) where n is source length, m is target length
+        Space: O(n)
+    """
+
+    I64 sourceLength = stringLen( source )
+    I64 targetLength = stringLen( target )
+    if targetLength == 0:
+        return source
+    StringBuilder builder = new StringBuilder()
+    I64 scanOffset = 0
+    while scanOffset <= sourceLength - targetLength:
+        Boolean matched = True
+        for Int compareIndex = 0; compareIndex < targetLength; compareIndex++:
+            if charAt( source, scanOffset + compareIndex ) != charAt( target, compareIndex ):
+                matched = False
+        if matched:
+            builder.append( replacement )
+            scanOffset = scanOffset + targetLength
+        else:
+            I64 codePoint = charAt( source, scanOffset )
+            builder.append( charToString( codePoint ) )
+            scanOffset = scanOffset + 1
+    while scanOffset < sourceLength:
+        I64 codePoint = charAt( source, scanOffset )
+        builder.append( charToString( codePoint ) )
+        scanOffset = scanOffset + 1
+    return builder.build()
+
+export {
+    ptrToString,
+    length,
+    charAt,
+    equals,
+    contains,
+    indexOf,
+    lastIndexOf,
+    startsWith,
+    endsWith,
+    substring,
+    trim,
+    toUpper,
+    toLower,
+    isDigit,
+    isAlpha,
+    isAlphaNumeric,
+    isWhitespace,
+    repeat,
+    reverse,
+    concat,
+    charToString,
+    replaceFirst,
+    padStart,
+    padEnd,
+    split,
+    join,
+    replace
+}

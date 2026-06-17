@@ -1,0 +1,108 @@
+package testing
+
+from uranite.regexp.regexp import RegExp
+from uranite.regexp.match import Match
+from uranite.testing.assertions import {
+    assertTrue, assertFalse,
+    assertEqualStr, assertEqualI64
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== RegExp Tests ===" )
+
+    # Basic literal match
+    RegExp r1 = new RegExp( "hello" )
+    assertTrue( r1.test( "hello world" ), "literal match" )
+    assertFalse( r1.test( "goodbye" ), "literal no match" )
+    putsln( "literal match OK" )
+
+    # Dot wildcard
+    RegExp r2 = new RegExp( "h.llo" )
+    assertTrue( r2.test( "hello" ), "dot hello" )
+    assertTrue( r2.test( "hallo" ), "dot hallo" )
+    assertFalse( r2.test( "hllo" ), "dot no match" )
+    putsln( "dot wildcard OK" )
+
+    # Star quantifier
+    RegExp r3 = new RegExp( "ab*c" )
+    assertTrue( r3.test( "ac" ), "star zero" )
+    assertTrue( r3.test( "abc" ), "star one" )
+    assertTrue( r3.test( "abbbbc" ), "star many" )
+    putsln( "star quantifier OK" )
+
+    # Plus quantifier
+    RegExp r4 = new RegExp( "ab+c" )
+    assertTrue( r4.test( "abc" ), "plus one" )
+    assertTrue( r4.test( "abbc" ), "plus two" )
+    assertFalse( r4.test( "ac" ), "plus zero" )
+    putsln( "plus quantifier OK" )
+
+    # Question mark
+    RegExp r5 = new RegExp( "ab?c" )
+    assertTrue( r5.test( "ac" ), "question zero" )
+    assertTrue( r5.test( "abc" ), "question one" )
+    assertFalse( r5.test( "abbc" ), "question two" )
+    putsln( "question mark OK" )
+
+    # Character class
+    RegExp r6 = new RegExp( "[abc]" )
+    assertTrue( r6.test( "a" ), "charclass a" )
+    assertFalse( r6.test( "d" ), "charclass d" )
+    putsln( "character class OK" )
+
+    # Negated class
+    RegExp r7 = new RegExp( "[^abc]" )
+    assertTrue( r7.test( "d" ), "negated d" )
+    assertFalse( r7.test( "a" ), "negated a" )
+    putsln( "negated class OK" )
+
+    # Digit shorthand
+    RegExp r8 = new RegExp( "\\d+" )
+    assertTrue( r8.test( "123" ), "digit match" )
+    assertFalse( r8.test( "abc" ), "digit no match" )
+    putsln( "digit shorthand OK" )
+
+    # Word shorthand
+    RegExp r9 = new RegExp( "\\w+" )
+    assertTrue( r9.test( "hello_123" ), "word match" )
+    putsln( "word shorthand OK" )
+
+    # Anchors
+    RegExp r10 = new RegExp( "^hello$" )
+    assertTrue( r10.test( "hello" ), "anchor exact" )
+    assertFalse( r10.test( "hello world" ), "anchor no match" )
+    putsln( "anchors OK" )
+
+    # Alternation
+    RegExp r11 = new RegExp( "cat|dog" )
+    assertTrue( r11.test( "cat" ), "alt cat" )
+    assertTrue( r11.test( "dog" ), "alt dog" )
+    assertFalse( r11.test( "bird" ), "alt bird" )
+    putsln( "alternation OK" )
+
+    # Find returns Match
+    RegExp r12 = new RegExp( "\\d+" )
+    Match m = r12.find( "abc 123 def" )
+    assertTrue( m.matched, "find matched" )
+    putsln( "find OK" )
+
+    # replaceFirst
+    RegExp r13 = new RegExp( "\\d+" )
+    String rep = r13.replaceFirst( "abc 123 def 456", "NUM" )
+    assertEqualStr( "abc NUM def 456", rep, "replaceFirst" )
+    putsln( "replaceFirst OK" )
+
+    # replaceAll
+    String repAll = r13.replaceAll( "abc 123 def 456", "NUM" )
+    assertEqualStr( "abc NUM def NUM", repAll, "replaceAll" )
+    putsln( "replaceAll OK" )
+
+    # Matches (full string)
+    RegExp r14 = new RegExp( "^\\d+$" )
+    assertTrue( r14.matches( "12345" ), "matches digits" )
+    assertFalse( r14.matches( "123abc" ), "matches mixed" )
+    putsln( "matches OK" )
+
+    putsln( "=== All RegExp tests passed ===" )
+    return 0

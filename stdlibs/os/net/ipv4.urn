@@ -1,0 +1,447 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/ipv4.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides IPv4 Layer 3 packet header representation, address manipulation utilities, and a longest-prefix-match routing table for kernel networking.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.net.ipv4
+
+from uranite.memory.memory import Memory
+
+public const I64 PROTO_ICMP = 1
+"""
+IP protocol number for ICMP (Internet Control Message Protocol). ICMP is
+used for diagnostic and error reporting functions such as ping and traceroute.
+"""
+
+public const I64 PROTO_TCP = 6
+"""
+IP protocol number for TCP (Transmission Control Protocol). TCP provides
+reliable, ordered, connection-oriented byte stream delivery over IP.
+"""
+
+public const I64 PROTO_UDP = 17
+"""
+IP protocol number for UDP (User Datagram Protocol). UDP provides
+connectionless, unreliable datagram delivery with minimal overhead.
+"""
+
+public function ipAddr( I64 octet0, I64 octet1, I64 octet2, I64 octet3 ) -> I64:
+
+    """
+    Constructs an IPv4 address from four individual octets by packing them into
+    a single I64 value in network byte order. For example, ipAddr(192, 168, 1, 1)
+    produces the 32-bit representation of 192.168.1.1.
+    """
+
+    return ( octet0 << 24 ) | ( octet1 << 16 ) | ( octet2 << 8 ) | octet3
+
+public function ipOctet0( I64 ip ) -> I64:
+    
+    """
+    Extracts the first (most significant) octet from an IPv4 address stored as an
+    I64 value. For address 192.168.1.1, this returns 192.
+    """
+    
+    return ( ip >> 24 ) & 255
+
+public function ipOctet1( I64 ip ) -> I64:
+    
+    """
+    Extracts the second octet from an IPv4 address stored as an I64 value.
+    For address 192.168.1.1, this returns 168.
+    """
+    
+    return ( ip >> 16 ) & 255
+
+public function ipOctet2( I64 ip ) -> I64:
+    
+    """
+    Extracts the third octet from an IPv4 address stored as an I64 value.
+    For address 192.168.1.1, this returns 1.
+    """
+    
+    return ( ip >> 8 ) & 255
+
+public function ipOctet3( I64 ip ) -> I64:
+    
+    """
+    Extracts the fourth (least significant) octet from an IPv4 address stored
+    as an I64 value. For address 192.168.1.1, this returns 1.
+    """
+    
+    return ip & 255
+
+public function isSameSubnet( I64 addr1, I64 addr2, I64 mask ) -> Boolean:
+    
+    """
+    Determines whether two IPv4 addresses belong to the same subnet by applying
+    the given subnet mask to both addresses and comparing the network portions.
+    Returns True if both addresses share the same network prefix under the mask.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    return ( addr1 & mask ) == ( addr2 & mask )
+
+public class Ipv4Header:
+    
+    """
+    Represents an IPv4 packet header as defined in RFC 791. The minimum header size
+    is 20 bytes (header length field value of 5, meaning 5 x 4 = 20 bytes) with no
+    options. Fields include version, header length, total packet length, identification
+    for fragmentation reassembly, flags, fragment offset, time-to-live hop counter,
+    protocol identifier, header checksum, and source/destination addresses.
+    """
+    
+    public I64 version
+    public I64 headerLength
+    public I64 totalLength
+    public I64 identification
+    public I64 flags
+    public I64 fragmentOffset
+    public I64 ttl
+    public I64 protocol
+    public I64 checksum
+    public I64 srcAddr
+    public I64 dstAddr
+    
+    public function Ipv4Header( self ) -> Void:
+        
+        """
+        Constructs a new IPv4 header with default values: version 4, header length 5
+        (20 bytes), total length 20, TTL of 64 hops, and all other fields set to zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.version = 4
+        self.headerLength = 5
+        self.totalLength = 20
+        self.identification = 0
+        self.flags = 0
+        self.fragmentOffset = 0
+        self.ttl = 64
+        self.protocol = 0
+        self.checksum = 0
+        self.srcAddr = 0
+        self.dstAddr = 0
+    
+    public function configure( self, I64 src, I64 dst, I64 proto, I64 payloadLen ) -> Void:
+        
+        """
+        Configures this IPv4 header with the specified source address, destination
+        address, transport protocol number, and payload length. The total length field
+        is automatically set to 20 (header size) plus the payload length.
+        """
+        
+        self.srcAddr = src
+        self.dstAddr = dst
+        self.protocol = proto
+        self.totalLength = 20 + payloadLen
+    
+    public function getPayloadLength( self ) -> I64:
+        
+        """
+        Calculates and returns the payload length in bytes by subtracting the header
+        size (header length multiplied by 4) from the total packet length.
+        """
+        
+        return self.totalLength - ( self.headerLength * 4 )
+    
+    public function isTcp( self ) -> Boolean:
+        
+        """ Returns True if the protocol field indicates TCP (protocol number 6). """
+        
+        return self.protocol == 6
+    
+    public function isUdp( self ) -> Boolean:
+        
+        """ Returns True if the protocol field indicates UDP (protocol number 17). """
+        
+        return self.protocol == 17
+    
+    public function isIcmp( self ) -> Boolean:
+        
+        """ Returns True if the protocol field indicates ICMP (protocol number 1). """
+        
+        return self.protocol == 1
+    
+    public function dontFragment( self ) -> Boolean:
+        
+        """
+        Returns True if the Don't Fragment (DF) flag is set. The DF flag is bit 1
+        of the 3-bit flags field. When set, routers must not fragment this packet
+        and should return an ICMP Fragmentation Needed error instead.
+        """
+        
+        return ( self.flags & 2 ) != 0
+    
+    public function moreFragments( self ) -> Boolean:
+        
+        """
+        Returns True if the More Fragments (MF) flag is set. The MF flag is bit 2
+        of the 3-bit flags field. When set, it indicates that more fragments follow
+        this one as part of a fragmented datagram.
+        """
+        
+        return ( self.flags & 1 ) != 0
+    
+    public function setDontFragment( self ) -> Void:
+        
+        """
+        Sets the Don't Fragment (DF) flag in the flags field, instructing routers
+        along the path not to fragment this packet.
+        """
+        
+        self.flags = self.flags | 2
+    
+    public function decrementTtl( self ) -> Boolean:
+        
+        """
+        Decrements the time-to-live (TTL) field by one, as performed by each router
+        that forwards the packet. Returns True if the TTL was successfully decremented
+        (TTL was greater than 1), or False if the TTL has expired (TTL was 1 or less),
+        indicating the packet should be discarded and an ICMP Time Exceeded message sent.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if self.ttl <= 1:
+            return False
+        self.ttl = self.ttl - 1
+        return True
+
+public class RoutingTable:
+    
+    """
+    IPv4 routing table that performs longest-prefix-match lookups to determine the
+    next-hop gateway and outgoing interface for a given destination address. Each
+    route entry consists of a network address, subnet mask, gateway address, interface
+    identifier, and metric value for tie-breaking when multiple routes match. Routes
+    are stored in parallel arrays for cache-friendly linear scanning.
+    """
+    
+    public Memory<I64> networks
+    public Memory<I64> masks
+    public Memory<I64> gateways
+    public Memory<I64> interfaces
+    public Memory<I64> metrics
+    public I64 capacity
+    public I64 count
+    
+    public function RoutingTable( self, I64 maxRoutes ) -> Void:
+        
+        """
+        Constructs a new routing table with the specified maximum number of route entries.
+        All slots are initialized to zero.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxRoutes
+        self.count = 0
+        self.networks = new Memory<I64>( maxRoutes )
+        self.masks = new Memory<I64>( maxRoutes )
+        self.gateways = new Memory<I64>( maxRoutes )
+        self.interfaces = new Memory<I64>( maxRoutes )
+        self.metrics = new Memory<I64>( maxRoutes )
+        I64 slotIndex = 0
+        while slotIndex < maxRoutes:
+            self.networks.set( slotIndex, 0 )
+            self.masks.set( slotIndex, 0 )
+            self.gateways.set( slotIndex, 0 )
+            self.interfaces.set( slotIndex, 0 )
+            self.metrics.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function addRoute( self, I64 network, I64 mask, I64 gateway, I64 iface, I64 metric ) -> Boolean:
+        
+        """
+        Adds a new route to the routing table with the specified network address, subnet
+        mask, gateway address, outgoing interface identifier, and routing metric. Returns
+        True if the route was successfully added, or False if the table is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if self.count >= self.capacity:
+            return False
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.masks.get( slotIndex ) == 0 and self.networks.get( slotIndex ) == 0 and self.count > 0:
+                pass
+            if slotIndex >= self.count:
+                self.networks.set( slotIndex, network )
+                self.masks.set( slotIndex, mask )
+                self.gateways.set( slotIndex, gateway )
+                self.interfaces.set( slotIndex, iface )
+                self.metrics.set( slotIndex, metric )
+                self.count = self.count + 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function removeRoute( self, I64 network, I64 mask ) -> Boolean:
+        
+        """
+        Removes a route from the routing table that matches the given network address and
+        subnet mask. The last entry in the table is moved into the vacated slot to maintain
+        a compact array. Returns True if the route was found and removed, or False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.count:
+            if self.networks.get( slotIndex ) == network and self.masks.get( slotIndex ) == mask:
+                I64 last = self.count - 1
+                self.networks.set( slotIndex, self.networks.get( last ) )
+                self.masks.set( slotIndex, self.masks.get( last ) )
+                self.gateways.set( slotIndex, self.gateways.get( last ) )
+                self.interfaces.set( slotIndex, self.interfaces.get( last ) )
+                self.metrics.set( slotIndex, self.metrics.get( last ) )
+                self.networks.set( last, 0 )
+                self.masks.set( last, 0 )
+                self.count = self.count - 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function lookup( self, I64 destAddr ) -> I64:
+        
+        """
+        Performs a longest-prefix-match lookup for the given destination IPv4 address.
+        Iterates through all routes and selects the one with the longest matching prefix
+        (most specific subnet mask). When multiple routes have the same prefix length,
+        the route with the lowest metric is preferred. Returns the gateway address of
+        the best matching route, or 0 if no route matches.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 bestGateway = 0
+        I64 bestMaskLen = 0 - 1
+        I64 bestMetric = 999999
+        I64 routeIndex = 0
+        while routeIndex < self.count:
+            I64 mask = self.masks.get( routeIndex )
+            I64 network = self.networks.get( routeIndex )
+            if ( destAddr & mask ) == network:
+                I64 maskLen = self.countBits( mask )
+                if maskLen > bestMaskLen:
+                    bestMaskLen = maskLen
+                    bestGateway = self.gateways.get( routeIndex )
+                    bestMetric = self.metrics.get( routeIndex )
+                else:
+                    if maskLen == bestMaskLen and self.metrics.get( routeIndex ) < bestMetric:
+                        bestGateway = self.gateways.get( routeIndex )
+                        bestMetric = self.metrics.get( routeIndex )
+            routeIndex = routeIndex + 1
+        return bestGateway
+    
+    public function lookupInterface( self, I64 destAddr ) -> I64:
+        
+        """
+        Performs a longest-prefix-match lookup for the given destination IPv4 address and
+        returns the outgoing interface identifier of the best matching route. Returns -1
+        (encoded as 0 - 1) if no route matches the destination address.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 bestIface = 0 - 1
+        I64 bestMaskLen = 0 - 1
+        I64 routeIndex = 0
+        while routeIndex < self.count:
+            I64 mask = self.masks.get( routeIndex )
+            I64 network = self.networks.get( routeIndex )
+            if ( destAddr & mask ) == network:
+                I64 maskLen = self.countBits( mask )
+                if maskLen > bestMaskLen:
+                    bestMaskLen = maskLen
+                    bestIface = self.interfaces.get( routeIndex )
+            routeIndex = routeIndex + 1
+        return bestIface
+    
+    protect function countBits( self, I64 mask ) -> I64:
+        
+        """
+        Counts the number of set bits (population count) in the given subnet mask value.
+        This determines the prefix length of the subnet, used for longest-prefix-match
+        comparison during route lookups.
+        """
+        
+        I64 bits = 0
+        I64 remainingMask = mask
+        while remainingMask != 0:
+            bits = bits + ( remainingMask & 1 )
+            remainingMask = remainingMask >> 1
+        return bits
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of routes currently stored in the routing table. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the routing table, including
+        the networks, masks, gateways, interfaces, and metrics arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.networks.free()
+        self.masks.free()
+        self.gateways.free()
+        self.interfaces.free()
+        self.metrics.free()
+
+export {
+    PROTO_ICMP,
+    PROTO_TCP,
+    PROTO_UDP,
+    ipAddr,
+    ipOctet0,
+    ipOctet1,
+    ipOctet2,
+    ipOctet3,
+    isSameSubnet,
+    Ipv4Header,
+    RoutingTable
+}

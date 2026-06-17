@@ -1,0 +1,74 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/filter.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Request/Response filter interfaces for pre/post processing.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.filter
+
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+
+public interface RequestFilter:
+    
+    """
+    Interface for filtering incoming HTTP requests before they reach
+    the route handler. Implementations can inspect, modify, or reject
+    requests during pre-processing.
+    """
+    
+    public function filterRequest( self, HttpRequest req ) -> Boolean:
+        
+        """
+        Filter an incoming HTTP request before it reaches the route handler.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request to filter.
+        
+        Returns:
+            True if the request should proceed to the handler, False to reject it.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+public interface ResponseFilter:
+    
+    """
+    Interface for filtering outgoing HTTP responses after the route handler
+    has executed. Implementations can inspect or modify the response during
+    post-processing.
+    """
+    
+    public function filterResponse( self, HttpRequest req, HttpResponse res ) -> Void:
+        
+        """
+        Filter an outgoing HTTP response after the route handler has executed.
+        
+        Parameters:
+            req (HttpRequest):
+                The original HTTP request.
+            res (HttpResponse):
+                The HTTP response to filter or modify.
+        """
+
+export {
+    RequestFilter,
+    ResponseFilter
+}

@@ -1,0 +1,337 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/io/dma.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides Direct Memory Access (DMA) primitives for hardware-to-RAM transfers
+# without CPU involvement, using descriptor-based transfer queues and ring-buffered channels.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.io.dma
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public enum DmaDirection backed I64:
+    
+    """ Enumerates the transfer directions for DMA operations between RAM and hardware devices. """
+    
+    unit ToDevice 1
+    unit FromDevice 2
+    unit Bidirectional 3
+
+public class DmaDescriptor:
+    
+    """
+    Represents a single DMA transfer unit describing the source address, destination
+    address, transfer length, direction, completion status, and a caller-provided tag
+    for correlation. Status values: 0 = pending, 1 = complete, 2 = error.
+    """
+    
+    public I64 sourceAddress
+    public I64 destAddress
+    public I64 length
+    public I64 direction
+    public I64 status
+    public I64 tag
+    
+    public function DmaDescriptor( self ) -> Void:
+        
+        """
+        Construct a new DMA descriptor with all fields initialized to zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.sourceAddress = 0
+        self.destAddress = 0
+        self.length = 0
+        self.direction = 0
+        self.status = 0
+        self.tag = 0
+    
+    public function configure( self, I64 src, I64 dst, I64 len, I64 dir ) -> Void:
+        
+        """
+        Configure this DMA descriptor for a transfer operation, resetting the
+        status to pending.
+        
+        Parameters:
+            src (I64):
+                The physical source address for the transfer.
+            dst (I64):
+                The physical destination address for the transfer.
+            len (I64):
+                The number of bytes to transfer.
+            dir (I64):
+                The transfer direction flag (use dmaToDevice, dmaFromDevice, or dmaBidirectional).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.sourceAddress = src
+        self.destAddress = dst
+        self.length = len
+        self.direction = dir
+        self.status = 0
+    
+    public function isComplete( self ) -> Boolean:
+        
+        """ Return True if this DMA transfer has completed successfully (status equals 1). """
+        
+        return self.status == 1
+    
+    public function markComplete( self ) -> Void:
+        
+        """ Mark this DMA descriptor as successfully completed by setting status to 1. """
+        
+        self.status = 1
+    
+    public function markError( self ) -> Void:
+        
+        """ Mark this DMA descriptor as failed by setting status to 2. """
+        
+        self.status = 2
+    
+    public function isError( self ) -> Boolean:
+        
+        """
+        Return True if this DMA transfer encountered an error (status equals 2).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.status == 2
+
+public class DmaChannel:
+    
+    """
+    Manages a ring buffer of DMA transfer descriptors for a single hardware DMA
+    channel. Transfers are submitted to the tail and completed descriptors are
+    drained from the head. The channel tracks pending transfer count and protects
+    concurrent access with a spinlock.
+    """
+    
+    protect Memory<I64> sources
+    protect Memory<I64> destinations
+    protect Memory<I64> lengths
+    protect Memory<I64> directions
+    protect Memory<I64> statuses
+    protect I64 capacity
+    protect I64 head
+    protect I64 tail
+    protect I64 pending
+    protect I64 channelId
+    protect Spinlock lock
+    
+    public function DmaChannel( self, I64 channelId, I64 ringSize ) -> Void:
+        
+        """
+        Construct a new DMA channel with the given channel identifier and ring
+        buffer capacity. All descriptor slots are initialized to zero.
+        
+        Parameters:
+            channelId (I64):
+                The hardware DMA channel identifier.
+            ringSize (I64):
+                The maximum number of concurrent DMA descriptors in the ring buffer.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.channelId = channelId
+        self.capacity = ringSize
+        self.head = 0
+        self.tail = 0
+        self.pending = 0
+        self.lock = new Spinlock()
+        self.sources = new Memory<I64>( ringSize )
+        self.destinations = new Memory<I64>( ringSize )
+        self.lengths = new Memory<I64>( ringSize )
+        self.directions = new Memory<I64>( ringSize )
+        self.statuses = new Memory<I64>( ringSize )
+        I64 slotIndex = 0
+        while slotIndex < ringSize:
+            self.sources.set( slotIndex, 0 )
+            self.destinations.set( slotIndex, 0 )
+            self.lengths.set( slotIndex, 0 )
+            self.directions.set( slotIndex, 0 )
+            self.statuses.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function submit( self, I64 src, I64 dst, I64 len, I64 dir ) -> I64:
+        
+        """
+        Submit a DMA transfer to this channel by writing source, destination,
+        length, and direction into the next available ring slot. The operation
+        is protected by a spinlock.
+        
+        Parameters:
+            src (I64):
+                The physical source address for the transfer.
+            dst (I64):
+                The physical destination address for the transfer.
+            len (I64):
+                The number of bytes to transfer.
+            dir (I64):
+                The transfer direction flag.
+        
+        Returns:
+            I64:
+                The descriptor index on success, or -1 if the ring is full.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.pending >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 idx = self.tail
+        self.sources.set( idx, src )
+        self.destinations.set( idx, dst )
+        self.lengths.set( idx, len )
+        self.directions.set( idx, dir )
+        self.statuses.set( idx, 0 )
+        self.tail = ( self.tail + 1 ) % self.capacity
+        self.pending = self.pending + 1
+        self.lock.unlock()
+        return idx
+    
+    public function complete( self, I64 index ) -> Boolean:
+        
+        """
+        Mark the descriptor at the given index as completed. This is typically
+        called from a DMA interrupt handler when the hardware signals transfer
+        completion.
+        
+        Parameters:
+            index (I64):
+                The descriptor index to mark as complete.
+        
+        Returns:
+            Boolean:
+                True if the descriptor was successfully marked, False if the index
+                is out of bounds.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return False
+        self.statuses.set( index, 1 )
+        self.lock.lock()
+        self.pending = self.pending - 1
+        self.lock.unlock()
+        return True
+    
+    public function isComplete( self, I64 index ) -> Boolean:
+        
+        """
+        Check whether the descriptor at the given index has completed its transfer.
+        
+        Parameters:
+            index (I64):
+                The descriptor index to check.
+        
+        Returns:
+            Boolean:
+                True if the descriptor status indicates completion.
+        """
+        
+        if index < 0 or index >= self.capacity:
+            return False
+        return self.statuses.get( index ) == 1
+    
+    public function drain( self ) -> I64:
+        
+        """
+        Advance the head pointer past all completed descriptors at the front of
+        the ring buffer. Stops at the first non-completed descriptor.
+        
+        Returns:
+            I64:
+                The number of descriptors that were drained.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 drained = 0
+        while self.head != self.tail:
+            if self.statuses.get( self.head ) != 1:
+                return drained
+            self.head = ( self.head + 1 ) % self.capacity
+            drained = drained + 1
+        return drained
+    
+    public function getPending( self ) -> I64:
+        
+        """ Return the number of pending (in-flight) DMA transfers on this channel. """
+        
+        return self.pending
+    
+    public function getChannelId( self ) -> I64:
+        
+        """ Return the hardware DMA channel identifier. """
+        
+        return self.channelId
+    
+    public function isFull( self ) -> Boolean:
+        
+        """ Return True if the DMA ring buffer is full and cannot accept new transfers. """
+        
+        return self.pending >= self.capacity
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """ Return True if there are no pending DMA transfers on this channel. """
+        
+        return self.pending == 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all memory buffers allocated by this DMA channel.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.sources.free()
+        self.destinations.free()
+        self.lengths.free()
+        self.directions.free()
+        self.statuses.free()
+
+export {
+    DmaDirection,
+    DmaDescriptor,
+    DmaChannel
+}

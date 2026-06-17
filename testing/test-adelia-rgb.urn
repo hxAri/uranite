@@ -1,0 +1,55 @@
+package testing
+
+from uranite.adelia.rgb import RGB
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia RGB Tests ===" )
+
+    # constructor + fields
+    RGB color = new RGB( 255, 128, 0 )
+    assertEqualI64( 255, color.red, "red" )
+    assertEqualI64( 128, color.green, "green" )
+    assertEqualI64( 0, color.blue, "blue" )
+    putsln( "constructor OK" )
+
+    # equals
+    RGB same = new RGB( 255, 128, 0 )
+    assertTrue( color.equals( same ), "equals same" )
+    RGB diff = new RGB( 0, 0, 0 )
+    assertFalse( color.equals( diff ), "equals diff" )
+    putsln( "equals OK" )
+
+    # toString
+    String str = color.toString()
+    assertTrue( str != "", "toString not empty" )
+    putsln( "toString OK" )
+
+    # black
+    RGB black = new RGB( 0, 0, 0 )
+    assertEqualI64( 0, black.red, "black red" )
+    assertEqualI64( 0, black.green, "black green" )
+    assertEqualI64( 0, black.blue, "black blue" )
+    putsln( "black OK" )
+
+    # white
+    RGB white = new RGB( 255, 255, 255 )
+    assertEqualI64( 255, white.red, "white red" )
+    assertEqualI64( 255, white.green, "white green" )
+    assertEqualI64( 255, white.blue, "white blue" )
+    putsln( "white OK" )
+
+    # different colors
+    RGB blue = new RGB( 0, 0, 255 )
+    assertEqualI64( 0, blue.red, "blue red" )
+    assertEqualI64( 0, blue.green, "blue green" )
+    assertEqualI64( 255, blue.blue, "blue blue" )
+    assertFalse( color.equals( blue ), "not equals blue" )
+    putsln( "blue OK" )
+
+    putsln( "=== All RGB tests passed ===" )
+    return 0

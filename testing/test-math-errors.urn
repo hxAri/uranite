@@ -1,0 +1,54 @@
+package testing
+
+from uranite.math.errors import ZeroDivisionError
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue,
+    fail
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Math Error Tests ===" )
+
+    # Normal arithmetic
+    assertEqualI64( 15, 10 + 5, "10 + 5" )
+    assertEqualI64( 17, 20 - 3, "20 - 3" )
+    assertEqualI64( 42, 6 * 7, "6 * 7" )
+    assertEqualI64( 25, 100 / 4, "100 / 4" )
+    assertEqualI64( 2, 17 % 5, "17 % 5" )
+    putsln( "arithmetic OK" )
+
+    # Division by zero caught
+    Boolean caught1 = False
+    try:
+        I64 x = 10 / 0
+        fail( "div by zero not caught" )
+    except ZeroDivisionError as err:
+        caught1 = True
+    assertTrue( caught1, "ZeroDivisionError caught for 10/0" )
+    putsln( "div-by-zero OK" )
+
+    # Modulo by zero caught
+    Boolean caught2 = False
+    try:
+        I64 y = 10 % 0
+        fail( "mod by zero not caught" )
+    except ZeroDivisionError as err:
+        caught2 = True
+    assertTrue( caught2, "ZeroDivisionError caught for 10%0" )
+    putsln( "mod-by-zero OK" )
+
+    # Division by zero with variable
+    I64 zero = 0
+    Boolean caught3 = False
+    try:
+        I64 z = 42 / zero
+        fail( "div by zero var not caught" )
+    except ZeroDivisionError as err:
+        caught3 = True
+    assertTrue( caught3, "ZeroDivisionError caught for 42/zero" )
+    putsln( "div-by-zero var OK" )
+
+    putsln( "=== All math error tests passed ===" )
+    return 0

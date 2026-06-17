@@ -1,0 +1,113 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/hal.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Hardware Abstraction Layer providing unified MMIO register access with
+# memory barrier enforcement and interrupt controller management.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.kernel.hal
+
+from uranite.os.hal.mmio import {
+    mmioRead8, mmioWrite8, mmioRead16, mmioWrite16,
+    mmioRead32, mmioWrite32, mmioRead64, mmioWrite64,
+    memoryFence, storeFence, loadFence
+}
+from uranite.os.hal.interrupt import MAX_IRQ_COUNT, IrqEntry, InterruptTable
+
+public class HardwareAbstraction:
+
+    """
+    Unified HAL combining MMIO register access with automatic memory
+    barrier enforcement and interrupt table management.
+    """
+
+    public InterruptTable interrupts
+
+    public function HardwareAbstraction( self ) -> Void:
+        self.interrupts = new InterruptTable()
+
+    public function readRegister8( self, I64 address ) -> I64:
+
+        """ Read an 8-bit MMIO register with a load fence. """
+
+        I64 value = mmioRead8( address )
+        loadFence()
+        return value
+
+    public function writeRegister8( self, I64 address, I64 value ) -> Void:
+
+        """ Write an 8-bit MMIO register with a store fence. """
+
+        mmioWrite8( address, value )
+        storeFence()
+
+    public function readRegister32( self, I64 address ) -> I64:
+
+        """ Read a 32-bit MMIO register with a load fence. """
+
+        I64 value = mmioRead32( address )
+        loadFence()
+        return value
+
+    public function writeRegister32( self, I64 address, I64 value ) -> Void:
+
+        """ Write a 32-bit MMIO register with a store fence. """
+
+        mmioWrite32( address, value )
+        storeFence()
+
+    public function readRegister64( self, I64 address ) -> I64:
+
+        """ Read a 64-bit MMIO register with a load fence. """
+
+        I64 value = mmioRead64( address )
+        loadFence()
+        return value
+
+    public function writeRegister64( self, I64 address, I64 value ) -> Void:
+
+        """ Write a 64-bit MMIO register with a store fence. """
+
+        mmioWrite64( address, value )
+        storeFence()
+
+    public function registerIrq( self, I64 irqNumber, I64 handlerId ) -> Boolean:
+
+        """ Register an interrupt handler for the given IRQ number. """
+
+        return self.interrupts.registerHandler( irqNumber, handlerId )
+
+    public function unregisterIrq( self, I64 irqNumber ) -> I64:
+
+        """
+        Unregister the interrupt handler for the given IRQ number.
+        Returns the previous handler address, or 0 if none was registered.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.interrupts.unregisterHandler( irqNumber )
+
+export {
+    HardwareAbstraction,
+    mmioRead8, mmioWrite8, mmioRead16, mmioWrite16,
+    mmioRead32, mmioWrite32, mmioRead64, mmioWrite64,
+    memoryFence, storeFence, loadFence,
+    MAX_IRQ_COUNT, IrqEntry, InterruptTable
+}

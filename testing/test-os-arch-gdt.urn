@@ -1,0 +1,34 @@
+package testing
+
+from uranite.os.arch.x86-64.gdt import {
+    GdtEntry, GdtPointer, Gdt,
+    KERNEL_CODE_SELECTOR, KERNEL_DATA_SELECTOR,
+    userCodeSelector, userDataSelector
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertGreaterThan
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Arch GDT Tests ===" )
+
+    GdtEntry entry = new GdtEntry( 0, 1048575, 154, 10 )
+    assertEqualI64( 154, entry.access, "entry access" )
+    putsln( "GdtEntry OK" )
+
+    Gdt gdt = new Gdt()
+    gdt.setupFlat()
+    assertGreaterThan( gdt.getCount(), 0, "gdt count > 0" )
+    putsln( "Gdt OK" )
+
+    assertEqualI64( 8, KERNEL_CODE_SELECTOR, "kernel CS" )
+    assertEqualI64( 16, KERNEL_DATA_SELECTOR, "kernel DS" )
+    assertEqualI64( 27, userCodeSelector(), "user CS" )
+    assertEqualI64( 35, userDataSelector(), "user DS" )
+    putsln( "selectors OK" )
+
+    gdt.destroy()
+
+    putsln( "=== All GDT tests passed ===" )
+    return 0

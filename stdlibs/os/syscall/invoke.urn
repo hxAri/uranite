@@ -1,0 +1,143 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/syscall/invoke.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides raw x86_64 syscall invocation functions that execute the syscall instruction with 0 to 6 arguments loaded into the ABI-defined registers.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.syscall.invoke
+
+from uranite.os.syscall.result import SyscallResult
+
+public function syscall0( I64 number ) -> SyscallResult:
+    
+    """
+    Executes a syscall with zero arguments. The syscall number is loaded into RAX.
+    The result is read from RAX after the syscall instruction completes. Registers
+    RCX (saved RIP) and R11 (saved RFLAGS) are clobbered by the hardware.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall1( I64 number, I64 arg1 ) -> SyscallResult:
+    
+    """
+    Executes a syscall with one argument. The syscall number is loaded into RAX and
+    arg1 is loaded into RDI. The result is read from RAX after completion.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall2( I64 number, I64 arg1, I64 arg2 ) -> SyscallResult:
+    
+    """
+    Executes a syscall with two arguments. The syscall number is loaded into RAX,
+    arg1 into RDI, and arg2 into RSI. The result is read from RAX after completion.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall3( I64 number, I64 arg1, I64 arg2, I64 arg3 ) -> SyscallResult:
+    
+    """
+    Executes a syscall with three arguments. The syscall number is loaded into RAX,
+    arg1 into RDI, arg2 into RSI, and arg3 into RDX. The result is read from RAX
+    after completion.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall4( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4 ) -> SyscallResult:
+    
+    """
+    Executes a syscall with four arguments. The syscall number is loaded into RAX,
+    arg1 into RDI, arg2 into RSI, arg3 into RDX, and arg4 into R10 (not RCX, which
+    is clobbered by the syscall instruction). The result is read from RAX after completion.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3, "{r10}" arg4 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall5( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4, I64 arg5 ) -> SyscallResult:
+    
+    """
+    Executes a syscall with five arguments. The syscall number is loaded into RAX,
+    arg1 into RDI, arg2 into RSI, arg3 into RDX, arg4 into R10, and arg5 into R8.
+    The result is read from RAX after completion.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3, "{r10}" arg4, "{r8}" arg5 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall6( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4, I64 arg5, I64 arg6 ) -> SyscallResult:
+    
+    """
+    Executes a syscall with six arguments (maximum for x86_64). The syscall number is
+    loaded into RAX, arg1 into RDI, arg2 into RSI, arg3 into RDX, arg4 into R10,
+    arg5 into R8, and arg6 into R9. The result is read from RAX after completion.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3, "{r10}" arg4, "{r8}" arg5, "{r9}" arg6 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+export {
+    syscall0,
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4,
+    syscall5,
+    syscall6
+}

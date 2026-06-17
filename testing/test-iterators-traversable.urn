@@ -1,0 +1,30 @@
+package testing
+
+from uranite.iterators.traversable import Traversable
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public class Container implements Traversable:
+    public Int size
+
+    public function Container( self, Int size ) -> Void:
+        self.size = size
+
+public class EmptyContainer implements Traversable:
+    public function EmptyContainer( self ) -> Void:
+        pass
+
+public function main() -> I32:
+    putsln( "=== Traversable Tests ===" )
+
+    Container c = new Container( 10 )
+    assertEqualI64( 10, c.size, "container size" )
+
+    Container c2 = new Container( 0 )
+    assertEqualI64( 0, c2.size, "empty container size" )
+
+    EmptyContainer ec = new EmptyContainer()
+    putsln( "EmptyContainer created OK" )
+
+    putsln( "=== All Traversable tests passed ===" )
+    return 0

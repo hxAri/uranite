@@ -1,0 +1,33 @@
+package testing
+
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt, memoryToPtr
+from uranite.memory.memory import Memory
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertGreaterThan
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO Syscall Tests ===" )
+
+    String test = "Hello"
+    I64 ptr = stringToPtr( test )
+    I64 len = stringLen( test )
+    assertGreaterThan( ptr, 0, "stringToPtr non-zero" )
+    assertEqualI64( 5, len, "stringLen" )
+
+    I64 firstByte = readByteAt( ptr, 0 )
+    assertEqualI64( 72, firstByte, "first byte H=72" )
+    putsln( "stringToPtr/stringLen OK" )
+
+    Memory<I64> buf = new Memory<I64>( 4 )
+    I64 bufAddr = memoryToPtr( buf )
+    writeByteAt( bufAddr, 0, 65 )
+    I64 readBack = readByteAt( bufAddr, 0 )
+    assertEqualI64( 65, readBack, "write/read byte A=65" )
+    buf.free()
+    putsln( "write/read byte OK" )
+
+    putsln( "=== All IO syscall tests passed ===" )
+    return 0

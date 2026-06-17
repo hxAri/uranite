@@ -1,0 +1,444 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-29 14:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process-future.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Typed future for asynchronous process results. ProcessFutureBase provides
+# the non-generic core (state machine, blocking, raw I64 result storage).
+# ProcessFuture<R> wraps ProcessFutureBase with compile-time type safety via generics.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.process-future
+
+from uranite.memory.memory import Memory
+from uranite.os.ipc.signal import Event
+from uranite.os.ipc.shared-memory import SharedRegion
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import BlockReason
+from uranite.threading.atomic import AtomicI64
+from uranite.process.errors import ProcessError, ProcessCancellationError, ProcessCrashedError
+
+const I64 PFUTURE_PENDING = 0
+""" Future state: task has not yet been picked up by a worker. """
+const I64 PFUTURE_RUNNING = 1
+""" Future state: task is currently being executed by a worker. """
+const I64 PFUTURE_FINISHED = 2
+""" Future state: task completed successfully with a result value. """
+const I64 PFUTURE_CANCELLED = 3
+""" Future state: task was cancelled before execution began. """
+const I64 PFUTURE_ERROR = 4
+""" Future state: task execution failed with an error. """
+
+enum ProcessFutureState:
+    unit Pending 0
+    unit Running 1
+    unit Finished 2
+    unit Cancelled 3
+    unit Error 4
+
+public class ProcessFutureBase:
+    
+    """
+    Non-generic core of the process future system.
+    
+    Manages the state machine (pending, running, finished, cancelled, error),
+    blocking semantics via scheduler integration, and raw I64 result/exception
+    storage in a shared memory region. ProcessFuture<R> wraps this class to
+    provide compile-time type safety.
+    """
+    
+    protect Memory<I64> resultBuffer
+    """ Raw memory slot storing the I64 result value in shared memory. """
+    protect Memory<I64> exceptionSlot
+    """ Raw memory slot storing the I64 exception pointer in shared memory. """
+    protect AtomicI64 state
+    """ Atomic state tracking the future lifecycle (PFUTURE_PENDING through PFUTURE_ERROR). """
+    protect Event completionEvent
+    """ Event used to wake blocked tasks waiting for this future to complete. """
+    protect Scheduler scheduler
+    """ Scheduler used for cooperative blocking when waiting for completion. """
+    protect SharedRegion region
+    """ Shared memory region backing the result and exception storage slots. """
+    
+    public function ProcessFutureBase( self, Scheduler scheduler, SharedRegion region, I64 slotAddr ) -> Void:
+        
+        """
+        Construct a new ProcessFutureBase with storage at the given shared memory slot.
+        
+        The result buffer is placed at slotAddr and the exception slot at slotAddr + 8,
+        both within the provided shared memory region. The region's reference count is
+        incremented to prevent premature release.
+        
+        Parameters:
+            scheduler (Scheduler):
+                The scheduler used for cooperative blocking on completion.
+            region (SharedRegion):
+                The shared memory region containing the result and exception slots.
+            slotAddr (I64):
+                The byte offset within the region for the result buffer.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.resultBuffer = new Memory<I64>( 1 )
+        asm volatile "movq $1, $0" : output( "=r" self.resultBuffer ) : input( "r" slotAddr ) : clobber()
+        I64 excAddr = slotAddr + 8
+        self.exceptionSlot = new Memory<I64>( 1 )
+        asm volatile "movq $1, $0" : output( "=r" self.exceptionSlot ) : input( "r" excAddr ) : clobber()
+        self.state = new AtomicI64( PFUTURE_PENDING )
+        self.completionEvent = new Event()
+        self.scheduler = scheduler
+        self.region = region
+        region.retain()
+    
+    public function setRunning( self ) -> Void:
+        
+        """
+        Atomically transition the future from pending to running state.
+        
+        Uses compare-and-exchange so only the first call succeeds. Subsequent
+        calls are no-ops if the state has already advanced past pending.
+        """
+        
+        self.state.compareExchange( PFUTURE_PENDING, PFUTURE_RUNNING )
+    
+    public function completeRaw( self, I64 value ) -> Void:
+        
+        """
+        Complete the future successfully with a raw I64 result value.
+        
+        Stores the value in the result buffer, transitions to finished state,
+        and signals all waiters via the completion event.
+        
+        Parameters:
+            value (I64):
+                The raw result value to store.
+        """
+        
+        self.resultBuffer.set( 0, value )
+        self.state.store( PFUTURE_FINISHED )
+        self.completionEvent.signal( 1 )
+    
+    public function failRaw( self, I64 exceptionPtr ) -> Void:
+        
+        """
+        Fail the future with a raw I64 exception pointer.
+        
+        Stores the exception pointer in the exception slot, transitions to
+        error state, and signals all waiters via the completion event.
+        
+        Parameters:
+            exceptionPtr (I64):
+                Raw pointer to the exception object, cast to I64.
+        """
+        
+        self.exceptionSlot.set( 0, exceptionPtr )
+        self.state.store( PFUTURE_ERROR )
+        self.completionEvent.signal( 1 )
+    
+    public function waitForCompletion( self ) -> Void:
+        
+        """
+        Block the current task until the future reaches a terminal state.
+        
+        If running within a scheduled task, registers a wait on the completion
+        event and cooperatively blocks via the scheduler. If running outside
+        a scheduled context, spin-waits with pause instructions.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        while self.state.load() < PFUTURE_FINISHED:
+            I64 taskId = 0
+            if self.scheduler.getCurrentTask() != None:
+                taskId = self.scheduler.getCurrentTask().id
+            if taskId > 0:
+                Boolean shouldBlock = self.completionEvent.registerWait( taskId, 1 )
+                if shouldBlock:
+                    self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+                    self.scheduler.blockCurrent()
+            else:
+                asm volatile "pause"
+    
+    public function getState( self ) -> I64:
+        
+        """
+        Return the current state of this future as a raw integer.
+        
+        Returns:
+            I64:
+                One of PFUTURE_PENDING, PFUTURE_RUNNING, PFUTURE_FINISHED,
+                PFUTURE_CANCELLED, or PFUTURE_ERROR.
+        """
+        
+        return self.state.load()
+    
+    public function getRawResult( self ) -> I64:
+        
+        """
+        Return the raw I64 result value stored in the result buffer.
+        
+        The caller must ensure the future has completed successfully before
+        calling this method. Reading the result of an incomplete or failed
+        future yields undefined data.
+        
+        Returns:
+            I64:
+                The raw result value.
+        """
+        
+        return self.resultBuffer.get( 0 )
+    
+    public function getRawException( self ) -> I64:
+        
+        """
+        Return the raw I64 exception pointer stored in the exception slot.
+        
+        The caller must ensure the future is in the error state before
+        calling this method.
+        
+        Returns:
+            I64:
+                The raw exception pointer, or 0 if no exception was stored.
+        """
+        
+        return self.exceptionSlot.get( 0 )
+    
+    public function isDone( self ) -> Boolean:
+        
+        """
+        Check whether the future has reached a terminal state.
+        
+        A future is done when it is finished, cancelled, or in error state.
+        
+        Returns:
+            Boolean:
+                True if the future is in a terminal state, False otherwise.
+        """
+        
+        return self.state.load() >= PFUTURE_FINISHED
+    
+    public function cancel( self ) -> Boolean:
+        
+        """
+        Attempt to cancel the future before execution begins.
+        
+        Only succeeds if the future is still in the pending state. Once a
+        worker has picked up the task (running state or later), cancellation
+        is not possible.
+        
+        Returns:
+            Boolean:
+                True if the future was successfully cancelled, False if it
+                had already advanced past the pending state.
+        """
+        
+        return self.state.compareExchange( PFUTURE_PENDING, PFUTURE_CANCELLED )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by this future.
+        
+        Destroys the atomic state and releases the reference on the shared
+        memory region. Must be called exactly once after the future is no
+        longer needed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.state.destroy()
+        self.region.release()
+
+public class ProcessFuture<R>:
+    
+    """
+    Type-safe wrapper around ProcessFutureBase for process task results.
+    
+    Provides compile-time type safety via the generic parameter R. Handles
+    blocking, state inspection, cancellation, and typed result extraction
+    by delegating to the underlying ProcessFutureBase.
+    """
+    
+    protect ProcessFutureBase base
+    """ The underlying non-generic future that manages state and raw storage. """
+    
+    public function ProcessFuture( self, ProcessFutureBase base ) -> Void:
+        
+        """
+        Construct a typed ProcessFuture wrapping the given base future.
+        
+        Parameters:
+            base (ProcessFutureBase):
+                The non-generic future to wrap with type safety.
+        """
+        
+        self.base = base
+    
+    public function result( self ) -> R:
+        
+        """
+        Block until the future completes and return the typed result.
+        
+        Waits for the underlying task to finish, then reinterprets the raw
+        I64 result as type R. Raises ProcessError if the task failed or
+        ProcessCancellationError if the future was cancelled.
+        
+        Returns:
+            R:
+                The result value produced by the process task.
+        
+        Raises:
+            ProcessError:
+                If the process task execution failed.
+            ProcessCancellationError:
+                If the future was cancelled before execution.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.base.waitForCompletion()
+        I64 currentState = self.base.getState()
+        if currentState == PFUTURE_ERROR:
+            raise new ProcessError( "Process task execution failed", 100, None )
+        if currentState == PFUTURE_CANCELLED:
+            raise new ProcessCancellationError( "Future was cancelled", 101, None )
+        I64 raw = self.base.getRawResult()
+        Memory<R> temp = new Memory<R>( 1 )
+        I64 tempAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" tempAddr ) : input( "r" temp ) : clobber()
+        asm volatile "movq $0, ($1)" : : input( "r" raw, "r" tempAddr ) : clobber( "memory" )
+        R value = temp.get( 0 )
+        temp.free()
+        return value
+    
+    public function wait( self ) -> Void:
+        
+        """
+        Block until the future completes, discarding the result.
+        
+        Useful when the caller only needs to synchronize on completion
+        without retrieving the value. Raises on failure or cancellation.
+        
+        Raises:
+            ProcessError:
+                If the process task execution failed.
+            ProcessCancellationError:
+                If the future was cancelled before execution.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.base.waitForCompletion()
+        I64 currentState = self.base.getState()
+        if currentState == PFUTURE_ERROR:
+            raise new ProcessError( "Process task execution failed", 100, None )
+        if currentState == PFUTURE_CANCELLED:
+            raise new ProcessCancellationError( "Future was cancelled", 101, None )
+    
+    public function state( self ) -> ProcessFutureState:
+        
+        """
+        Return the current state of this future as a ProcessFutureState enum.
+        
+        Returns:
+            ProcessFutureState:
+                The current lifecycle state of the future.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 currentState = self.base.getState()
+        if currentState == PFUTURE_RUNNING:
+            return ProcessFutureState.Running
+        elif currentState == PFUTURE_FINISHED:
+            return ProcessFutureState.Finished
+        elif currentState == PFUTURE_CANCELLED:
+            return ProcessFutureState.Cancelled
+        elif currentState == PFUTURE_ERROR:
+            return ProcessFutureState.Error
+        return ProcessFutureState.Pending
+    
+    public function isDone( self ) -> Boolean:
+        
+        """
+        Check whether the future has reached a terminal state.
+        
+        Returns:
+            Boolean:
+                True if the future is finished, cancelled, or in error state.
+        """
+        
+        return self.base.isDone()
+    
+    public function cancel( self ) -> Boolean:
+        
+        """
+        Attempt to cancel the future before a worker begins execution.
+        
+        Returns:
+            Boolean:
+                True if cancellation succeeded, False if the task had
+                already started or completed.
+        """
+        
+        return self.base.cancel()
+    
+    public function getBase( self ) -> ProcessFutureBase:
+        
+        """
+        Return the underlying non-generic ProcessFutureBase.
+        
+        Returns:
+            ProcessFutureBase:
+                The base future wrapped by this typed future.
+        """
+        
+        return self.base
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by this future and its base.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.base.destroy()
+
+export {
+    ProcessFutureState,
+    ProcessFutureBase,
+    ProcessFuture,
+    PFUTURE_PENDING,
+    PFUTURE_RUNNING,
+    PFUTURE_FINISHED,
+    PFUTURE_CANCELLED,
+    PFUTURE_ERROR
+}

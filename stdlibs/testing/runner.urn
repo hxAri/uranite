@@ -1,0 +1,142 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/testing/runner.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# TestRunner: collects test functions, runs them, tracks pass/fail/error
+# counts, and prints a summary report. Uses monotonic clock for timing.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.testing.runner
+
+from uranite.io.console import putsln
+from uranite.convert.convert import intToString
+from uranite.datetime.datetime import nowMonotonic
+
+public class TestRunner:
+    
+    """
+    Collects and executes test functions, tracking pass, fail, and error
+    counts. Prints a formatted summary report after all tests have run.
+    """
+    
+    public I64 passed
+    """ The number of tests that passed successfully. """
+    public I64 failed
+    """ The number of tests that failed due to assertion errors. """
+    public I64 errors
+    """ The number of tests that encountered unexpected runtime errors. """
+    public I64 total
+    """ The total number of tests that have been recorded. """
+    
+    public function TestRunner( self ) -> Void:
+        
+        """
+        Create a new TestRunner with all counters initialized to zero.
+        """
+        
+        self.passed = 0
+        self.failed = 0
+        self.errors = 0
+        self.total = 0
+    
+    public function recordPass( self, String name ) -> Void:
+        
+        """
+        Record a passing test result and print its name to the console.
+        
+        Parameters:
+            name (String):
+                The name of the test that passed.
+        """
+        
+        self.total = self.total + 1
+        self.passed = self.passed + 1
+        putsln( "  PASS: " + name )
+    
+    public function recordFail( self, String name, String message ) -> Void:
+        
+        """
+        Record a failing test result and print its name with the failure
+        message to the console.
+        
+        Parameters:
+            name (String):
+                The name of the test that failed.
+            message (String):
+                A description of why the test failed.
+        """
+        
+        self.total = self.total + 1
+        self.failed = self.failed + 1
+        putsln( "  FAIL: " + name + " - " + message )
+    
+    public function recordError( self, String name, String message ) -> Void:
+        
+        """
+        Record a test that encountered an unexpected error and print its
+        name with the error message to the console.
+        
+        Parameters:
+            name (String):
+                The name of the test that errored.
+            message (String):
+                A description of the unexpected error.
+        """
+        
+        self.total = self.total + 1
+        self.errors = self.errors + 1
+        putsln( "  ERROR: " + name + " - " + message )
+    
+    public function report( self ) -> Void:
+        
+        """
+        Print a formatted summary of all test results to the console,
+        including total, passed, failed, and error counts. Concludes
+        with either "ALL TESTS PASSED" or "TESTS FAILED".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        putsln( "" )
+        putsln( "=============================" )
+        putsln( "Test Results:" )
+        putsln( "  Total:  " + intToString( self.total ) )
+        putsln( "  Passed: " + intToString( self.passed ) )
+        putsln( "  Failed: " + intToString( self.failed ) )
+        putsln( "  Errors: " + intToString( self.errors ) )
+        putsln( "=============================" )
+        if self.failed == 0 and self.errors == 0:
+            putsln( "ALL TESTS PASSED" )
+        else:
+            putsln( "TESTS FAILED" )
+    
+    public function allPassed( self ) -> Boolean:
+        
+        """
+        Check whether all recorded tests passed without any failures
+        or errors.
+        
+        Returns:
+            True if no tests failed and no tests errored, False otherwise.
+        """
+        
+        return self.failed == 0 and self.errors == 0
+
+export {
+    TestRunner
+}

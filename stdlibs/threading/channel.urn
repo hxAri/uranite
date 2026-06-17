@@ -1,0 +1,442 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/channel.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Bounded MPSC channel for inter-thread communication. Values are copied
+# into an internal circular buffer — no shared references across threads.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.channel
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+from uranite.os.sync.semaphore import Semaphore
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import BlockReason
+from uranite.threading.errors import ThreadChannelError
+from uranite.threading.atomic import AtomicI64, AtomicBoolean
+
+public class ChannelInner<T>:
+    
+    """
+    Bounded circular buffer channel that forms the shared backbone of
+    Sender/Receiver pairs. Supports multiple producers and a single consumer.
+    Values are copied into the internal buffer -- no shared references cross
+    thread boundaries. Blocking send and receive use semaphores with
+    cooperative scheduler integration; non-blocking variants are also provided.
+    """
+    
+    protect Memory<T> buffer
+    """ Circular buffer holding channel values. """
+    protect I64 capacity
+    """ Maximum number of values the channel can hold simultaneously. """
+    protect I64 head
+    """ Index of the next value to be consumed from the buffer. """
+    protect I64 tail
+    """ Index of the next slot where a value will be written. """
+    protect I64 count
+    """ Current number of values in the buffer. """
+    protect Spinlock guard
+    """ Spinlock protecting head, tail, count, and buffer access. """
+    protect Semaphore emptySlots
+    """ Semaphore tracking the number of available empty slots for producers. """
+    protect Semaphore fullSlots
+    """ Semaphore tracking the number of values available for consumers. """
+    protect Scheduler scheduler
+    """ Scheduler used for cooperative blocking when the channel is full or empty. """
+    protect AtomicBoolean closed
+    """ Atomic flag indicating whether the channel has been closed. """
+    protect AtomicI64 senderCount
+    """ Atomic count of active senders; channel closes when this reaches zero. """
+    
+    public function ChannelInner( self, I64 capacity, Scheduler scheduler ) -> Void:
+        
+        """
+        Construct a bounded channel with the specified capacity.
+        
+        Parameters:
+            capacity (I64):
+                Maximum number of values the channel can buffer.
+            scheduler (Scheduler):
+                Scheduler used for cooperative task blocking.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.buffer = new Memory<T>( capacity )
+        self.capacity = capacity
+        self.head = 0
+        self.tail = 0
+        self.count = 0
+        self.guard = new Spinlock()
+        self.emptySlots = new Semaphore( capacity )
+        self.fullSlots = new Semaphore( 0 )
+        self.scheduler = scheduler
+        self.closed = new AtomicBoolean( False )
+        self.senderCount = new AtomicI64( 1 )
+    
+    public function send( self, T value ) -> Boolean:
+        
+        """
+        Send a value into the channel, blocking if the buffer is full.
+        Returns False immediately if the channel is closed.
+        
+        Parameters:
+            value (T):
+                The value to send.
+        
+        Returns:
+            Boolean:
+                True if the value was sent successfully, False if the channel
+                was closed before the send could complete.
+
+        Complexity:
+            Time: O(1) amortized, unbounded under contention
+            Space: O(1)
+        """
+
+        if self.closed.load():
+            return False
+        
+        Boolean gotSlot = self.emptySlots.tryWait()
+        while gotSlot == False:
+            if self.closed.load():
+                return False
+            self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+            self.scheduler.blockCurrent()
+            gotSlot = self.emptySlots.tryWait()
+        
+        self.guard.lock()
+        self.buffer.set( self.tail, value )
+        self.tail = ( self.tail + 1 ) % self.capacity
+        self.count = self.count + 1
+        self.guard.unlock()
+        
+        self.fullSlots.signal()
+        return True
+    
+    public function receive( self ) -> T:
+        
+        """
+        Receive a value from the channel, blocking if the buffer is empty.
+        Raises if the channel is closed and no values remain.
+        
+        Returns:
+            T:
+                The next value from the channel.
+        
+        Raises:
+            ThreadChannelError:
+                If the channel is closed and empty.
+
+        Complexity:
+            Time: O(1) amortized, unbounded under contention
+            Space: O(1)
+        """
+
+        Boolean gotItem = self.fullSlots.tryWait()
+        while gotItem == False:
+            if self.closed.load() and self.count == 0:
+                raise new ThreadChannelError( "Channel closed and empty", 1, None )
+            self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+            self.scheduler.blockCurrent()
+            gotItem = self.fullSlots.tryWait()
+        
+        self.guard.lock()
+        T value = self.buffer.get( self.head )
+        self.head = ( self.head + 1 ) % self.capacity
+        self.count = self.count - 1
+        self.guard.unlock()
+        
+        self.emptySlots.signal()
+        return value
+    
+    public function trySend( self, T value ) -> Boolean:
+        
+        """
+        Attempt to send a value without blocking. Returns False immediately
+        if the channel is closed or the buffer is full.
+        
+        Parameters:
+            value (T):
+                The value to send.
+        
+        Returns:
+            Boolean:
+                True if the value was sent, False if the channel is closed
+                or full.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed.load():
+            return False
+        Boolean gotSlot = self.emptySlots.tryWait()
+        if gotSlot == False:
+            return False
+        self.guard.lock()
+        self.buffer.set( self.tail, value )
+        self.tail = ( self.tail + 1 ) % self.capacity
+        self.count = self.count + 1
+        self.guard.unlock()
+        self.fullSlots.signal()
+        return True
+    
+    public function tryReceive( self ) -> ?T:
+        
+        """
+        Attempt to receive a value without blocking. Returns None if no
+        values are currently available.
+        
+        Returns:
+            ?T:
+                The next value from the channel, or None if the buffer is empty.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Boolean gotItem = self.fullSlots.tryWait()
+        if gotItem == False:
+            return None
+        self.guard.lock()
+        T value = self.buffer.get( self.head )
+        self.head = ( self.head + 1 ) % self.capacity
+        self.count = self.count - 1
+        self.guard.unlock()
+        self.emptySlots.signal()
+        return value
+    
+    public function isClosed( self ) -> Boolean:
+        
+        """
+        Check whether the channel has been closed.
+        
+        Returns:
+            Boolean:
+                True if the channel is closed, False otherwise.
+        """
+        
+        return self.closed.load()
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """
+        Check whether the channel buffer currently holds zero values.
+        
+        Returns:
+            Boolean:
+                True if the buffer is empty, False otherwise.
+        """
+        
+        return self.count == 0
+    
+    public function getCount( self ) -> I64:
+        
+        """
+        Return the number of values currently buffered in the channel.
+        
+        Returns:
+            I64:
+                The current item count.
+        """
+        
+        return self.count
+    
+    public function closeSend( self ) -> Void:
+        
+        """
+        Decrement the sender reference count. When the last sender closes,
+        the channel is marked as closed, preventing further sends.
+        """
+        
+        I64 remaining = self.senderCount.fetchSub( 1 ) - 1
+        if remaining <= 0:
+            self.closed.store( True )
+    
+    public function closeReceive( self ) -> Void:
+        
+        """
+        Close the channel from the receiver side. Immediately marks the
+        channel as closed, which will cause pending and future sends to fail.
+        """
+        
+        self.closed.store( True )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources owned by the channel. Frees the internal buffer
+        and destroys atomic state. The channel must not be used after this call.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.buffer.free()
+        self.closed.destroy()
+        self.senderCount.destroy()
+
+public class Sender<T>:
+    
+    """
+    Send half of a bounded channel. Wraps a ChannelInner and provides a
+    simplified API for producers. Multiple Senders may share the same
+    underlying ChannelInner for multi-producer patterns.
+    """
+    
+    protect ChannelInner<T> inner
+    """ The shared channel backing this sender. """
+    
+    public function Sender( self, ChannelInner<T> inner ) -> Void:
+        
+        """
+        Construct a sender connected to the given channel.
+        
+        Parameters:
+            inner (ChannelInner<T>):
+                The underlying channel to send values into.
+        """
+        
+        self.inner = inner
+    
+    public function send( self, T value ) -> Void:
+        
+        """
+        Send a value into the channel, blocking if the buffer is full.
+        Raises if the channel has been closed.
+        
+        Parameters:
+            value (T):
+                The value to send.
+        
+        Raises:
+            ThreadChannelError:
+                If the channel is closed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Boolean sent = self.inner.send( value )
+        if sent == False:
+            raise new ThreadChannelError( "Channel closed", 2, None )
+    
+    public function trySend( self, T value ) -> Boolean:
+        
+        """
+        Attempt to send a value without blocking.
+        
+        Parameters:
+            value (T):
+                The value to send.
+        
+        Returns:
+            Boolean:
+                True if the value was sent, False if the channel is closed or full.
+        """
+        
+        return self.inner.trySend( value )
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close this sender's connection to the channel. If this is the last
+        active sender, the channel itself is marked as closed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.inner.closeSend()
+
+public class Receiver<T>:
+    
+    """
+    Receive half of a bounded channel. Wraps a ChannelInner and provides a
+    simplified API for the consumer. Only one Receiver should be active per
+    channel (single-consumer pattern).
+    """
+    
+    protect ChannelInner<T> inner
+    """ The shared channel backing this receiver. """
+    
+    public function Receiver( self, ChannelInner<T> inner ) -> Void:
+        
+        """
+        Construct a receiver connected to the given channel.
+        
+        Parameters:
+            inner (ChannelInner<T>):
+                The underlying channel to receive values from.
+        """
+        
+        self.inner = inner
+    
+    public function receive( self ) -> T:
+        
+        """
+        Receive a value from the channel, blocking if the buffer is empty.
+        
+        Returns:
+            T:
+                The next value from the channel.
+        
+        Raises:
+            ThreadChannelError:
+                If the channel is closed and empty.
+        """
+        
+        return self.inner.receive()
+    
+    public function tryReceive( self ) -> ?T:
+        
+        """
+        Attempt to receive a value without blocking.
+        
+        Returns:
+            ?T:
+                The next value, or None if the buffer is empty.
+        """
+        
+        return self.inner.tryReceive()
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close the channel from the receiver side. All pending and future
+        sends will fail after this call.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.inner.closeReceive()
+
+export {
+    Sender,
+    Receiver,
+    ChannelInner
+}

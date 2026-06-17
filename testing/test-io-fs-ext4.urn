@@ -1,0 +1,13 @@
+package testing
+
+from uranite.io.fs.ext4 import Ext4Superblock, Ext4Inode, Ext4FileSystem
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO FS Ext4 Tests ===" )
+
+    Ext4Superblock superblock = new Ext4Superblock()
+    putsln( "Ext4Superblock constructed OK" )
+
+    putsln( "=== All IO FS Ext4 Tests Passed ===" )
+    return 0

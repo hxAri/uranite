@@ -1,0 +1,55 @@
+package testing
+
+from uranite.net.http.request import HttpRequest
+from uranite.net.http.response import HttpResponse
+from uranite.net.http.parser import {
+    parseStatusCode, extractStatusText,
+    parseContentLength, parseResponse
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertEqualStr
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== HTTP Client Tests ===" )
+
+    # HttpRequest construction
+    HttpRequest req = new HttpRequest( "GET", "/api/users" )
+    assertEqualStr( "GET", req.method, "request method" )
+    assertEqualStr( "/api/users", req.path, "request path" )
+    assertEqualStr( "HTTP/1.1", req.version, "request version" )
+    putsln( "HttpRequest OK" )
+
+    # HttpResponse construction
+    HttpResponse res = new HttpResponse( 200, "OK", "" )
+    assertEqualI64( 200, res.statusCode, "response status" )
+    assertEqualStr( "OK", res.statusText, "response statusText" )
+    assertEqualStr( "", res.body, "response body empty" )
+    putsln( "HttpResponse OK" )
+
+    # parseStatusCode
+    I64 code1 = parseStatusCode( "HTTP/1.1 200 OK\r\n" )
+    assertEqualI64( 200, code1, "parseStatusCode 200" )
+    I64 code2 = parseStatusCode( "HTTP/1.1 404 Not Found\r\n" )
+    assertEqualI64( 404, code2, "parseStatusCode 404" )
+    putsln( "parseStatusCode OK" )
+
+    # extractStatusText
+    String statusText = extractStatusText( "HTTP/1.1 200 OK\r\n" )
+    assertEqualStr( "OK", statusText, "extractStatusText" )
+    putsln( "extractStatusText OK" )
+
+    # parseContentLength
+    I64 contentLength = parseContentLength( "Content-Length: 42\r\n" )
+    assertEqualI64( 42, contentLength, "parseContentLength" )
+    putsln( "parseContentLength OK" )
+
+    # parseResponse
+    HttpResponse parsed = parseResponse( "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello" )
+    assertEqualI64( 200, parsed.statusCode, "parsed statusCode" )
+    assertEqualStr( "Hello", parsed.body, "parsed body" )
+    putsln( "parseResponse OK" )
+
+    putsln( "=== All HTTP tests passed ===" )
+    return 0

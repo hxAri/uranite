@@ -1,0 +1,40 @@
+#
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/iterators/traversable.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the Traversable marker interface, which serves as a base contract
+# indicating that a type supports some form of sequential element traversal.
+# Types implementing Traversable signal that their elements can be visited
+# in order, though the specific traversal mechanism is left to subtypes
+# such as Iterable or Iterator.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.iterators.traversable
+
+public interface Traversable:
+    
+    """
+    Marker interface for types that support some form of sequential element
+    traversal. Implementing this interface signals that the type's elements
+    can be visited in a defined order, serving as the root of the traversal
+    type hierarchy. Concrete traversal contracts such as Iterable and Iterator
+    extend this interface with specific method requirements for obtaining
+    iterators or advancing through elements.
+    """
+
+export {
+    Traversable
+}

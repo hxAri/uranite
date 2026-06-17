@@ -1,0 +1,56 @@
+package testing
+
+from uranite.adelia.color-distance import ColorDistance
+from uranite.adelia.rgb import RGB
+from uranite.testing.assertions import {
+    assertEqualF64, assertGreaterThan,
+    assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia ColorDistance Tests ===" )
+
+    RGB red = new RGB( 255, 0, 0 )
+    RGB green = new RGB( 0, 255, 0 )
+    RGB black = new RGB( 0, 0, 0 )
+    RGB white = new RGB( 255, 255, 255 )
+    RGB sameRed = new RGB( 255, 0, 0 )
+
+    # euclidean: identical = 0
+    F64 eucSame = ColorDistance.euclidean( red, sameRed )
+    assertEqualF64( 0.0, eucSame, 0.0001, "euclidean same" )
+    putsln( "euclidean same OK" )
+
+    # euclidean: different > 0
+    F64 eucRG = ColorDistance.euclidean( red, green )
+    assertTrue( eucRG > 0.0, "euclidean red-green > 0" )
+    putsln( "euclidean diff OK" )
+
+    # euclidean: black vs white
+    F64 eucBW = ColorDistance.euclidean( black, white )
+    assertTrue( eucBW > eucRG, "black-white > red-green" )
+    putsln( "euclidean bw OK" )
+
+    # redmean: identical = 0
+    F64 rmSame = ColorDistance.redmean( red, sameRed )
+    assertEqualF64( 0.0, rmSame, 0.0001, "redmean same" )
+    putsln( "redmean same OK" )
+
+    # redmean: different > 0
+    F64 rmRG = ColorDistance.redmean( red, green )
+    assertTrue( rmRG > 0.0, "redmean red-green > 0" )
+    putsln( "redmean diff OK" )
+
+    # similarity: identical colors = 0% distance
+    F64 simSame = ColorDistance.similarity( red, sameRed )
+    assertTrue( simSame < 1.0, "similarity same near 0" )
+    putsln( "similarity same OK" )
+
+    # similarity: different colors > identical
+    F64 simRG = ColorDistance.similarity( red, green )
+    assertTrue( simRG > simSame, "similarity diff > same" )
+    putsln( "similarity diff OK" )
+
+    putsln( "=== All ColorDistance tests passed ===" )
+    return 0

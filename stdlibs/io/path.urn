@@ -1,0 +1,481 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/path.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Path manipulation utilities. Pure string operations for join, dirname,
+# basename, extension. Stat-based checks for exists, isFile, isDir.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.path
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
+    sysAccess, sysGetcwd, sysReadlink, F_OK
+}
+from uranite.io.stat import statPath, lstatPath, FileStat
+
+public function join( String basePath, String childPath ) -> String:
+
+    """
+    Join two path segments with a forward slash separator. If the first
+    segment already ends with a slash, no extra slash is inserted.
+
+    Parameters:
+        basePath (String):
+            The leading path segment.
+        childPath (String):
+            The trailing path segment to append.
+
+    Returns:
+        String:
+            The combined path with exactly one slash between segments.
+
+    Complexity:
+        Time: O(n + m) where n and m are the lengths of basePath and childPath.
+    """
+
+    I64 firstPointer = stringToPtr( basePath )
+    I64 firstLength = stringLen( basePath )
+    I64 secondPointer = stringToPtr( childPath )
+    I64 secondLength = stringLen( childPath )
+    I64 needSlash = 0
+    if firstLength > 0:
+        I64 lastByte = readByteAt( firstPointer, firstLength - 1 )
+        if lastByte != 47:
+            needSlash = 1
+    I64 totalLength = firstLength + needSlash + secondLength
+    I64 allocationWords = ( totalLength + 8 ) / 8
+    Memory<I64> resultMemory = new Memory<I64>( allocationWords )
+    I64 resultAddress = memoryToPtr( resultMemory )
+    I64 writePosition = 0
+    I64 firstCopyIndex = 0
+    while firstCopyIndex < firstLength:
+        I64 byteValue = readByteAt( firstPointer, firstCopyIndex )
+        writeByteAt( resultAddress, writePosition, byteValue )
+        writePosition = writePosition + 1
+        firstCopyIndex = firstCopyIndex + 1
+    if needSlash == 1:
+        writeByteAt( resultAddress, writePosition, 47 )
+        writePosition = writePosition + 1
+    I64 secondCopyIndex = 0
+    while secondCopyIndex < secondLength:
+        I64 byteValue = readByteAt( secondPointer, secondCopyIndex )
+        writeByteAt( resultAddress, writePosition, byteValue )
+        writePosition = writePosition + 1
+        secondCopyIndex = secondCopyIndex + 1
+    writeByteAt( resultAddress, writePosition, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    return result
+
+public function dirname( String path ) -> String:
+    
+    """
+    Return the directory portion of a path by finding the last forward
+    slash. Returns "." if no slash is found, "/" if the only slash is
+    at position zero.
+    
+    Parameters:
+        path (String):
+            The filesystem path to extract the directory from.
+    
+    Returns:
+        String:
+            The directory component of the path.
+    
+    Complexity:
+        Time: O(n) where n is the length of the path.
+    """
+    
+    I64 pathPointer = stringToPtr( path )
+    I64 pathLength = stringLen( path )
+    I64 lastSlashPosition = -1
+    I64 scanIndex = 0
+    while scanIndex < pathLength:
+        I64 currentByte = readByteAt( pathPointer, scanIndex )
+        if currentByte == 47:
+            lastSlashPosition = scanIndex
+        scanIndex = scanIndex + 1
+    if lastSlashPosition == -1:
+        return "."
+    if lastSlashPosition == 0:
+        return "/"
+    I64 resultLength = lastSlashPosition
+    I64 allocationWords = ( resultLength + 8 ) / 8
+    Memory<I64> resultMemory = new Memory<I64>( allocationWords )
+    I64 resultAddress = memoryToPtr( resultMemory )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        I64 byteValue = readByteAt( pathPointer, copyIndex )
+        writeByteAt( resultAddress, copyIndex, byteValue )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultAddress, resultLength, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    return result
+
+public function basename( String path ) -> String:
+    
+    """
+    Return the final component of a path after the last forward slash.
+    If the path contains no slash, the entire path is returned. Returns
+    an empty string if the path ends with a slash.
+    
+    Parameters:
+        path (String):
+            The filesystem path to extract the base name from.
+    
+    Returns:
+        String:
+            The filename component of the path.
+    
+    Complexity:
+        Time: O(n) where n is the length of the path.
+    """
+    
+    I64 pathPointer = stringToPtr( path )
+    I64 pathLength = stringLen( path )
+    I64 lastSlashPosition = -1
+    I64 scanIndex = 0
+    while scanIndex < pathLength:
+        I64 currentByte = readByteAt( pathPointer, scanIndex )
+        if currentByte == 47:
+            lastSlashPosition = scanIndex
+        scanIndex = scanIndex + 1
+    I64 nameStart = lastSlashPosition + 1
+    I64 resultLength = pathLength - nameStart
+    if resultLength <= 0:
+        return ""
+    I64 allocationWords = ( resultLength + 8 ) / 8
+    Memory<I64> resultMemory = new Memory<I64>( allocationWords )
+    I64 resultAddress = memoryToPtr( resultMemory )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        I64 byteValue = readByteAt( pathPointer, nameStart + copyIndex )
+        writeByteAt( resultAddress, copyIndex, byteValue )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultAddress, resultLength, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    return result
+
+public function extension( String path ) -> String:
+    
+    """
+    Return the file extension from a path, excluding the dot. Operates
+    on the basename portion only. Returns an empty string if there is
+    no dot or the dot is the first character (hidden files).
+    
+    Parameters:
+        path (String):
+            The filesystem path to extract the extension from.
+    
+    Returns:
+        String:
+            The file extension without the leading dot, or empty string
+            if none.
+    
+    Complexity:
+        Time: O(n) where n is the length of the path.
+    """
+    
+    String base = basename( path )
+    I64 basePointer = stringToPtr( base )
+    I64 baseLength = stringLen( base )
+    I64 lastDotPosition = -1
+    I64 scanIndex = 0
+    while scanIndex < baseLength:
+        I64 currentByte = readByteAt( basePointer, scanIndex )
+        if currentByte == 46:
+            lastDotPosition = scanIndex
+        scanIndex = scanIndex + 1
+    if lastDotPosition == -1:
+        return ""
+    if lastDotPosition == 0:
+        return ""
+    I64 extensionStart = lastDotPosition + 1
+    I64 resultLength = baseLength - extensionStart
+    if resultLength <= 0:
+        return ""
+    I64 allocationWords = ( resultLength + 8 ) / 8
+    Memory<I64> resultMemory = new Memory<I64>( allocationWords )
+    I64 resultAddress = memoryToPtr( resultMemory )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        I64 byteValue = readByteAt( basePointer, extensionStart + copyIndex )
+        writeByteAt( resultAddress, copyIndex, byteValue )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultAddress, resultLength, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    return result
+
+public function stem( String path ) -> String:
+    
+    """
+    Return the basename of a path with the extension removed. If there
+    is no dot or the dot is the first character, the full basename is
+    returned unchanged.
+    
+    Parameters:
+        path (String):
+            The filesystem path to extract the stem from.
+    
+    Returns:
+        String:
+            The filename without its extension.
+    
+    Complexity:
+        Time: O(n) where n is the length of the path.
+    """
+    
+    String base = basename( path )
+    I64 basePointer = stringToPtr( base )
+    I64 baseLength = stringLen( base )
+    I64 lastDotPosition = -1
+    I64 scanIndex = 0
+    while scanIndex < baseLength:
+        I64 currentByte = readByteAt( basePointer, scanIndex )
+        if currentByte == 46:
+            lastDotPosition = scanIndex
+        scanIndex = scanIndex + 1
+    if lastDotPosition <= 0:
+        return base
+    I64 resultLength = lastDotPosition
+    I64 allocationWords = ( resultLength + 8 ) / 8
+    Memory<I64> resultMemory = new Memory<I64>( allocationWords )
+    I64 resultAddress = memoryToPtr( resultMemory )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        I64 byteValue = readByteAt( basePointer, copyIndex )
+        writeByteAt( resultAddress, copyIndex, byteValue )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultAddress, resultLength, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    return result
+
+public function exists( String path ) -> Boolean:
+    
+    """
+    Check whether a file or directory exists at the given path using
+    the access syscall with F_OK mode.
+    
+    Parameters:
+        path (String):
+            The filesystem path to check.
+    
+    Returns:
+        Boolean:
+            True if the path exists, False otherwise.
+    """
+    
+    I64 pathPtr = stringToPtr( path )
+    return sysAccess( pathPtr, F_OK )
+
+public function isFile( String path ) -> Boolean:
+    
+    """
+    Check whether the given path exists and is a regular file.
+    
+    Parameters:
+        path (String):
+            The filesystem path to check.
+    
+    Returns:
+        Boolean:
+            True if the path is a regular file, False otherwise.
+    """
+    
+    if exists( path ) == False:
+        return False
+    FileStat st = statPath( path )
+    return st.isFile()
+
+public function isDir( String path ) -> Boolean:
+    
+    """
+    Check whether the given path exists and is a directory.
+    
+    Parameters:
+        path (String):
+            The filesystem path to check.
+    
+    Returns:
+        Boolean:
+            True if the path is a directory, False otherwise.
+    """
+    
+    if exists( path ) == False:
+        return False
+    FileStat st = statPath( path )
+    return st.isDirectory()
+
+public function isSymlink( String path ) -> Boolean:
+    
+    """
+    Check whether the given path exists and is a symbolic link. Uses
+    lstat to avoid following the symlink itself.
+    
+    Parameters:
+        path (String):
+            The filesystem path to check.
+    
+    Returns:
+        Boolean:
+            True if the path is a symbolic link, False otherwise.
+    """
+    
+    if exists( path ) == False:
+        return False
+    FileStat st = lstatPath( path )
+    return st.isSymlink()
+
+public function readlink( String path ) -> String:
+    
+    """
+    Read the target of a symbolic link and return it as a string.
+    
+    Parameters:
+        path (String):
+            The filesystem path of the symbolic link.
+    
+    Returns:
+        String:
+            The target path that the symbolic link points to.
+    
+    Raises:
+        IOError:
+            If the readlink syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 pathPointer = stringToPtr( path )
+    I64 readBufferSize = 4096
+    I64 allocationWords = ( readBufferSize + 8 ) / 8
+    Memory<I64> readBuffer = new Memory<I64>( allocationWords )
+    I64 readBufferAddress = memoryToPtr( readBuffer )
+    I64 bytesRead = sysReadlink( pathPointer, readBufferAddress, readBufferSize )
+    writeByteAt( readBufferAddress, bytesRead, 0 )
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
+    return result
+
+public function absolute( String path ) -> String:
+    
+    """
+    Convert a relative path to an absolute path by joining it with the
+    current working directory. If the path is already absolute (starts
+    with '/'), it is returned unchanged.
+    
+    Parameters:
+        path (String):
+            The filesystem path to resolve.
+    
+    Returns:
+        String:
+            The absolute path.
+    
+    Raises:
+        IOError:
+            If the getcwd syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 pathPointer = stringToPtr( path )
+    I64 pathLength = stringLen( path )
+    if pathLength > 0:
+        I64 firstByte = readByteAt( pathPointer, 0 )
+        if firstByte == 47:
+            return path
+    I64 cwdBufferSize = 4096
+    I64 cwdBufferWords = ( cwdBufferSize + 8 ) / 8
+    Memory<I64> cwdBuffer = new Memory<I64>( cwdBufferWords )
+    I64 cwdBufferAddress = memoryToPtr( cwdBuffer )
+    sysGetcwd( cwdBufferAddress, cwdBufferSize )
+    String currentDirectory = ""
+    asm volatile "movq $1, $0" : output( "=r" currentDirectory ) : input( "r" cwdBufferAddress ) : clobber()
+    return join( currentDirectory, path )
+
+public function parentDir( String path ) -> String:
+
+    """
+    Return the parent directory of the given path.
+
+    Alias for dirname that reads more naturally in path-building code.
+
+    Parameters:
+        path (String):
+            The filesystem path whose parent is requested.
+
+    Returns:
+        String:
+            The parent directory path, or "." if the path has no separator.
+
+    Complexity:
+        Time: O(n) where n is the path length
+        Space: O(1)
+    """
+
+    return dirname( path )
+
+public function resolve( String basePath, String child ) -> String:
+
+    """
+    Resolve a child path relative to a base path.
+
+    Alias for join that reads more naturally when building paths
+    from a known base directory.
+
+    Parameters:
+        basePath (String):
+            The base directory path.
+        child (String):
+            The child segment to append.
+
+    Returns:
+        String:
+            The combined path.
+
+    Complexity:
+        Time: O(n + m) where n and m are the segment lengths
+        Space: O(n + m)
+    """
+
+    return join( basePath, child )
+
+export {
+    join,
+    dirname,
+    basename,
+    extension,
+    stem,
+    exists,
+    isFile,
+    isDir,
+    isSymlink,
+    readlink,
+    absolute,
+    parentDir,
+    resolve
+}

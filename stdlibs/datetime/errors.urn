@@ -1,0 +1,109 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/datetime/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.datetime.errors
+
+from uranite.errors.error import Error
+
+public class DateTimeError extends Error:
+    
+    """
+    Base error class for all date and time related failures such as
+    invalid date components, timezone lookup failures, or arithmetic
+    overflow in temporal calculations.
+    """
+    
+    public function DateTimeError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new DateTimeError.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the error.
+            code (I64):
+                A numeric error code identifying the failure type.
+            cause (?Error):
+                An optional underlying error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class DateParseError extends DateTimeError:
+    
+    """
+    Raised when a date or time string cannot be parsed into a valid
+    DateTime due to malformed input or an unrecognized format.
+    """
+    
+    public function DateParseError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new DateParseError.
+        
+        Parameters:
+            message (String):
+                A description of the parsing failure.
+            code (I64):
+                A numeric error code.
+            cause (?Error):
+                An optional underlying error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class InvalidDateError extends DateTimeError:
+    
+    """
+    Raised when date components form an invalid date, such as
+    month 13, day 32, or February 30.
+    """
+    
+    public function InvalidDateError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new InvalidDateError.
+        
+        Parameters:
+            message (String):
+                A description of which date component is invalid.
+            code (I64):
+                A numeric error code.
+            cause (?Error):
+                An optional underlying error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+export {
+    DateTimeError,
+    DateParseError,
+    InvalidDateError
+}

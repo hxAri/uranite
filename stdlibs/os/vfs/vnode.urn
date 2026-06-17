@@ -1,0 +1,348 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/vfs/vnode.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the VNode (virtual node) abstraction for filesystem-agnostic file and directory representation, along with permission constants and a VNode cache for efficient lookups.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.vfs.vnode
+
+from uranite.memory.memory import Memory
+
+enum VNodeType backed I64:
+    
+    """
+    Enumerates the types of nodes in the virtual filesystem. Each type corresponds to
+    a distinct kind of filesystem object, from regular files and directories to special
+    device nodes, pipes, and sockets.
+    """
+    
+    unit File 1
+    unit Directory 2
+    unit Symlink 3
+    unit CharDevice 4
+    unit BlockDevice 5
+    unit Pipe 6
+    unit Socket 7
+
+public const I64 PERM_READ = 4
+""" POSIX read permission for "other" category (bits 0-2). """
+
+public const I64 PERM_WRITE = 2
+""" POSIX write permission for "other" category (bits 0-2). """
+
+public const I64 PERM_EXECUTE = 1
+""" POSIX execute permission for "other" category (bits 0-2). """
+
+public const I64 PERM_OWNER_READ = 256
+""" POSIX owner read permission (bit 8). """
+
+public const I64 PERM_OWNER_WRITE = 128
+""" POSIX owner write permission (bit 7). """
+
+public const I64 PERM_OWNER_EXECUTE = 64
+""" POSIX owner execute permission (bit 6). """
+
+public class VNode:
+    
+    """
+    In-memory representation of a file, directory, or special node in the virtual
+    filesystem. VNodes are filesystem-agnostic, providing a unified abstraction over
+    different underlying filesystem formats. Metadata (size, permissions, ownership,
+    timestamps, link count) is cached from the underlying filesystem. Each VNode
+    is reference-counted to track how many open file descriptors and directory entries
+    reference it. The filesystem ID and inode number link the VNode back to its
+    concrete storage in the underlying filesystem.
+    """
+    
+    public I64 vnodeId
+    public I64 vnodeType
+    public I64 size
+    public I64 permissions
+    public I64 ownerUid
+    public I64 ownerGid
+    public I64 refCount
+    public I64 filesystemId
+    public I64 inodeNumber
+    public I64 createdTime
+    public I64 modifiedTime
+    public I64 accessedTime
+    public I64 linkCount
+    
+    public function VNode( self, I64 id, I64 nodeType, I64 fsId, I64 inode ) -> Void:
+        
+        """
+        Constructs a new VNode with the given unique identifier, node type (from VNodeType),
+        filesystem identifier, and underlying inode number. The VNode starts with a reference
+        count of 1, link count of 1, and all other metadata fields (size, permissions,
+        ownership, timestamps) initialized to zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.vnodeId = id
+        self.vnodeType = nodeType
+        self.size = 0
+        self.permissions = 0
+        self.ownerUid = 0
+        self.ownerGid = 0
+        self.refCount = 1
+        self.filesystemId = fsId
+        self.inodeNumber = inode
+        self.createdTime = 0
+        self.modifiedTime = 0
+        self.accessedTime = 0
+        self.linkCount = 1
+    
+    public function retain( self ) -> I64:
+        
+        """
+        Increments the VNode reference count by one and returns the new count. Called when
+        a new file descriptor or directory entry references this VNode.
+        """
+        
+        self.refCount = self.refCount + 1
+        return self.refCount
+    
+    public function release( self ) -> Boolean:
+        
+        """
+        Decrements the VNode reference count by one. Returns True if the reference count
+        reached zero, indicating the VNode is no longer referenced and can be evicted
+        from the cache and its resources freed.
+        """
+        
+        self.refCount = self.refCount - 1
+        return self.refCount == 0
+    
+    public function isFile( self ) -> Boolean:
+        
+        """ Returns True if this VNode represents a regular file (type 1). """
+        
+        return self.vnodeType == 1
+    
+    public function isDirectory( self ) -> Boolean:
+        
+        """ Returns True if this VNode represents a directory (type 2). """
+        
+        return self.vnodeType == 2
+    
+    public function isSymlink( self ) -> Boolean:
+        
+        """ Returns True if this VNode represents a symbolic link (type 3). """
+        
+        return self.vnodeType == 3
+    
+    public function canOwnerRead( self ) -> Boolean:
+        
+        """
+        Checks whether the owner has read permission on this VNode by testing bit 8
+        (value 256) of the POSIX permission bitmask.
+        """
+        
+        return ( self.permissions & 256 ) != 0
+    
+    public function canOwnerWrite( self ) -> Boolean:
+        
+        """
+        Checks whether the owner has write permission on this VNode by testing bit 7
+        (value 128) of the POSIX permission bitmask.
+        """
+        
+        return ( self.permissions & 128 ) != 0
+    
+    public function canOwnerExecute( self ) -> Boolean:
+        
+        """
+        Checks whether the owner has execute permission on this VNode by testing bit 6
+        (value 64) of the POSIX permission bitmask.
+        """
+        
+        return ( self.permissions & 64 ) != 0
+    
+    public function setPermissions( self, I64 perms ) -> Void:
+        
+        """ Sets the 12-bit POSIX permission bitmask for this VNode. """
+        
+        self.permissions = perms
+    
+    public function setSize( self, I64 newSize ) -> Void:
+        
+        """ Updates the cached file size for this VNode. """
+        
+        self.size = newSize
+    
+    public function setOwner( self, I64 uid, I64 gid ) -> Void:
+        
+        """ Sets the owner user ID and group ID for this VNode. """
+        
+        self.ownerUid = uid
+        self.ownerGid = gid
+    
+    public function getVnodeId( self ) -> I64:
+        
+        """ Returns the unique identifier assigned to this VNode. """
+        
+        return self.vnodeId
+    
+    public function getFilesystemId( self ) -> I64:
+        
+        """ Returns the filesystem identifier that this VNode belongs to. """
+        
+        return self.filesystemId
+    
+    public function getInodeNumber( self ) -> I64:
+        
+        """
+        Returns the underlying inode number of this VNode in its filesystem.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.inodeNumber
+
+public class VNodeCache:
+    
+    """
+    Cache that maps VNode IDs to VNode pointers (stored as type-erased I64 values) for
+    fast lookup. This avoids repeated filesystem queries for frequently accessed VNodes.
+    The cache has a fixed capacity and uses linear scanning for lookups.
+    """
+    
+    protect Memory<I64> ids
+    protect Memory<I64> pointers
+    protect I64 capacity
+    protect I64 count
+    
+    public function VNodeCache( self, I64 maxEntries ) -> Void:
+        
+        """
+        Constructs a new VNode cache with the specified maximum number of entries.
+        All slots are initialized to empty (ID and pointer set to zero).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxEntries
+        self.count = 0
+        self.ids = new Memory<I64>( maxEntries )
+        self.pointers = new Memory<I64>( maxEntries )
+        I64 slotIndex = 0
+        while slotIndex < maxEntries:
+            self.ids.set( slotIndex, 0 )
+            self.pointers.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function insert( self, I64 vnodeId, I64 vnodePointer ) -> Boolean:
+        
+        """
+        Inserts a VNode into the cache by storing its ID and type-erased pointer in the
+        first available slot. Returns True if the VNode was successfully cached, or False
+        if the cache is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if self.count >= self.capacity:
+            return False
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ids.get( slotIndex ) == 0:
+                self.ids.set( slotIndex, vnodeId )
+                self.pointers.set( slotIndex, vnodePointer )
+                self.count = self.count + 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function lookup( self, I64 vnodeId ) -> I64:
+        
+        """
+        Looks up a VNode in the cache by its ID. Returns the type-erased VNode pointer
+        if found, or -1 if the VNode is not cached.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ids.get( slotIndex ) == vnodeId:
+                return self.pointers.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return -1
+    
+    public function remove( self, I64 vnodeId ) -> Boolean:
+        
+        """
+        Removes a VNode from the cache by its ID, freeing the slot for reuse. Returns
+        True if the VNode was found and removed, or False if it was not in the cache.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ids.get( slotIndex ) == vnodeId:
+                self.ids.set( slotIndex, 0 )
+                self.pointers.set( slotIndex, 0 )
+                self.count = self.count - 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of VNodes currently stored in the cache. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the VNode cache, including
+        the ID and pointer arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.ids.free()
+        self.pointers.free()
+
+export {
+    VNodeType,
+    VNode,
+    VNodeCache,
+    PERM_READ,
+    PERM_WRITE,
+    PERM_EXECUTE,
+    PERM_OWNER_READ,
+    PERM_OWNER_WRITE,
+    PERM_OWNER_EXECUTE
+}

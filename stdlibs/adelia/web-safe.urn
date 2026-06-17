@@ -1,0 +1,159 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/web-safe.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the WebSafe class with static functions for snapping RGB colors
+# to the nearest web-safe color. Web-safe colors are a palette of 216 colors
+# (6 x 6 x 6 cube) where each channel uses only the values 0, 51, 102, 153,
+# 204, or 255. These colors were designed to display consistently on 256-color
+# displays common in the early web era and remain useful as a simplified
+# color palette for accessibility and compatibility purposes.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.web-safe
+
+from uranite.adelia.rgb import RGB
+from uranite.language.boolean import Boolean
+
+public final class WebSafe:
+    
+    """
+    Static utility class for snapping arbitrary RGB colors to the nearest
+    web-safe color value. The web-safe palette consists of 216 colors formed
+    by taking all combinations of six intensity levels (0x00, 0x33, 0x66,
+    0x99, 0xCC, 0xFF) for each of the red, green, and blue channels. Each
+    level is separated by exactly 51 in decimal. The snapping algorithm rounds
+    each channel independently to the nearest multiple of 51.
+    """
+    
+    public function snapComponent( self, I32 component ) -> I32:
+        
+        """
+        Snap a single RGB channel value (0-255) to the nearest web-safe value
+        by dividing by 51, rounding to the nearest integer, and multiplying
+        back by 51. The six possible output values are 0, 51, 102, 153, 204,
+        and 255.
+        
+        Parameters:
+            component (I32):
+                A single channel value from 0 to 255.
+        
+        Returns:
+            I32:
+                The nearest web-safe value for this channel.
+        """
+        
+        I32 snapped = ( component + 25 ) / 51
+        return snapped * 51
+    
+    public function snap( self, I32 red, I32 green, I32 blue ) -> RGB:
+        
+        """
+        Snap all three RGB channels independently to the nearest web-safe values,
+        returning the resulting web-safe color as an RGB struct.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            RGB:
+                An RGB struct with each channel snapped to web-safe values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new RGB( self.snapComponent( red ), self.snapComponent( green ), self.snapComponent( blue ) )
+    
+    public function snapHex( self, I32 hex ) -> I32:
+        
+        """
+        Snap a packed 24-bit hex color to the nearest web-safe color and return
+        the result as a packed hex integer.
+        
+        Parameters:
+            hex (I32):
+                The packed hex color value in 0xRRGGBB format.
+        
+        Returns:
+            I32:
+                The nearest web-safe color as a packed hex value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I32 r = ( hex >> 16 ) & 255
+        I32 g = ( hex >> 8 ) & 255
+        I32 b = hex & 255
+        I32 sr = self.snapComponent( r )
+        I32 sg = self.snapComponent( g )
+        I32 sb = self.snapComponent( b )
+        return ( sr << 16 ) | ( sg << 8 ) | sb
+    
+    public function isWebSafe( self, I32 red, I32 green, I32 blue ) -> Boolean:
+        
+        """
+        Check whether the given RGB color is already a web-safe color, meaning
+        each channel value is exactly one of 0, 51, 102, 153, 204, or 255.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            Boolean:
+                True if all three channels are web-safe values.
+        """
+        
+        return self.isComponentWebSafe( red ) and self.isComponentWebSafe( green ) and self.isComponentWebSafe( blue )
+    
+    private function isComponentWebSafe( self, I32 component ) -> Boolean:
+        
+        """
+        Check whether a single channel value is a web-safe value by verifying
+        it is evenly divisible by 51.
+        
+        Parameters:
+            component (I32):
+                A single channel value from 0 to 255.
+        
+        Returns:
+            Boolean:
+                True if the component is a multiple of 51.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I32 remainder = component - ( component / 51 ) * 51
+        return remainder == 0
+
+export {
+    WebSafe
+}

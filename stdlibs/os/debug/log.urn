@@ -1,0 +1,264 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/debug/log.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Kernel event log implemented as a ring buffer of timestamped entries. Each entry stores a timestamp, severity level, source identifier, and event code. Supports configurable minimum log level filtering and ring-buffer overflow semantics.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.debug.log
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public enum KernelLogLevel backed I64:
+    
+    """
+    Kernel log severity levels, from most verbose (Trace) to most severe (Fatal).
+    Used by EventLog to filter and categorize kernel events.
+    """
+    
+    unit Trace 0
+    
+    """ Most verbose level, for detailed execution tracing. """
+    
+    unit Debug 1
+    
+    """ Debug-level messages for development diagnostics. """
+    
+    unit Info 2
+    
+    """ Informational messages about normal kernel operation. """
+    
+    unit Warn 3
+    """ Warning messages for recoverable abnormal conditions. """
+    
+    unit Error 4
+    
+    """ Error messages for failures that may affect operation. """
+    
+    unit Fatal 5
+    
+    """ Most severe level, for unrecoverable fatal conditions. """
+
+public class EventLog:
+    
+    """
+    Ring buffer-based kernel event log that stores timestamped log entries with
+    severity levels. When the buffer is full, new entries overwrite the oldest
+    ones. Each entry consists of a timestamp, log level, source identifier, and
+    event code stored in parallel Memory arrays. A spinlock protects concurrent
+    access from multiple kernel subsystems and interrupt handlers.
+    """
+    
+    public Memory<I64> timestamps
+    public Memory<I64> levels
+    public Memory<I64> sources
+    public Memory<I64> codes
+    public I64 capacity
+    public I64 head
+    public I64 tail
+    public I64 count
+    public I64 minLevel
+    public Spinlock lock
+    
+    public function EventLog( self, I64 maxEntries ) -> Void:
+        
+        """
+        Construct an event log with capacity for the specified maximum number
+        of entries. Allocates parallel arrays for timestamps, levels, sources,
+        and codes, initializing all slots to zero. The minimum log level filter
+        defaults to 0 (trace), accepting all messages.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxEntries
+        self.head = 0
+        self.tail = 0
+        self.count = 0
+        self.minLevel = 0
+        self.lock = new Spinlock()
+        self.timestamps = new Memory<I64>( maxEntries )
+        self.levels = new Memory<I64>( maxEntries )
+        self.sources = new Memory<I64>( maxEntries )
+        self.codes = new Memory<I64>( maxEntries )
+        I64 slotIndex = 0
+        while slotIndex < maxEntries:
+            self.timestamps.set( slotIndex, 0 )
+            self.levels.set( slotIndex, 0 )
+            self.sources.set( slotIndex, 0 )
+            self.codes.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function log( self, I64 timestamp, I64 level, I64 source, I64 code ) -> Boolean:
+        
+        """
+        Log an event with the given timestamp, severity level, source identifier,
+        and event code. Events below the minimum log level are silently dropped
+        and return False. When the ring buffer is full, the oldest entry is
+        overwritten by advancing the head pointer. Returns True if the event
+        was recorded successfully.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if level < self.minLevel:
+            return False
+        self.lock.lock()
+        self.timestamps.set( self.tail, timestamp )
+        self.levels.set( self.tail, level )
+        self.sources.set( self.tail, source )
+        self.codes.set( self.tail, code )
+        self.tail = ( self.tail + 1 ) % self.capacity
+        if self.count < self.capacity:
+            self.count = self.count + 1
+        else:
+            self.head = ( self.head + 1 ) % self.capacity
+        self.lock.unlock()
+        return True
+    
+    public function getTimestamp( self, I64 index ) -> I64:
+        
+        """
+        Return the timestamp of the log entry at the given logical index,
+        where index 0 is the oldest entry. Returns 0 if the index is out of range.
+        """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        I64 slot = ( self.head + index ) % self.capacity
+        return self.timestamps.get( slot )
+    
+    public function getLevel( self, I64 index ) -> I64:
+        
+        """
+        Return the severity level of the log entry at the given logical index,
+        where index 0 is the oldest entry. Returns 0 if the index is out of range.
+        """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        I64 slot = ( self.head + index ) % self.capacity
+        return self.levels.get( slot )
+    
+    public function getSource( self, I64 index ) -> I64:
+        
+        """
+        Return the source identifier of the log entry at the given logical index,
+        where index 0 is the oldest entry. Returns 0 if the index is out of range.
+        """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        I64 slot = ( self.head + index ) % self.capacity
+        return self.sources.get( slot )
+    
+    public function getCode( self, I64 index ) -> I64:
+        
+        """
+        Return the event code of the log entry at the given logical index,
+        where index 0 is the oldest entry. Returns 0 if the index is out of range.
+        """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        I64 slot = ( self.head + index ) % self.capacity
+        return self.codes.get( slot )
+    
+    public function setMinLevel( self, I64 level ) -> Void:
+        
+        """
+        Set the minimum log level filter. Events with a severity level below
+        this threshold will be silently dropped by the log() method.
+        """
+        
+        self.minLevel = level
+    
+    public function getMinLevel( self ) -> I64:
+        
+        """ Return the current minimum log level filter threshold. """
+        
+        return self.minLevel
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the number of log entries currently stored in the ring buffer. """
+        
+        return self.count
+    
+    public function countAtLevel( self, I64 level ) -> I64:
+        
+        """
+        Count the number of log entries at or above the specified severity level
+        by scanning all stored entries. This is a linear-time operation over
+        all entries in the ring buffer.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 result = 0
+        I64 entryIndex = 0
+        while entryIndex < self.count:
+            I64 slot = ( self.head + entryIndex ) % self.capacity
+            if self.levels.get( slot ) >= level:
+                result = result + 1
+            entryIndex = entryIndex + 1
+        return result
+    
+    public function clear( self ) -> Void:
+        
+        """
+        Clear all log entries by resetting the head, tail, and count to zero.
+        The underlying memory is not zeroed for performance; old data may remain
+        in the buffer but is inaccessible through the public interface.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        self.head = 0
+        self.tail = 0
+        self.count = 0
+        self.lock.unlock()
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all Memory arrays used for storing log entries. Must be called
+        before the EventLog object is deallocated to prevent memory leaks.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.timestamps.free()
+        self.levels.free()
+        self.sources.free()
+        self.codes.free()
+
+export {
+    KernelLogLevel,
+    EventLog
+}

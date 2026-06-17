@@ -1,0 +1,502 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/bus/pci.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# PCI Configuration Space access via x86 I/O ports and device enumeration. Provides functions for reading and writing PCI config registers, plus PciDevice and PciBus classes for device discovery across all 256 buses.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.bus.pci
+
+from uranite.memory.memory import Memory
+from uranite.os.arch.x86-64.port import outl, inl
+
+public const I64 PCI_CONFIG_ADDRESS = 3320
+"""
+PCI configuration address I/O port number (0xCF8). The address port
+accepts a 32-bit value encoding the bus, device, function, and register
+offset to select a PCI config register.
+"""
+
+public const I64 PCI_CONFIG_DATA = 3324
+"""
+PCI configuration data I/O port number (0xCFC). After writing an address
+to the address port, reading or writing this port accesses the selected
+PCI configuration register.
+"""
+
+public const I64 PCI_NO_DEVICE = 65535
+"""
+Vendor ID value indicating no device is present (0xFFFF). When reading
+vendor ID from an empty PCI slot, the bus returns all ones, which is
+used as a sentinel to detect absent devices.
+"""
+
+public function pciAddress( I64 bus, I64 device, I64 func, I64 offset ) -> I64:
+    
+    """
+    Build a PCI configuration address word for the given bus, device, function,
+    and register offset. The address format is: bit 31 = enable, bits 23:16 = bus,
+    bits 15:11 = device, bits 10:8 = function, bits 7:0 = offset (aligned to 4 bytes).
+    """
+    
+    I64 addr = ( 1 << 31 ) | ( bus << 16 ) | ( device << 11 ) | ( func << 8 ) | ( offset & 252 )
+    return addr
+
+public function pciRead32( I64 bus, I64 device, I64 func, I64 offset ) -> I64:
+    
+    """
+    Read a 32-bit value from PCI configuration space at the specified bus,
+    device, function, and register offset by writing the config address to
+    port 0xCF8 and reading the result from port 0xCFC.
+    """
+    
+    I64 addr = pciAddress( bus, device, func, offset )
+    outl( PCI_CONFIG_ADDRESS, addr )
+    I64 value = inl( PCI_CONFIG_DATA )
+    return value
+
+public function pciRead16( I64 bus, I64 device, I64 func, I64 offset ) -> I64:
+    
+    """
+    Read a 16-bit value from PCI configuration space by performing a 32-bit
+    read and extracting the appropriate 16-bit half based on the offset alignment.
+    """
+    
+    I64 word = pciRead32( bus, device, func, offset )
+    I64 shift = ( offset & 2 ) * 8
+    return ( word >> shift ) & 65535
+
+public function pciRead8( I64 bus, I64 device, I64 func, I64 offset ) -> I64:
+    
+    """
+    Read an 8-bit value from PCI configuration space by performing a 32-bit
+    read and extracting the appropriate byte based on the offset alignment.
+    """
+    
+    I64 word = pciRead32( bus, device, func, offset )
+    I64 shift = ( offset & 3 ) * 8
+    return ( word >> shift ) & 255
+
+public function pciWrite32( I64 bus, I64 device, I64 func, I64 offset, I64 value ) -> Void:
+    
+    """
+    Write a 32-bit value to PCI configuration space at the specified bus,
+    device, function, and register offset by writing the config address to
+    port 0xCF8 and the value to port 0xCFC.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 addr = pciAddress( bus, device, func, offset )
+    outl( PCI_CONFIG_ADDRESS, addr )
+    outl( PCI_CONFIG_DATA, value )
+
+public class PciDevice:
+    
+    """
+    Represents a single PCI device function discovered during bus enumeration.
+    Stores the bus/device/function address along with key configuration register
+    values including vendor ID, device ID, class code, subclass, revision, header
+    type, all six Base Address Registers (BARs), and interrupt routing information.
+    """
+    
+    public I64 bus
+    public I64 device
+    public I64 func
+    public I64 vendorId
+    public I64 deviceId
+    public I64 classCode
+    public I64 subclass
+    public I64 progIf
+    public I64 revisionId
+    public I64 headerType
+    public I64 bar0
+    public I64 bar1
+    public I64 bar2
+    public I64 bar3
+    public I64 bar4
+    public I64 bar5
+    public I64 interruptLine
+    public I64 interruptPin
+    
+    public function PciDevice( self ) -> Void:
+        
+        """
+        Construct a PCI device with all fields initialized to zero.
+        Call readConfig() to populate the fields from actual hardware registers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.bus = 0
+        self.device = 0
+        self.func = 0
+        self.vendorId = 0
+        self.deviceId = 0
+        self.classCode = 0
+        self.subclass = 0
+        self.progIf = 0
+        self.revisionId = 0
+        self.headerType = 0
+        self.bar0 = 0
+        self.bar1 = 0
+        self.bar2 = 0
+        self.bar3 = 0
+        self.bar4 = 0
+        self.bar5 = 0
+        self.interruptLine = 0
+        self.interruptPin = 0
+    
+    public function readConfig( self, I64 busNumber, I64 deviceNumber, I64 functionNumber ) -> Void:
+
+        """
+        Read all configuration fields from hardware for the given bus, device,
+        and function. Populates vendor ID, device ID, class code, subclass,
+        programming interface, revision ID, header type, all six BARs, and
+        interrupt line/pin from the PCI configuration space registers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.bus = busNumber
+        self.device = deviceNumber
+        self.func = functionNumber
+        I64 reg0 = pciRead32( busNumber, deviceNumber, functionNumber, 0 )
+        self.vendorId = reg0 & 65535
+        self.deviceId = ( reg0 >> 16 ) & 65535
+        I64 reg2 = pciRead32( busNumber, deviceNumber, functionNumber, 8 )
+        self.revisionId = reg2 & 255
+        self.progIf = ( reg2 >> 8 ) & 255
+        self.subclass = ( reg2 >> 16 ) & 255
+        self.classCode = ( reg2 >> 24 ) & 255
+        I64 reg3 = pciRead32( busNumber, deviceNumber, functionNumber, 12 )
+        self.headerType = ( reg3 >> 16 ) & 255
+        self.bar0 = pciRead32( busNumber, deviceNumber, functionNumber, 16 )
+        self.bar1 = pciRead32( busNumber, deviceNumber, functionNumber, 20 )
+        self.bar2 = pciRead32( busNumber, deviceNumber, functionNumber, 24 )
+        self.bar3 = pciRead32( busNumber, deviceNumber, functionNumber, 28 )
+        self.bar4 = pciRead32( busNumber, deviceNumber, functionNumber, 32 )
+        self.bar5 = pciRead32( busNumber, deviceNumber, functionNumber, 36 )
+        I64 regInt = pciRead32( busNumber, deviceNumber, functionNumber, 60 )
+        self.interruptLine = regInt & 255
+        self.interruptPin = ( regInt >> 8 ) & 255
+    
+    public function isMultifunction( self ) -> Boolean:
+        
+        """
+        Check if this device is a multifunction device by testing bit 7
+        of the header type register. Multifunction devices expose up to
+        8 independent functions on a single device slot.
+        """
+        
+        return ( self.headerType & 128 ) != 0
+    
+    public function isBridge( self ) -> Boolean:
+        
+        """
+        Check if this device is a PCI-to-PCI bridge by testing whether
+        the lower 7 bits of the header type equal 1. Bridge devices
+        connect two PCI buses and require special configuration.
+        """
+        
+        return ( self.headerType & 127 ) == 1
+    
+    public function getBar( self, I64 index ) -> I64:
+        
+        """
+        Get the raw Base Address Register value by index (0 through 5).
+        Returns 0 if the index is out of range. The raw BAR value contains
+        both the base address and type/prefetch flag bits.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if index == 0:
+            return self.bar0
+        if index == 1:
+            return self.bar1
+        if index == 2:
+            return self.bar2
+        if index == 3:
+            return self.bar3
+        if index == 4:
+            return self.bar4
+        if index == 5:
+            return self.bar5
+        return 0
+    
+    public function isBarMmio( self, I64 index ) -> Boolean:
+        
+        """
+        Check if the Base Address Register at the given index is memory-mapped
+        I/O (MMIO) rather than I/O port space. Bit 0 of the BAR is 0 for MMIO
+        and 1 for I/O space.
+        """
+        
+        I64 bar = self.getBar( index )
+        return ( bar & 1 ) == 0
+    
+    public function getBarAddress( self, I64 index ) -> I64:
+        
+        """
+        Get the base address from a BAR by masking out the type and flag bits.
+        For MMIO BARs, the lower 4 bits are masked. For I/O space BARs, the
+        lower 2 bits are masked.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 bar = self.getBar( index )
+        if ( bar & 1 ) == 0:
+            return bar & ( 0 - 16 )
+        return bar & ( 0 - 4 )
+
+public class PciBus:
+    
+    """
+    PCI bus scanner that enumerates all devices across all 256 PCI buses,
+    32 device slots per bus, and up to 8 functions per device. Discovered
+    device information is stored in parallel Memory arrays for vendor ID,
+    device ID, class code, subclass, bus number, device number, and function
+    number, enabling efficient lookup by vendor/device ID or class/subclass.
+    """
+    
+    protect Memory<I64> vendorIds
+    protect Memory<I64> deviceIds
+    protect Memory<I64> classCodes
+    protect Memory<I64> subclasses
+    protect Memory<I64> buses
+    protect Memory<I64> devices
+    protect Memory<I64> functions
+    protect I64 capacity
+    protect I64 count
+    
+    public function PciBus( self, I64 maxDevices ) -> Void:
+        
+        """
+        Construct a PCI bus scanner with capacity for the specified maximum
+        number of discovered devices. Allocates parallel arrays to store
+        device metadata for all discovered PCI functions.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.capacity = maxDevices
+        self.count = 0
+        self.vendorIds = new Memory<I64>( maxDevices )
+        self.deviceIds = new Memory<I64>( maxDevices )
+        self.classCodes = new Memory<I64>( maxDevices )
+        self.subclasses = new Memory<I64>( maxDevices )
+        self.buses = new Memory<I64>( maxDevices )
+        self.devices = new Memory<I64>( maxDevices )
+        self.functions = new Memory<I64>( maxDevices )
+    
+    public function scan( self ) -> Void:
+        
+        """
+        Scan all 256 PCI buses, 32 device slots per bus, and up to 8 functions
+        per multifunction device. For each slot, reads the vendor ID to detect
+        device presence, then checks the header type to determine if the device
+        is multifunction and should have additional functions probed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.count = 0
+        I64 bus = 0
+        while bus < 256:
+            I64 dev = 0
+            while dev < 32:
+                I64 vendor = pciRead16( bus, dev, 0, 0 )
+                if vendor != PCI_NO_DEVICE:
+                    self.addDevice( bus, dev, 0 )
+                    I64 headerType = pciRead8( bus, dev, 0, 14 )
+                    if ( headerType & 128 ) != 0:
+                        I64 func = 1
+                        while func < 8:
+                            I64 fVendor = pciRead16( bus, dev, func, 0 )
+                            if fVendor != PCI_NO_DEVICE:
+                                self.addDevice( bus, dev, func )
+                            func = func + 1
+                dev = dev + 1
+            bus = bus + 1
+    
+    protect function addDevice( self, I64 bus, I64 dev, I64 func ) -> Void:
+        
+        """
+        Record a discovered PCI device function by reading its vendor ID,
+        device ID, class code, and subclass from configuration space and
+        storing them in the parallel arrays. Silently discards the device
+        if the scanner has reached its maximum capacity.
+        """
+        
+        if self.count >= self.capacity:
+            return
+        I64 reg0 = pciRead32( bus, dev, func, 0 )
+        I64 reg2 = pciRead32( bus, dev, func, 8 )
+        self.vendorIds.set( self.count, reg0 & 65535 )
+        self.deviceIds.set( self.count, ( reg0 >> 16 ) & 65535 )
+        self.classCodes.set( self.count, ( reg2 >> 24 ) & 255 )
+        self.subclasses.set( self.count, ( reg2 >> 16 ) & 255 )
+        self.buses.set( self.count, bus )
+        self.devices.set( self.count, dev )
+        self.functions.set( self.count, func )
+        self.count = self.count + 1
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the number of PCI device functions discovered during the last scan. """
+        
+        return self.count
+    
+    public function getVendorId( self, I64 index ) -> I64:
+        
+        """ Return the vendor ID of the discovered device at the given index, or 0 if out of range. """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        return self.vendorIds.get( index )
+    
+    public function getDeviceId( self, I64 index ) -> I64:
+        
+        """ Return the device ID of the discovered device at the given index, or 0 if out of range. """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        return self.deviceIds.get( index )
+    
+    public function getClassCode( self, I64 index ) -> I64:
+        
+        """ Return the class code of the discovered device at the given index, or 0 if out of range. """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        return self.classCodes.get( index )
+    
+    public function getSubclass( self, I64 index ) -> I64:
+        
+        """ Return the subclass of the discovered device at the given index, or 0 if out of range. """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        return self.subclasses.get( index )
+    
+    public function getBus( self, I64 index ) -> I64:
+        
+        """ Return the bus number of the discovered device at the given index, or 0 if out of range. """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        return self.buses.get( index )
+    
+    public function getDevice( self, I64 index ) -> I64:
+        
+        """ Return the device slot number of the discovered device at the given index, or 0 if out of range. """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        return self.devices.get( index )
+    
+    public function getFunction( self, I64 index ) -> I64:
+        
+        """ Return the function number of the discovered device at the given index, or 0 if out of range. """
+        
+        if index < 0 or index >= self.count:
+            return 0
+        return self.functions.get( index )
+    
+    public function findByVendorDevice( self, I64 vendorId, I64 deviceId ) -> I64:
+        
+        """
+        Find the first discovered device matching the given vendor and device ID pair.
+        Returns the index of the matching device, or -1 if no match is found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 deviceIndex = 0
+        while deviceIndex < self.count:
+            if self.vendorIds.get( deviceIndex ) == vendorId and self.deviceIds.get( deviceIndex ) == deviceId:
+                return deviceIndex
+            deviceIndex = deviceIndex + 1
+        return 0 - 1
+    
+    public function findByClass( self, I64 classCode, I64 subclass ) -> I64:
+        
+        """
+        Find the first discovered device matching the given class code and subclass pair.
+        Returns the index of the matching device, or -1 if no match is found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 deviceIndex = 0
+        while deviceIndex < self.count:
+            if self.classCodes.get( deviceIndex ) == classCode and self.subclasses.get( deviceIndex ) == subclass:
+                return deviceIndex
+            deviceIndex = deviceIndex + 1
+        return 0 - 1
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all Memory arrays used for storing discovered device metadata.
+        Must be called before the PciBus object is deallocated to prevent
+        memory leaks.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.vendorIds.free()
+        self.deviceIds.free()
+        self.classCodes.free()
+        self.subclasses.free()
+        self.buses.free()
+        self.devices.free()
+        self.functions.free()
+
+export {
+    PCI_CONFIG_ADDRESS,
+    PCI_CONFIG_DATA,
+    PCI_NO_DEVICE,
+    pciAddress,
+    pciRead32,
+    pciRead16,
+    pciRead8,
+    pciWrite32,
+    PciDevice,
+    PciBus
+}

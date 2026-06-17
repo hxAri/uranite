@@ -1,0 +1,120 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/cmyk.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the CMYK struct representing a color in the Cyan-Magenta-Yellow-Key
+# subtractive color space used by printers and print media. Unlike the additive
+# RGB model where combining colors produces white, CMYK subtracts light from
+# white paper. The Key (black) channel is added because mixing cyan, magenta,
+# and yellow inks produces a muddy brown rather than true black in practice.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.cmyk
+
+from uranite.language.boolean import Boolean
+from uranite.language.f64 import F64
+from uranite.language.string import String
+from uranite.language.void import Void
+
+public struct CMYK:
+    
+    """
+    Represents a color in the Cyan-Magenta-Yellow-Key (black) subtractive color
+    space. Each component is a floating-point value from 0.0 to 1.0 representing
+    the ink density for that channel, where 0.0 means no ink and 1.0 means full
+    ink coverage. Cyan absorbs red light, magenta absorbs green light, and yellow
+    absorbs blue light. The key (black) channel provides true black ink rather
+    than relying on mixing the three color inks, which improves print quality
+    and reduces ink consumption for dark areas.
+    """
+    
+    public F64 cyan
+    public F64 magenta
+    public F64 yellow
+    public F64 key
+    
+    public function CMYK( self, F64 cyan, F64 magenta, F64 yellow, F64 key ) -> Void:
+        
+        """
+        Construct a new CMYK color from individual ink density values for each
+        channel. All values should be in the range 0.0 to 1.0.
+        
+        Parameters:
+            cyan (F64):
+                The cyan ink density from 0.0 (no cyan) to 1.0 (full cyan).
+            magenta (F64):
+                The magenta ink density from 0.0 (no magenta) to 1.0 (full magenta).
+            yellow (F64):
+                The yellow ink density from 0.0 (no yellow) to 1.0 (full yellow).
+            key (F64):
+                The black ink density from 0.0 (no black) to 1.0 (full black).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.cyan = cyan
+        self.magenta = magenta
+        self.yellow = yellow
+        self.key = key
+    
+    public function equals( self, Object other ) -> Boolean:
+        
+        """
+        Compare this CMYK color with another object for component-wise equality.
+        Two CMYK colors are considered equal if all four channel values are identical.
+        Returns false if the other object is not a CMYK.
+        
+        Parameters:
+            other (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is a CMYK with identical channel values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if other instanceof CMYK:
+            CMYK otherCmyk = other
+            return self.cyan == otherCmyk.cyan and self.magenta == otherCmyk.magenta and self.yellow == otherCmyk.yellow and self.key == otherCmyk.key
+        return False
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a human-readable string representation of this CMYK color in the
+        format "CMYK(cyan, magenta, yellow, key)" showing the floating-point
+        values of each ink density channel.
+        
+        Returns:
+            String:
+                A string representation such as "CMYK(1.0, 0.0, 0.03, 0.71)".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return "CMYK(" + self.cyan + ", " + self.magenta + ", " + self.yellow + ", " + self.key + ")"
+
+export {
+    CMYK
+}

@@ -1,0 +1,93 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Strings: string literals, character iteration, extern FFI with strings.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.strings
+
+from uranite.io.console import puts
+
+# Count characters in a string via iteration
+public function strlen( String s ) -> I64:
+    
+    """
+    Counts the number of characters in a string via iteration.
+    
+    Parameters:
+        s: The string to measure.
+    
+    Returns:
+        The number of characters in the string.
+    
+    Complexity:
+        Time: O(n) where n is the length of the string.
+    """
+    
+    I64 count = 0
+    for Char c in s:
+        count += 1
+    return count
+
+# Print each character spaced out
+public function spell_out( String s ) -> Void:
+    
+    """
+    Prints each character of a string separated by a space.
+    
+    Parameters:
+        s: The string to spell out.
+    
+    Returns:
+        Void
+    """
+    
+    for Char c in s:
+        puts( c, " " )
+    puts(  )
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the string demonstration.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    String greeting = "Hello, Uranite!"
+    puts( greeting )
+
+    puts( "length = ", strlen( greeting ) )
+    puts( "length-equals = ", strlen( greeting ) == greeting.length() )
+    puts( "length-equals = {}".format( strlen( greeting ) == greeting.length() ) )
+
+    puts( "spell: " )
+    spell_out( "Uranite" )
+
+    # String variable
+    String a = "hello"
+    String b = "world"
+    puts( a, " ", b )
+
+    # Iterate string
+    puts( "iterate: " )
+    for Char c in greeting:
+        puts( "[", c, "]" )
+    puts(  )
+
+    return 0

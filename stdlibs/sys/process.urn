@@ -1,0 +1,373 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/sys/process.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Process control via raw Linux x86_64 syscalls. Provides exit, getpid,
+# getppid, getuid, getgid, geteuid, getegid, fork, kill, sleep.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.sys.process
+
+from uranite.os.syscall.invoke import syscall0, syscall1, syscall2, syscall3, syscall4
+from uranite.os.syscall.result import SyscallResult
+from uranite.errors.error import Error
+from uranite.memory.allocator import alloc
+from uranite.io.syscall import readByteAt, writeByteAt, stringToPtr, SYS_OPEN, SYS_READ, SYS_CLOSE, O_RDONLY
+from uranite.functions.builtin import ptrToString
+
+const I64 SYS_EXIT_GROUP = 231
+const I64 SYS_GETPID = 39
+const I64 SYS_GETPPID = 110
+const I64 SYS_GETUID = 102
+const I64 SYS_GETGID = 104
+const I64 SYS_GETEUID = 107
+const I64 SYS_GETEGID = 108
+const I64 SYS_FORK = 57
+const I64 SYS_KILL = 62
+const I64 SYS_NANOSLEEP = 35
+const I64 SYS_WAIT4 = 61
+const I64 SYS_GETPGID = 121
+const I64 SYS_SETSID = 112
+const I64 SIGTERM = 15
+const I64 SIGKILL = 9
+const I64 SIGINT = 2
+const I64 SIGHUP = 1
+const I64 SIGUSR1 = 10
+const I64 SIGUSR2 = 12
+
+public class ProcessError extends Error:
+    
+    """
+    Error raised when a process-related syscall fails (fork, kill, wait4, etc.).
+    """
+    
+    public function ProcessError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new ProcessError with a message, error code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the failure.
+            code (I64):
+                The errno value from the failed syscall.
+            cause (?Error):
+                An optional chained error that caused this one, or None.
+        """
+        
+        parent( message, code, cause )
+
+public function exit( I64 code ) -> Void:
+    
+    """
+    Terminate the process with the given exit code via SYS_EXIT_GROUP.
+    
+    Parameters:
+        code (I64):
+            The exit code returned to the parent process.
+    """
+    
+    syscall1( SYS_EXIT_GROUP, code )
+
+public function getpid() -> I64:
+    
+    """
+    Get the process ID of the calling process.
+    
+    Returns:
+        I64:
+            The process ID.
+    """
+    
+    SyscallResult result = syscall0( SYS_GETPID )
+    return result.value()
+
+public function getppid() -> I64:
+    
+    """
+    Get the process ID of the parent process.
+    
+    Returns:
+        I64:
+            The parent process ID.
+    """
+    
+    SyscallResult result = syscall0( SYS_GETPPID )
+    return result.value()
+
+public function getuid() -> I64:
+    
+    """
+    Get the real user ID of the calling process.
+    
+    Returns:
+        I64:
+            The real user ID.
+    """
+    
+    SyscallResult result = syscall0( SYS_GETUID )
+    return result.value()
+
+public function getgid() -> I64:
+    
+    """
+    Get the real group ID of the calling process.
+    
+    Returns:
+        I64:
+            The real group ID.
+    """
+    
+    SyscallResult result = syscall0( SYS_GETGID )
+    return result.value()
+
+public function geteuid() -> I64:
+    
+    """
+    Get the effective user ID of the calling process.
+    
+    Returns:
+        I64:
+            The effective user ID.
+    """
+    
+    SyscallResult result = syscall0( SYS_GETEUID )
+    return result.value()
+
+public function getegid() -> I64:
+    
+    """
+    Get the effective group ID of the calling process.
+    
+    Returns:
+        I64:
+            The effective group ID.
+    """
+    
+    SyscallResult result = syscall0( SYS_GETEGID )
+    return result.value()
+
+public function fork() -> I64:
+    
+    """
+    Create a child process via the fork syscall.
+    
+    Returns:
+        I64:
+            0 in the child process, the child's PID in the parent.
+    
+    Raises:
+        ProcessError:
+            If the fork syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult result = syscall0( SYS_FORK )
+    if result.isError():
+        raise new ProcessError( "fork failed", result.errorCode(), None )
+    return result.value()
+
+public function kill( I64 processId, I64 signal ) -> Void:
+    
+    """
+    Send a signal to a process.
+    
+    Parameters:
+        processId (I64):
+            The PID of the target process.
+        signal (I64):
+            The signal number to send (e.g., SIGTERM, SIGKILL).
+    
+    Raises:
+        ProcessError:
+            If the kill syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult result = syscall2( SYS_KILL, processId, signal )
+    if result.isError():
+        raise new ProcessError( "kill failed", result.errorCode(), None )
+
+public function wait4( I64 processId, I64 statusPointer, I64 options, I64 rusagePointer ) -> I64:
+    
+    """
+    Wait for a child process to change state.
+    
+    Parameters:
+        processId (I64):
+            The PID to wait for, or -1 for any child.
+        statusPointer (I64):
+            Memory address to store the status information.
+        options (I64):
+            Wait options (e.g., WNOHANG).
+        rusagePointer (I64):
+            Memory address for resource usage info, or 0.
+    
+    Returns:
+        I64:
+            The PID of the child that changed state.
+    
+    Raises:
+        ProcessError:
+            If the wait4 syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult result = syscall4( SYS_WAIT4, processId, statusPointer, options, rusagePointer )
+    if result.isError():
+        raise new ProcessError( "wait4 failed", result.errorCode(), None )
+    return result.value()
+
+public function getpgid( I64 processId ) -> I64:
+    
+    """
+    Get the process group ID of the specified process.
+    
+    Parameters:
+        processId (I64):
+            The PID to query, or 0 for the calling process.
+    
+    Returns:
+        I64:
+            The process group ID.
+    
+    Raises:
+        ProcessError:
+            If the getpgid syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult result = syscall1( SYS_GETPGID, processId )
+    if result.isError():
+        raise new ProcessError( "getpgid failed", result.errorCode(), None )
+    return result.value()
+
+public function setsid() -> I64:
+    
+    """
+    Create a new session and set the calling process as session leader.
+    
+    Returns:
+        I64:
+            The new session ID.
+    
+    Raises:
+        ProcessError:
+            If the setsid syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult result = syscall0( SYS_SETSID )
+    if result.isError():
+        raise new ProcessError( "setsid failed", result.errorCode(), None )
+    return result.value()
+
+public function getUsername() -> String:
+    
+    """
+    Resolve the current OS username by reading /etc/passwd and matching
+    the UID from getuid(). Parses each line to extract the username
+    field (field 0) and UID field (field 2, colon-delimited).
+    
+    Returns:
+        String:
+            The username string, or "unknown" if /etc/passwd cannot be
+            read or the UID is not found.
+    
+    Complexity:
+        Time: O(n) where n is the byte size of /etc/passwd.
+        Space: O(n) for the file read buffer.
+    """
+    
+    I64 uid = getuid()
+    I64 pathPointer = stringToPtr( "/etc/passwd" )
+    SyscallResult openResult = syscall3( SYS_OPEN, pathPointer, O_RDONLY, 0 )
+    if openResult.isError():
+        return "unknown"
+    I64 fileDescriptor = openResult.value()
+    I64 fileBuffer = alloc( 4096 )
+    SyscallResult readResult = syscall3( SYS_READ, fileDescriptor, fileBuffer, 4095 )
+    syscall1( SYS_CLOSE, fileDescriptor )
+    if readResult.isError():
+        return "unknown"
+    I64 bytesRead = readResult.value()
+    writeByteAt( fileBuffer, bytesRead, 0 )
+    I64 position = 0
+    while position < bytesRead:
+        I64 lineStart = position
+        while position < bytesRead and readByteAt( fileBuffer, position ) != 10:
+            position = position + 1
+        I64 lineEnd = position
+        position = position + 1
+        I64 colonCount = 0
+        I64 usernameFieldStart = lineStart
+        I64 usernameFieldEnd = lineStart
+        I64 uidFieldStart = lineStart
+        I64 uidFieldEnd = lineStart
+        I64 scanIndex = lineStart
+        while scanIndex < lineEnd:
+            if readByteAt( fileBuffer, scanIndex ) == 58:
+                if colonCount == 0:
+                    usernameFieldEnd = scanIndex
+                elif colonCount == 2:
+                    uidFieldStart = scanIndex + 1
+                elif colonCount == 3:
+                    uidFieldEnd = scanIndex
+                colonCount = colonCount + 1
+            scanIndex = scanIndex + 1
+        if colonCount >= 3:
+            I64 parsedUid = 0
+            I64 digitIndex = uidFieldStart
+            while digitIndex < uidFieldEnd:
+                I64 digit = readByteAt( fileBuffer, digitIndex ) - 48
+                parsedUid = parsedUid * 10 + digit
+                digitIndex = digitIndex + 1
+            if parsedUid == uid:
+                I64 usernameLength = usernameFieldEnd - usernameFieldStart
+                I64 usernameBuffer = alloc( usernameLength + 1 )
+                I64 copyIndex = 0
+                while copyIndex < usernameLength:
+                    writeByteAt( usernameBuffer, copyIndex, readByteAt( fileBuffer, usernameFieldStart + copyIndex ) )
+                    copyIndex = copyIndex + 1
+                writeByteAt( usernameBuffer, usernameLength, 0 )
+                return ptrToString( usernameBuffer )
+    return "unknown"
+
+export {
+    ProcessError,
+    SYS_EXIT_GROUP, SYS_GETPID, SYS_GETPPID,
+    SYS_GETUID, SYS_GETGID, SYS_GETEUID, SYS_GETEGID,
+    SYS_FORK, SYS_KILL, SYS_NANOSLEEP, SYS_WAIT4,
+    SIGTERM, SIGKILL, SIGINT, SIGHUP, SIGUSR1, SIGUSR2,
+    exit, getpid, getppid, getuid, getgid, geteuid, getegid,
+    fork, kill, wait4, getpgid, setsid,
+    getUsername
+}

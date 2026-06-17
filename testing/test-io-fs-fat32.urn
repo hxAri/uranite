@@ -1,0 +1,13 @@
+package testing
+
+from uranite.io.fs.fat32 import Fat32Info, Fat32DirEntry, Fat32FileSystem
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO FS FAT32 Tests ===" )
+
+    Fat32Info info = new Fat32Info()
+    putsln( "Fat32Info constructed OK" )
+
+    putsln( "=== All IO FS FAT32 Tests Passed ===" )
+    return 0

@@ -1,0 +1,46 @@
+package testing
+
+from uranite.adelia.color-palette import ColorPalette
+from uranite.testing.assertions import {
+    assertEqualI64, assertEqualStr, assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia ColorPalette Tests ===" )
+
+    ColorPalette palette = new ColorPalette( "Tropical" )
+    assertEqualStr( "Tropical", palette.name, "name" )
+    assertEqualI64( 0, palette.length, "initial length" )
+    putsln( "constructor OK" )
+
+    # addColor
+    palette.addColor( 16711680 )
+    assertEqualI64( 1, palette.length, "after 1 add" )
+    putsln( "addColor OK" )
+
+    # addColor chaining
+    palette.addColor( 65280 ).addColor( 255 )
+    assertEqualI64( 3, palette.length, "after 3 adds" )
+    putsln( "chaining OK" )
+
+    # get
+    assertEqualI64( 16711680, palette.get( 0 ) as I64, "get(0) red" )
+    assertEqualI64( 65280, palette.get( 1 ) as I64, "get(1) green" )
+    assertEqualI64( 255, palette.get( 2 ) as I64, "get(2) blue" )
+    putsln( "get OK" )
+
+    # toString
+    String str = palette.toString()
+    assertTrue( str != "", "toString not empty" )
+    putsln( "toString OK" )
+
+    # second palette
+    ColorPalette p2 = new ColorPalette( "Monochrome" )
+    p2.addColor( 0 ).addColor( 8421504 ).addColor( 16777215 )
+    assertEqualStr( "Monochrome", p2.name, "p2 name" )
+    assertEqualI64( 3, p2.length, "p2 length" )
+    putsln( "second palette OK" )
+
+    putsln( "=== All ColorPalette tests passed ===" )
+    return 0

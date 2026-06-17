@@ -1,0 +1,100 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/http/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.http.errors
+
+from uranite.errors.error import Error
+
+public class HttpError extends Error:
+    """Base error for all HTTP operations including connection, timeout, and parsing failures."""
+
+    public function HttpError( self, String message, I64 code, ?Error cause ) -> Void:
+        """
+        Construct an HTTP error.
+
+        Parameters:
+            message (String):
+                Human-readable description of the error.
+            code (I64):
+                Numeric error code for programmatic handling.
+            cause (?Error):
+                Optional underlying error that caused this one.
+        """
+        parent( message, code, cause )
+
+public class HttpTimeoutError extends HttpError:
+    """Raised when an HTTP operation exceeds its time limit."""
+
+    public function HttpTimeoutError( self, String message, I64 code, ?Error cause ) -> Void:
+        """
+        Construct an HTTP timeout error.
+
+        Parameters:
+            message (String):
+                Human-readable description of the timeout.
+            code (I64):
+                Numeric error code for programmatic handling.
+            cause (?Error):
+                Optional underlying error that caused this one.
+        """
+        parent( message, code, cause )
+
+public class HttpConnectionError extends HttpError:
+    """Raised when a TCP connection to the remote host cannot be established."""
+
+    public function HttpConnectionError( self, String message, I64 code, ?Error cause ) -> Void:
+        """
+        Construct an HTTP connection error.
+
+        Parameters:
+            message (String):
+                Human-readable description of the connection failure.
+            code (I64):
+                Numeric error code, typically the negated errno.
+            cause (?Error):
+                Optional underlying error that caused this one.
+        """
+        parent( message, code, cause )
+
+public class HttpParseError extends HttpError:
+    """Raised when an HTTP response cannot be parsed due to malformed status line, headers, or body."""
+
+    public function HttpParseError( self, String message, I64 code, ?Error cause ) -> Void:
+        """
+        Construct an HTTP parse error.
+
+        Parameters:
+            message (String):
+                Human-readable description of the parse failure.
+            code (I64):
+                Numeric error code for programmatic handling.
+            cause (?Error):
+                Optional underlying error that caused this one.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        parent( message, code, cause )
+
+export {
+    HttpError,
+    HttpTimeoutError,
+    HttpConnectionError,
+    HttpParseError
+}

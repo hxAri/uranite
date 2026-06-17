@@ -1,0 +1,36 @@
+package testing
+
+from uranite.os.crypto.aes import AesContext, AES_128, AES_256, AES_BLOCK_SIZE
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Crypto AES Tests ===" )
+
+    assertEqualI64( 128, AES_128, "AES_128" )
+    assertEqualI64( 256, AES_256, "AES_256" )
+    assertEqualI64( 16, AES_BLOCK_SIZE, "AES_BLOCK_SIZE" )
+    putsln( "constants OK" )
+
+    AesContext ctx128 = new AesContext( 128 )
+    assertEqualI64( 128, ctx128.getKeySize(), "128 keySize" )
+    assertEqualI64( 10, ctx128.getRounds(), "128 rounds" )
+    assertFalse( ctx128.isInitialized(), "128 not init" )
+
+    ctx128.init( 111, 222, 0, 0 )
+    assertTrue( ctx128.isInitialized(), "128 initialized" )
+    ctx128.destroy()
+    putsln( "AES-128 OK" )
+
+    AesContext ctx256 = new AesContext( 256 )
+    assertEqualI64( 256, ctx256.getKeySize(), "256 keySize" )
+    assertEqualI64( 14, ctx256.getRounds(), "256 rounds" )
+    ctx256.init( 11, 22, 33, 44 )
+    assertTrue( ctx256.isInitialized(), "256 initialized" )
+    ctx256.destroy()
+    putsln( "AES-256 OK" )
+
+    putsln( "=== All AES tests passed ===" )
+    return 0

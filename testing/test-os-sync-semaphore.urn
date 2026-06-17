@@ -1,0 +1,53 @@
+package testing
+
+from uranite.os.sync.semaphore import Semaphore
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Sync Semaphore Tests ===" )
+
+    Semaphore sem = new Semaphore( 3 )
+    assertEqualI64( 3, sem.getCount(), "count 3" )
+    assertEqualI64( 0, sem.getWaitCount(), "wait 0" )
+
+    Boolean w1 = sem.tryWait()
+    assertTrue( w1, "tryWait 1" )
+    assertEqualI64( 2, sem.getCount(), "count 2" )
+
+    Boolean w2 = sem.tryWait()
+    assertTrue( w2, "tryWait 2" )
+    Boolean w3 = sem.tryWait()
+    assertTrue( w3, "tryWait 3" )
+    assertEqualI64( 0, sem.getCount(), "count 0" )
+
+    Boolean w4 = sem.tryWait()
+    assertFalse( w4, "tryWait fails" )
+    assertEqualI64( 1, sem.getWaitCount(), "wait 1" )
+    putsln( "tryWait OK" )
+
+    Boolean sig1 = sem.signal()
+    assertTrue( sig1, "signal with waiter" )
+    assertEqualI64( 0, sem.getCount(), "count 0 after signal" )
+    assertEqualI64( 0, sem.getWaitCount(), "wait 0 after signal" )
+
+    Boolean sig2 = sem.signal()
+    assertFalse( sig2, "signal no waiter" )
+    assertEqualI64( 1, sem.getCount(), "count 1 after signal" )
+
+    Boolean sig3 = sem.signal()
+    assertFalse( sig3, "signal again" )
+    assertEqualI64( 2, sem.getCount(), "count 2 after signal" )
+    putsln( "signal OK" )
+
+    Semaphore sem0 = new Semaphore( 0 )
+    assertEqualI64( 0, sem0.getCount(), "sem0 count" )
+    Boolean w0 = sem0.tryWait()
+    assertFalse( w0, "sem0 tryWait" )
+    assertEqualI64( 1, sem0.getWaitCount(), "sem0 wait" )
+    putsln( "zero semaphore OK" )
+
+    putsln( "=== All semaphore tests passed ===" )
+    return 0

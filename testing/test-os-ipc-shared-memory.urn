@@ -1,0 +1,75 @@
+package testing
+
+from uranite.os.ipc.shared-memory import {
+    SharedRegion, SharedMemoryRegistry
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS IPC SharedMemory Tests ===" )
+
+    SharedRegion sr = new SharedRegion( 1, 10, 1048576, 4, 3 )
+    assertEqualI64( 1, sr.getRegionId(), "regionId" )
+    assertEqualI64( 10, sr.getOwnerTaskId(), "ownerTaskId" )
+    assertEqualI64( 1048576, sr.getPhysicalBase(), "physBase" )
+    assertEqualI64( 4, sr.getPageCount(), "pageCount" )
+    assertEqualI64( 16384, sr.getSize(), "size 4*4096" )
+    assertEqualI64( 3, sr.getFlags(), "flags" )
+    assertEqualI64( 1, sr.getRefCount(), "refCount 1" )
+    assertTrue( sr.isWritable(), "writable" )
+    assertFalse( sr.isExecutable(), "not executable" )
+    putsln( "SharedRegion OK" )
+
+    I64 ref2 = sr.retain()
+    assertEqualI64( 2, ref2, "retain 2" )
+    I64 ref3 = sr.retain()
+    assertEqualI64( 3, ref3, "retain 3" )
+
+    assertFalse( sr.release(), "release not last" )
+    assertEqualI64( 2, sr.getRefCount(), "refCount 2" )
+    assertFalse( sr.release(), "release not last 2" )
+    assertTrue( sr.release(), "release last" )
+    putsln( "retain/release OK" )
+
+    SharedRegion roRegion = new SharedRegion( 2, 20, 2097152, 1, 1 )
+    assertFalse( roRegion.isWritable(), "ro not writable" )
+    assertFalse( roRegion.isExecutable(), "ro not exec" )
+
+    SharedRegion exRegion = new SharedRegion( 3, 30, 3145728, 2, 4 )
+    assertFalse( exRegion.isWritable(), "ex not writable" )
+    assertTrue( exRegion.isExecutable(), "ex executable" )
+    putsln( "flags OK" )
+
+    SharedMemoryRegistry reg = new SharedMemoryRegistry( 4 )
+    assertEqualI64( 0, reg.getCount(), "count 0" )
+
+    I64 rid1 = reg.allocateRegionId()
+    assertEqualI64( 1, rid1, "rid1" )
+    I64 rid2 = reg.allocateRegionId()
+    assertEqualI64( 2, rid2, "rid2" )
+
+    I64 slot0 = reg.addRegion( rid1, 12345 )
+    assertTrue( slot0 >= 0, "addRegion slot" )
+    assertEqualI64( 1, reg.getCount(), "count 1" )
+
+    I64 found = reg.findRegion( rid1 )
+    assertEqualI64( 12345, found, "findRegion" )
+
+    I64 miss = reg.findRegion( 999 )
+    assertEqualI64( 0, miss, "findRegion miss" )
+
+    Boolean remOk = reg.removeRegion( rid1 )
+    assertTrue( remOk, "removeRegion" )
+    assertEqualI64( 0, reg.getCount(), "count after remove" )
+
+    Boolean remFail = reg.removeRegion( 999 )
+    assertFalse( remFail, "removeRegion miss" )
+    putsln( "registry OK" )
+
+    reg.destroy()
+
+    putsln( "=== All shared memory tests passed ===" )
+    return 0

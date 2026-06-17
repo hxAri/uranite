@@ -1,0 +1,1019 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/hash-set.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides HashSet, a hash-based set using open addressing with linear probing
+# for storing unique elements, and its companion HashSetIterator for traversal.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.hashset
+
+from uranite.collection.mutable-set import MutableSet
+from uranite.collection.set import Set
+from uranite.collection.collection import Collection
+from uranite.collection.sequence import Sequence
+from uranite.iterators.iterator import Iterator
+from uranite.language.boolean import Boolean
+from uranite.language.callable import Callable
+from uranite.language.void import Void
+from uranite.language.string import String
+from uranite.memory.memory import Memory
+from uranite.collection.array-list import ArrayList
+
+public class HashSet<E> implements MutableSet<E>:
+    
+    """
+    Hash-based set using open addressing with linear probing for unique elements.
+    
+    Elements are hashed to determine bucket placement. Collisions are resolved
+    by linear probing, and deleted slots are marked as tombstones (status 2) to
+    maintain probe chain integrity. The table automatically grows when the load
+    factor exceeds 75%.
+    """
+    
+    private Memory<E> data
+    private Memory<Int> status
+    private Int count
+    private Int capacity
+    
+    public function HashSet( self ) -> Void:
+        
+        """
+        Create an empty set with a default initial capacity of 16 buckets.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.capacity = 16
+        self.data = new Memory<E>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+    
+    public function HashSet( self, Int initialCapacity ) -> Void:
+        
+        """
+        Create an empty set with the specified initial capacity.
+        
+        Parameters:
+            initialCapacity (Int):
+                The number of buckets to pre-allocate.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = initialCapacity
+        self.data = new Memory<E>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+    
+    private function computeIndex( self, E element ) -> Int:
+        
+        """
+        Compute the bucket index from the element's hash code, wrapping negative
+        values to ensure a positive index within the capacity range.
+        
+        Parameters:
+            element (E):
+                The element to compute the index for.
+        
+        Returns:
+            Int:
+                The non-negative bucket index.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Int hash = element.hashCode()
+        Int index = hash % self.capacity
+        if index < 0:
+            index = index + self.capacity
+        return index
+    
+    private function probe( self, E element ) -> Int:
+        
+        """
+        Perform linear probing to find the slot for the given element, reusing
+        the first deleted tombstone encountered during the probe.
+        
+        Parameters:
+            element (E):
+                The element to probe for.
+        
+        Returns:
+            Int:
+                The slot index where the element should be placed, or -1 if the
+                table is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int index = self.computeIndex( element )
+        Int firstDeleted = -1
+        for Int probeOffset = 0; probeOffset < self.capacity; probeOffset++:
+            Int slot = ( index + probeOffset ) % self.capacity
+            if self.status.get( slot ) == 0:
+                if firstDeleted >= 0:
+                    return firstDeleted
+                return slot
+            if self.status.get( slot ) == 2 and firstDeleted < 0:
+                firstDeleted = slot
+            if self.status.get( slot ) == 1 and self.data.get( slot ) == element:
+                return slot
+        if firstDeleted >= 0:
+            return firstDeleted
+        return -1
+    
+    private function grow( self ) -> Void:
+        
+        """
+        Double the table capacity and rehash all existing elements into the new buckets.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Int oldCapacity = self.capacity
+        Memory<E> oldData = self.data
+        Memory<Int> oldStatus = self.status
+        self.capacity = oldCapacity * 2
+        self.data = new Memory<E>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+        for Int rehashIndex = 0; rehashIndex < oldCapacity; rehashIndex++:
+            if oldStatus.get( rehashIndex ) == 1:
+                self.add( oldData.get( rehashIndex ) )
+        oldData.free()
+        oldStatus.free()
+    
+    public function add( self, E element ) -> Boolean:
+        
+        """
+        Add an element to the set. If the element is already present, no change
+        is made. The table grows automatically when the load factor exceeds 75%.
+        
+        Parameters:
+            element (E):
+                The element to add.
+        
+        Returns:
+            Boolean:
+                True if the element was added, False if it was already present.
+        
+        Complexity:
+            Time: O(1) amortized, O(n) worst case
+            Space: O(1) amortized
+        """
+        
+        if self.count * 4 >= self.capacity * 3:
+            self.grow()
+        Int slot = self.probe( element )
+        if slot < 0:
+            self.grow()
+            slot = self.probe( element )
+        if self.status.get( slot ) == 1 and self.data.get( slot ) == element:
+            return False
+        self.data.set( slot, element )
+        self.status.set( slot, 1 )
+        self.count = self.count + 1
+        return True
+    
+    public function addAll( self, Sequence<E> elements ) -> Boolean:
+        
+        """
+        Add all elements from a sequence to the set.
+        
+        Parameters:
+            elements (Sequence<E>):
+                The sequence of elements to add.
+        
+        Returns:
+            Boolean:
+                True if at least one element was added, False if all were already present.
+        
+        Complexity:
+            Time: O(m) where m is elements.length
+            Space: O(1) amortized
+        """
+        
+        Boolean changed = False
+        for Int elementIndex = 0; elementIndex < elements.length; elementIndex++:
+            if self.add( elements.get( elementIndex ) ):
+                changed = True
+        return changed
+    
+    public function discard( self, E element ) -> Void:
+        
+        """
+        Remove the element if present, with no error if the element is absent.
+        
+        Parameters:
+            element (E):
+                The element to discard.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.removeElement( element )
+    
+    public function removeAll( self, Sequence<E> elements ) -> Boolean:
+        
+        """
+        Remove all given elements from the set.
+        
+        Parameters:
+            elements (Sequence<E>):
+                The sequence of elements to remove.
+        
+        Returns:
+            Boolean:
+                True if at least one element was removed.
+        
+        Complexity:
+            Time: O(m * n) where m is elements.length
+            Space: O(1)
+        """
+        
+        Boolean changed = False
+        for Int elementIndex = 0; elementIndex < elements.length; elementIndex++:
+            if self.removeElement( elements.get( elementIndex ) ):
+                changed = True
+        return changed
+    
+    public function retainAll( self, Sequence<E> elements ) -> Boolean:
+        
+        """
+        Keep only elements that are present in the given sequence, removing
+        all others.
+        
+        Parameters:
+            elements (Sequence<E>):
+                The sequence of elements to retain.
+        
+        Returns:
+            Boolean:
+                True if at least one element was removed.
+        
+        Complexity:
+            Time: O(n + m) where m is elements.length
+            Space: O(m)
+        """
+        
+        Boolean changed = False
+        HashSet<E> keep = new HashSet<E>( elements.length )
+        for Int elementIndex = 0; elementIndex < elements.length; elementIndex++:
+            keep.add( elements.get( elementIndex ) )
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and not keep.exists( self.data.get( slotIndex ) ):
+                self.status.set( slotIndex, 2 )
+                self.count = self.count - 1
+                changed = True
+        return changed
+    
+    public function addUnion( self, Set<E> other ) -> Void:
+        
+        """
+        Add all elements from the other set into this set, performing an
+        in-place union operation.
+        
+        Parameters:
+            other (Set<E>):
+                The set whose elements are to be added.
+        
+        Complexity:
+            Time: O(m) amortized where m is other.size
+            Space: O(1) amortized
+        """
+        
+        Iterator<E> iter = other.iterator
+        while iter.has:
+            self.add( iter.next )
+    
+    public function retainIntersect( self, Set<E> other ) -> Void:
+        
+        """
+        Keep only elements that are also in the other set, performing an
+        in-place intersection operation.
+        
+        Parameters:
+            other (Set<E>):
+                The set to intersect with.
+        
+        Complexity:
+            Time: O(n * m) where m is other.size
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and not other.exists( self.data.get( slotIndex ) ):
+                self.status.set( slotIndex, 2 )
+                self.count = self.count - 1
+    
+    public function removeDifference( self, Set<E> other ) -> Void:
+        
+        """
+        Remove all elements that are found in the other set, performing an
+        in-place difference operation.
+        
+        Parameters:
+            other (Set<E>):
+                The set whose elements are to be removed from this set.
+        
+        Complexity:
+            Time: O(m * n) where m is other.size
+            Space: O(1)
+        """
+        
+        Iterator<E> iter = other.iterator
+        while iter.has:
+            self.removeElement( iter.next )
+    
+    public function isSubsetOf( self, Set<E> other ) -> Boolean:
+        
+        """
+        Check whether all elements of this set are contained in the other set.
+        
+        Parameters:
+            other (Set<E>):
+                The set to check against.
+        
+        Returns:
+            Boolean:
+                True if every element in this set is also in the other set.
+        
+        Complexity:
+            Time: O(n * m) where m is other.size
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and not other.exists( self.data.get( slotIndex ) ):
+                return False
+        return True
+    
+    public function isSupersetOf( self, Set<E> other ) -> Boolean:
+        
+        """
+        Check whether this set contains all elements of the other set.
+        
+        Parameters:
+            other (Set<E>):
+                The set to check against.
+        
+        Returns:
+            Boolean:
+                True if every element in the other set is also in this set.
+        
+        Complexity:
+            Time: O(m * n) where m is other.size
+            Space: O(1)
+        """
+        
+        Iterator<E> iter = other.iterator
+        while iter.has:
+            if not self.exists( iter.next ):
+                return False
+        return True
+    
+    public function isDisjoint( self, Set<E> other ) -> Boolean:
+        
+        """
+        Check whether this set shares no elements with the other set.
+        
+        Parameters:
+            other (Set<E>):
+                The set to check against.
+        
+        Returns:
+            Boolean:
+                True if there are no elements in common.
+        
+        Complexity:
+            Time: O(n * m) where m is other.size
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and other.exists( self.data.get( slotIndex ) ):
+                return False
+        return True
+    
+    public function union( self, Set<E> other ) -> Set<E>:
+        
+        """
+        Return a new set containing elements from both this set and the other set.
+        
+        Parameters:
+            other (Set<E>):
+                The set to union with.
+        
+        Returns:
+            Set<E>:
+                A new set containing all elements from both sets.
+        
+        Complexity:
+            Time: O(n + m) where m is other.size
+            Space: O(n + m)
+        """
+        
+        HashSet<E> result = self.copy()
+        Iterator<E> iter = other.iterator
+        while iter.has:
+            result.add( iter.next )
+        return result
+    
+    public function intersect( self, Set<E> other ) -> Set<E>:
+        
+        """
+        Return a new set containing only elements present in both this set
+        and the other set.
+        
+        Parameters:
+            other (Set<E>):
+                The set to intersect with.
+        
+        Returns:
+            Set<E>:
+                A new set containing only the common elements.
+        
+        Complexity:
+            Time: O(n * m) where m is other.size
+            Space: O(min(n, m))
+        """
+        
+        HashSet<E> result = new HashSet<E>()
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and other.exists( self.data.get( slotIndex ) ):
+                result.add( self.data.get( slotIndex ) )
+        return result
+    
+    public function difference( self, Set<E> other ) -> Set<E>:
+        
+        """
+        Return a new set with elements that are in this set but not in the other.
+        
+        Parameters:
+            other (Set<E>):
+                The set to subtract.
+        
+        Returns:
+            Set<E>:
+                A new set containing elements unique to this set.
+        
+        Complexity:
+            Time: O(n * m) where m is other.size
+            Space: O(n)
+        """
+        
+        HashSet<E> result = new HashSet<E>()
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and not other.exists( self.data.get( slotIndex ) ):
+                result.add( self.data.get( slotIndex ) )
+        return result
+
+    public function symmetricDifference( self, Set<E> other ) -> Set<E>:
+        
+        """
+        Return a new set with elements that are in either set but not in both.
+        
+        Parameters:
+            other (Set<E>):
+                The set to compute the symmetric difference with.
+        
+        Returns:
+            Set<E>:
+                A new set containing elements exclusive to one set or the other.
+        
+        Complexity:
+            Time: O(n * m)
+            Space: O(n + m)
+        """
+        
+        HashSet<E> result = new HashSet<E>()
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and not other.exists( self.data.get( slotIndex ) ):
+                result.add( self.data.get( slotIndex ) )
+        Iterator<E> iter = other.iterator
+        while iter.has:
+            E element = iter.next
+            if not self.exists( element ):
+                result.add( element )
+        return result
+    
+    public function append( self, E element ) -> Collection<E>:
+        
+        """
+        Add an element and return self for chaining.
+        
+        Parameters:
+            element (E):
+                The element to add.
+        
+        Returns:
+            Collection<E>:
+                This set instance.
+        
+        Complexity:
+            Time: O(1) amortized, O(n) worst case
+            Space: O(1) amortized
+        """
+        
+        self.add( element )
+        return self
+    
+    public function clear( self ) -> Void:
+        
+        """
+        Remove all elements from the set by resetting all slot statuses to empty.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            self.status.set( slotIndex, 0 )
+        self.count = 0
+    
+    public property copy( self ) -> Collection<E>:
+        
+        """
+        Return a shallow copy of this set.
+        
+        Returns:
+            Collection<E>:
+                A new HashSet containing the same elements.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashSet<E> result = new HashSet<E>( self.capacity )
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                result.add( self.data.get( slotIndex ) )
+        return result
+
+    public property empty( self ) -> Boolean:
+        
+        """
+        Check whether the set contains no elements.
+        
+        Returns:
+            Boolean:
+                True if the set has zero elements, False otherwise.
+        """
+        
+        return self.count == 0
+    
+    public function equals( self, Object object ) -> Boolean:
+        
+        """
+        Compare this set with another object for structural equality.
+        
+        Parameters:
+            object (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is a HashSet with the same elements.
+        
+        Complexity:
+            Time: O(n * m)
+            Space: O(1)
+        """
+        
+        if object instanceof HashSet:
+            HashSet<E> other = object
+            if self.count != other.count:
+                return False
+            for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+                if self.status.get( slotIndex ) == 1 and not other.exists( self.data.get( slotIndex ) ):
+                    return False
+            return True
+        return False
+    
+    public function exists( self, E element ) -> Boolean:
+        
+        """
+        Check whether the given element exists in the set.
+        
+        Parameters:
+            element (E):
+                The element to search for.
+        
+        Returns:
+            Boolean:
+                True if the element is found, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int index = self.computeIndex( element )
+        for Int probeOffset = 0; probeOffset < self.capacity; probeOffset++:
+            Int slot = ( index + probeOffset ) % self.capacity
+            if self.status.get( slot ) == 0:
+                return False
+            if self.status.get( slot ) == 1 and self.data.get( slot ) == element:
+                return True
+        return False
+    
+    public function filter( self, Callable<Boolean,<E>> callback ) -> Collection<E>:
+        
+        """
+        Return a new set containing only elements that match the predicate.
+        
+        Parameters:
+            callback (Callable<Boolean,<E>>):
+                A predicate function that returns True for elements to include.
+        
+        Returns:
+            Collection<E>:
+                A new HashSet with only the matching elements.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashSet<E> result = new HashSet<E>()
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and callback( self.data.get( slotIndex ) ):
+                result.add( self.data.get( slotIndex ) )
+        return result
+    
+    public function forEach( self, Callable<Void, <E>> action ) -> Void:
+
+        """
+        Execute an action for each element in the set.
+
+        Parameters:
+            action (Callable<Void, <E>>):
+                The action to execute with each element.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                action( self.data.get( slotIndex ) )
+
+    public property length( self ) -> Int:
+        
+        """ Return the number of elements currently in the set. """
+        
+        return self.count
+    
+    public function remove( self, E element ) -> Boolean:
+        
+        """
+        Remove the given element from the set.
+        
+        Parameters:
+            element (E):
+                The element to remove.
+        
+        Returns:
+            Boolean:
+                True if the element was found and removed, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.removeElement( element )
+    
+    private function removeElement( self, E element ) -> Boolean:
+        
+        """
+        Remove an element by marking its slot as a tombstone (status 2) to
+        maintain probe chain integrity.
+        
+        Parameters:
+            element (E):
+                The element to remove.
+        
+        Returns:
+            Boolean:
+                True if the element was found and removed, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int index = self.computeIndex( element )
+        for Int probeOffset = 0; probeOffset < self.capacity; probeOffset++:
+            Int slot = ( index + probeOffset ) % self.capacity
+            if self.status.get( slot ) == 0:
+                return False
+            if self.status.get( slot ) == 1 and self.data.get( slot ) == element:
+                self.status.set( slot, 2 )
+                self.count = self.count - 1
+                return True
+        return False
+    
+    public property iterator( self ) -> Iterator<E>:
+        
+        """
+        Return an iterator over the elements of this set.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new HashSetIterator<E>( self.data, self.status, self.capacity )
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a string representation of the set in the format {elem1, elem2, ...}.
+        
+        Returns:
+            String:
+                The formatted string representation.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        String result = "{"
+        Boolean first = True
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                if not first:
+                    result = result + ", "
+                result = result + self.data.get( slotIndex )
+                first = False
+        result = result + "}"
+        return result
+
+    public property size( self ) -> Int:
+
+        """
+        Return the number of elements in the set.
+
+        Alias for the length property to match common collection conventions.
+
+        Returns:
+            Int:
+                The element count.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count
+
+    public property isEmpty( self ) -> Boolean:
+
+        """
+        Test whether the set contains no elements.
+
+        Returns:
+            Boolean:
+                True if the set has zero elements.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count == 0
+
+    public property isNotEmpty( self ) -> Boolean:
+
+        """
+        Test whether the set contains at least one element.
+
+        Returns:
+            Boolean:
+                True if the set has one or more elements.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count > 0
+
+    public function toList( self ) -> ArrayList<E>:
+
+        """
+        Convert the set to an ArrayList preserving iteration order.
+
+        Returns:
+            ArrayList<E>:
+                New list containing all elements of the set.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        ArrayList<E> result = new ArrayList<E>()
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                result.add( self.data.get( bucketIndex ) )
+        return result
+
+    public function any( self, Callable<Boolean, <E>> predicate ) -> Boolean:
+
+        """
+        Test whether at least one element satisfies the predicate.
+
+        Short-circuits on the first match.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns True for a matching element.
+
+        Returns:
+            Boolean:
+                True if any element satisfies the predicate.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                if predicate( self.data.get( bucketIndex ) ):
+                    return True
+        return False
+
+    public function all( self, Callable<Boolean, <E>> predicate ) -> Boolean:
+
+        """
+        Test whether every element satisfies the predicate.
+
+        Short-circuits on the first non-matching element.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns True for a conforming element.
+
+        Returns:
+            Boolean:
+                True if all elements satisfy the predicate.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                if not predicate( self.data.get( bucketIndex ) ):
+                    return False
+        return True
+
+    public function noneMatch( self, Callable<Boolean, <E>> predicate ) -> Boolean:
+
+        """
+        Test whether no element satisfies the predicate.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns True for a matching element.
+
+        Returns:
+            Boolean:
+                True if no element satisfies the predicate.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                if predicate( self.data.get( bucketIndex ) ):
+                    return False
+        return True
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all heap-allocated memory buffers held by this set.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.data.free()
+        self.status.free()
+
+
+public class HashSetIterator<E> implements Iterator<E>:
+    
+    """
+    Iterator that traverses occupied slots in a HashSet's data array.
+    
+    Skips over empty and tombstone slots, yielding only elements from
+    active entries.
+    """
+    
+    private Memory<E> data
+    private Memory<Int> status
+    private Int capacity
+    private Int position
+    
+    public function HashSetIterator( self, Memory<E> data, Memory<Int> status, Int capacity ) -> Void:
+        
+        """
+        Create an iterator over the given data array, starting at the first
+        occupied slot.
+        
+        Parameters:
+            data (Memory<E>):
+                The element storage buffer to iterate over.
+            status (Memory<Int>):
+                The slot status array (0=empty, 1=occupied, 2=deleted).
+            capacity (Int):
+                The total number of slots in the table.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.data = data
+        self.status = status
+        self.capacity = capacity
+        self.position = 0
+        while self.position < self.capacity and self.status.get( self.position ) != 1:
+            self.position = self.position + 1
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether more elements remain to be iterated.
+        
+        Returns:
+            Boolean:
+                True if the iterator has not yet reached the end of the table.
+        """
+        
+        return self.position < self.capacity
+    
+    public property next( self ) -> E:
+        
+        """
+        Return the current element and advance to the next occupied slot.
+        
+        Returns:
+            E:
+                The element at the current position before advancing.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        E element = self.data.get( self.position )
+        self.position = self.position + 1
+        while self.position < self.capacity and self.status.get( self.position ) != 1:
+            self.position = self.position + 1
+        return element
+
+
+export {
+    HashSet,
+    HashSetIterator
+}

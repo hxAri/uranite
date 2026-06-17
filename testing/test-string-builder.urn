@@ -1,0 +1,79 @@
+package testing
+
+from uranite.string.builder import StringBuilder
+from uranite.testing.assertions import {
+    assertEqualStr,
+    assertEqualI64,
+    assertTrue,
+    assertGreaterOrEqual
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== StringBuilder Tests ===" )
+
+    # Basic append and build
+    StringBuilder sb = new StringBuilder()
+    sb.append( "Hello" )
+    sb.append( " " )
+    sb.append( "World" )
+    assertEqualStr( "Hello World", sb.build(), "append+build" )
+    assertEqualI64( 11, sb.length(), "length after append" )
+    putsln( "append+build OK" )
+
+    # appendChar
+    StringBuilder sb2 = new StringBuilder()
+    sb2.appendChar( 72 )
+    sb2.appendChar( 105 )
+    assertEqualStr( "Hi", sb2.build(), "appendChar" )
+    putsln( "appendChar OK" )
+
+    # appendI64
+    StringBuilder sb3 = new StringBuilder()
+    sb3.append( "val=" )
+    sb3.appendI64( 42 )
+    assertEqualStr( "val=42", sb3.build(), "appendI64" )
+    putsln( "appendI64 OK" )
+
+    # appendBool
+    StringBuilder sb5 = new StringBuilder()
+    sb5.appendBool( True )
+    sb5.append( "/" )
+    sb5.appendBool( False )
+    assertEqualStr( "true/false", sb5.build(), "appendBool" )
+    putsln( "appendBool OK" )
+
+    # clear + isEmpty
+    StringBuilder sb7 = new StringBuilder()
+    sb7.append( "something" )
+    sb7.clear()
+    assertTrue( sb7.isEmpty(), "isEmpty after clear" )
+    sb7.append( "fresh" )
+    assertEqualStr( "fresh", sb7.build(), "build after clear+append" )
+    putsln( "clear+isEmpty OK" )
+
+    # capacity growth
+    StringBuilder sb8 = new StringBuilder()
+    I64 i = 0
+    while i < 200:
+        sb8.appendChar( 65 )
+        i = i + 1
+    assertGreaterOrEqual( sb8.capacity(), 200, "capacity >= 200" )
+    assertEqualI64( 200, sb8.length(), "length after 200 appends" )
+    putsln( "capacity growth OK" )
+
+    # charAtIndex
+    StringBuilder sb9 = new StringBuilder()
+    sb9.append( "ABCD" )
+    assertEqualI64( 65, sb9.charAtIndex( 0 ), "charAtIndex(0)=A" )
+    assertEqualI64( 68, sb9.charAtIndex( 3 ), "charAtIndex(3)=D" )
+    putsln( "charAtIndex OK" )
+
+    # destroy
+    StringBuilder sb11 = new StringBuilder()
+    sb11.append( "temp" )
+    sb11.destroy()
+    putsln( "destroy OK" )
+
+    putsln( "=== All StringBuilder tests passed ===" )
+    return 0

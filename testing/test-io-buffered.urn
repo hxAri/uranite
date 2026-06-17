@@ -1,0 +1,27 @@
+package testing
+
+from uranite.io.file import File, createFile, openFile
+from uranite.io.buffered-reader import BufferedReader
+from uranite.testing.assertions import assertEqualStr
+from uranite.io.console import putsln
+from uranite.sys.process import exit
+
+public function main() -> I32:
+    putsln( "=== IO Buffered Tests ===" )
+
+    File wf = createFile( "/tmp/uranite-test-buffered.txt", 420 )
+    wf.writeString( "Line one\nLine two\nLine three\n" )
+    wf.close()
+
+    File rf = openFile( "/tmp/uranite-test-buffered.txt" )
+    BufferedReader reader = new BufferedReader( rf.getFd(), 4096, False )
+    assertEqualStr( "Line one", reader.readLine(), "line1" )
+    assertEqualStr( "Line two", reader.readLine(), "line2" )
+    assertEqualStr( "Line three", reader.readLine(), "line3" )
+    reader.close()
+    rf.close()
+    putsln( "buffered read OK" )
+
+    putsln( "=== All IO buffered tests passed ===" )
+    exit( 0 )
+    return 0

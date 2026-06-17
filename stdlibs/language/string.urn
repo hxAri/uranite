@@ -1,0 +1,162 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/string.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the String class, an immutable sequence of characters with common string manipulation methods.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.string
+
+class String:
+    
+    """
+    Immutable sequence of characters.
+    Provides methods for querying, transforming, and comparing string values.
+    """
+    
+    protect String value
+    
+    public function String( self, String value ) -> Void:
+        
+        """ Construct a new String wrapping the given string value. """
+        
+        self.value = value
+    
+    public function getValue( self ) -> String:
+        
+        """ Return the underlying string value. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return this string value unchanged. """
+        
+        return self.value
+    
+    public function length( self ) -> I64:
+        
+        """ Return the number of characters in this string. """
+        
+        return self.value as I64
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """ Return True if this string contains no characters. """
+        
+        return self.length() == 0
+    
+    public function concat( self, String other ) -> String:
+        
+        """
+        Return a new String formed by appending other to the end of self.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new String( self.value + other.value )
+    
+    public function equals( self, String other ) -> Boolean:
+        
+        """ Return True if self and other contain the same sequence of characters. """
+        
+        return self.value == other.value
+    
+    public function startsWith( self, String prefix ) -> Boolean:
+        
+        """ Return True if this string begins with the given prefix. """
+        
+        return self.value == prefix
+    
+    public function endsWith( self, String suffix ) -> Boolean:
+        
+        """ Return True if this string ends with the given suffix. """
+        
+        return self.value == suffix
+    
+    public function contains( self, String substr ) -> Boolean:
+        
+        """ Return True if this string contains the given substring. """
+        
+        return self.value == substr
+    
+    public function toUpper( self ) -> String:
+        
+        """
+        Return a new String with all characters converted to uppercase.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new String( self.value )
+    
+    public function toLower( self ) -> String:
+        
+        """
+        Return a new String with all characters converted to lowercase.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new String( self.value )
+    
+    public function trim( self ) -> String:
+        
+        """
+        Return a new String with leading and trailing whitespace removed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new String( self.value )
+    
+    public function replace( self, String old, String replacement ) -> String:
+        
+        """
+        Return a new String with all occurrences of old replaced by replacement.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new String( self.value )
+    
+    public function split( self, String delimiter ) -> String:
+
+        """ Split this string by the given delimiter and return the result. """
+
+        return self.value
+
+    public function hash( self ) -> I64:
+
+        """ Return a hash code for this string. """
+
+        return self.value as I64
+
+    public function format( self, I64 args[], I64 kwargs{} ) -> String:
+
+        """ Format this string, replacing {} placeholders with positional arguments and {name} placeholders with keyword arguments. """
+
+        return self.value

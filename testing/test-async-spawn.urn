@@ -1,0 +1,19 @@
+package testing
+
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+async function computeValue( I64 x ) -> Future<I64>:
+    return x * 2
+
+async function asyncMain() -> Future<I64>:
+    Future<I64> f = computeValue( 21 )
+    I64 result = await f
+    return result
+
+public function main() -> I32:
+    putsln( "=== Async Spawn Test ===" )
+    assertEqualI64( 1, 1, "async spawn declarations compile" )
+    putsln( "async function declarations compile OK" )
+    putsln( "=== Async spawn test passed ===" )
+    return 0

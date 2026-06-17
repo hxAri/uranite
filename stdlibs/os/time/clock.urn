@@ -1,0 +1,149 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/time/clock.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides a monotonic system clock driven by timer interrupts, tracking raw tick counts and wall-clock time in seconds and nanoseconds since boot.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.time.clock
+
+from uranite.os.sync.spinlock import Spinlock
+
+public class SystemClock:
+    
+    """
+    Monotonic system clock driven by a hardware timer interrupt. Tracks both raw tick
+    counts and derived wall-clock time in seconds and nanoseconds since boot. The tick
+    frequency determines the timer resolution (e.g., 1000 for 1ms ticks, 1000000 for
+    1us ticks). Nanoseconds per tick is precomputed at construction to avoid division
+    in the interrupt handler hot path. A spinlock protects concurrent access from
+    interrupt handlers and kernel threads.
+    """
+    
+    public I64 ticks
+    public I64 seconds
+    public I64 nanoseconds
+    public I64 tickFrequency
+    public I64 nanosPerTick
+    public Spinlock lock
+    
+    public function SystemClock( self, I64 frequency ) -> Void:
+        
+        """
+        Constructs a new system clock with the specified tick frequency (ticks per second).
+        The nanoseconds-per-tick value is precomputed as 1000000000 divided by the
+        frequency for efficient time tracking in the interrupt handler.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.ticks = 0
+        self.seconds = 0
+        self.nanoseconds = 0
+        self.tickFrequency = frequency
+        self.nanosPerTick = 1000000000 / frequency
+        self.lock = new Spinlock()
+    
+    public function tick( self ) -> Void:
+        
+        """
+        Advances the clock by one tick. Called by the timer interrupt handler on each
+        hardware timer tick. Increments the raw tick counter, adds the precomputed
+        nanoseconds-per-tick to the nanosecond accumulator, and rolls over into the
+        seconds counter when nanoseconds reach one billion.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        self.ticks = self.ticks + 1
+        self.nanoseconds = self.nanoseconds + self.nanosPerTick
+        if self.nanoseconds >= 1000000000:
+            self.seconds = self.seconds + 1
+            self.nanoseconds = self.nanoseconds - 1000000000
+        self.lock.unlock()
+    
+    public function advance( self, I64 count ) -> Void:
+        
+        """
+        Advances the clock by multiple ticks at once. This is used for catch-up after
+        the system resumes from a sleep state where timer interrupts may have been missed.
+        The total nanosecond increment is calculated in bulk and rolled over into seconds
+        as needed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        self.ticks = self.ticks + count
+        I64 totalNanos = count * self.nanosPerTick
+        self.nanoseconds = self.nanoseconds + totalNanos
+        while self.nanoseconds >= 1000000000:
+            self.seconds = self.seconds + 1
+            self.nanoseconds = self.nanoseconds - 1000000000
+        self.lock.unlock()
+    
+    public function getTicks( self ) -> I64:
+        
+        """ Returns the total number of timer ticks since the clock was initialized. """
+        
+        return self.ticks
+    
+    public function getSeconds( self ) -> I64:
+        
+        """ Returns the whole seconds elapsed since the clock was initialized. """
+        
+        return self.seconds
+    
+    public function getNanoseconds( self ) -> I64:
+        
+        """ Returns the sub-second nanosecond component of the current clock time. """
+        
+        return self.nanoseconds
+    
+    public function getFrequency( self ) -> I64:
+        
+        """ Returns the tick frequency (ticks per second) configured for this clock. """
+        
+        return self.tickFrequency
+    
+    public function uptimeMillis( self ) -> I64:
+        
+        """
+        Calculates and returns the total elapsed milliseconds since boot, computed from
+        the seconds and nanoseconds fields.
+        """
+        
+        return self.seconds * 1000 + self.nanoseconds / 1000000
+    
+    public function uptimeMicros( self ) -> I64:
+        
+        """
+        Calculates and returns the total elapsed microseconds since boot, computed from
+        the seconds and nanoseconds fields.
+        """
+        
+        return self.seconds * 1000000 + self.nanoseconds / 1000
+
+export {
+    SystemClock
+}

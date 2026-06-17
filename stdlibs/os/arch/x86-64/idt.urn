@@ -1,0 +1,398 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/idt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Interrupt Descriptor Table (IDT) infrastructure for x86-64 long mode,
+# including gate descriptor entries, the IDTR pointer structure, gate type attribute
+# helpers, CPU exception vector constants, and functions to load the IDT into the processor.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.x86-64.idt
+
+from uranite.memory.memory import Memory
+
+public class IdtEntry:
+    
+    """
+    Single 16-byte interrupt gate descriptor for the x86_64 Interrupt Descriptor
+    Table in long mode. Each entry maps an interrupt vector number (0-255) to a
+    handler function address, a code segment selector, gate type attributes, and
+    an optional Interrupt Stack Table index. The handler address is split across
+    three fields (offsetLow, offsetMiddle, offsetHigh) due to the historical
+    evolution of the x86 descriptor format from 16-bit to 64-bit mode.
+    """
+    
+    public I64 offsetLow
+    public I64 selector
+    public I64 ist
+    public I64 typeAttr
+    public I64 offsetMiddle
+    public I64 offsetHigh
+    public I64 reserved
+    
+    public function IdtEntry( self ) -> Void:
+        
+        """
+        Construct a zeroed IDT entry with no handler installed. All fields are
+        initialized to zero, which means the entry is marked as not-present
+        and will trigger a General Protection Fault if the corresponding
+        interrupt vector fires before a handler is configured via setHandler.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.offsetLow = 0
+        self.selector = 0
+        self.ist = 0
+        self.typeAttr = 0
+        self.offsetMiddle = 0
+        self.offsetHigh = 0
+        self.reserved = 0
+    
+    public function setHandler( self, I64 handler, I64 selector, I64 typeAttr, I64 ist ) -> Void:
+        
+        """
+        Configure this IDT entry with an interrupt handler address, code segment
+        selector, gate type and attributes, and an Interrupt Stack Table index.
+        The 64-bit handler address is split into three parts to match the hardware
+        descriptor format. The selector should point to a kernel code segment.
+        The typeAttr byte encodes the gate type (interrupt or trap), DPL (ring
+        level required to invoke via software int), and the present bit. The IST
+        field (1-7) selects a dedicated stack from the TSS for this handler, or
+        0 to use the current stack.
+        
+        Parameters:
+            handler (I64):
+                The 64-bit virtual address of the interrupt handler function.
+            selector (I64):
+                The GDT code segment selector to load into CS on handler entry.
+            typeAttr (I64):
+                The gate type and attribute byte (interrupt gate, trap gate, DPL).
+            ist (I64):
+                The IST index (1-7) for dedicated stack switching, or 0 for none.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.offsetLow = handler & 65535
+        self.offsetMiddle = ( handler >> 16 ) & 65535
+        self.offsetHigh = ( handler >> 32 ) & 4294967295
+        self.selector = selector
+        self.typeAttr = typeAttr
+        self.ist = ist
+        self.reserved = 0
+    
+    public function getHandler( self ) -> I64:
+        
+        """
+        Reconstruct and return the full 64-bit handler address by combining the
+        three offset fields (offsetLow, offsetMiddle, offsetHigh) back into a
+        single contiguous virtual address.
+        
+        Returns:
+            I64:
+                The reconstructed 64-bit handler function address.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.offsetLow | ( self.offsetMiddle << 16 ) | ( self.offsetHigh << 32 )
+
+public class IdtPointer:
+    
+    """
+    Descriptor for the IDTR register, loaded by the lidt instruction. Contains
+    a 2-byte limit field specifying the IDT size minus one in bytes, and an
+    8-byte linear base address pointing to the first IDT entry in memory.
+    The processor uses this structure to locate interrupt gate descriptors
+    when an interrupt or exception fires.
+    """
+    
+    public I64 limit
+    public I64 base
+    
+    public function IdtPointer( self, I64 limit, I64 base ) -> Void:
+        
+        """
+        Construct an IDT pointer with the given size limit and base address.
+        The limit should be set to the total IDT size in bytes minus one
+        (typically 256 * 16 - 1 = 4095 for a full IDT), and the base should
+        point to the linear address of the first IdtEntry in memory.
+        
+        Parameters:
+            limit (I64):
+                The IDT size in bytes minus one.
+            base (I64):
+                The linear address of the first IDT entry.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.limit = limit
+        self.base = base
+
+public enum GateType backed I64:
+    
+    """
+    Gate type attribute bytes for x86_64 IDT entries, encoding the gate type,
+    DPL (privilege level), and present bit into a single byte value.
+    """
+    
+    unit InterruptGateKernel 142
+    
+    """ Kernel-mode interrupt gate (0x8E). Clears IF on entry, DPL 0. """
+    
+    unit TrapGateKernel 143
+    
+    """ Kernel-mode trap gate (0x8F). Keeps IF set on entry, DPL 0. """
+    
+    unit InterruptGateUser 238
+    
+    """ User-mode interrupt gate (0xEE). Clears IF on entry, DPL 3. """
+
+public enum InterruptVector backed I64:
+    
+    """
+    CPU exception and interrupt vector numbers for x86_64. Vectors 0-31 are
+    reserved by the processor for hardware exceptions. Vectors 32-255 are
+    available for hardware IRQs and software-defined interrupts.
+    """
+    
+    unit DivideError 0
+    
+    """ Vector 0: Divide Error (#DE), triggered by integer division by zero or quotient overflow. """
+    
+    unit Debug 1
+    
+    """ Vector 1: Debug exception (#DB), triggered by hardware breakpoints and single-step traps. """
+    
+    unit Nmi 2
+    
+    """ Vector 2: Non-Maskable Interrupt, a high-priority interrupt that cannot be disabled via IF. """
+    
+    unit Breakpoint 3
+    
+    """ Vector 3: Breakpoint exception (#BP), triggered by the INT3 instruction. """
+    
+    unit Overflow 4
+    
+    """ Vector 4: Overflow exception (#OF), triggered by INTO when the overflow flag is set. """
+    
+    unit BoundRange 5
+    
+    """ Vector 5: Bound Range Exceeded (#BR), triggered by BOUND on out-of-bounds index. """
+    
+    unit InvalidOpcode 6
+    
+    """ Vector 6: Invalid Opcode (#UD), triggered by an undefined instruction encoding. """
+    
+    unit DeviceNotAvail 7
+    
+    """ Vector 7: Device Not Available (#NM), triggered when FPU/SIMD unit is disabled. """
+    
+    unit DoubleFault 8
+    
+    """ Vector 8: Double Fault (#DF), triggered when nested exceptions cannot be serialized. """
+    
+    unit InvalidTss 10
+    
+    """ Vector 10: Invalid TSS (#TS), triggered by a malformed Task State Segment. """
+    
+    unit SegmentNotPresent 11
+    
+    """ Vector 11: Segment Not Present (#NP), triggered by loading a not-present segment. """
+    
+    unit StackSegment 12
+    
+    """ Vector 12: Stack-Segment Fault (#SS), triggered by stack limit or not-present violations. """
+    
+    unit GeneralProtection 13
+    
+    """ Vector 13: General Protection Fault (#GP), triggered by privilege and protection violations. """
+    
+    unit PageFault 14
+    
+    """ Vector 14: Page Fault (#PF), triggered by not-present pages or permission violations. """
+    
+    unit X87Fpu 16
+    
+    """ Vector 16: x87 Floating-Point Exception (#MF), triggered by unmasked x87 FPU errors. """
+    
+    unit AlignCheck 17
+    
+    """ Vector 17: Alignment Check (#AC), triggered by unaligned memory access in ring 3. """
+    
+    unit MachineCheck 18
+    
+    """ Vector 18: Machine Check (#MC), triggered by internal processor or bus errors. """
+    
+    unit SimdFp 19
+    
+    """ Vector 19: SIMD Floating-Point Exception (#XM), triggered by unmasked SSE/AVX errors. """
+
+public const I64 IRQ_BASE = 32
+
+""" Base interrupt vector number where hardware IRQs start after PIC remapping. """
+
+public class Idt:
+    
+    """
+    Full Interrupt Descriptor Table containing 256 gate descriptor entries,
+    covering all possible interrupt vector numbers on x86_64. Vectors 0-31
+    are reserved by the processor for CPU exceptions (divide error, page fault,
+    general protection fault, etc.). Vectors 32-255 are available for hardware
+    IRQs (typically starting at vector 32 after PIC remapping) and software-
+    defined interrupts including system calls.
+    """
+    
+    protect Memory<IdtEntry> entries
+    protect I64 count
+    
+    public function Idt( self ) -> Void:
+        
+        """
+        Construct a full IDT with 256 zeroed gate descriptor entries. All entries
+        start as not-present, meaning any interrupt vector that fires without a
+        registered handler will trigger a General Protection Fault. Handlers must
+        be installed via setGate or setGateWithIst before enabling interrupts.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.entries = new Memory<IdtEntry>( 256 )
+        self.count = 256
+        I64 vectorIndex = 0
+        while vectorIndex < 256:
+            self.entries.set( vectorIndex, new IdtEntry() )
+            vectorIndex = vectorIndex + 1
+    
+    public function setGate( self, I64 vector, I64 handler, I64 selector, I64 typeAttr ) -> Void:
+        
+        """
+        Install an interrupt handler for the specified vector number using IST 0,
+        which means the handler runs on the current stack. The vector must be in
+        the range 0-255. The handler address, code segment selector, and gate type
+        attributes are written into the corresponding IDT entry.
+        
+        Parameters:
+            vector (I64):
+                The interrupt vector number (0-255) to install the handler for.
+            handler (I64):
+                The virtual address of the interrupt handler function.
+            selector (I64):
+                The GDT code segment selector to load into CS on entry.
+            typeAttr (I64):
+                The gate type and attribute byte (interrupt gate, trap gate, DPL).
+        """
+        
+        if vector >= 0 and vector < 256:
+            IdtEntry entry = self.entries.get( vector )
+            entry.setHandler( handler, selector, typeAttr, 0 )
+            self.entries.set( vector, entry )
+    
+    public function setGateWithIst( self, I64 vector, I64 handler, I64 selector, I64 typeAttr, I64 ist ) -> Void:
+        
+        """
+        Install an interrupt handler with a dedicated Interrupt Stack Table entry
+        for automatic stack switching on entry. IST indices 1-7 reference stacks
+        defined in the Task State Segment. This is critical for handlers that must
+        not rely on the current stack being valid, such as double fault (IST 1) and
+        NMI (IST 2), where the original stack may be corrupted or exhausted.
+        
+        Parameters:
+            vector (I64):
+                The interrupt vector number (0-255) to install the handler for.
+            handler (I64):
+                The virtual address of the interrupt handler function.
+            selector (I64):
+                The GDT code segment selector to load into CS on entry.
+            typeAttr (I64):
+                The gate type and attribute byte (interrupt gate, trap gate, DPL).
+            ist (I64):
+                The IST index (1-7) for dedicated stack switching, or 0 for none.
+        """
+        
+        if vector >= 0 and vector < 256:
+            IdtEntry entry = self.entries.get( vector )
+            entry.setHandler( handler, selector, typeAttr, ist )
+            self.entries.set( vector, entry )
+    
+    public function getEntry( self, I64 vector ) -> IdtEntry:
+        
+        """
+        Return the IDT entry for the specified interrupt vector number. The
+        returned IdtEntry can be inspected to check the installed handler
+        address, gate type, and IST configuration.
+        
+        Parameters:
+            vector (I64):
+                The interrupt vector number (0-255) to retrieve.
+        
+        Returns:
+            IdtEntry:
+                The gate descriptor entry for the given vector.
+        """
+        
+        return self.entries.get( vector )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the underlying memory allocation used to store all 256 IDT entries.
+        This should only be called when the IDT is no longer loaded into the IDTR,
+        as freeing an active IDT will cause undefined behavior on the next interrupt.
+        """
+        
+        self.entries.free()
+
+public function loadIdt( IdtPointer ptr ) -> Void:
+    
+    """
+    Load the Interrupt Descriptor Table into the IDTR register using the lidt
+    instruction. The IdtPointer provides the base address and size limit of
+    the IDT to the processor. After loading, the processor will use this IDT
+    to dispatch all interrupts and exceptions to their registered handlers.
+    
+    Parameters:
+        ptr (IdtPointer):
+            The IDT pointer containing the base address and size limit.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    asm volatile "lidt ($0)" : : input( "r" ptr ) : clobber( "memory" )
+
+export {
+    IdtEntry,
+    IdtPointer,
+    Idt,
+    loadIdt,
+    GateType,
+    InterruptVector,
+    IRQ_BASE
+}

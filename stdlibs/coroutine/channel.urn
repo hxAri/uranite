@@ -1,0 +1,94 @@
+package uranite.coroutine.channel
+
+from uranite.errors.error import Error
+from uranite.memory.memory import Memory
+from uranite.coroutine.scheduler import CoroutineScheduler
+
+public class ChannelError extends Error:
+    
+    public function ChannelError( self, String message ) -> Void:
+        parent( message, 0, None )
+
+public interface AsyncChannel<T>:
+    
+    public function send( self, T value ) -> Void raises ChannelError:
+        
+        """ Send value into channel. Blocks if buffer full. """
+    
+    public function receive( self ) -> T raises ChannelError:
+        
+        """ Receive value from channel. Blocks if empty. """
+    
+    public function close( self ) -> Void:
+        
+        """ Close channel. """
+    
+    public function closed( self ) -> Boolean:
+        
+        """
+        Check if channel is closed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+public class BufferedChannel implements AsyncChannel<I64>:
+    public Memory<I64> buffer
+    public I64 capacity
+    public I64 head
+    public I64 tail
+    public I64 count
+    public Boolean isClosed
+    public CoroutineScheduler scheduler
+    
+    public function BufferedChannel( self, I64 capacity, CoroutineScheduler scheduler ) -> Void:
+        self.buffer = new Memory<I64>( capacity )
+        self.capacity = capacity
+        self.head = 0
+        self.tail = 0
+        self.count = 0
+        self.isClosed = False
+        self.scheduler = scheduler
+    
+    public function send( self, I64 value ) -> Void:
+        if self.isClosed:
+            raise new ChannelError( "send on closed channel" )
+        while self.count >= self.capacity:
+            self.scheduler.yieldCurrent()
+            if self.isClosed:
+                raise new ChannelError( "send on closed channel" )
+        self.buffer.set( self.tail, value )
+        self.tail = ( self.tail + 1 ) % self.capacity
+        self.count = self.count + 1
+    
+    public function receive( self ) -> I64:
+        while self.count == 0:
+            if self.isClosed:
+                raise new ChannelError( "receive on closed empty channel" )
+            self.scheduler.yieldCurrent()
+        I64 value = self.buffer.get( self.head )
+        self.head = ( self.head + 1 ) % self.capacity
+        self.count = self.count - 1
+        return value
+    
+    public function close( self ) -> Void:
+        self.isClosed = True
+    
+    public function closed( self ) -> Boolean:
+        return self.isClosed
+    
+    public function size( self ) -> I64:
+        return self.count
+    
+    public function empty( self ) -> Boolean:
+        return self.count == 0
+    
+    public function destroy( self ) -> Void:
+        self.buffer.free()
+
+export {
+    AsyncChannel,
+    ChannelError,
+    BufferedChannel
+}

@@ -1,0 +1,660 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-29 14:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Core process types: ProcessRuntime manages kernel subsystem access including
+# shared memory registry and address space creation, Process represents an
+# isolated execution context with its own address space and stack.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.process
+
+from uranite.memory.memory import Memory
+from uranite.os.task.task import Task, TaskState, BlockReason
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.memory.vmm import AddressSpace, protUser, protReadWrite
+from uranite.os.ipc.shared-memory import SharedRegion, SharedMemoryRegistry
+from uranite.os.ipc.signal import Event
+from uranite.os.sync.spinlock import Spinlock
+from uranite.os.time.clock import SystemClock
+from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.process.errors import ProcessError, ProcessCreationError
+
+const I64 DEFAULT_PROCESS_STACK_PAGES = 16
+""" Default number of pages allocated for a process stack (64 KiB at 4096 bytes per page). """
+const I64 PAGE_SIZE = 4096
+""" Size of a single memory page in bytes. """
+const I64 DEFAULT_PROCESS_PRIORITY = 5
+""" Default scheduler priority assigned to newly created processes. """
+
+const I64 PROCESS_STATE_NEW = 0
+""" Process state: created but not yet started. """
+const I64 PROCESS_STATE_RUNNING = 1
+""" Process state: actively executing on the scheduler. """
+const I64 PROCESS_STATE_FINISHED = 2
+""" Process state: execution completed normally. """
+const I64 PROCESS_STATE_CRASHED = 3
+""" Process state: execution terminated due to an unhandled error. """
+const I64 PROCESS_STATE_DETACHED = 4
+""" Process state: detached from its handle, resources freed on completion. """
+
+const I64 SHARED_MEM_FLAGS_RW = 3
+""" Shared memory flags for read-write access. """
+
+public class ProcessRuntime:
+    
+    """
+    Manages kernel subsystem access for process creation and lifecycle.
+    
+    Provides a unified interface to the scheduler, physical memory manager,
+    system clock, and shared memory registry. Handles process ID allocation,
+    stack allocation/deallocation, address space creation, shared memory
+    region management, and task pointer registration. A single ProcessRuntime
+    instance is shared across all processes within an executor or pool.
+    """
+    
+    protect Scheduler scheduler
+    """ The task scheduler used for enqueuing and managing process tasks. """
+    protect PhysicalMemoryManager pmm
+    """ Physical memory manager used for stack and shared region allocation. """
+    protect SystemClock clock
+    """ System clock providing time services to processes. """
+    protect SharedMemoryRegistry sharedRegistry
+    """ Registry tracking all shared memory regions across processes. """
+    protect Spinlock guard
+    """ Spinlock protecting concurrent access to the task pointer table. """
+    protect AtomicI64 nextProcessId
+    """ Atomic counter for generating unique process identifiers. """
+    protect AtomicBoolean initialized
+    """ Flag indicating whether this runtime has been fully initialized. """
+    protect Memory<I64> taskPointers
+    """ Table mapping process IDs to their corresponding task pointers. """
+    protect I64 maxProcesses
+    """ Maximum number of processes this runtime can manage simultaneously. """
+    
+    public function ProcessRuntime( self, Scheduler scheduler, PhysicalMemoryManager pmm, SystemClock clock, I64 maxProcesses ) -> Void:
+        
+        """
+        Construct a new ProcessRuntime with the given kernel subsystems.
+        
+        Initializes the shared memory registry, process ID counter, task
+        pointer table, and synchronization primitives. The task pointer
+        table is zeroed to indicate no registered tasks.
+        
+        Parameters:
+            scheduler (Scheduler):
+                The task scheduler for process execution.
+            pmm (PhysicalMemoryManager):
+                The physical memory manager for stack and region allocation.
+            clock (SystemClock):
+                The system clock for time-related operations.
+            maxProcesses (I64):
+                Maximum number of concurrent processes supported.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.scheduler = scheduler
+        self.pmm = pmm
+        self.clock = clock
+        self.sharedRegistry = new SharedMemoryRegistry( maxProcesses )
+        self.guard = new Spinlock()
+        self.nextProcessId = new AtomicI64( 1 )
+        self.initialized = new AtomicBoolean( True )
+        self.maxProcesses = maxProcesses
+        self.taskPointers = new Memory<I64>( maxProcesses )
+        I64 slotIndex = 0
+        while slotIndex < maxProcesses:
+            self.taskPointers.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function allocateStack( self, I64 stackPages ) -> I64:
+        
+        """
+        Allocate a contiguous physical memory region for a process stack.
+        
+        Allocates one extra page beyond the requested count to serve as
+        a guard page for stack overflow detection.
+        
+        Parameters:
+            stackPages (I64):
+                Number of usable stack pages to allocate.
+        
+        Returns:
+            I64:
+                The physical base address of the allocated stack region.
+        """
+        
+        I64 totalPages = stackPages + 1
+        I64 baseAddr = self.pmm.allocContiguous( totalPages )
+        return baseAddr
+    
+    public function freeStack( self, I64 stackBase, I64 stackPages ) -> Void:
+        
+        """
+        Free a previously allocated stack region.
+        
+        Parameters:
+            stackBase (I64):
+                The physical base address returned by allocateStack.
+            stackPages (I64):
+                The number of usable stack pages (same value passed to allocateStack).
+        """
+        
+        I64 totalPages = stackPages + 1
+        self.pmm.freeRegion( stackBase, totalPages )
+    
+    public function allocateProcessId( self ) -> I64:
+        
+        """
+        Atomically allocate and return a unique process identifier.
+        
+        Returns:
+            I64:
+                A monotonically increasing process ID, starting from 1.
+        """
+        
+        return self.nextProcessId.fetchAdd( 1 )
+    
+    public function createAddressSpace( self ) -> AddressSpace:
+        
+        """
+        Create a new virtual address space for a process.
+        
+        Returns:
+            AddressSpace:
+                A fresh address space backed by this runtime's physical
+                memory manager.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new AddressSpace( self.pmm )
+    
+    public function createSharedRegion( self, I64 ownerTaskId, I64 pageCount ) -> SharedRegion:
+        
+        """
+        Allocate a shared memory region and register it in the shared registry.
+        
+        The region is backed by contiguous physical pages and is assigned a
+        unique region ID. It is created with read-write access flags.
+        
+        Parameters:
+            ownerTaskId (I64):
+                The task ID of the process that owns this region.
+            pageCount (I64):
+                Number of physical pages to allocate for the region.
+        
+        Returns:
+            SharedRegion:
+                The newly created and registered shared memory region.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 physBase = self.pmm.allocContiguous( pageCount )
+        I64 regionId = self.sharedRegistry.allocateRegionId()
+        SharedRegion region = new SharedRegion( regionId, ownerTaskId, physBase, pageCount, SHARED_MEM_FLAGS_RW )
+        I64 regionPtr = 0
+        asm volatile "movq $1, $0" : output( "=r" regionPtr ) : input( "r" region ) : clobber()
+        self.sharedRegistry.addRegion( regionId, regionPtr )
+        return region
+    
+    public function mapSharedRegion( self, AddressSpace addrSpace, SharedRegion region, I64 virtAddr ) -> Boolean:
+        
+        """
+        Map an existing shared memory region into a process address space.
+        
+        Creates a virtual-to-physical mapping for the region's pages at the
+        specified virtual address. Increments the region's reference count
+        on success.
+        
+        Parameters:
+            addrSpace (AddressSpace):
+                The target address space to map into.
+            region (SharedRegion):
+                The shared memory region to map.
+            virtAddr (I64):
+                The virtual address where the region should appear.
+        
+        Returns:
+            Boolean:
+                True if the mapping succeeded, False on failure.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 physBase = region.getPhysicalBase()
+        I64 pageCount = region.getPageCount()
+        Boolean ok = addrSpace.mapRange( virtAddr, physBase, pageCount, protUser() )
+        if ok:
+            region.retain()
+        return ok
+    
+    public function registerTask( self, I64 taskId, I64 taskPointer ) -> Void:
+        
+        """
+        Register a task pointer for a given task ID in the lookup table.
+        
+        Thread-safe via spinlock. Only registers if the task ID is within
+        the valid range.
+        
+        Parameters:
+            taskId (I64):
+                The task identifier to register.
+            taskPointer (I64):
+                The raw pointer to the task, cast to I64.
+        """
+        
+        self.guard.lock()
+        if taskId > 0 and taskId < self.maxProcesses:
+            self.taskPointers.set( taskId, taskPointer )
+        self.guard.unlock()
+    
+    public function lookupTaskPointer( self, I64 taskId ) -> I64:
+        
+        """
+        Look up the task pointer for a given task ID.
+        
+        Parameters:
+            taskId (I64):
+                The task identifier to look up.
+        
+        Returns:
+            I64:
+                The raw task pointer, or 0 if the task ID is out of range
+                or not registered.
+        """
+        
+        if taskId <= 0 or taskId >= self.maxProcesses:
+            return 0
+        return self.taskPointers.get( taskId )
+    
+    public function unregisterTask( self, I64 taskId ) -> Void:
+        
+        """
+        Remove a task pointer registration for a given task ID.
+        
+        Thread-safe via spinlock. Sets the slot to 0 to indicate the task
+        is no longer registered.
+        
+        Parameters:
+            taskId (I64):
+                The task identifier to unregister.
+        """
+        
+        self.guard.lock()
+        if taskId > 0 and taskId < self.maxProcesses:
+            self.taskPointers.set( taskId, 0 )
+        self.guard.unlock()
+    
+    public function getScheduler( self ) -> Scheduler:
+        
+        """
+        Return the scheduler used by this runtime.
+        
+        Returns:
+            Scheduler:
+                The task scheduler instance.
+        """
+        
+        return self.scheduler
+    
+    public function getPmm( self ) -> PhysicalMemoryManager:
+        
+        """
+        Return the physical memory manager used by this runtime.
+        
+        Returns:
+            PhysicalMemoryManager:
+                The physical memory manager instance.
+        """
+        
+        return self.pmm
+    
+    public function getClock( self ) -> SystemClock:
+        
+        """
+        Return the system clock used by this runtime.
+        
+        Returns:
+            SystemClock:
+                The system clock instance.
+        """
+        
+        return self.clock
+    
+    public function getSharedRegistry( self ) -> SharedMemoryRegistry:
+        
+        """
+        Return the shared memory registry used by this runtime.
+        
+        Returns:
+            SharedMemoryRegistry:
+                The shared memory registry instance.
+        """
+        
+        return self.sharedRegistry
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by this runtime.
+        
+        Frees the task pointer table, destroys atomic counters, and tears
+        down the shared memory registry. Must be called after all processes
+        managed by this runtime have been cleaned up.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.taskPointers.free()
+        self.nextProcessId.destroy()
+        self.initialized.destroy()
+        self.sharedRegistry.destroy()
+
+public class Process:
+    
+    """
+    An isolated execution context with its own address space and stack.
+    
+    Represents a single process backed by a kernel Task. Each process has
+    a private address space, a physical stack region, a completion event
+    for join synchronization, and atomic state tracking. Processes are
+    created through a ProcessRuntime and scheduled via its Scheduler.
+    """
+    
+    protect Task task
+    """ The kernel task backing this process execution. """
+    protect I64 processId
+    """ Unique identifier for this process within its runtime. """
+    protect I64 stackBasePhys
+    """ Physical base address of the allocated stack region. """
+    protect I64 stackPages
+    """ Number of usable stack pages allocated for this process. """
+    protect ProcessRuntime runtime
+    """ The runtime that manages this process's kernel resources. """
+    protect AddressSpace addressSpace
+    """ The virtual address space private to this process. """
+    protect Event completionEvent
+    """ Event signaled when the process reaches a terminal state. """
+    protect AtomicI64 state
+    """ Atomic process state (PROCESS_STATE_NEW through PROCESS_STATE_DETACHED). """
+    protect Memory<I64> resultSlot
+    """ Single-element buffer storing the process return value. """
+    protect AtomicBoolean crashed
+    """ Flag indicating whether the process terminated due to a crash. """
+    
+    public function Process( self, ProcessRuntime runtime, I64 processId, I64 stackPages, I64 priority ) -> Void:
+        
+        """
+        Construct a new process with the given runtime, identity, and resources.
+        
+        Allocates a stack, creates a private address space, initializes a
+        kernel Task with the specified priority, and registers the task
+        in the runtime's lookup table. The process starts in the NEW state
+        with its instruction pointer set to 0 (must be set before starting).
+        
+        Parameters:
+            runtime (ProcessRuntime):
+                The runtime providing kernel subsystem access.
+            processId (I64):
+                Unique identifier for this process.
+            stackPages (I64):
+                Number of stack pages to allocate.
+            priority (I64):
+                Scheduler priority for the backing task.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.runtime = runtime
+        self.processId = processId
+        self.stackPages = stackPages
+        self.resultSlot = new Memory<I64>( 1 )
+        self.resultSlot.set( 0, 0 )
+        self.state = new AtomicI64( PROCESS_STATE_NEW )
+        self.crashed = new AtomicBoolean( False )
+        self.completionEvent = new Event()
+        self.addressSpace = runtime.createAddressSpace()
+        
+        I64 stackBase = runtime.allocateStack( stackPages )
+        self.stackBasePhys = stackBase
+        
+        I64 taskId = runtime.getScheduler().allocateTaskId()
+        I64 stackSize = ( stackPages + 1 ) * PAGE_SIZE
+        self.task = new Task( taskId, stackSize, priority )
+        
+        I64 stackTop = stackBase + stackSize
+        self.task.setEntryPoint( 0, stackTop )
+        
+        runtime.registerTask( taskId, 0 )
+    
+    public function start( self, I64 entryAddr ) -> Void:
+        
+        """
+        Start the process by setting its entry point and enqueuing it.
+        
+        Sets the instruction pointer to the provided function address,
+        passes the process ID as the first argument (rdi), transitions
+        to running state, and enqueues the backing task on the scheduler.
+        
+        Parameters:
+            entryAddr (I64):
+                The address of the function to execute as the process entry point.
+        """
+        
+        self.task.setEntryPoint( entryAddr, self.task.registers.rsp )
+        self.task.registers.rdi = self.processId
+        self.state.store( PROCESS_STATE_RUNNING )
+        self.runtime.getScheduler().enqueue( self.task )
+    
+    public function getProcessId( self ) -> I64:
+        
+        """
+        Return the unique identifier of this process.
+        
+        Returns:
+            I64:
+                The process ID assigned at construction.
+        """
+        
+        return self.processId
+    
+    public function getTask( self ) -> Task:
+        
+        """
+        Return the kernel task backing this process.
+        
+        Returns:
+            Task:
+                The underlying task object.
+        """
+        
+        return self.task
+    
+    public function getAddressSpace( self ) -> AddressSpace:
+        
+        """
+        Return the virtual address space private to this process.
+        
+        Returns:
+            AddressSpace:
+                The process's address space.
+        """
+        
+        return self.addressSpace
+    
+    public function getCompletionEvent( self ) -> Event:
+        
+        """
+        Return the event that is signaled when this process finishes.
+        
+        Returns:
+            Event:
+                The completion event for join synchronization.
+        """
+        
+        return self.completionEvent
+    
+    public function setResult( self, I64 value ) -> Void:
+        
+        """
+        Store the process return value.
+        
+        Parameters:
+            value (I64):
+                The result value produced by the process.
+        """
+        
+        self.resultSlot.set( 0, value )
+    
+    public function getResult( self ) -> I64:
+        
+        """
+        Retrieve the process return value.
+        
+        Should only be called after the process has finished.
+        
+        Returns:
+            I64:
+                The result value stored by setResult, or 0 if none was set.
+        """
+        
+        return self.resultSlot.get( 0 )
+    
+    public function markFinished( self ) -> Void:
+        
+        """
+        Transition the process to the finished state and signal waiters.
+        
+        Sets the state to PROCESS_STATE_FINISHED and signals the completion
+        event to unblock any tasks waiting on join.
+        """
+        
+        self.state.store( PROCESS_STATE_FINISHED )
+        self.completionEvent.signal( 1 )
+    
+    public function markCrashed( self ) -> Void:
+        
+        """
+        Mark the process as crashed and signal waiters.
+        
+        Sets the crashed flag and then transitions to finished state,
+        signaling the completion event so that joining tasks can detect
+        the crash.
+        """
+        
+        self.crashed.store( True )
+        self.markFinished()
+    
+    public function hasCrashed( self ) -> Boolean:
+        
+        """
+        Check whether this process terminated due to a crash.
+        
+        Returns:
+            Boolean:
+                True if the process crashed, False otherwise.
+        """
+        
+        return self.crashed.load()
+    
+    public function isFinished( self ) -> Boolean:
+        
+        """
+        Check whether this process has reached a terminal state.
+        
+        A process is finished when its state is PROCESS_STATE_FINISHED,
+        PROCESS_STATE_CRASHED, or PROCESS_STATE_DETACHED.
+        
+        Returns:
+            Boolean:
+                True if the process is in a terminal state.
+        """
+        
+        return self.state.load() >= PROCESS_STATE_FINISHED
+    
+    public function isDetached( self ) -> Boolean:
+        
+        """
+        Check whether this process has been detached from its handle.
+        
+        Returns:
+            Boolean:
+                True if the process is in the detached state.
+        """
+        
+        return self.state.load() == PROCESS_STATE_DETACHED
+    
+    public function detach( self ) -> Void:
+        
+        """
+        Detach the process from its handle.
+        
+        A detached process's resources are freed automatically upon
+        completion rather than requiring an explicit join.
+        """
+        
+        self.state.store( PROCESS_STATE_DETACHED )
+    
+    public function cleanup( self ) -> Void:
+        
+        """
+        Release all resources held by this process.
+        
+        Unregisters the task, terminates it, frees the stack memory, and
+        destroys the result slot and atomic state. Must be called exactly
+        once after the process has finished or been joined.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.runtime.unregisterTask( self.task.id )
+        self.task.terminate()
+        self.runtime.freeStack( self.stackBasePhys, self.stackPages )
+        self.resultSlot.free()
+        self.state.destroy()
+        self.crashed.destroy()
+
+export {
+    ProcessRuntime,
+    Process,
+    DEFAULT_PROCESS_STACK_PAGES,
+    DEFAULT_PROCESS_PRIORITY,
+    PAGE_SIZE,
+    PROCESS_STATE_NEW,
+    PROCESS_STATE_RUNNING,
+    PROCESS_STATE_FINISHED,
+    PROCESS_STATE_CRASHED,
+    PROCESS_STATE_DETACHED,
+    SHARED_MEM_FLAGS_RW
+}

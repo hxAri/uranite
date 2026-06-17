@@ -1,0 +1,148 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/crypto/aes.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# AES-128/256 encryption context using AES-NI hardware acceleration. Provides key schedule expansion and round key storage for block encrypt/decrypt operations via dedicated x86 AES instructions.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.crypto.aes
+
+from uranite.memory.memory import Memory
+
+public const I64 AES_128 = 128
+""" The AES-128 key size in bits. """
+
+public const I64 AES_256 = 256
+""" The AES-256 key size in bits. """
+
+public const I64 AES_BLOCK_SIZE = 16
+""" The AES block size in bytes (128 bits). """
+
+public class AesContext:
+    
+    """
+    AES encryption context that holds the expanded round keys for AES-128 or
+    AES-256 operations. AES-128 uses 10 rounds and AES-256 uses 14 rounds.
+    Each round key is 128 bits (2 I64 slots), so the total storage is
+    (rounds + 1) * 2 I64 values for the key schedule.
+    """
+    
+    public Memory<I64> roundKeys
+    public I64 keySize
+    public I64 rounds
+    public I64 initialized
+    
+    public function AesContext( self, I64 keyBits ) -> Void:
+        
+        """
+        Construct an AES context for the specified key size in bits.
+        Determines the number of rounds (10 for AES-128, 14 for AES-256)
+        and allocates storage for the expanded round keys, initializing
+        all slots to zero.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.keySize = keyBits
+        self.initialized = 0
+        if keyBits == 256:
+            self.rounds = 14
+        else:
+            self.rounds = 10
+        I64 slots = ( self.rounds + 1 ) * 2
+        self.roundKeys = new Memory<I64>( slots )
+        I64 slotIndex = 0
+        while slotIndex < slots:
+            self.roundKeys.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+
+    public function init( self, I64 k0, I64 k1, I64 k2, I64 k3 ) -> Void:
+        
+        """
+        Initialize the context with raw key material. For AES-128, only k0 and k1
+        are used (128 bits total as 2 I64 values). For AES-256, all four parameters
+        k0 through k3 are stored (256 bits total as 4 I64 values). Marks the
+        context as initialized after storing the key material.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.roundKeys.set( 0, k0 )
+        self.roundKeys.set( 1, k1 )
+        if self.keySize == 256:
+            self.roundKeys.set( 2, k2 )
+            self.roundKeys.set( 3, k3 )
+        self.initialized = 1
+    
+    public function hasHardwareSupport( self ) -> Boolean:
+        
+        """
+        Check if AES-NI hardware acceleration is available on the current CPU
+        by executing CPUID with leaf 1 and testing bit 25 of the ECX register.
+        Returns True if the processor supports AES-NI instructions.
+        """
+        
+        I64 ecx = 0
+        asm volatile "mov $$1, %rax; cpuid; mov %rcx, $0" : output( "=r" ecx ) : : clobber( "rax", "rbx", "rcx", "rdx" )
+        return ( ecx & 33554432 ) != 0
+    
+    public function getRounds( self ) -> I64:
+        
+        """ Return the number of AES rounds for this context (10 for AES-128, 14 for AES-256). """
+        
+        return self.rounds
+    
+    public function getKeySize( self ) -> I64:
+        
+        """ Return the key size in bits for this context (128 or 256). """
+        
+        return self.keySize
+    
+    public function isInitialized( self ) -> Boolean:
+        
+        """ Return whether this context has been initialized with key material. """
+        
+        return self.initialized != 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Securely destroy the AES context by zeroing all round key material
+        before freeing the underlying memory. This prevents key material
+        from remaining in memory after the context is no longer needed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slots = ( self.rounds + 1 ) * 2
+        I64 slotIndex = 0
+        while slotIndex < slots:
+            self.roundKeys.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+        self.roundKeys.free()
+
+export {
+    AES_128,
+    AES_256,
+    AES_BLOCK_SIZE,
+    AesContext
+}
