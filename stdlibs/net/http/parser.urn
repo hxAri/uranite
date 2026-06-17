@@ -1,0 +1,239 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/http/parser.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# HTTP message parser: parses response status line, headers, body.
+# Handles Content-Length-based body reading.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.http.parser
+
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString, substring, trim
+from uranite.net.http.response import HttpResponse
+from uranite.net.http.errors import HttpParseError
+
+public function findCRLF( I64 dataPointer, I64 startOffset, I64 dataLength ) -> I64:
+    """
+    Find the next CRLF (\\r\\n) sequence in a raw byte buffer.
+
+    Parameters:
+        dataPointer (I64):
+            Raw pointer to the byte buffer to search.
+        startOffset (I64):
+            Byte offset to begin searching from.
+        dataLength (I64):
+            Total length of the buffer in bytes.
+
+    Returns:
+        The byte offset of the CR byte, or -1 if no CRLF found.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 scanOffset = startOffset
+    I64 searchLimit = dataLength - 1
+    while scanOffset < searchLimit:
+        if readByteAt( dataPointer, scanOffset ) == 13 and readByteAt( dataPointer, scanOffset + 1 ) == 10:
+            return scanOffset
+        scanOffset = scanOffset + 1
+    return -1
+
+public function parseStatusCode( String raw ) -> I64:
+    """
+    Extract the numeric status code from an HTTP status line.
+
+    Parameters:
+        raw (String):
+            The full status line (e.g. "HTTP/1.1 200 OK").
+
+    Returns:
+        The parsed status code as an integer.
+
+    Raises:
+        HttpParseError:
+            If the status line has no space or contains non-digit characters
+            in the status code position.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    I64 rawPointer = stringToPtr( raw )
+    I64 rawLength = stringLen( raw )
+    I64 firstSpacePosition = -1
+    I64 scanOffset = 0
+    while scanOffset < rawLength and firstSpacePosition == -1:
+        if readByteAt( rawPointer, scanOffset ) == 32:
+            firstSpacePosition = scanOffset
+        scanOffset = scanOffset + 1
+    if firstSpacePosition == -1:
+        raise new HttpParseError( "no space in status line", 0, None )
+    I64 secondSpacePosition = -1
+    I64 codeSearchOffset = firstSpacePosition + 1
+    while codeSearchOffset < rawLength and secondSpacePosition == -1:
+        if readByteAt( rawPointer, codeSearchOffset ) == 32:
+            secondSpacePosition = codeSearchOffset
+        codeSearchOffset = codeSearchOffset + 1
+    if secondSpacePosition == -1:
+        secondSpacePosition = rawLength
+    I64 statusCode = 0
+    I64 digitOffset = firstSpacePosition + 1
+    while digitOffset < secondSpacePosition:
+        I64 digitByte = readByteAt( rawPointer, digitOffset )
+        if digitByte < 48 or digitByte > 57:
+            raise new HttpParseError( "non-digit in status code", 0, None )
+        statusCode = statusCode * 10 + ( digitByte - 48 )
+        digitOffset = digitOffset + 1
+    return statusCode
+
+public function extractStatusText( String raw ) -> String:
+    """
+    Extract the reason phrase from an HTTP status line.
+
+    Parameters:
+        raw (String):
+            The full status line (e.g. "HTTP/1.1 200 OK").
+
+    Returns:
+        The trimmed reason phrase (e.g. "OK"), or empty string if none.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 rawPointer = stringToPtr( raw )
+    I64 rawLength = stringLen( raw )
+    I64 spaceCount = 0
+    I64 textStartPosition = 0
+    I64 scanOffset = 0
+    while scanOffset < rawLength:
+        if readByteAt( rawPointer, scanOffset ) == 32:
+            spaceCount = spaceCount + 1
+            if spaceCount == 2:
+                textStartPosition = scanOffset + 1
+                scanOffset = rawLength
+        scanOffset = scanOffset + 1
+    if textStartPosition == 0:
+        return ""
+    return trim( substring( raw, textStartPosition, rawLength ) )
+
+public function parseContentLength( String headers ) -> I64:
+    """
+    Search for and parse the Content-Length header value from a raw
+    header block. Case-insensitive matching.
+
+    Parameters:
+        headers (String):
+            The raw header block as a single string.
+
+    Returns:
+        The parsed content length, or -1 if the header is not present.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    I64 headersPointer = stringToPtr( headers )
+    I64 headersLength = stringLen( headers )
+    I64 searchOffset = 0
+    String targetHeader = "content-length: "
+    I64 targetPointer = stringToPtr( targetHeader )
+    I64 targetLength = 16
+    while searchOffset <= headersLength - targetLength:
+        Boolean matched = True
+        I64 compareIndex = 0
+        while compareIndex < targetLength and matched:
+            I64 headerByte = readByteAt( headersPointer, searchOffset + compareIndex )
+            I64 targetByte = readByteAt( targetPointer, compareIndex )
+            if headerByte >= 65 and headerByte <= 90:
+                headerByte = headerByte + 32
+            if headerByte != targetByte:
+                matched = False
+            compareIndex = compareIndex + 1
+        if matched:
+            I64 numberStart = searchOffset + targetLength
+            I64 numberEnd = numberStart
+            while numberEnd < headersLength and readByteAt( headersPointer, numberEnd ) >= 48 and readByteAt( headersPointer, numberEnd ) <= 57:
+                numberEnd = numberEnd + 1
+            I64 parsedValue = 0
+            I64 digitOffset = numberStart
+            while digitOffset < numberEnd:
+                parsedValue = parsedValue * 10 + ( readByteAt( headersPointer, digitOffset ) - 48 )
+                digitOffset = digitOffset + 1
+            return parsedValue
+        searchOffset = searchOffset + 1
+    return -1
+
+public function parseResponse( String rawData ) -> HttpResponse:
+    """
+    Parse a raw HTTP response string into an HttpResponse object.
+    Splits the response at the CRLFCRLF boundary into headers and
+    body, then extracts the status code, reason phrase, and
+    Content-Length.
+
+    Parameters:
+        rawData (String):
+            The complete raw HTTP response.
+
+    Returns:
+        A fully populated HttpResponse.
+
+    Raises:
+        HttpParseError:
+            If the response lacks a header terminator or status line.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    I64 dataPointer = stringToPtr( rawData )
+    I64 dataLength = stringLen( rawData )
+    I64 headerEndPosition = -1
+    I64 scanOffset = 0
+    while scanOffset < dataLength - 3 and headerEndPosition == -1:
+        if readByteAt( dataPointer, scanOffset ) == 13 and readByteAt( dataPointer, scanOffset + 1 ) == 10 and readByteAt( dataPointer, scanOffset + 2 ) == 13 and readByteAt( dataPointer, scanOffset + 3 ) == 10:
+            headerEndPosition = scanOffset
+        scanOffset = scanOffset + 1
+    if headerEndPosition == -1:
+        raise new HttpParseError( "no header terminator found", 0, None )
+    I64 firstLineEndPosition = findCRLF( dataPointer, 0, dataLength )
+    if firstLineEndPosition == -1:
+        raise new HttpParseError( "no status line", 0, None )
+    String statusLine = substring( rawData, 0, firstLineEndPosition )
+    I64 statusCode = parseStatusCode( statusLine )
+    String statusText = extractStatusText( statusLine )
+    String headers = substring( rawData, firstLineEndPosition + 2, headerEndPosition )
+    I64 bodyStartPosition = headerEndPosition + 4
+    String body = ""
+    if bodyStartPosition < dataLength:
+        body = substring( rawData, bodyStartPosition, dataLength )
+    HttpResponse response = new HttpResponse( statusCode, statusText, body )
+    response.rawHeaders = headers
+    I64 contentLength = parseContentLength( headers )
+    if contentLength >= 0:
+        response.contentLength = contentLength
+    return response
+
+export {
+    parseResponse,
+    parseStatusCode,
+    extractStatusText,
+    parseContentLength,
+    findCRLF
+}
