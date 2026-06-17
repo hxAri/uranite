@@ -1,0 +1,28 @@
+package testing
+
+from uranite.crypto.cipher import AesCipher, AES_128, AES_256
+from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Crypto Cipher Tests ===" )
+
+    AesCipher cipher128 = new AesCipher( AES_128 )
+    assertEqualI64( AES_128, cipher128.getKeySize(), "key size 128" )
+    assertFalse( cipher128.isInitialized(), "not initialized before init" )
+    putsln( "AesCipher 128 constructed OK" )
+
+    cipher128.init( 1234, 5678, 0, 0 )
+    assertTrue( cipher128.isInitialized(), "initialized after init" )
+    putsln( "AesCipher 128 initialized OK" )
+
+    AesCipher cipher256 = new AesCipher( AES_256 )
+    assertEqualI64( AES_256, cipher256.getKeySize(), "key size 256" )
+    putsln( "AesCipher 256 constructed OK" )
+
+    cipher128.destroy()
+    cipher256.destroy()
+    putsln( "destroy OK" )
+
+    putsln( "=== All Crypto Cipher Tests Passed ===" )
+    return 0
