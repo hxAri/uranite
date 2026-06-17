@@ -1,0 +1,564 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/convert/convert.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Type conversion functions: integer/float to string, string to integer/float,
+# boolean to string, char conversions. Pure Uranite, zero C runtime.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.convert.convert
+
+from uranite.io.syscall import readByteAt, writeByteAt, stringToPtr, stringLen
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString
+from uranite.errors.error import Error
+
+public class ConversionError extends Error:
+    
+    """
+    Raised when a type conversion fails, such as attempting to parse
+    an invalid string as a number or encountering unexpected characters
+    during hex or binary conversion.
+    """
+    
+    public function ConversionError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new ConversionError.
+        
+        Parameters:
+            message (String):
+                A description of what conversion failed and why.
+            code (I64):
+                A numeric error code.
+            cause (?Error):
+                An optional underlying error, or None.
+        """
+        
+        parent( message, code, cause )
+
+public function intToString( I64 value ) -> String:
+    
+    """
+    Convert an I64 integer value to its decimal string representation.
+    Handles negative values by prepending a minus sign. Allocates a
+    new null-terminated string buffer via mmap.
+    
+    Parameters:
+        value (I64):
+            The integer value to convert.
+    
+    Returns:
+        The decimal string representation of the value.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    if value == 0:
+        return "0"
+    Boolean negative = value < 0
+    I64 remaining = value
+    if negative:
+        remaining = 0 - remaining
+    I64 digitBuffer = alloc( 21 )
+    I64 writePosition = 20
+    writeByteAt( digitBuffer, 20, 0 )
+    while remaining > 0:
+        writePosition = writePosition - 1
+        I64 digit = remaining % 10
+        writeByteAt( digitBuffer, writePosition, digit + 48 )
+        remaining = remaining / 10
+    if negative:
+        writePosition = writePosition - 1
+        writeByteAt( digitBuffer, writePosition, 45 )
+    I64 resultLength = 20 - writePosition
+    I64 resultBuffer = alloc( resultLength + 1 )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        writeByteAt( resultBuffer, copyIndex, readByteAt( digitBuffer, writePosition + copyIndex ) )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultBuffer, resultLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function stringToInt( String source ) -> I64:
+
+    """
+    Parse a decimal integer string into an I64 value. Accepts an
+    optional leading '+' or '-' sign followed by one or more digits.
+
+    Parameters:
+        source (String):
+            The string to parse.
+
+    Returns:
+        The parsed integer value.
+
+    Raises:
+        ConversionError: If the string is empty, contains only a sign
+            character, or includes non-digit characters.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+
+    I64 inputLength = stringLen( source )
+    if inputLength == 0:
+        raise new ConversionError( "empty string cannot convert to integer", 0, None )
+    I64 inputPointer = stringToPtr( source )
+    I64 parseOffset = 0
+    Boolean negative = False
+    I64 firstByte = readByteAt( inputPointer, 0 )
+    if firstByte == 45:
+        negative = True
+        parseOffset = 1
+    elif firstByte == 43:
+        parseOffset = 1
+    if parseOffset >= inputLength:
+        raise new ConversionError( "invalid integer string", 0, None )
+    I64 result = 0
+    while parseOffset < inputLength:
+        I64 digitByte = readByteAt( inputPointer, parseOffset )
+        if digitByte < 48 or digitByte > 57:
+            raise new ConversionError( "invalid character in integer string", 0, None )
+        result = result * 10 + ( digitByte - 48 )
+        parseOffset = parseOffset + 1
+    if negative:
+        return 0 - result
+    return result
+
+public function floatToString( F64 value, I64 precision ) -> String:
+    
+    """
+    Convert an F64 floating-point value to its string representation
+    with the specified number of decimal digits. Uses half-up rounding
+    for the fractional part.
+    
+    Parameters:
+        value (F64):
+            The floating-point value to convert.
+        precision (I64):
+            The number of digits after the decimal point. Values less
+            than zero default to 6.
+    
+    Returns:
+        The formatted string representation with exactly the specified
+        number of decimal digits.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    I64 decimalDigits = precision
+    if decimalDigits < 0:
+        decimalDigits = 6
+    I64 integerPart = value
+    Boolean negative = value < 0.0
+    F64 absoluteValue = value
+    if negative:
+        absoluteValue = 0.0 - value
+    I64 absoluteInteger = absoluteValue
+    F64 fractionalValue = absoluteValue - absoluteInteger
+    I64 fractionalInteger = 0
+    I64 multiplier = 1
+    I64 digitIndex = 0
+    while digitIndex < decimalDigits:
+        multiplier = multiplier * 10
+        digitIndex = digitIndex + 1
+    F64 fractionalScaled = fractionalValue * multiplier + 0.5
+    fractionalInteger = fractionalScaled
+    String integerString = intToString( absoluteInteger )
+    I64 integerLength = stringLen( integerString )
+    I64 totalLength = integerLength + 1 + decimalDigits
+    if negative:
+        totalLength = totalLength + 1
+    I64 outputBuffer = alloc( totalLength + 1 )
+    I64 writePosition = 0
+    I64 integerPointer = stringToPtr( integerString )
+    if negative:
+        writeByteAt( outputBuffer, writePosition, 45 )
+        writePosition = writePosition + 1
+    I64 copyIndex = 0
+    while copyIndex < integerLength:
+        writeByteAt( outputBuffer, writePosition, readByteAt( integerPointer, copyIndex ) )
+        writePosition = writePosition + 1
+        copyIndex = copyIndex + 1
+    writeByteAt( outputBuffer, writePosition, 46 )
+    writePosition = writePosition + 1
+    I64 fractionBuffer = alloc( decimalDigits + 1 )
+    I64 fractionIndex = decimalDigits - 1
+    I64 fractionRemaining = fractionalInteger
+    while fractionIndex >= 0:
+        writeByteAt( fractionBuffer, fractionIndex, ( fractionRemaining % 10 ) + 48 )
+        fractionRemaining = fractionRemaining / 10
+        fractionIndex = fractionIndex - 1
+    I64 fractionCopyIndex = 0
+    while fractionCopyIndex < decimalDigits:
+        writeByteAt( outputBuffer, writePosition, readByteAt( fractionBuffer, fractionCopyIndex ) )
+        writePosition = writePosition + 1
+        fractionCopyIndex = fractionCopyIndex + 1
+    writeByteAt( outputBuffer, writePosition, 0 )
+    return ptrToString( outputBuffer )
+
+public function stringToFloat( String source ) -> F64:
+
+    """
+    Parse a floating-point string into an F64 value. Accepts an
+    optional leading '+' or '-' sign, followed by digits with an
+    optional decimal point separating the integer and fractional parts.
+
+    Parameters:
+        source (String):
+            The string to parse.
+
+    Returns:
+        The parsed floating-point value.
+
+    Raises:
+        ConversionError: If the string is empty or contains invalid
+            characters.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+
+    I64 inputLength = stringLen( source )
+    if inputLength == 0:
+        raise new ConversionError( "empty string cannot convert to float", 0, None )
+    I64 inputPointer = stringToPtr( source )
+    I64 parseOffset = 0
+    Boolean negative = False
+    I64 firstByte = readByteAt( inputPointer, 0 )
+    if firstByte == 45:
+        negative = True
+        parseOffset = 1
+    elif firstByte == 43:
+        parseOffset = 1
+    F64 integerPart = 0.0
+    while parseOffset < inputLength:
+        I64 digitByte = readByteAt( inputPointer, parseOffset )
+        if digitByte == 46:
+            parseOffset = parseOffset + 1
+            parseOffset = inputLength + parseOffset
+        elif digitByte < 48 or digitByte > 57:
+            raise new ConversionError( "invalid character in float string", 0, None )
+        else:
+            integerPart = integerPart * 10.0 + ( digitByte - 48 )
+            parseOffset = parseOffset + 1
+    F64 fractionalPart = 0.0
+    F64 fractionalDivisor = 10.0
+    if parseOffset > inputLength:
+        I64 fractionalStart = parseOffset - inputLength
+        while fractionalStart < inputLength:
+            I64 digitByte = readByteAt( inputPointer, fractionalStart )
+            if digitByte < 48 or digitByte > 57:
+                raise new ConversionError( "invalid character in float fractional part", 0, None )
+            fractionalPart = fractionalPart + ( digitByte - 48 ) / fractionalDivisor
+            fractionalDivisor = fractionalDivisor * 10.0
+            fractionalStart = fractionalStart + 1
+    F64 result = integerPart + fractionalPart
+    if negative:
+        return 0.0 - result
+    return result
+
+public function boolToString( Boolean value ) -> String:
+    
+    """
+    Convert a boolean value to its string representation.
+    
+    Parameters:
+        value (Boolean):
+            The boolean to convert.
+    
+    Returns:
+        "true" if the value is True, "false" otherwise.
+    """
+    
+    if value:
+        return "true"
+    return "false"
+
+public function hexToInt( String source ) -> I64:
+
+    """
+    Parse a hexadecimal string into an I64 value. Accepts an optional
+    "0x" or "0X" prefix. Digits may be uppercase (A-F) or lowercase
+    (a-f).
+
+    Parameters:
+        source (String):
+            The hexadecimal string to parse.
+
+    Returns:
+        The parsed integer value.
+
+    Raises:
+        ConversionError: If the string contains invalid hex characters.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+
+    I64 inputLength = stringLen( source )
+    I64 inputPointer = stringToPtr( source )
+    I64 parseStart = 0
+    if inputLength >= 2:
+        if readByteAt( inputPointer, 0 ) == 48:
+            I64 secondByte = readByteAt( inputPointer, 1 )
+            if secondByte == 120 or secondByte == 88:
+                parseStart = 2
+    I64 result = 0
+    I64 parseOffset = parseStart
+    while parseOffset < inputLength:
+        I64 hexByte = readByteAt( inputPointer, parseOffset )
+        I64 digitValue = 0
+        if hexByte >= 48 and hexByte <= 57:
+            digitValue = hexByte - 48
+        elif hexByte >= 65 and hexByte <= 70:
+            digitValue = hexByte - 55
+        elif hexByte >= 97 and hexByte <= 102:
+            digitValue = hexByte - 87
+        else:
+            raise new ConversionError( "invalid hex character", 0, None )
+        result = result * 16 + digitValue
+        parseOffset = parseOffset + 1
+    return result
+
+public function intToHex( I64 value ) -> String:
+    
+    """
+    Convert an I64 integer value to its hexadecimal string
+    representation prefixed with "0x". Uses lowercase hex digits
+    (a-f). Negative values are preceded by a minus sign.
+    
+    Parameters:
+        value (I64):
+            The integer value to convert.
+    
+    Returns:
+        The hexadecimal string representation (e.g. "0x1a3f").
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    if value == 0:
+        return "0x0"
+    I64 digitBuffer = alloc( 19 )
+    I64 writePosition = 18
+    writeByteAt( digitBuffer, 18, 0 )
+    I64 remaining = value
+    Boolean negative = remaining < 0
+    if negative:
+        remaining = 0 - remaining
+    while remaining > 0:
+        writePosition = writePosition - 1
+        I64 hexDigit = remaining % 16
+        if hexDigit < 10:
+            writeByteAt( digitBuffer, writePosition, hexDigit + 48 )
+        else:
+            writeByteAt( digitBuffer, writePosition, hexDigit + 87 )
+        remaining = remaining / 16
+    writePosition = writePosition - 1
+    writeByteAt( digitBuffer, writePosition, 120 )
+    writePosition = writePosition - 1
+    writeByteAt( digitBuffer, writePosition, 48 )
+    if negative:
+        writePosition = writePosition - 1
+        writeByteAt( digitBuffer, writePosition, 45 )
+    I64 resultLength = 18 - writePosition
+    I64 resultBuffer = alloc( resultLength + 1 )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        writeByteAt( resultBuffer, copyIndex, readByteAt( digitBuffer, writePosition + copyIndex ) )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultBuffer, resultLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function intToBin( I64 value ) -> String:
+    
+    """
+    Convert an I64 integer value to its binary string representation
+    prefixed with "0b". Negative values are preceded by a minus sign.
+    
+    Parameters:
+        value (I64):
+            The integer value to convert.
+    
+    Returns:
+        The binary string representation (e.g. "0b1010").
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    if value == 0:
+        return "0b0"
+    I64 digitBuffer = alloc( 67 )
+    I64 writePosition = 66
+    writeByteAt( digitBuffer, 66, 0 )
+    I64 remaining = value
+    if remaining < 0:
+        remaining = 0 - remaining
+    while remaining > 0:
+        writePosition = writePosition - 1
+        writeByteAt( digitBuffer, writePosition, ( remaining % 2 ) + 48 )
+        remaining = remaining / 2
+    writePosition = writePosition - 1
+    writeByteAt( digitBuffer, writePosition, 98 )
+    writePosition = writePosition - 1
+    writeByteAt( digitBuffer, writePosition, 48 )
+    if value < 0:
+        writePosition = writePosition - 1
+        writeByteAt( digitBuffer, writePosition, 45 )
+    I64 resultLength = 66 - writePosition
+    I64 resultBuffer = alloc( resultLength + 1 )
+    I64 copyIndex = 0
+    while copyIndex < resultLength:
+        writeByteAt( resultBuffer, copyIndex, readByteAt( digitBuffer, writePosition + copyIndex ) )
+        copyIndex = copyIndex + 1
+    writeByteAt( resultBuffer, resultLength, 0 )
+    return ptrToString( resultBuffer )
+
+public function tryParseInt( String source ) -> ?I64:
+
+    """
+    Parse a decimal integer string into an I64, returning None on failure
+    instead of raising. Accepts optional leading sign followed by digits.
+
+    Parameters:
+        source (String):
+            The string to parse.
+
+    Returns:
+        ?I64:
+            The parsed integer, or None if the string is not a valid integer.
+
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    I64 inputLength = stringLen( source )
+    if inputLength == 0:
+        return None
+    I64 inputPointer = stringToPtr( source )
+    I64 parseOffset = 0
+    Boolean negative = False
+    I64 firstByte = readByteAt( inputPointer, 0 )
+    if firstByte == 45:
+        negative = True
+        parseOffset = 1
+    elif firstByte == 43:
+        parseOffset = 1
+    if parseOffset >= inputLength:
+        return None
+    I64 result = 0
+    while parseOffset < inputLength:
+        I64 digitByte = readByteAt( inputPointer, parseOffset )
+        if digitByte < 48 or digitByte > 57:
+            return None
+        result = result * 10 + ( digitByte - 48 )
+        parseOffset = parseOffset + 1
+    if negative:
+        return 0 - result
+    return result
+
+public function tryParseFloat( String source ) -> ?F64:
+
+    """
+    Parse a decimal floating-point string into an F64, returning None on
+    failure instead of raising. Accepts optional sign, digits, optional
+    decimal point with fractional digits.
+
+    Parameters:
+        source (String):
+            The string to parse.
+
+    Returns:
+        ?F64:
+            The parsed float, or None if the string is not a valid float.
+
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    I64 inputLength = stringLen( source )
+    if inputLength == 0:
+        return None
+    I64 inputPointer = stringToPtr( source )
+    I64 parseOffset = 0
+    Boolean negative = False
+    I64 firstByte = readByteAt( inputPointer, 0 )
+    if firstByte == 45:
+        negative = True
+        parseOffset = 1
+    elif firstByte == 43:
+        parseOffset = 1
+    if parseOffset >= inputLength:
+        return None
+    Boolean hasDigit = False
+    F64 result = 0.0
+    while parseOffset < inputLength:
+        I64 digitByte = readByteAt( inputPointer, parseOffset )
+        if digitByte == 46:
+            parseOffset = parseOffset + 1
+            F64 fraction = 0.0
+            F64 divisor = 10.0
+            while parseOffset < inputLength:
+                I64 fracByte = readByteAt( inputPointer, parseOffset )
+                if fracByte < 48 or fracByte > 57:
+                    return None
+                hasDigit = True
+                fraction = fraction + ( fracByte - 48 ) / divisor
+                divisor = divisor * 10.0
+                parseOffset = parseOffset + 1
+            result = result + fraction
+            if negative:
+                return 0.0 - result
+            return result
+        if digitByte < 48 or digitByte > 57:
+            return None
+        hasDigit = True
+        result = result * 10.0 + ( digitByte - 48 )
+        parseOffset = parseOffset + 1
+    if not hasDigit:
+        return None
+    if negative:
+        return 0.0 - result
+    return result
+
+export {
+    ConversionError,
+    intToString,
+    stringToInt,
+    floatToString,
+    stringToFloat,
+    boolToString,
+    hexToInt,
+    intToHex,
+    intToBin,
+    tryParseInt,
+    tryParseFloat
+}
