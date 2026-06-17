@@ -1,0 +1,136 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/barrier.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# N-thread synchronization barrier. All threads must reach wait()
+# before any can proceed past it.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.barrier
+
+from uranite.os.sync.spinlock import Spinlock
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.ipc.signal import Event
+from uranite.os.task.task import BlockReason
+from uranite.threading.atomic import AtomicI64
+
+public class Barrier:
+    
+    """
+    N-thread synchronization barrier that blocks all participating threads
+    until the last one arrives. Uses a generation counter to support reuse
+    across multiple barrier cycles. The last thread to arrive resets the
+    counter and signals all waiters. Exactly one thread per cycle receives
+    True from wait() (the "leader"), all others receive False.
+    """
+    
+    protect I64 threshold
+    """ Number of threads that must arrive before the barrier opens. """
+    protect AtomicI64 arrived
+    """ Atomic counter of threads that have reached the barrier in the current generation. """
+    protect AtomicI64 generation
+    """ Atomic generation counter incremented each time the barrier opens. """
+    protect Spinlock guard
+    """ Spinlock protecting barrier state transitions. """
+    protect Event event
+    """ Event used to wake threads blocked at the barrier. """
+    protect Scheduler scheduler
+    """ Scheduler used for cooperative blocking of the current task. """
+    
+    public function Barrier( self, I64 count, Scheduler scheduler ) -> Void:
+        
+        """
+        Construct a barrier that requires the specified number of threads
+        to arrive before any can proceed.
+        
+        Parameters:
+            count (I64):
+                The number of threads that must call wait() before the
+                barrier opens.
+            scheduler (Scheduler):
+                The scheduler used for cooperative task blocking.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.threshold = count
+        self.arrived = new AtomicI64( 0 )
+        self.generation = new AtomicI64( 0 )
+        self.guard = new Spinlock()
+        self.event = new Event()
+        self.scheduler = scheduler
+    
+    public function wait( self ) -> Boolean:
+        
+        """
+        Block the calling thread until all threads have arrived at the barrier.
+        The last thread to arrive opens the barrier and wakes all waiters.
+        
+        Returns:
+            Boolean:
+                True for exactly one thread per cycle (the "leader" that opened
+                the barrier), False for all other threads.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 gen = self.generation.load()
+        
+        I64 count = self.arrived.fetchAdd( 1 ) + 1
+        
+        if count >= self.threshold:
+            self.arrived.store( 0 )
+            self.generation.fetchAdd( 1 )
+            self.event.signal( 1 )
+            self.event.reset()
+            return True
+        
+        I64 taskId = 0
+        if self.scheduler.getCurrentTask() != None:
+            taskId = self.scheduler.getCurrentTask().id
+        
+        while self.generation.load() == gen:
+            if taskId > 0:
+                Boolean shouldBlock = self.event.registerWait( taskId, 1 )
+                if shouldBlock:
+                    self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+                    self.scheduler.blockCurrent()
+            else:
+                asm volatile "pause"
+        
+        return False
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release atomic resources used by the barrier. The barrier must not
+        be used after this call.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.arrived.destroy()
+        self.generation.destroy()
+
+export {
+    Barrier
+}
