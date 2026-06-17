@@ -1,0 +1,13 @@
+package testing
+
+from uranite.kernel.debug import PerfCounters
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Kernel Debug Tests ===" )
+
+    PerfCounters perf = new PerfCounters()
+    putsln( "PerfCounters constructed OK" )
+
+    putsln( "=== All Kernel Debug Tests Passed ===" )
+    return 0
