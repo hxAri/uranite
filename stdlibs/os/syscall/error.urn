@@ -1,0 +1,55 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/syscall/error.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines kernel error codes returned by syscalls, where a negative return value in RAX indicates an error with the negated error code as the specific error type.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.syscall.error
+
+enum SyscallError backed I64:
+    
+    """
+    Kernel error codes returned by system calls. By convention, a syscall returns a
+    negative value in RAX on error, where the absolute value is the error code from
+    this enum. For example, Permission (1) is returned as -1 in RAX. A return value
+    of zero or positive indicates success.
+    """
+    
+    unit AccessDenied 18
+    unit AlreadyExists 11
+    unit BadAddress 15
+    unit BrokenPipe 19
+    unit BufferTooSmall 12
+    unit Busy 6
+    unit Deadlock 14
+    unit HandleTableFull 16
+    unit Interrupted 8
+    unit InvalidArgument 3
+    unit InvalidHandle 2
+    unit IoError 10
+    unit NoError 0
+    unit NoMemory 5
+    unit NotFound 4
+    unit NotSupported 9
+    unit Permission 1
+    unit Timeout 7
+    unit TooManyTasks 17
+    unit WouldBlock 13
+
+export {
+    SyscallError
+}
