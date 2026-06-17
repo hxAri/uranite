@@ -1,0 +1,21 @@
+package testing
+
+from uranite.io.console import puts, putsln, putserr, putserrln, putsI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Console Tests ===" )
+
+    puts( "print test " )
+    putsln( "putsln test" )
+    putserr( "putserr test " )
+    putserrln( "putserrln test" )
+    putsI64( 12345 )
+    puts( "\n" )
+    putsI64( -99 )
+    puts( "\n" )
+    putsI64( 0 )
+    puts( "\n" )
+
+    putsln( "=== All console tests passed ===" )
+    return 0
