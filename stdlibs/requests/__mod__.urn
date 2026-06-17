@@ -1,0 +1,35 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/requests/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.requests
+
+from uranite.requests.requests import request, get, post, put, del, patch, postForm
+from uranite.requests.response import Response
+from uranite.requests.headers import Headers, parseHeaders
+from uranite.requests.session import Session
+from uranite.requests.url import ParsedURL, InvalidURLError, parseURL, parseIPv4
+from uranite.requests.errors import RequestError, RequestConnectionError, RequestTimeoutError, HTTPError
+
+export {
+    request, get, post, put, del, patch, postForm,
+    Response,
+    Headers, parseHeaders,
+    Session,
+    ParsedURL, InvalidURLError, parseURL, parseIPv4,
+    RequestError, RequestConnectionError, RequestTimeoutError, HTTPError
+}
