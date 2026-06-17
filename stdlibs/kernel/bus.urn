@@ -1,0 +1,102 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/bus.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level PCI bus abstraction wrapping low-level PCI configuration space
+# access and device enumeration into a kernel-friendly API.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.kernel.bus
+
+from uranite.os.bus.pci import {
+    PCI_CONFIG_ADDRESS, PCI_CONFIG_DATA, PCI_NO_DEVICE,
+    pciAddress, pciRead32, pciRead16, pciRead8, pciWrite32,
+    PciDevice, PciBus
+}
+
+public class PciScanner:
+
+    """
+    High-level PCI bus scanner with device enumeration. Wraps the raw
+    PCI configuration space access functions and PciBus device list into
+    a single scan-and-query interface.
+    """
+
+    public PciBus bus
+
+    public function PciScanner( self, I64 capacity ) -> Void:
+
+        """
+        Construct a PCI scanner that can hold up to capacity discovered devices.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.bus = new PciBus( capacity )
+
+    public function scan( self ) -> Void:
+
+        """
+        Enumerate all devices on the PCI bus by probing every bus/device/function
+        combination. Populates the internal device list.
+        """
+
+        self.bus.scan()
+
+    public function getDeviceCount( self ) -> I64:
+
+        """ Return the number of PCI devices discovered during the last scan. """
+
+        return self.bus.getCount()
+
+    public function findByVendorDevice( self, I64 vendorId, I64 deviceId ) -> I64:
+
+        """
+        Search for a PCI device by vendor and device ID. Returns the device
+        index or -1 if not found.
+        """
+
+        return self.bus.findByVendorDevice( vendorId, deviceId )
+
+    public function findByClass( self, I64 classCode, I64 subclass ) -> I64:
+
+        """
+        Search for a PCI device by class code and subclass. Returns the
+        device index or -1 if not found.
+        """
+
+        return self.bus.findByClass( classCode, subclass )
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all resources held by the scanner.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.bus.destroy()
+
+export {
+    PciScanner,
+    PciBus, PciDevice,
+    PCI_CONFIG_ADDRESS, PCI_CONFIG_DATA, PCI_NO_DEVICE,
+    pciAddress, pciRead32, pciRead16, pciRead8, pciWrite32
+}
