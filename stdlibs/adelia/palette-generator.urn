@@ -1,0 +1,292 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/palette-generator.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the PaletteGenerator class with static functions for generating
+# harmonious color palettes from a single base color. All algorithms work in
+# HSL color space where hue rotation produces natural color harmonies. Supports
+# complementary (180 degree), triadic (120 degree), analogous (30 degree),
+# split-complementary (150/210 degree), and monochromatic (lightness variation)
+# palette types. Each method returns a named ColorPalette containing the
+# generated colors.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.palette-generator
+
+from uranite.adelia.color import Color
+from uranite.adelia.color-converter import ColorConverter
+from uranite.adelia.color-palette import ColorPalette
+from uranite.adelia.hsl import HSL
+from uranite.math.math import fmod
+
+public final class PaletteGenerator:
+    
+    """
+    Static utility class for generating harmonious color palettes from a single
+    base color. All palette generation algorithms operate in HSL color space
+    because hue rotation around the color wheel naturally produces aesthetically
+    pleasing color combinations. The generator supports six standard palette
+    types: complementary (opposite on the wheel), triadic (equilateral triangle),
+    analogous (adjacent hues), split-complementary (flanking the complement),
+    tints (lighter variations), and shades (darker variations). Each method
+    returns a named ColorPalette containing the base color and the generated
+    harmony colors.
+    """
+    
+    public function complementary( self, I32 baseHex ) -> ColorPalette:
+        
+        """
+        Generate a complementary palette containing the base color and its
+        complement (hue rotated 180 degrees). Complementary colors provide
+        maximum contrast and visual tension, making them ideal for call-to-action
+        elements and attention-grabbing designs.
+        
+        Parameters:
+            baseHex (I32):
+                The packed 24-bit hex value of the base color.
+        
+        Returns:
+            ColorPalette:
+                A palette named "Complementary" with 2 colors.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        ColorPalette palette = new ColorPalette( "Complementary" )
+        palette.addColor( baseHex )
+        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 180.0 ), hsl.saturation, hsl.lightness ) )
+        return palette
+    
+    public function triadic( self, I32 baseHex ) -> ColorPalette:
+        
+        """
+        Generate a triadic palette containing the base color and two colors
+        at 120 and 240 degrees around the color wheel. Triadic palettes offer
+        vibrant contrast while maintaining color harmony, forming an equilateral
+        triangle on the color wheel.
+        
+        Parameters:
+            baseHex (I32):
+                The packed 24-bit hex value of the base color.
+        
+        Returns:
+            ColorPalette:
+                A palette named "Triadic" with 3 colors.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        ColorPalette palette = new ColorPalette( "Triadic" )
+        palette.addColor( baseHex )
+        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 120.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 240.0 ), hsl.saturation, hsl.lightness ) )
+        return palette
+    
+    public function analogous( self, I32 baseHex ) -> ColorPalette:
+        
+        """
+        Generate an analogous palette containing the base color and two adjacent
+        colors at +30 and -30 degrees on the color wheel. Analogous palettes
+        create a sense of unity and harmony because the colors share similar
+        underlying hues, making them ideal for cohesive, soothing designs.
+        
+        Parameters:
+            baseHex (I32):
+                The packed 24-bit hex value of the base color.
+        
+        Returns:
+            ColorPalette:
+                A palette named "Analogous" with 3 colors.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        ColorPalette palette = new ColorPalette( "Analogous" )
+        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, -30.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( baseHex )
+        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 30.0 ), hsl.saturation, hsl.lightness ) )
+        return palette
+    
+    public function splitComplementary( self, I32 baseHex ) -> ColorPalette:
+        
+        """
+        Generate a split-complementary palette containing the base color and
+        two colors flanking the complement at 150 and 210 degrees. This palette
+        type provides strong visual contrast similar to complementary but with
+        less tension, as the two accent colors are near-complements rather than
+        direct opposites.
+        
+        Parameters:
+            baseHex (I32):
+                The packed 24-bit hex value of the base color.
+        
+        Returns:
+            ColorPalette:
+                A palette named "Split Complementary" with 3 colors.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        ColorPalette palette = new ColorPalette( "Split Complementary" )
+        palette.addColor( baseHex )
+        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 150.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 210.0 ), hsl.saturation, hsl.lightness ) )
+        return palette
+    
+    public function tints( self, I32 baseHex, I64 count ) -> ColorPalette:
+        
+        """
+        Generate a palette of progressively lighter tints of the base color by
+        increasing the lightness component in equal steps toward 1.0 (white)
+        while preserving the hue and saturation. Tints are created by mixing
+        a color with white.
+        
+        Parameters:
+            baseHex (I32):
+                The packed 24-bit hex value of the base color.
+            count (I64):
+                The number of tints to generate (not including the base color).
+        
+        Returns:
+            ColorPalette:
+                A palette named "Tints" with count+1 colors from base to lightest.
+        
+        Complexity:
+            Time: O(count)
+            Space: O(count)
+        """
+        
+        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        ColorPalette palette = new ColorPalette( "Tints" )
+        palette.addColor( baseHex )
+        F64 step = ( 1.0 - hsl.lightness ) / ( count + 1 )
+        for I64 stepIndex=1; stepIndex<=count; stepIndex++:
+            F64 newLightness = hsl.lightness + step * stepIndex
+            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, newLightness ) )
+        return palette
+
+    public function shades( self, I32 baseHex, I64 count ) -> ColorPalette:
+        
+        """
+        Generate a palette of progressively darker shades of the base color by
+        decreasing the lightness component in equal steps toward 0.0 (black)
+        while preserving the hue and saturation. Shades are created by mixing
+        a color with black.
+        
+        Parameters:
+            baseHex (I32):
+                The packed 24-bit hex value of the base color.
+            count (I64):
+                The number of shades to generate (not including the base color).
+        
+        Returns:
+            ColorPalette:
+                A palette named "Shades" with count+1 colors from base to darkest.
+        
+        Complexity:
+            Time: O(count)
+            Space: O(count)
+        """
+        
+        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        ColorPalette palette = new ColorPalette( "Shades" )
+        palette.addColor( baseHex )
+        F64 step = hsl.lightness / ( count + 1 )
+        for I64 stepIndex=1; stepIndex<=count; stepIndex++:
+            F64 newLightness = hsl.lightness - step * stepIndex
+            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, newLightness ) )
+        return palette
+    
+    public function monochromatic( self, I32 baseHex, I64 count ) -> ColorPalette:
+        
+        """
+        Generate a monochromatic palette containing tints and shades of the base
+        color, arranged from darkest to lightest with the base color in the middle.
+        The total palette size is count*2 + 1 (count shades + base + count tints).
+        
+        Parameters:
+            baseHex (I32):
+                The packed 24-bit hex value of the base color.
+            count (I64):
+                The number of shades and tints on each side of the base color.
+        
+        Returns:
+            ColorPalette:
+                A palette named "Monochromatic" with 2*count+1 colors.
+        
+        Complexity:
+            Time: O(count)
+            Space: O(count)
+        """
+        
+        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        ColorPalette palette = new ColorPalette( "Monochromatic" )
+        F64 shadeStep = hsl.lightness / ( count + 1 )
+        F64 tintStep = ( 1.0 - hsl.lightness ) / ( count + 1 )
+        I64 shadeIndex = count
+        while shadeIndex >= 1:
+            F64 shadeLightness = hsl.lightness - shadeStep * shadeIndex
+            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, shadeLightness ) )
+            shadeIndex = shadeIndex - 1
+        palette.addColor( baseHex )
+        for I64 tintIndex=1; tintIndex<=count; tintIndex++:
+            F64 tintLightness = hsl.lightness + tintStep * tintIndex
+            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, tintLightness ) )
+        return palette
+    
+    private function rotateHue( self, F64 hue, F64 degrees ) -> F64:
+        
+        """
+        Rotate a hue angle by the given number of degrees, wrapping around
+        the 0-360 degree range. Handles both positive (clockwise) and negative
+        (counter-clockwise) rotations correctly by adding 360 before applying
+        fmod to ensure a positive result.
+        
+        Parameters:
+            hue (F64):
+                The starting hue angle in degrees.
+            degrees (F64):
+                The number of degrees to rotate (positive or negative).
+        
+        Returns:
+            F64:
+                The rotated hue angle, normalized to the range 0.0-360.0.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 result = fmod( hue + degrees + 360.0, 360.0 )
+        if result < 0.0:
+            result = result + 360.0
+        return result
+
+export {
+    PaletteGenerator
+}
