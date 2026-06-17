@@ -1,0 +1,27 @@
+package testing
+
+from uranite.functions.runtime import {
+    uraniteCondVarCreate, uraniteCondVarSignal,
+    uraniteCondVarBroadcast, uraniteCondVarDestroy
+}
+from uranite.testing.assertions import assertGreaterThan
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Threading CondVar Tests ===" )
+
+    I64 cv = uraniteCondVarCreate()
+    assertGreaterThan( cv, 0, "condvar handle" )
+    putsln( "create OK" )
+
+    uraniteCondVarSignal( cv )
+    putsln( "signal OK" )
+
+    uraniteCondVarBroadcast( cv )
+    putsln( "broadcast OK" )
+
+    uraniteCondVarDestroy( cv )
+    putsln( "destroy OK" )
+
+    putsln( "=== All condvar tests passed ===" )
+    return 0
