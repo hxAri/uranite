@@ -1,0 +1,127 @@
+package testing
+
+from uranite.adelia.color import Color
+from uranite.adelia.rgb import RGB
+from uranite.adelia.hsl import HSL
+from uranite.adelia.hsv import HSV
+from uranite.adelia.cmyk import CMYK
+from uranite.testing.assertions import {
+    assertEqualI64, assertEqualF64,
+    assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia Color Tests ===" )
+
+    # constructor (0x004B49 = 19273)
+    Color color = new Color( 19273 )
+
+    # RGB extraction: 0x004B49 → r=0, g=75, b=73
+    assertEqualI64( 0, color.red, "red" )
+    assertEqualI64( 75, color.green, "green" )
+    assertEqualI64( 73, color.blue, "blue" )
+    assertEqualI64( 19273, color.hexValue, "hexValue" )
+    putsln( "constructor OK" )
+
+    # toRgb
+    RGB rgb = color.toRgb
+    assertEqualI64( 0, rgb.red, "toRgb red" )
+    assertEqualI64( 75, rgb.green, "toRgb green" )
+    assertEqualI64( 73, rgb.blue, "toRgb blue" )
+    putsln( "toRgb OK" )
+
+    # toHsl
+    HSL hsl = color.toHsl
+    assertTrue( hsl.hue >= 0.0, "toHsl hue >= 0" )
+    putsln( "toHsl OK" )
+
+    # toHsv
+    HSV hsv = color.toHsv
+    assertTrue( hsv.value >= 0.0, "toHsv value >= 0" )
+    putsln( "toHsv OK" )
+
+    # toCmyk
+    CMYK cmyk = color.toCmyk
+    assertTrue( cmyk.key >= 0.0, "toCmyk key >= 0" )
+    putsln( "toCmyk OK" )
+
+    # cssHex
+    String cssHex = color.cssHex
+    assertTrue( cssHex != "", "cssHex not empty" )
+    putsln( "cssHex OK" )
+
+    # cssRgb
+    String cssRgb = color.cssRgb
+    assertTrue( cssRgb != "", "cssRgb not empty" )
+    putsln( "cssRgb OK" )
+
+    # cssHsl
+    String cssHsl = color.cssHsl
+    assertTrue( cssHsl != "", "cssHsl not empty" )
+    putsln( "cssHsl OK" )
+
+    # ansiForeground / ansiBackground
+    String ansFg = color.ansiForeground
+    assertTrue( ansFg != "", "ansiFg not empty" )
+    String ansBg = color.ansiBackground
+    assertTrue( ansBg != "", "ansBg not empty" )
+    putsln( "ansi OK" )
+
+    # ansiColorize
+    String colorized = color.ansiColorize( "hello" )
+    assertTrue( colorized != "", "colorized not empty" )
+    putsln( "ansiColorize OK" )
+
+    # complementary
+    Color comp = color.complementary
+    assertTrue( comp.hexValue >= 0, "complementary hex >= 0" )
+    putsln( "complementary OK" )
+
+    # webSafe
+    Color safe = color.webSafe
+    assertTrue( safe.hexValue >= 0, "webSafe hex >= 0" )
+    putsln( "webSafe OK" )
+
+    # distanceTo self = 0
+    Color same = new Color( 19273 )
+    assertEqualF64( 0.0, color.distanceTo( same ), 0.0001, "distanceTo self" )
+    putsln( "distanceTo OK" )
+
+    # equals
+    assertTrue( color.equals( same ), "equals same" )
+    Color red = new Color( 16711680 )
+    assertFalse( color.equals( red ), "equals diff" )
+    putsln( "equals OK" )
+
+    # toString
+    String str = color.toString()
+    assertTrue( str != "", "toString not empty" )
+    putsln( "toString OK" )
+
+    # fromRgb
+    Color fromRgb = Color.fromRgb( 255, 128, 0 )
+    assertEqualI64( 255, fromRgb.red, "fromRgb red" )
+    assertEqualI64( 128, fromRgb.green, "fromRgb green" )
+    assertEqualI64( 0, fromRgb.blue, "fromRgb blue" )
+    putsln( "fromRgb OK" )
+
+    # fromHsl
+    Color fromHsl = Color.fromHsl( 0.0, 1.0, 0.5 )
+    assertEqualI64( 255, fromHsl.red, "fromHsl red" )
+    putsln( "fromHsl OK" )
+
+    # fromHsv
+    Color fromHsv = Color.fromHsv( 120.0, 1.0, 1.0 )
+    assertEqualI64( 0, fromHsv.red, "fromHsv red" )
+    assertEqualI64( 255, fromHsv.green, "fromHsv green" )
+    putsln( "fromHsv OK" )
+
+    # fromCmyk
+    Color fromCmyk = Color.fromCmyk( 0.0, 1.0, 1.0, 0.0 )
+    assertEqualI64( 255, fromCmyk.red, "fromCmyk red" )
+    assertEqualI64( 0, fromCmyk.green, "fromCmyk green" )
+    putsln( "fromCmyk OK" )
+
+    putsln( "=== All Color tests passed ===" )
+    return 0
