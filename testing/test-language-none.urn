@@ -1,0 +1,54 @@
+package testing
+
+from uranite.testing.assertions import assertTrue, assertFalse, assertEqualI64, assertEqualStr
+from uranite.io.console import putsln
+
+public function maybeValue( Boolean give ) -> ?Int:
+    if give:
+        return 42
+    return None
+
+public function maybeString( Boolean give ) -> ?String:
+    if give:
+        return "hello"
+    return None
+
+public function main() -> I32:
+    putsln( "=== None/Nullable Tests ===" )
+
+    # nullable with value
+    ?Int a = maybeValue( True )
+    assertTrue( a != None, "a has value" )
+
+    # nullable without value
+    ?Int b = maybeValue( False )
+    assertTrue( b == None, "b is None" )
+    putsln( "nullable int OK" )
+
+    # nullable string
+    ?String s1 = None
+    assertTrue( s1 == None, "s1 is None" )
+
+    ?String s2 = "hello"
+    assertTrue( s2 != None, "s2 has value" )
+    putsln( "nullable string OK" )
+
+    # nullable function return
+    ?String ms = maybeString( True )
+    assertTrue( ms != None, "ms has value" )
+    assertEqualStr( "hello", ms, "ms value" )
+
+    ?String msNone = maybeString( False )
+    assertTrue( msNone == None, "msNone is None" )
+    putsln( "nullable function return OK" )
+
+    # direct None / value assignment
+    ?Int direct = None
+    assertTrue( direct == None, "direct==None" )
+
+    ?Int directVal = 100
+    assertTrue( directVal != None, "directVal!=None" )
+    putsln( "direct assignment OK" )
+
+    putsln( "=== All None tests passed ===" )
+    return 0
