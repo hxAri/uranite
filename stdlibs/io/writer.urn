@@ -1,0 +1,131 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-06 04:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/writer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Centralized file-descriptor write utilities and standard FD constants.
+# All modules that write to stdout, stderr, or any fd must import from
+# here instead of defining local write helpers.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.writer
+
+from uranite.io.syscall import stringToPtr, stringLen, sysWrite, writeByteAt
+from uranite.memory.allocator import alloc
+
+public const I64 STDIN_FD = 0
+""" Standard file descriptor for standard input (fd 0). """
+
+public const I64 STDOUT_FD = 1
+""" Standard file descriptor for standard output (fd 1). """
+
+public const I64 STDERR_FD = 2
+""" Standard file descriptor for standard error (fd 2). """
+
+public function writeFd( I64 fileDescriptor, String content ) -> Void:
+    
+    """
+    Write all bytes of a string to the given file descriptor.
+    Handles partial writes by looping until the full string is flushed.
+    
+    Parameters:
+        fileDescriptor (I64):
+            The target file descriptor (e.g., STDOUT_FD, STDERR_FD).
+        content (String):
+            The string whose bytes will be written.
+    
+    Complexity:
+        Time: O(n) where n is the byte length of content.
+    """
+    
+    I64 pointer = stringToPtr( content )
+    I64 length = stringLen( content )
+    I64 written = 0
+    while written < length:
+        I64 result = sysWrite( fileDescriptor, pointer + written, length - written )
+        if result <= 0:
+            return
+        written = written + result
+
+public function writeNewlineFd( I64 fileDescriptor ) -> Void:
+    
+    """
+    Write a single newline byte (0x0A) to the given file descriptor.
+    
+    Parameters:
+        fileDescriptor (I64):
+            The target file descriptor.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1) for the single-byte buffer allocation.
+    """
+    
+    I64 buffer = alloc( 1 )
+    writeByteAt( buffer, 0, 10 )
+    sysWrite( fileDescriptor, buffer, 1 )
+
+public function writeLineFd( I64 fileDescriptor, String content ) -> Void:
+    
+    """
+    Write a string followed by a newline to the given file descriptor.
+    
+    Parameters:
+        fileDescriptor (I64):
+            The target file descriptor.
+        content (String):
+            The string to write before the newline.
+    
+    Complexity:
+        Time: O(n) where n is the byte length of content.
+    """
+    
+    writeFd( fileDescriptor, content )
+    writeNewlineFd( fileDescriptor )
+
+public function writeRawFd( I64 fileDescriptor, I64 pointer, I64 length ) -> Void:
+    
+    """
+    Write raw bytes from a memory pointer to the given file descriptor.
+    Handles partial writes by looping until all bytes are flushed.
+    
+    Parameters:
+        fileDescriptor (I64):
+            The target file descriptor.
+        pointer (I64):
+            The memory address of the first byte to write.
+        length (I64):
+            The number of bytes to write.
+    
+    Complexity:
+        Time: O(length)
+    """
+    
+    I64 written = 0
+    while written < length:
+        I64 result = sysWrite( fileDescriptor, pointer + written, length - written )
+        if result <= 0:
+            return
+        written = written + result
+
+export {
+    STDIN_FD,
+    STDOUT_FD,
+    STDERR_FD,
+    writeFd,
+    writeNewlineFd,
+    writeLineFd,
+    writeRawFd
+}
