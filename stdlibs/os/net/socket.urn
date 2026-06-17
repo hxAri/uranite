@@ -1,0 +1,377 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/socket.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the kernel socket API abstraction for application-facing network operations, including socket type constants, state management, and a socket table for lifecycle tracking.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.net.socket
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public const I64 SOCKET_STREAM = 1
+"""
+Socket type constant for stream sockets. Stream sockets provide reliable,
+ordered, connection-oriented byte stream delivery and map to TCP.
+"""
+
+public const I64 SOCKET_DATAGRAM = 2
+"""
+Socket type constant for datagram sockets. Datagram sockets provide
+connectionless, unreliable message delivery and map to UDP.
+"""
+
+public const I64 SOCKET_RAW = 3
+"""
+Socket type constant for raw sockets. Raw sockets bypass the transport
+layer and provide direct access to the network layer, allowing
+applications to construct and receive raw IP packets.
+"""
+
+public const I64 SOCKET_UNBOUND = 0
+"""
+Socket state for an unbound socket. Initial state after socket creation,
+before any local address has been assigned.
+"""
+
+public const I64 SOCKET_BOUND = 1
+"""
+Socket state for a bound socket. A socket enters this state after
+successfully binding to a local address and port.
+"""
+
+public const I64 SOCKET_LISTENING = 2
+"""
+Socket state for a listening socket. A stream socket enters this state
+after calling listen, making it ready to accept incoming connections.
+"""
+
+public const I64 SOCKET_CONNECTED = 3
+"""
+Socket state for a connected socket. A socket enters this state after
+successfully connecting to a remote address and port.
+"""
+
+public const I64 SOCKET_CLOSED = 4
+"""
+Socket state for a closed socket. A socket enters this state after being
+explicitly closed and is no longer usable.
+"""
+
+public const I64 AF_INET = 2
+"""
+Address family constant for IPv4, corresponding to the AF_INET address
+family used in the BSD socket API.
+"""
+
+public const I64 AF_INET6 = 10
+"""
+Address family constant for IPv6, corresponding to the AF_INET6 address
+family used in the BSD socket API.
+"""
+
+public class SocketTable:
+    
+    """
+    Manages all open sockets in the kernel networking stack. The socket table tracks
+    the complete lifecycle of each socket from creation through binding, listening or
+    connecting, and finally closing. Each socket is identified by a unique monotonically
+    increasing ID. The table uses parallel arrays for socket metadata (type, state, local
+    and remote addresses/ports, protocol, and backing slot ID) and a spinlock for
+    thread-safe concurrent access.
+    """
+    
+    public Memory<I64> types
+    public Memory<I64> states
+    public Memory<I64> localAddrs
+    public Memory<I64> localPorts
+    public Memory<I64> remoteAddrs
+    public Memory<I64> remotePorts
+    public Memory<I64> protocols
+    public Memory<I64> backingSlots
+    public I64 capacity
+    public I64 count
+    public I64 nextId
+    public Spinlock lock
+    
+    public function SocketTable( self, I64 maxSockets ) -> Void:
+        
+        """
+        Constructs a new socket table with the specified maximum number of sockets.
+        All slots are initialized to empty, the next socket ID starts at 1, and a
+        spinlock is created for concurrent access protection.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxSockets
+        self.count = 0
+        self.nextId = 1
+        self.lock = new Spinlock()
+        self.types = new Memory<I64>( maxSockets )
+        self.states = new Memory<I64>( maxSockets )
+        self.localAddrs = new Memory<I64>( maxSockets )
+        self.localPorts = new Memory<I64>( maxSockets )
+        self.remoteAddrs = new Memory<I64>( maxSockets )
+        self.remotePorts = new Memory<I64>( maxSockets )
+        self.protocols = new Memory<I64>( maxSockets )
+        self.backingSlots = new Memory<I64>( maxSockets )
+        I64 slotIndex = 0
+        while slotIndex < maxSockets:
+            self.types.set( slotIndex, 0 )
+            self.states.set( slotIndex, 0 )
+            self.localAddrs.set( slotIndex, 0 )
+            self.localPorts.set( slotIndex, 0 )
+            self.remoteAddrs.set( slotIndex, 0 )
+            self.remotePorts.set( slotIndex, 0 )
+            self.protocols.set( slotIndex, 0 )
+            self.backingSlots.set( slotIndex, 0 - 1 )
+            slotIndex = slotIndex + 1
+    
+    public function create( self, I64 sockType, I64 protocol ) -> I64:
+        
+        """
+        Creates a new socket of the specified type and protocol. Allocates the first
+        available slot in the table, assigns a unique monotonically increasing socket
+        ID, and initializes the socket in the unbound state. Returns the socket ID
+        (1-based) on success, or -1 if the table is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.count >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.types.get( slotIndex ) == 0 or self.states.get( slotIndex ) == 4:
+                I64 id = self.nextId
+                self.nextId = self.nextId + 1
+                self.types.set( slotIndex, sockType )
+                self.states.set( slotIndex, 0 )
+                self.protocols.set( slotIndex, protocol )
+                self.backingSlots.set( slotIndex, id )
+                self.count = self.count + 1
+                self.lock.unlock()
+                return id
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return 0 - 1
+    
+    protect function findSlot( self, I64 socketId ) -> I64:
+        
+        """
+        Searches the socket table for the internal slot index corresponding to the given
+        socket ID. Returns the slot index if found, or -1 if no active socket with the
+        given ID exists.
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.backingSlots.get( slotIndex ) == socketId and self.types.get( slotIndex ) != 0:
+                return slotIndex
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function bind( self, I64 socketId, I64 addr, I64 port ) -> Boolean:
+        
+        """
+        Binds the socket identified by socketId to the specified local address and port.
+        The socket must be in the unbound state (state 0) for binding to succeed. Returns
+        True if the socket was successfully bound, or False if the socket was not found
+        or is not in the unbound state.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            return False
+        if self.states.get( slot ) != 0:
+            return False
+        self.localAddrs.set( slot, addr )
+        self.localPorts.set( slot, port )
+        self.states.set( slot, 1 )
+        return True
+    
+    public function listen( self, I64 socketId ) -> Boolean:
+        
+        """
+        Transitions the socket identified by socketId to the listening state, making it
+        ready to accept incoming connections. The socket must be a stream socket (type 1)
+        in the bound state (state 1). Returns True on success, or False if the socket
+        was not found, is not bound, or is not a stream socket.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            return False
+        if self.states.get( slot ) != 1:
+            return False
+        if self.types.get( slot ) != 1:
+            return False
+        self.states.set( slot, 2 )
+        return True
+    
+    public function connect( self, I64 socketId, I64 remoteAddr, I64 remotePort ) -> Boolean:
+        
+        """
+        Connects the socket identified by socketId to the specified remote address and
+        port. The socket must be in either the unbound or bound state (state 0 or 1).
+        Returns True if the connection was established, or False if the socket was not
+        found or is already listening or connected.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            return False
+        I64 state = self.states.get( slot )
+        if state > 1:
+            return False
+        self.remoteAddrs.set( slot, remoteAddr )
+        self.remotePorts.set( slot, remotePort )
+        self.states.set( slot, 3 )
+        return True
+    
+    public function close( self, I64 socketId ) -> Boolean:
+        
+        """
+        Closes the socket identified by socketId, releasing its slot in the socket table.
+        All associated state (type, addresses, ports, protocol) is cleared. Returns True
+        if the socket was found and closed, or False if no socket with the given ID exists.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            self.lock.unlock()
+            return False
+        self.states.set( slot, 4 )
+        self.localAddrs.set( slot, 0 )
+        self.localPorts.set( slot, 0 )
+        self.remoteAddrs.set( slot, 0 )
+        self.remotePorts.set( slot, 0 )
+        self.count = self.count - 1
+        self.lock.unlock()
+        return True
+    
+    public function getState( self, I64 socketId ) -> I64:
+        
+        """
+        Returns the current state of the socket identified by socketId. Returns -1
+        if no socket with the given ID exists.
+        """
+        
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            return 0 - 1
+        return self.states.get( slot )
+    
+    public function getType( self, I64 socketId ) -> I64:
+        
+        """
+        Returns the type of the socket identified by socketId (stream, datagram, or raw).
+        Returns 0 if no socket with the given ID exists.
+        """
+        
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            return 0 - 1
+        return self.types.get( slot )
+    
+    public function getLocalPort( self, I64 socketId ) -> I64:
+        
+        """
+        Returns the local port number bound to the socket identified by socketId.
+        Returns 0 if no socket with the given ID exists.
+        """
+        
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            return 0
+        return self.localPorts.get( slot )
+    
+    public function getRemoteAddr( self, I64 socketId ) -> I64:
+        
+        """
+        Returns the remote address of the socket identified by socketId.
+        Returns 0 if no socket with the given ID exists.
+        """
+        
+        I64 slot = self.findSlot( socketId )
+        if slot < 0:
+            return 0
+        return self.remoteAddrs.get( slot )
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of currently open sockets in the socket table. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the socket table, including
+        the types, states, address, port, protocol, and backing slot arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.types.free()
+        self.states.free()
+        self.localAddrs.free()
+        self.localPorts.free()
+        self.remoteAddrs.free()
+        self.remotePorts.free()
+        self.protocols.free()
+        self.backingSlots.free()
+
+export {
+    SOCKET_STREAM,
+    SOCKET_DATAGRAM,
+    SOCKET_RAW,
+    SOCKET_UNBOUND,
+    SOCKET_BOUND,
+    SOCKET_LISTENING,
+    SOCKET_CONNECTED,
+    SOCKET_CLOSED,
+    AF_INET,
+    AF_INET6,
+    SocketTable
+}
