@@ -1,0 +1,297 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/binary-reader.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Binary reader for reading typed integers from a file descriptor.
+# Little-endian byte order (native x86_64). Uses raw sysRead.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.binary-reader
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import memoryToPtr, readByteAt, sysRead, sysClose
+from uranite.io.errors import IOError
+
+public class BinaryReader:
+    
+    """
+    Binary reader for deserializing typed integer values from a file descriptor.
+    Reads multi-byte integers in little-endian byte order (native x86_64 layout).
+    Uses a single reusable temporary buffer for all read operations.
+    """
+    
+    protect I64 fd
+    """The underlying file descriptor to read from."""
+    protect Memory<I64> tmpBuf
+    """Reusable temporary buffer for reading raw bytes before assembly."""
+    protect I64 tmpAddr
+    """Raw pointer address of the temporary buffer."""
+    protect Boolean closed
+    """Whether this reader has been closed."""
+    protect Boolean ownsFd
+    """Whether this reader owns the file descriptor and should close it on cleanup."""
+    
+    public function BinaryReader( self, I64 fd, Boolean ownsFd ) -> Void:
+        
+        """
+        Construct a new BinaryReader wrapping the given file descriptor.
+        
+        Parameters:
+            fd (I64):
+                The file descriptor to read binary data from.
+            ownsFd (Boolean):
+                Whether this reader owns the file descriptor. If True, the
+                file descriptor will be closed when this reader is closed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.fd = fd
+        self.tmpBuf = new Memory<I64>( 1 )
+        self.tmpAddr = memoryToPtr( self.tmpBuf )
+        self.closed = False
+        self.ownsFd = ownsFd
+    
+    protect function readExact( self, I64 count ) -> Void:
+        I64 totalRead = 0
+        while totalRead < count:
+            I64 bytesRead = sysRead( self.fd, self.tmpAddr + totalRead, count - totalRead )
+            if bytesRead == 0:
+                raise new IOError( "unexpected end of stream", 0, None )
+            totalRead = totalRead + bytesRead
+    
+    public function readI8( self ) -> I64:
+        
+        """
+        Read a signed 8-bit integer from the stream.
+        Values in the range 128-255 are sign-extended to negative values.
+        
+        Returns:
+            The signed 8-bit value as an I64 in the range -128 to 127.
+        
+        Raises:
+            IOError: If the stream ends before the byte can be read.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.readExact( 1 )
+        I64 byteValue = readByteAt( self.tmpAddr, 0 )
+        if byteValue >= 128:
+            byteValue = byteValue - 256
+        return byteValue
+    
+    public function readU8( self ) -> I64:
+        
+        """
+        Read an unsigned 8-bit integer from the stream.
+        
+        Returns:
+            The unsigned 8-bit value as an I64 in the range 0 to 255.
+        
+        Raises:
+            IOError: If the stream ends before the byte can be read.
+        """
+        
+        self.readExact( 1 )
+        return readByteAt( self.tmpAddr, 0 )
+    
+    public function readI16( self ) -> I64:
+        
+        """
+        Read a signed 16-bit integer from the stream in little-endian byte order.
+        Values in the range 32768-65535 are sign-extended to negative values.
+        
+        Returns:
+            The signed 16-bit value as an I64 in the range -32768 to 32767.
+        
+        Raises:
+            IOError: If the stream ends before both bytes can be read.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.readExact( 2 )
+        I64 byte0 = readByteAt( self.tmpAddr, 0 )
+        I64 byte1 = readByteAt( self.tmpAddr, 1 )
+        I64 combined = byte0 | ( byte1 * 256 )
+        if combined >= 32768:
+            combined = combined - 65536
+        return combined
+    
+    public function readU16( self ) -> I64:
+        
+        """
+        Read an unsigned 16-bit integer from the stream in little-endian byte order.
+        
+        Returns:
+            The unsigned 16-bit value as an I64 in the range 0 to 65535.
+        
+        Raises:
+            IOError: If the stream ends before both bytes can be read.
+        """
+        
+        self.readExact( 2 )
+        I64 byte0 = readByteAt( self.tmpAddr, 0 )
+        I64 byte1 = readByteAt( self.tmpAddr, 1 )
+        return byte0 | ( byte1 * 256 )
+    
+    public function readI32( self ) -> I64:
+        
+        """
+        Read a signed 32-bit integer from the stream in little-endian byte order.
+        Values in the range 2147483648-4294967295 are sign-extended to negative values.
+        
+        Returns:
+            The signed 32-bit value as an I64 in the range -2147483648 to 2147483647.
+        
+        Raises:
+            IOError: If the stream ends before all four bytes can be read.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.readExact( 4 )
+        I64 byte0 = readByteAt( self.tmpAddr, 0 )
+        I64 byte1 = readByteAt( self.tmpAddr, 1 )
+        I64 byte2 = readByteAt( self.tmpAddr, 2 )
+        I64 byte3 = readByteAt( self.tmpAddr, 3 )
+        I64 combined = byte0 | ( byte1 * 256 ) | ( byte2 * 65536 ) | ( byte3 * 16777216 )
+        if combined >= 2147483648:
+            combined = combined - 4294967296
+        return combined
+    
+    public function readU32( self ) -> I64:
+        
+        """
+        Read an unsigned 32-bit integer from the stream in little-endian byte order.
+        
+        Returns:
+            The unsigned 32-bit value as an I64 in the range 0 to 4294967295.
+        
+        Raises:
+            IOError: If the stream ends before all four bytes can be read.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.readExact( 4 )
+        I64 b0 = readByteAt( self.tmpAddr, 0 )
+        I64 b1 = readByteAt( self.tmpAddr, 1 )
+        I64 b2 = readByteAt( self.tmpAddr, 2 )
+        I64 b3 = readByteAt( self.tmpAddr, 3 )
+        return b0 | ( b1 * 256 ) | ( b2 * 65536 ) | ( b3 * 16777216 )
+    
+    public function readI64( self ) -> I64:
+        
+        """
+        Read a signed 64-bit integer from the stream in little-endian byte order.
+        Reconstructs the value from eight bytes as two 32-bit halves.
+        
+        Returns:
+            The signed 64-bit value as an I64.
+        
+        Raises:
+            IOError: If the stream ends before all eight bytes can be read.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.readExact( 8 )
+        I64 b0 = readByteAt( self.tmpAddr, 0 )
+        I64 b1 = readByteAt( self.tmpAddr, 1 )
+        I64 b2 = readByteAt( self.tmpAddr, 2 )
+        I64 b3 = readByteAt( self.tmpAddr, 3 )
+        I64 b4 = readByteAt( self.tmpAddr, 4 )
+        I64 b5 = readByteAt( self.tmpAddr, 5 )
+        I64 b6 = readByteAt( self.tmpAddr, 6 )
+        I64 b7 = readByteAt( self.tmpAddr, 7 )
+        I64 low = b0 | ( b1 * 256 ) | ( b2 * 65536 ) | ( b3 * 16777216 )
+        I64 high = b4 | ( b5 * 256 ) | ( b6 * 65536 ) | ( b7 * 16777216 )
+        return low | ( high * 4294967296 )
+    
+    public function readBytes( self, I64 count ) -> Memory<I64>:
+        
+        """
+        Read exactly the specified number of raw bytes from the stream into
+        a newly allocated Memory buffer. Handles partial reads by retrying.
+        
+        Parameters:
+            count (I64):
+                The exact number of bytes to read.
+        
+        Returns:
+            A newly allocated Memory buffer containing the raw bytes.
+        
+        Raises:
+            IOError: If the stream ends before all bytes can be read.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Memory<I64> result = new Memory<I64>( count )
+        I64 resultAddr = memoryToPtr( result )
+        I64 totalRead = 0
+        while totalRead < count:
+            I64 bytesRead = sysRead( self.fd, resultAddr + totalRead, count - totalRead )
+            if bytesRead == 0:
+                raise new IOError( "unexpected end of stream", 0, None )
+            totalRead = totalRead + bytesRead
+        return result
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close this reader, freeing the temporary buffer. If this reader
+        owns the file descriptor, the descriptor is also closed. Subsequent
+        calls after the first close are no-ops.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed == False:
+            self.tmpBuf.free()
+            if self.ownsFd:
+                sysClose( self.fd )
+            self.closed = True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Destructor that delegates to close to ensure resource cleanup.
+        """
+        
+        self.close()
+
+export {
+    BinaryReader
+}
