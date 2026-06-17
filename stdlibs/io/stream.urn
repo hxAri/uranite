@@ -1,0 +1,145 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/stream.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Stream interfaces for byte-oriented input and output operations.
+# Buffers use Memory<I64> with one byte value per slot.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.stream
+
+from uranite.memory.memory import Memory
+
+public interface InputStream:
+    
+    """
+    Interface for byte-oriented input streams. Implementations provide
+    sequential read access to a source of bytes such as a file, socket,
+    or in-memory buffer. Buffers use Memory<I64> with one byte value
+    per slot.
+    """
+    
+    public function read( self, Memory<I64> buffer, I64 offset, I64 length ) -> I64:
+        
+        """
+        Read up to length bytes from the stream into the buffer starting
+        at the given offset. Returns the number of bytes actually read,
+        which may be less than length if the end of the stream is reached.
+        Returns 0 at end of stream.
+        
+        Parameters:
+            buffer (Memory<I64>):
+                The destination buffer to read bytes into, with one
+                byte value per slot.
+            offset (I64):
+                The starting index in the buffer to write to.
+            length (I64):
+                The maximum number of bytes to read.
+        
+        Returns:
+            I64:
+                The number of bytes actually read, or 0 at end of stream.
+        """
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close the stream and release any underlying resources such as
+        file descriptors or memory buffers.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+public interface OutputStream:
+    
+    """
+    Interface for byte-oriented output streams. Implementations provide
+    sequential write access to a destination such as a file, socket, or
+    in-memory buffer. Buffers use Memory<I64> with one byte value per
+    slot.
+    """
+    
+    public function write( self, Memory<I64> buffer, I64 offset, I64 length ) -> I64:
+        
+        """
+        Write up to length bytes from the buffer starting at the given
+        offset to the stream. Returns the number of bytes actually
+        written.
+        
+        Parameters:
+            buffer (Memory<I64>):
+                The source buffer containing bytes to write, with one
+                byte value per slot.
+            offset (I64):
+                The starting index in the buffer to read from.
+            length (I64):
+                The number of bytes to write.
+        
+        Returns:
+            I64:
+                The number of bytes actually written.
+        """
+    
+    public function flush( self ) -> Void:
+        
+        """
+        Flush any buffered output to the underlying destination,
+        ensuring all previously written bytes are committed.
+        """
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close the stream and release any underlying resources. Any
+        buffered data is flushed before closing.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+public Readonly class Stream:
+
+    """
+    File-descriptor-backed output stream for directing text output
+    to any writable file descriptor (stdout, stderr, files, pipes).
+    """
+
+    public I64 fileDescriptor
+
+    public function Stream( self, I64 fileDescriptor ) -> Void:
+
+        """
+        Construct a stream targeting the given file descriptor.
+
+        Parameters:
+            fileDescriptor (I64):
+                The file descriptor to write to.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.fileDescriptor = fileDescriptor
+
+export {
+    InputStream,
+    OutputStream,
+    Stream
+}
