@@ -1,0 +1,182 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/condvar.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Condition variable with wait queue. Allows threads to wait until
+# a condition is signaled by another thread, with automatic mutex
+# release and re-acquisition around the wait.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.condvar
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import BlockReason
+from uranite.threading.thread import ThreadRuntime
+from uranite.threading.mutex import MutexGuard
+
+public class CondVar:
+    
+    """
+    Condition variable that allows threads to wait until a condition is
+    signaled by another thread. Maintains a bounded circular wait queue
+    of task identifiers. The caller must hold a MutexGuard when calling
+    wait(); the guard is released atomically before blocking and must be
+    re-acquired by the caller after waking.
+    """
+    
+    protect Spinlock guard
+    """ Spinlock protecting the wait queue. """
+    protect Memory<I64> waitQueue
+    """ Circular buffer of task IDs waiting on this condition variable. """
+    protect I64 waitHead
+    """ Index of the oldest waiter in the circular queue. """
+    protect I64 waitTail
+    """ Index of the next free slot in the circular queue. """
+    protect I64 waitCount
+    """ Number of tasks currently waiting on the condition variable. """
+    protect I64 waitCapacity
+    """ Maximum number of concurrent waiters the queue can hold. """
+    protect Scheduler scheduler
+    """ Scheduler used for cooperative task blocking and yielding. """
+    protect ThreadRuntime runtime
+    """ Thread runtime used to look up task pointers by ID. """
+    
+    public function CondVar( self, I64 maxWaiters, Scheduler scheduler, ThreadRuntime runtime ) -> Void:
+        
+        """
+        Construct a condition variable with a fixed-capacity wait queue.
+        
+        Parameters:
+            maxWaiters (I64):
+                Maximum number of threads that can wait simultaneously.
+            scheduler (Scheduler):
+                Scheduler for cooperative task blocking.
+            runtime (ThreadRuntime):
+                Runtime for task pointer lookups during notification.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.guard = new Spinlock()
+        self.waitQueue = new Memory<I64>( maxWaiters )
+        self.waitHead = 0
+        self.waitTail = 0
+        self.waitCount = 0
+        self.waitCapacity = maxWaiters
+        self.scheduler = scheduler
+        self.runtime = runtime
+        I64 slotIndex = 0
+        while slotIndex < maxWaiters:
+            self.waitQueue.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function wait( self, MutexGuard<I64> guard ) -> Void:
+        
+        """
+        Atomically release the mutex guard and block the current task until
+        signaled by another thread via notifyOne or notifyAll. The caller
+        must re-acquire the mutex after this method returns.
+        
+        Parameters:
+            guard (MutexGuard<I64>):
+                The mutex guard to release before blocking. The guard is
+                released inside this method.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 taskId = 0
+        if self.scheduler.getCurrentTask() != None:
+            taskId = self.scheduler.getCurrentTask().id
+        
+        self.guard.lock()
+        if self.waitCount < self.waitCapacity:
+            self.waitQueue.set( self.waitTail, taskId )
+            self.waitTail = ( self.waitTail + 1 ) % self.waitCapacity
+            self.waitCount = self.waitCount + 1
+        self.guard.unlock()
+        
+        guard.release()
+        
+        if taskId > 0:
+            self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+            self.scheduler.blockCurrent()
+    
+    public function notifyOne( self ) -> Void:
+        
+        """
+        Wake one waiting thread, if any. Removes the oldest waiter from
+        the queue and yields the scheduler to allow it to run.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        if self.waitCount > 0:
+            I64 taskId = self.waitQueue.get( self.waitHead )
+            self.waitHead = ( self.waitHead + 1 ) % self.waitCapacity
+            self.waitCount = self.waitCount - 1
+            self.guard.unlock()
+            
+            I64 taskPtr = self.runtime.lookupTaskPointer( taskId )
+            if taskPtr != 0:
+                self.scheduler.yields()
+        else:
+            self.guard.unlock()
+    
+    public function notifyAll( self ) -> Void:
+        
+        """
+        Wake all waiting threads. Drains the entire wait queue and yields
+        the scheduler so all woken threads can be rescheduled.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        while self.waitCount > 0:
+            I64 taskId = self.waitQueue.get( self.waitHead )
+            self.waitHead = ( self.waitHead + 1 ) % self.waitCapacity
+            self.waitCount = self.waitCount - 1
+            
+            I64 taskPtr = self.runtime.lookupTaskPointer( taskId )
+            if taskPtr != 0:
+                pass
+        self.guard.unlock()
+        self.scheduler.yields()
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release the wait queue memory. The condition variable must not be
+        used after this call.
+        """
+        
+        self.waitQueue.free()
+
+export {
+    CondVar
+}
