@@ -1,0 +1,322 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/datetime/duration.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Duration class representing a span of time in seconds and nanoseconds.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.datetime.duration
+
+const I64 NANOS_PER_SEC = 1000000000
+""" The number of nanoseconds in one second (1,000,000,000). """
+const I64 NANOS_PER_MILLI = 1000000
+""" The number of nanoseconds in one millisecond (1,000,000). """
+const I64 NANOS_PER_MICRO = 1000
+""" The number of nanoseconds in one microsecond (1,000). """
+const I64 SECS_PER_MIN = 60
+""" The number of seconds in one minute (60). """
+const I64 SECS_PER_HOUR = 3600
+""" The number of seconds in one hour (3,600). """
+const I64 SECS_PER_DAY = 86400
+""" The number of seconds in one day (86,400). """
+
+public class Duration:
+    
+    """
+    Represents a span of time decomposed into whole seconds and a
+    nanosecond remainder. The nanosecond component is always normalized
+    to the range [0, 999999999]. Supports arithmetic, comparison, and
+    conversion to various time units.
+    """
+    
+    public I64 secs
+    """ The whole seconds component of this duration. """
+    public I64 nanos
+    """ The nanosecond remainder in the range [0, 999999999]. """
+    
+    public function Duration( self, I64 secs, I64 nanos ) -> Void:
+        
+        """
+        Create a new Duration from seconds and nanoseconds. The nanosecond
+        value is normalized so that it falls within [0, 999999999], carrying
+        any overflow or underflow into the seconds component.
+        
+        Parameters:
+            secs (I64):
+                The whole seconds component.
+            nanos (I64):
+                The nanosecond component, which will be normalized.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.secs = secs + nanos / NANOS_PER_SEC
+        self.nanos = nanos % NANOS_PER_SEC
+        if self.nanos < 0:
+            self.secs = self.secs - 1
+            self.nanos = self.nanos + NANOS_PER_SEC
+    
+    public function totalSeconds( self ) -> I64:
+        
+        """
+        Return the total whole seconds in this duration, ignoring the
+        nanosecond remainder.
+        
+        Returns:
+            The whole seconds component of this duration.
+        """
+        
+        return self.secs
+    
+    public function totalMillis( self ) -> I64:
+        
+        """
+        Return the total duration expressed in whole milliseconds.
+        
+        Returns:
+            The duration converted to milliseconds, truncating any
+            sub-millisecond remainder.
+        """
+        
+        return self.secs * 1000 + self.nanos / NANOS_PER_MILLI
+    
+    public function totalMicros( self ) -> I64:
+        
+        """
+        Return the total duration expressed in whole microseconds.
+        
+        Returns:
+            The duration converted to microseconds, truncating any
+            sub-microsecond remainder.
+        """
+        
+        return self.secs * 1000000 + self.nanos / NANOS_PER_MICRO
+    
+    public function totalNanos( self ) -> I64:
+        
+        """
+        Return the total duration expressed in nanoseconds.
+        
+        Returns:
+            The entire duration as a single nanosecond count.
+        """
+        
+        return self.secs * NANOS_PER_SEC + self.nanos
+    
+    public function add( self, Duration other ) -> Duration:
+        
+        """
+        Add another Duration to this one and return the result as a
+        new Duration. Neither operand is modified.
+        
+        Parameters:
+            other (Duration):
+                The duration to add.
+        
+        Returns:
+            A new Duration representing the sum.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Duration( self.secs + other.secs, self.nanos + other.nanos )
+    
+    public function subtract( self, Duration other ) -> Duration:
+        
+        """
+        Subtract another Duration from this one and return the result
+        as a new Duration. Neither operand is modified.
+        
+        Parameters:
+            other (Duration):
+                The duration to subtract.
+        
+        Returns:
+            A new Duration representing the difference.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Duration( self.secs - other.secs, self.nanos - other.nanos )
+    
+    public function isZero( self ) -> Boolean:
+        
+        """
+        Check whether this duration represents zero elapsed time.
+        
+        Returns:
+            True if both seconds and nanoseconds are zero.
+        """
+        
+        return self.secs == 0 and self.nanos == 0
+    
+    public function isNegative( self ) -> Boolean:
+        
+        """
+        Check whether this duration is negative.
+        
+        Returns:
+            True if the seconds component is less than zero.
+        """
+        
+        return self.secs < 0
+
+public function fromNanos( I64 nanos ) -> Duration:
+    
+    """
+    Create a Duration from a nanosecond count.
+    
+    Parameters:
+        nanos (I64):
+            The number of nanoseconds.
+    
+    Returns:
+        A new Duration equivalent to the given nanosecond count.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Duration( 0, nanos )
+
+public function fromMicros( I64 micros ) -> Duration:
+    
+    """
+    Create a Duration from a microsecond count.
+    
+    Parameters:
+        micros (I64):
+            The number of microseconds.
+    
+    Returns:
+        A new Duration equivalent to the given microsecond count.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Duration( 0, micros * NANOS_PER_MICRO )
+
+public function fromMillis( I64 millis ) -> Duration:
+    
+    """
+    Create a Duration from a millisecond count.
+    
+    Parameters:
+        millis (I64):
+            The number of milliseconds.
+    
+    Returns:
+        A new Duration equivalent to the given millisecond count.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Duration( 0, millis * NANOS_PER_MILLI )
+
+public function fromSeconds( I64 secs ) -> Duration:
+    
+    """
+    Create a Duration from a whole-second count.
+    
+    Parameters:
+        secs (I64):
+            The number of seconds.
+    
+    Returns:
+        A new Duration with the given seconds and zero nanoseconds.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Duration( secs, 0 )
+
+public function fromMinutes( I64 mins ) -> Duration:
+    
+    """
+    Create a Duration from a minute count.
+    
+    Parameters:
+        mins (I64):
+            The number of minutes.
+    
+    Returns:
+        A new Duration equivalent to the given number of minutes.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Duration( mins * SECS_PER_MIN, 0 )
+
+public function fromHours( I64 hours ) -> Duration:
+    
+    """
+    Create a Duration from an hour count.
+    
+    Parameters:
+        hours (I64):
+            The number of hours.
+    
+    Returns:
+        A new Duration equivalent to the given number of hours.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Duration( hours * SECS_PER_HOUR, 0 )
+
+public function fromDays( I64 days ) -> Duration:
+    
+    """
+    Create a Duration from a day count.
+    
+    Parameters:
+        days (I64):
+            The number of days.
+    
+    Returns:
+        A new Duration equivalent to the given number of days.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Duration( days * SECS_PER_DAY, 0 )
+
+export {
+    Duration,
+    NANOS_PER_SEC, NANOS_PER_MILLI, NANOS_PER_MICRO,
+    SECS_PER_MIN, SECS_PER_HOUR, SECS_PER_DAY,
+    fromNanos, fromMicros, fromMillis, fromSeconds,
+    fromMinutes, fromHours, fromDays
+}
