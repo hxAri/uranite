@@ -1,0 +1,84 @@
+package testing
+
+from uranite.os.net.ipv4 import {
+    PROTO_ICMP, PROTO_TCP, PROTO_UDP,
+    ipAddr, ipOctet0, ipOctet1, ipOctet2, ipOctet3,
+    isSameSubnet, Ipv4Header, RoutingTable
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Net IPv4 Tests ===" )
+
+    assertEqualI64( 1, PROTO_ICMP, "PROTO_ICMP" )
+    assertEqualI64( 6, PROTO_TCP, "PROTO_TCP" )
+    assertEqualI64( 17, PROTO_UDP, "PROTO_UDP" )
+    putsln( "protocol constants OK" )
+
+    I64 addr = ipAddr( 192, 168, 1, 1 )
+    assertEqualI64( 3232235777, addr, "ipAddr" )
+    assertEqualI64( 192, ipOctet0( addr ), "octet0" )
+    assertEqualI64( 168, ipOctet1( addr ), "octet1" )
+    assertEqualI64( 1, ipOctet2( addr ), "octet2" )
+    assertEqualI64( 1, ipOctet3( addr ), "octet3" )
+    putsln( "ipAddr OK" )
+
+    I64 addr2 = ipAddr( 192, 168, 1, 100 )
+    I64 mask24 = ipAddr( 255, 255, 255, 0 )
+    assertTrue( isSameSubnet( addr, addr2, mask24 ), "same subnet" )
+
+    I64 addr3 = ipAddr( 192, 168, 2, 1 )
+    assertFalse( isSameSubnet( addr, addr3, mask24 ), "diff subnet" )
+    putsln( "subnet OK" )
+
+    Ipv4Header hdr = new Ipv4Header()
+    assertEqualI64( 4, hdr.version, "version 4" )
+    assertEqualI64( 5, hdr.headerLength, "headerLen 5 words" )
+    assertEqualI64( 64, hdr.ttl, "ttl 64" )
+
+    hdr.configure( addr, addr2, 6, 100 )
+    assertEqualI64( addr, hdr.srcAddr, "srcAddr" )
+    assertEqualI64( addr2, hdr.dstAddr, "dstAddr" )
+    assertEqualI64( 6, hdr.protocol, "protocol tcp" )
+    assertEqualI64( 120, hdr.totalLength, "totalLength 20+100" )
+    assertEqualI64( 100, hdr.getPayloadLength(), "payloadLen" )
+    assertTrue( hdr.isTcp(), "isTcp" )
+    assertFalse( hdr.isUdp(), "not udp" )
+    assertFalse( hdr.isIcmp(), "not icmp" )
+    putsln( "Ipv4Header OK" )
+
+    hdr.setDontFragment()
+    assertTrue( hdr.dontFragment(), "dontFragment" )
+    assertFalse( hdr.moreFragments(), "no more fragments" )
+
+    I64 ttlBefore = hdr.ttl
+    Boolean decOk = hdr.decrementTtl()
+    assertTrue( decOk, "decrementTtl" )
+    assertEqualI64( ttlBefore - 1, hdr.ttl, "ttl decremented" )
+    putsln( "flags OK" )
+
+    RoutingTable rt = new RoutingTable( 8 )
+    assertEqualI64( 0, rt.getCount(), "rt count 0" )
+
+    I64 gw = ipAddr( 192, 168, 1, 254 )
+    Boolean addOk = rt.addRoute( ipAddr( 192, 168, 1, 0 ), mask24, gw, 1, 10 )
+    assertTrue( addOk, "addRoute" )
+    assertEqualI64( 1, rt.getCount(), "rt count 1" )
+
+    I64 foundGw = rt.lookup( addr )
+    assertEqualI64( gw, foundGw, "lookup gw" )
+    assertEqualI64( 1, rt.lookupInterface( addr ), "lookupInterface" )
+    assertEqualI64( 0, rt.lookup( ipAddr( 10, 0, 0, 1 ) ), "lookup miss" )
+
+    Boolean remOk = rt.removeRoute( ipAddr( 192, 168, 1, 0 ), mask24 )
+    assertTrue( remOk, "removeRoute" )
+    assertEqualI64( 0, rt.getCount(), "rt count after remove" )
+    putsln( "RoutingTable OK" )
+
+    rt.destroy()
+
+    putsln( "=== All IPv4 tests passed ===" )
+    return 0
