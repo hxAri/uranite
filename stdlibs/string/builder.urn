@@ -1,0 +1,575 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/string/builder.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# StringBuilder: mutable byte buffer with dynamic growth for efficient
+# string construction. Avoids O(n^2) repeated concatenation. Uses mmap
+# allocator for buffer management. Zero C runtime dependency.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.string.builder
+
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc, realloc
+from uranite.functions.builtin import ptrToString
+from uranite.convert.convert import intToString, floatToString
+from uranite.errors.lookup import IndexError
+from uranite.errors.value import ValueError
+
+const I64 INITIAL_CAPACITY = 64
+""" The default initial buffer capacity in bytes. """
+
+public class StringBuilder:
+    
+    """
+    A mutable byte buffer for efficient incremental string construction.
+    Avoids the O(n^2) cost of repeated string concatenation by maintaining
+    a dynamically growing internal buffer. The buffer doubles in capacity
+    when more space is needed. Uses mmap-based allocation with zero C
+    runtime dependency. Call build() to produce the final immutable String,
+    and destroy() to release the underlying memory when done.
+    """
+    
+    public I64 buffer
+    """ Raw pointer to the mmap-allocated byte buffer. """
+    
+    public I64 len
+    """ The current number of bytes written to the buffer. """
+    
+    public I64 cap
+    """ The current allocated capacity of the buffer in bytes. """
+    
+    public function StringBuilder( self ) -> Void:
+        
+        """
+        Create a new StringBuilder with the default initial capacity
+        of 64 bytes.
+        """
+        
+        self.buffer = alloc( INITIAL_CAPACITY )
+        self.len = 0
+        self.cap = INITIAL_CAPACITY
+    
+    public function grow( self, I64 needed ) -> Void:
+        
+        """
+        Ensure that at least the given number of additional bytes can
+        be written without reallocation. If the current capacity is
+        insufficient, the buffer is reallocated with doubled capacity
+        until it is large enough.
+        
+        Parameters:
+            needed (I64):
+                The number of additional bytes required.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 required = self.len + needed
+        if required <= self.cap:
+            return
+        I64 newCap = self.cap * 2
+        while newCap < required:
+            newCap = newCap * 2
+        self.buffer = realloc( self.buffer, newCap )
+        self.cap = newCap
+    
+    public function append( self, String content ) -> StringBuilder:
+
+        """
+        Append a string to the buffer. Returns self for method chaining.
+
+        Parameters:
+            content (String):
+                The string to append.
+
+        Returns:
+            This StringBuilder instance for chaining.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 contentLength = stringLen( content )
+        if contentLength == 0:
+            return self
+        self.grow( contentLength )
+        I64 contentPointer = stringToPtr( content )
+        I64 byteIndex = 0
+        while byteIndex < contentLength:
+            writeByteAt( self.buffer, self.len, readByteAt( contentPointer, byteIndex ) )
+            self.len = self.len + 1
+            byteIndex = byteIndex + 1
+        return self
+    
+    public function appendChar( self, I64 codePoint ) -> StringBuilder:
+
+        """
+        Append a single byte to the buffer. Returns self for method
+        chaining.
+
+        Parameters:
+            codePoint (I64):
+                The byte value to append (0-255).
+
+        Returns:
+            This StringBuilder instance for chaining.
+        """
+
+        self.grow( 1 )
+        writeByteAt( self.buffer, self.len, codePoint )
+        self.len = self.len + 1
+        return self
+    
+    public function appendI64( self, I64 value ) -> StringBuilder:
+        
+        """
+        Append the decimal string representation of an I64 value to
+        the buffer. Returns self for method chaining.
+        
+        Parameters:
+            value (I64):
+                The integer value to convert and append.
+        
+        Returns:
+            This StringBuilder instance for chaining.
+        """
+        
+        return self.append( intToString( value ) )
+    
+    public function appendF64( self, F64 value ) -> StringBuilder:
+        
+        """
+        Append the string representation of an F64 value to the buffer
+        with 6 digits of decimal precision. Returns self for method
+        chaining.
+        
+        Parameters:
+            value (F64):
+                The floating-point value to convert and append.
+        
+        Returns:
+            This StringBuilder instance for chaining.
+        """
+        
+        return self.append( floatToString( value, 6 ) )
+    
+    public function appendBool( self, Boolean value ) -> StringBuilder:
+        
+        """
+        Append "true" or "false" to the buffer based on the given
+        boolean value. Returns self for method chaining.
+        
+        Parameters:
+            value (Boolean):
+                The boolean value to convert and append.
+        
+        Returns:
+            This StringBuilder instance for chaining.
+        """
+        
+        if value:
+            return self.append( "true" )
+        return self.append( "false" )
+    
+    public function appendLine( self, String content ) -> StringBuilder:
+
+        """
+        Append a string followed by a newline character (byte 10) to
+        the buffer. Returns self for method chaining.
+
+        Parameters:
+            content (String):
+                The string to append before the newline.
+
+        Returns:
+            This StringBuilder instance for chaining.
+        """
+
+        self.append( content )
+        return self.appendChar( 10 )
+    
+    public function build( self ) -> String:
+        
+        """
+        Produce the final immutable String from the buffer contents.
+        Allocates a new null-terminated buffer, copies all bytes, and
+        returns the result as a String. The StringBuilder remains
+        usable after this call.
+        
+        Returns:
+            A new String containing all bytes appended so far.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 result = alloc( self.len + 1 )
+        I64 byteIndex = 0
+        while byteIndex < self.len:
+            writeByteAt( result, byteIndex, readByteAt( self.buffer, byteIndex ) )
+            byteIndex = byteIndex + 1
+        writeByteAt( result, self.len, 0 )
+        return ptrToString( result )
+    
+    public function clear( self ) -> Void:
+        
+        """
+        Reset the buffer length to zero without deallocating memory.
+        The existing capacity is retained for future appends.
+        """
+        
+        self.len = 0
+    
+    public function length( self ) -> I64:
+        
+        """
+        Return the current number of bytes in the buffer.
+        
+        Returns:
+            The number of bytes written so far.
+        """
+        
+        return self.len
+    
+    public function capacity( self ) -> I64:
+        
+        """
+        Return the current allocated capacity of the buffer.
+        
+        Returns:
+            The total number of bytes the buffer can hold before
+            needing to grow.
+        """
+        
+        return self.cap
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """
+        Check whether the buffer is empty.
+        
+        Returns:
+            True if no bytes have been written, False otherwise.
+        """
+        
+        return self.len == 0
+    
+    public function charAtIndex( self, I64 index ) -> I64:
+        
+        """
+        Return the byte value at the given index in the buffer.
+        
+        Parameters:
+            index (I64):
+                The zero-based byte index to read.
+        
+        Returns:
+            The byte value at the index, or -1 if the index is out
+            of bounds.
+        """
+        
+        if index < 0 or index >= self.len:
+            return -1
+        return readByteAt( self.buffer, index )
+    
+    public function toString( self ) -> String:
+
+        """
+        Return the accumulated buffer contents as an immutable String.
+
+        Alias for build() to match the standard toString convention.
+
+        Returns:
+            String:
+                The final string.
+
+        Complexity:
+            Time: O(n) where n is the buffer length
+            Space: O(n)
+        """
+
+        return self.build()
+
+    public function appendRepeated( self, String content, I64 repeatCount ) -> StringBuilder:
+
+        """
+        Append the content string the specified number of times.
+
+        Parameters:
+            content (String):
+                The string to repeat.
+            repeatCount (I64):
+                How many times to append the content.
+
+        Returns:
+            StringBuilder:
+                This builder for method chaining.
+
+        Raises:
+            ValueError:
+                If repeatCount is negative.
+
+        Complexity:
+            Time: O(repeatCount * len(content))
+            Space: O(repeatCount * len(content))
+        """
+
+        if repeatCount < 0:
+            raise new ValueError( "repeat count must be non-negative", 0, None )
+        I64 iteration = 0
+        while iteration < repeatCount:
+            self.append( content )
+            iteration = iteration + 1
+        return self
+
+    public function reverse( self ) -> StringBuilder:
+
+        """
+        Reverse the buffer contents in place.
+
+        Returns:
+            StringBuilder:
+                This builder for method chaining.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 leftIndex = 0
+        I64 rightIndex = self.len - 1
+        while leftIndex < rightIndex:
+            I64 leftByte = readByteAt( self.buffer, leftIndex )
+            I64 rightByte = readByteAt( self.buffer, rightIndex )
+            writeByteAt( self.buffer, leftIndex, rightByte )
+            writeByteAt( self.buffer, rightIndex, leftByte )
+            leftIndex = leftIndex + 1
+            rightIndex = rightIndex - 1
+        return self
+
+    public function substring( self, I64 startIndex, I64 endIndex ) -> String:
+
+        """
+        Extract a substring from the buffer in the range [startIndex, endIndex).
+
+        Parameters:
+            startIndex (I64):
+                The inclusive start byte index.
+            endIndex (I64):
+                The exclusive end byte index.
+
+        Returns:
+            String:
+                The extracted substring.
+
+        Raises:
+            IndexError:
+                If either index is out of bounds or startIndex > endIndex.
+
+        Complexity:
+            Time: O(endIndex - startIndex)
+            Space: O(endIndex - startIndex)
+        """
+
+        if startIndex < 0 or startIndex > self.len:
+            raise new IndexError( startIndex, self.len )
+        if endIndex < startIndex or endIndex > self.len:
+            raise new IndexError( endIndex, self.len )
+        I64 sliceLength = endIndex - startIndex
+        StringBuilder sliceBuilder = new StringBuilder()
+        I64 copyOffset = 0
+        while copyOffset < sliceLength:
+            sliceBuilder.appendChar( readByteAt( self.buffer, startIndex + copyOffset ) )
+            copyOffset = copyOffset + 1
+        return sliceBuilder.build()
+
+    public function indexOf( self, String needle ) -> I64:
+
+        """
+        Find the first occurrence of the needle string in the buffer.
+
+        Parameters:
+            needle (String):
+                The string to search for.
+
+        Returns:
+            I64:
+                The byte index of the first match, or -1 if not found.
+
+        Complexity:
+            Time: O(n * m) where n is the buffer length and m is the needle length
+            Space: O(1)
+        """
+
+        I64 needlePtr = stringToPtr( needle )
+        I64 needleLength = stringLen( needle )
+        if needleLength == 0:
+            return 0
+        if needleLength > self.len:
+            return -1
+        I64 searchLimit = self.len - needleLength + 1
+        I64 searchOffset = 0
+        while searchOffset < searchLimit:
+            Boolean matched = True
+            I64 compareOffset = 0
+            while compareOffset < needleLength:
+                I64 bufferByte = readByteAt( self.buffer, searchOffset + compareOffset )
+                I64 needleByte = readByteAt( needlePtr, compareOffset )
+                if bufferByte != needleByte:
+                    matched = False
+                    compareOffset = needleLength
+                else:
+                    compareOffset = compareOffset + 1
+            if matched:
+                return searchOffset
+            searchOffset = searchOffset + 1
+        return -1
+
+    public function insert( self, I64 position, String content ) -> StringBuilder:
+
+        """
+        Insert a string at the specified byte position, shifting existing
+        content to the right.
+
+        Parameters:
+            position (I64):
+                The byte index at which to insert.
+            content (String):
+                The string to insert.
+
+        Returns:
+            StringBuilder:
+                This builder for method chaining.
+
+        Raises:
+            IndexError:
+                If position is out of bounds.
+
+        Complexity:
+            Time: O(n) where n is the buffer length
+        """
+
+        if position < 0 or position > self.len:
+            raise new IndexError( position, self.len )
+        I64 contentPtr = stringToPtr( content )
+        I64 contentLength = stringLen( content )
+        self.grow( contentLength )
+        I64 shiftIndex = self.len - 1
+        while shiftIndex >= position:
+            I64 shiftByte = readByteAt( self.buffer, shiftIndex )
+            writeByteAt( self.buffer, shiftIndex + contentLength, shiftByte )
+            shiftIndex = shiftIndex - 1
+        I64 insertOffset = 0
+        while insertOffset < contentLength:
+            writeByteAt( self.buffer, position + insertOffset, readByteAt( contentPtr, insertOffset ) )
+            insertOffset = insertOffset + 1
+        self.len = self.len + contentLength
+        return self
+
+    public function deleteRange( self, I64 startIndex, I64 endIndex ) -> StringBuilder:
+
+        """
+        Remove bytes in the range [startIndex, endIndex) from the buffer,
+        shifting remaining content to the left.
+
+        Parameters:
+            startIndex (I64):
+                The inclusive start byte index.
+            endIndex (I64):
+                The exclusive end byte index.
+
+        Returns:
+            StringBuilder:
+                This builder for method chaining.
+
+        Raises:
+            IndexError:
+                If either index is out of bounds or startIndex > endIndex.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        if startIndex < 0 or startIndex > self.len:
+            raise new IndexError( startIndex, self.len )
+        if endIndex < startIndex or endIndex > self.len:
+            raise new IndexError( endIndex, self.len )
+        I64 deleteLength = endIndex - startIndex
+        I64 copySource = endIndex
+        I64 copyDest = startIndex
+        while copySource < self.len:
+            writeByteAt( self.buffer, copyDest, readByteAt( self.buffer, copySource ) )
+            copySource = copySource + 1
+            copyDest = copyDest + 1
+        self.len = self.len - deleteLength
+        return self
+
+    public function replaceRange( self, I64 startIndex, I64 endIndex, String replacement ) -> StringBuilder:
+
+        """
+        Replace bytes in [startIndex, endIndex) with the replacement string.
+
+        Parameters:
+            startIndex (I64):
+                The inclusive start byte index.
+            endIndex (I64):
+                The exclusive end byte index.
+            replacement (String):
+                The string to insert in place of the removed range.
+
+        Returns:
+            StringBuilder:
+                This builder for method chaining.
+
+        Raises:
+            IndexError:
+                If either index is out of bounds or startIndex > endIndex.
+
+        Complexity:
+            Time: O(n) where n is the buffer length
+        """
+
+        self.deleteRange( startIndex, endIndex )
+        self.insert( startIndex, replacement )
+        return self
+
+    public function destroy( self ) -> Void:
+        
+        """
+        Release the underlying buffer memory via munmap and reset all
+        internal state to zero. The StringBuilder must not be used
+        after calling this method.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        dealloc( self.buffer )
+        self.buffer = 0
+        self.len = 0
+        self.cap = 0
+
+export {
+    StringBuilder,
+    INITIAL_CAPACITY
+}
