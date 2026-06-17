@@ -1,0 +1,128 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/color-palette.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the ColorPalette class representing a named collection of hex color
+# values. Palettes typically contain 5-6 harmonious colors and are used for
+# themed color schemes such as complementary, triadic, analogous, or custom
+# curated palettes. Supports building palettes incrementally via method chaining
+# or from a pre-existing list of colors.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.color-palette
+
+from uranite.collection.array-list import ArrayList
+from uranite.language.string import String
+
+public class ColorPalette:
+    
+    """
+    A named collection of hexadecimal color values representing a themed color
+    palette. Palettes are used to group harmonious colors together under a
+    descriptive name, such as "Tropical Daydream" or "Complementary of Teal".
+    Colors are stored as packed 24-bit I32 hex values in an ArrayList, typically
+    containing between 2 and 6 colors. The palette can be built incrementally
+    using the addColor method which returns self for method chaining.
+    """
+    
+    public String name
+    protect ArrayList<I32> colors
+    
+    public function ColorPalette( self, String name ) -> Void:
+        
+        """
+        Construct an empty color palette with the given name and no colors.
+        Colors can be added afterward using the addColor method.
+        
+        Parameters:
+            name (String):
+                The descriptive name for this palette.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.name = name
+        self.colors = new ArrayList<I32>()
+    
+    public function addColor( self, I32 hex ) -> ColorPalette:
+        
+        """
+        Append a hex color value to this palette and return self for method
+        chaining, allowing fluent palette construction such as
+        palette.addColor(0xFF0000).addColor(0x00FF00).addColor(0x0000FF).
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value to add.
+        
+        Returns:
+            ColorPalette:
+                This palette instance for chaining.
+        """
+        
+        self.colors.append( hex )
+        return self
+    
+    public function get( self, I64 index ) -> I32:
+        
+        """
+        Return the hex color value at the given index in this palette.
+        
+        Parameters:
+            index (I64):
+                The zero-based index of the color to retrieve.
+        
+        Returns:
+            I32:
+                The packed 24-bit hex color value at the given index.
+        """
+        
+        return self.colors.get( index )
+    
+    public property length( self ) -> I64:
+        
+        """
+        Return the number of colors currently in this palette.
+        
+        Returns:
+            I64:
+                The number of colors in the palette.
+        """
+        
+        return self.colors.length
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a human-readable string representation of this palette showing
+        the palette name followed by the hex values of all contained colors.
+        
+        Returns:
+            String:
+                A string such as "Palette(Tropical Daydream, [3 colors])".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return "Palette(" + self.name + ", [" + self.colors.length + " colors])"
+
+export {
+    ColorPalette
+}
