@@ -1,0 +1,100 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/char.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Char class, a single Unicode character (32-bit) with character classification and case conversion.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.Char
+
+final class Char:
+    
+    """
+    Single Unicode character (32-bit).
+    Provides character classification methods (alphabetic, digit, whitespace) and case conversion.
+    """
+    
+    protect Char value
+    
+    public function Char( self, Char value ) -> Void:
+        
+        """ Construct a new Char wrapping the given character value. """
+        
+        self.value = value
+    
+    public function getValue( self ) -> Char:
+        
+        """ Return the underlying character value. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return this character as a single-character String. """
+        
+        return self.value as String
+    
+    public function isAlpha( self ) -> Boolean:
+        
+        """ Return True if this character is an alphabetic letter (a-z or A-Z). """
+        
+        return ( self.value >= 'a' and self.value <= 'z' ) or ( self.value >= 'A' and self.value <= 'Z' )
+    
+    public function isDigit( self ) -> Boolean:
+        
+        """ Return True if this character is a decimal digit (0-9). """
+        
+        return self.value >= '0' and self.value <= '9'
+    
+    public function isAlphanumeric( self ) -> Boolean:
+        
+        """ Return True if this character is either alphabetic or a digit. """
+        
+        return self.isAlpha() or self.isDigit()
+    
+    public function isWhitespace( self ) -> Boolean:
+        
+        """ Return True if this character is a whitespace character (space, tab, newline, or carriage return). """
+        
+        return self.value == ' ' or self.value == '\t' or self.value == '\n' or self.value == '\r'
+    
+    public function toUpper( self ) -> Char:
+        
+        """
+        Return a new Char converted to uppercase, or the same character if not a lowercase letter.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value >= 'a' and self.value <= 'z':
+            return new Char( ( self.value as I32 - 32 ) as Char )
+        return new Char( self.value )
+    
+    public function toLower( self ) -> Char:
+        
+        """
+        Return a new Char converted to lowercase, or the same character if not an uppercase letter.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value >= 'A' and self.value <= 'Z':
+            return new Char( ( self.value as I32 + 32 ) as Char )
+        return new Char( self.value )
