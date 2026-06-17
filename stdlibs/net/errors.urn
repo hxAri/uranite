@@ -1,0 +1,194 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.errors
+
+from uranite.errors.error import Error
+
+public class SocketError extends Error:
+    
+    """
+    Base error for all socket-related failures such as socket creation,
+    binding, listening, accepting, connecting, sending, or receiving.
+    """
+    
+    public function SocketError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new SocketError with a descriptive message, error code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the socket failure.
+            code (I64):
+                The errno value from the failed syscall.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class ConnectionError extends SocketError:
+    
+    """
+    Error raised when a connection-level operation fails, such as
+    establishing or maintaining a TCP connection.
+    """
+    
+    public function ConnectionError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new ConnectionError with a descriptive message, error code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the connection failure.
+            code (I64):
+                The errno value from the failed syscall.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class TimeoutError extends SocketError:
+    
+    """
+    Error raised when a socket operation exceeds its configured timeout
+    duration, such as a connect or read timeout.
+    """
+    
+    public function TimeoutError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new TimeoutError with a descriptive message, error code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the timeout condition.
+            code (I64):
+                The errno value from the timed-out syscall.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class ConnectionRefusedError extends ConnectionError:
+    
+    """
+    Error raised when a connect attempt is actively refused by the remote
+    host, typically because no service is listening on the target port.
+    Corresponds to ECONNREFUSED (errno 111).
+    """
+    
+    public function ConnectionRefusedError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new ConnectionRefusedError with a descriptive message, error code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the refused connection.
+            code (I64):
+                The errno value from the failed connect syscall.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class ConnectionResetError extends ConnectionError:
+    
+    """
+    Error raised when an established connection is forcibly closed by the
+    remote peer. Corresponds to ECONNRESET (errno 104).
+    """
+    
+    public function ConnectionResetError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new ConnectionResetError with a descriptive message, error code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the connection reset.
+            code (I64):
+                The errno value from the failed syscall.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+public class AddressInUseError extends SocketError:
+    
+    """
+    Error raised when a bind operation fails because the requested address
+    and port combination is already in use by another socket.
+    Corresponds to EADDRINUSE (errno 98).
+    """
+    
+    public function AddressInUseError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new AddressInUseError with a descriptive message, error code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the address conflict.
+            code (I64):
+                The errno value from the failed bind syscall.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, cause )
+
+export {
+    SocketError,
+    ConnectionError,
+    TimeoutError,
+    ConnectionRefusedError,
+    ConnectionResetError,
+    AddressInUseError
+}
