@@ -1,0 +1,106 @@
+package testing
+
+from uranite.os.ipc.message import Message, Port
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS IPC Message Tests ===" )
+
+    Message msg = new Message( 8 )
+    assertEqualI64( 0, msg.senderId, "senderId 0" )
+    assertEqualI64( 0, msg.messageType, "type 0" )
+    assertEqualI64( 0, msg.getLength(), "length 0" )
+    assertEqualI64( 8, msg.getCapacity(), "capacity" )
+
+    Boolean ok1 = msg.setWord( 0, 100 )
+    assertTrue( ok1, "setWord 0" )
+    Boolean ok2 = msg.setWord( 1, 200 )
+    assertTrue( ok2, "setWord 1" )
+    assertEqualI64( 2, msg.getLength(), "length 2" )
+    assertEqualI64( 100, msg.getWord( 0 ), "getWord 0" )
+    assertEqualI64( 200, msg.getWord( 1 ), "getWord 1" )
+
+    Boolean okOob = msg.setWord( 99, 999 )
+    assertFalse( okOob, "setWord oob" )
+    assertEqualI64( 0, msg.getWord( 99 ), "getWord oob" )
+    putsln( "Message OK" )
+
+    msg.senderId = 42
+    msg.messageType = 7
+
+    Message msg2 = new Message( 8 )
+    Boolean copyOk = msg2.copyFrom( msg )
+    assertTrue( copyOk, "copyFrom" )
+    assertEqualI64( 42, msg2.senderId, "copy senderId" )
+    assertEqualI64( 7, msg2.messageType, "copy type" )
+    assertEqualI64( 100, msg2.getWord( 0 ), "copy word 0" )
+    assertEqualI64( 200, msg2.getWord( 1 ), "copy word 1" )
+
+    Message tiny = new Message( 1 )
+    Boolean copyFail = tiny.copyFrom( msg )
+    assertFalse( copyFail, "copyFrom too small" )
+    putsln( "copy OK" )
+
+    msg.clear()
+    assertEqualI64( 0, msg.senderId, "cleared senderId" )
+    assertEqualI64( 0, msg.getLength(), "cleared length" )
+    putsln( "clear OK" )
+
+    Port port = new Port( 1, 10, 4, 8 )
+    assertEqualI64( 1, port.getPortId(), "portId" )
+    assertEqualI64( 10, port.getOwnerTaskId(), "ownerTaskId" )
+    assertTrue( port.isEmpty(), "port empty" )
+    assertFalse( port.isFull(), "port not full" )
+    assertEqualI64( 0, port.getCount(), "port count 0" )
+
+    Message sendMsg = new Message( 8 )
+    sendMsg.senderId = 5
+    sendMsg.messageType = 3
+    sendMsg.setWord( 0, 999 )
+    Boolean sent = port.send( sendMsg )
+    assertTrue( sent, "send" )
+    assertEqualI64( 1, port.getCount(), "count 1" )
+    assertFalse( port.isEmpty(), "not empty" )
+
+    Message peekMsg = new Message( 8 )
+    Boolean peeked = port.peek( peekMsg )
+    assertTrue( peeked, "peek" )
+    assertEqualI64( 5, peekMsg.senderId, "peek senderId" )
+    assertEqualI64( 3, peekMsg.messageType, "peek type" )
+    assertEqualI64( 1, port.getCount(), "count after peek" )
+
+    Message recvMsg = new Message( 8 )
+    Boolean received = port.receive( recvMsg )
+    assertTrue( received, "receive" )
+    assertEqualI64( 5, recvMsg.senderId, "recv senderId" )
+    assertEqualI64( 999, recvMsg.getWord( 0 ), "recv word 0" )
+    assertEqualI64( 0, port.getCount(), "count after recv" )
+
+    Message emptyRecv = new Message( 8 )
+    Boolean recvEmpty = port.receive( emptyRecv )
+    assertFalse( recvEmpty, "recv from empty" )
+    putsln( "Port OK" )
+
+    port.send( sendMsg )
+    port.send( sendMsg )
+    port.send( sendMsg )
+    port.send( sendMsg )
+    assertTrue( port.isFull(), "port full" )
+    Boolean sendFull = port.send( sendMsg )
+    assertFalse( sendFull, "send when full" )
+    putsln( "capacity OK" )
+
+    sendMsg.destroy()
+    recvMsg.destroy()
+    peekMsg.destroy()
+    emptyRecv.destroy()
+    msg.destroy()
+    msg2.destroy()
+    tiny.destroy()
+    port.destroy()
+
+    putsln( "=== All IPC message tests passed ===" )
+    return 0
