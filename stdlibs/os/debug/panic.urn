@@ -1,0 +1,196 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/debug/panic.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Kernel panic handler that captures crash context including reason code, register state, and stack frame addresses for post-mortem analysis, then halts the CPU.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.debug.panic
+
+from uranite.memory.memory import Memory
+
+public enum PanicReason backed I64:
+    
+    """
+    Kernel panic reason codes identifying the category of fatal error that
+    triggered the panic. Used by PanicContext to record the cause of a crash.
+    """
+    
+    unit General 1
+    
+    """ General unspecified kernel panic. """
+    
+    unit DoubleFault 2
+    
+    """ Double fault exception. """
+    
+    unit OutOfMemory 3
+    
+    """ Out-of-memory condition. """
+    
+    unit StackOverflow 4
+    
+    """ Stack overflow. """
+    
+    unit NullDeref 5
+    
+    """ Null pointer dereference. """
+    
+    unit AssertFailed 6
+    
+    """ Failed kernel assertion. """
+
+public class PanicContext:
+    
+    """
+    Captures the full crash context when a kernel panic occurs, including the
+    panic reason code, faulting address, CPU register state (stack pointer and
+    instruction pointer), and a stack backtrace obtained by walking the frame
+    pointer chain. After capturing this context, the CPU is halted.
+    """
+    
+    public I64 reason
+    public I64 address
+    public I64 stackPointer
+    public I64 instructionPointer
+    public Memory<I64> stackFrames
+    public I64 frameCount
+    public I64 maxFrames
+    public I64 hasPanicked
+    
+    public function PanicContext( self, I64 maxStackFrames ) -> Void:
+        
+        """
+        Construct a panic context with capacity for the specified maximum number
+        of stack frames. All fields are initialized to zero and the stack frame
+        buffer is allocated and zeroed. The hasPanicked flag remains 0 until
+        panic() is called.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.reason = 0
+        self.address = 0
+        self.stackPointer = 0
+        self.instructionPointer = 0
+        self.frameCount = 0
+        self.maxFrames = maxStackFrames
+        self.hasPanicked = 0
+        self.stackFrames = new Memory<I64>( maxStackFrames )
+        I64 frameIndex = 0
+        while frameIndex < maxStackFrames:
+            self.stackFrames.set( frameIndex, 0 )
+            frameIndex = frameIndex + 1
+    
+    public function panic( self, I64 reason, I64 addr ) -> Void:
+        
+        """
+        Trigger a kernel panic with the given reason code and faulting address.
+        Captures the current stack pointer (RSP), instruction pointer (RIP),
+        and base pointer (RBP) using inline assembly, then walks the frame
+        pointer chain to collect a stack backtrace. After capturing all context,
+        disables interrupts (CLI) and halts the CPU (HLT).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.reason = reason
+        self.address = addr
+        self.hasPanicked = 1
+        I64 rsp = 0
+        asm volatile "mov %rsp, $0" : output( "=r" rsp )
+        self.stackPointer = rsp
+        I64 rip = 0
+        asm volatile "lea (%rip), $0" : output( "=r" rip )
+        self.instructionPointer = rip
+        I64 rbp = 0
+        asm volatile "mov %rbp, $0" : output( "=r" rbp )
+        self.unwindStack( rbp )
+        asm volatile "cli"
+        asm volatile "hlt"
+    
+    protect function unwindStack( self, I64 framePointer ) -> Void:
+        
+        """
+        Walk the frame pointer chain starting from the given base pointer
+        to collect return addresses into the stack frames buffer. Stops when
+        a null frame pointer is encountered or the maximum frame count is
+        reached. Each frame pointer in the chain points to the previous
+        frame's base pointer on the stack.
+        """
+        
+        self.frameCount = 0
+        I64 fp = framePointer
+        while fp != 0 and self.frameCount < self.maxFrames:
+            self.stackFrames.set( self.frameCount, fp )
+            self.frameCount = self.frameCount + 1
+            fp = 0
+    
+    public function getReason( self ) -> I64:
+        
+        """ Return the panic reason code that triggered this panic context. """
+        
+        return self.reason
+    
+    public function getAddress( self ) -> I64:
+        
+        """ Return the faulting address associated with this panic. """
+        
+        return self.address
+    
+    public function getFrameCount( self ) -> I64:
+        
+        """ Return the number of stack frames captured during the panic. """
+        
+        return self.frameCount
+    
+    public function getFrame( self, I64 index ) -> I64:
+        
+        """
+        Return the stack frame address at the given index in the backtrace.
+        Returns 0 if the index is out of range.
+        """
+        
+        if index < 0 or index >= self.frameCount:
+            return 0
+        return self.stackFrames.get( index )
+    
+    public function isPanicked( self ) -> Boolean:
+        
+        """ Return whether a panic has been triggered in this context. """
+        
+        return self.hasPanicked != 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the stack frames memory buffer.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.stackFrames.free()
+
+export {
+    PanicReason,
+    PanicContext
+}
