@@ -1,0 +1,111 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/functions/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all extern function bindings from both libc externs and the
+# Uranite C runtime, providing a single unified import point for all foreign functions.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.functions
+
+
+from uranite.functions.externs import *
+from uranite.functions.runtime import *
+
+
+export {
+    uraniteAtomicAdd,
+    uraniteAtomicCompareExchange,
+    uraniteAtomicLoad,
+    uraniteAtomicStore,
+    uraniteAtomicSub,
+    uraniteAwaitFD,
+    uraniteAwaitTask,
+    uraniteCondVarBroadcast,
+    uraniteCondVarCreate,
+    uraniteCondVarDestroy,
+    uraniteCondVarSignal,
+    uraniteCondVarTimedWait,
+    uraniteCondVarWait,
+    uraniteHasPendingTasks,
+    uraniteMutexCreate,
+    uraniteMutexDestroy,
+    uraniteMutexLock,
+    uraniteMutexTryLock,
+    uraniteMutexUnlock,
+    uranitePipeCloseRead,
+    uranitePipeCloseWrite,
+    uranitePipeCreate,
+    uranitePipeDestroy,
+    uranitePipeRead,
+    uranitePipeReadFd,
+    uranitePipeWrite,
+    uranitePipeWriteFd,
+    uraniteProcessExec,
+    uraniteProcessFree,
+    uraniteProcessIsRunning,
+    uraniteProcessKill,
+    uraniteProcessPid,
+    uraniteProcessResultFree,
+    uraniteProcessRun,
+    uraniteProcessSpawn,
+    uraniteProcessWait,
+    uraniteRWLockCreate,
+    uraniteRWLockDestroy,
+    uraniteRWLockReadLock,
+    uraniteRWLockUnlock,
+    uraniteRWLockWriteLock,
+    uraniteRunScheduler,
+    uraniteSchedulerInit,
+    uraniteSemaphoreAcquire,
+    uraniteSemaphoreCreate,
+    uraniteSemaphoreDestroy,
+    uraniteSemaphoreRelease,
+    uraniteSemaphoreTryAcquire,
+    uraniteSharedMemoryClose,
+    uraniteSharedMemoryCreate,
+    uraniteSharedMemoryOpen,
+    uraniteSharedMemoryPtr,
+    uraniteSharedMemorySize,
+    uraniteSharedMemoryUnlink,
+    uraniteSleep,
+    uraniteSpawnTask,
+    uraniteTaskComplete,
+    uraniteTaskError,
+    uraniteTaskGetError,
+    uraniteTaskHasError,
+    uraniteTaskYield,
+    uraniteThreadCreate,
+    uraniteThreadDestroy,
+    uraniteThreadDetach,
+    uraniteThreadId,
+    uraniteThreadJoin,
+    uraniteThreadSleep,
+    calloc,
+    clock,
+    exit,
+    free,
+    malloc,
+    memcpy,
+    memset,
+    printf,
+    puts,
+    realloc,
+    snprintf,
+    strcat,
+    strcmp,
+    strlen
+}
