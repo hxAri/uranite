@@ -1,0 +1,792 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-29 14:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/executor.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level process pool executor with typed futures. Workers dispatch
+# calls via asm indirect call through a shared channel. Each worker runs
+# in its own address space for fault isolation. Pure OS-module
+# multiprocessing, no C/C++ runtime.
+#
+# Descriptor layout in Memory<I64>(6):
+#   [0] = arity (0-3)
+#   [1] = fnAddr (function pointer as I64)
+#   [2] = futureBaseAddr (ProcessFutureBase pointer as I64)
+#   [3] = arg1 (raw I64, if arity >= 1)
+#   [4] = arg2 (raw I64, if arity >= 2)
+#   [5] = arg3 (raw I64, if arity >= 3)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.executor
+
+from uranite.memory.memory import Memory
+from uranite.os.ipc.signal import Event
+from uranite.os.ipc.shared-memory import SharedRegion
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.task.task import Task, BlockReason
+from uranite.os.time.clock import SystemClock
+from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.threading.channel import ChannelInner
+from uranite.language.callable import Callable
+from uranite.process.process import Process, ProcessRuntime, DEFAULT_PROCESS_STACK_PAGES, DEFAULT_PROCESS_PRIORITY
+from uranite.process.process-future import {
+    ProcessFutureBase, ProcessFuture,
+    PFUTURE_PENDING, PFUTURE_RUNNING, PFUTURE_FINISHED, PFUTURE_ERROR
+}
+from uranite.process.errors import ProcessError
+
+const I64 DEFAULT_PROCESS_QUEUE_CAPACITY = 256
+""" Default maximum number of pending tasks in the executor work channel. """
+const I64 EXECUTOR_PROCESS_STACK_PAGES = 16
+""" Number of stack pages allocated for each executor worker process. """
+const I64 FUTURE_SLOT_SIZE = 16
+""" Size in bytes of each future slot in the shared memory pool (8 bytes result + 8 bytes exception). """
+const I64 FUTURE_POOL_PAGES = 1
+""" Minimum number of pages for the future slot shared memory pool. """
+
+public function processWorkerLoop( I64 processId, I64 channelAddr ) -> Void:
+    
+    """
+    Main loop executed by each worker process in the executor pool.
+    
+    Receives task descriptors from the shared channel, dispatches function
+    calls via inline assembly indirect call based on arity (0-3 arguments),
+    and completes or fails the associated ProcessFutureBase. Exits when
+    the channel is closed or a zero descriptor address is received.
+    
+    Parameters:
+        processId (I64):
+            The unique identifier of this worker process.
+        channelAddr (I64):
+            Raw pointer to the ChannelInner<I64> for receiving task descriptors.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    ChannelInner<I64> channel = new ChannelInner<I64>( 1, new Scheduler() )
+    asm volatile "movq $1, $0" : output( "=r" channel ) : input( "r" channelAddr ) : clobber()
+    
+    ProcessFutureBase fb = new ProcessFutureBase( new Scheduler(), new SharedRegion( 0, 0, 0, 1, 3 ), 0 )
+    Memory<I64> desc = new Memory<I64>( 1 )
+    
+    Boolean running = True
+    while running:
+        I64 descAddr = 0
+        try:
+            descAddr = channel.receive()
+        except as e:
+            running = False
+            break
+        
+        if descAddr == 0:
+            running = False
+            break
+        
+        asm volatile "movq $1, $0" : output( "=r" desc ) : input( "r" descAddr ) : clobber()
+        
+        I64 arity = desc.get( 0 )
+        I64 fnAddr = desc.get( 1 )
+        I64 fbAddr = desc.get( 2 )
+        
+        asm volatile "movq $1, $0" : output( "=r" fb ) : input( "r" fbAddr ) : clobber()
+        fb.setRunning()
+        
+        I64 result = 0
+        Boolean failed = False
+        try:
+            if arity == 0:
+                asm volatile "call *$1" : output( "={rax}" result ) : input( "r" fnAddr ) : clobber( "memory", "rdi", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+            elif arity == 1:
+                I64 a1 = desc.get( 3 )
+                asm volatile "call *$2" : output( "={rax}" result ) : input( "{rdi}" a1, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+            elif arity == 2:
+                I64 a1 = desc.get( 3 )
+                I64 a2 = desc.get( 4 )
+                asm volatile "call *$3" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "r" fnAddr ) : clobber( "memory", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+            elif arity == 3:
+                I64 a1 = desc.get( 3 )
+                I64 a2 = desc.get( 4 )
+                I64 a3 = desc.get( 5 )
+                asm volatile "call *$4" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "{rdx}" a3, "r" fnAddr ) : clobber( "memory", "rcx", "r8", "r9", "r10", "r11" )
+        except as e:
+            failed = True
+        
+        if failed:
+            fb.failRaw( 0 )
+        else:
+            fb.completeRaw( result )
+        
+        desc.free()
+
+public class ProcessPoolExecutor:
+    
+    """
+    High-level process pool executor with future-based result retrieval.
+    
+    Manages a fixed pool of worker processes that execute submitted functions
+    in isolated address spaces. Workers dispatch calls via inline assembly
+    indirect call through a shared channel. Results are stored in a shared
+    memory future pool and accessed through ProcessFutureBase instances.
+    Supports functions with 0-3 arguments via the run, submit1, submit2,
+    and submit3 methods.
+    """
+    
+    protect Memory<Process> workers
+    """ Array of worker process instances. """
+    protect I64 workerCount
+    """ Number of worker processes in the pool. """
+    protect ChannelInner<I64> taskChannel
+    """ Bounded channel for distributing task descriptors to workers. """
+    protect ProcessRuntime runtime
+    """ The runtime providing kernel subsystem access. """
+    protect SharedRegion futurePoolRegion
+    """ Shared memory region backing all future result/exception slots. """
+    protect AtomicI64 nextFutureSlot
+    """ Atomic counter for round-robin allocation of future slots. """
+    protect I64 futurePoolCapacity
+    """ Total number of future slots available in the pool. """
+    protect AtomicI64 activeCount
+    """ Counter tracking the number of currently executing tasks. """
+    protect AtomicI64 completedCount
+    """ Counter tracking the number of tasks that have finished. """
+    protect AtomicBoolean shutdownFlag
+    """ Flag indicating whether the executor has been shut down. """
+    
+    public function ProcessPoolExecutor( self, I64 numWorkers, ?ProcessRuntime runtime=None ) -> Void:
+        
+        """
+        Construct a new executor with the specified number of worker processes.
+        
+        If no runtime is provided, creates a default one with a new scheduler,
+        a 1 MiB physical memory manager, a 1000-tick system clock, and a
+        maximum of 256 processes. Spawns worker processes immediately and
+        enqueues them on the scheduler.
+        
+        Parameters:
+            numWorkers (I64):
+                Number of worker processes to create. Must be at least 1.
+            runtime (ProcessRuntime):
+                Optional pre-configured runtime, or None for a default one.
+        
+        Raises:
+            ProcessError:
+                If numWorkers is less than or equal to 0.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if numWorkers <= 0:
+            raise new ProcessError( "Workers must be greater than or equal 1 not 0", 1, None )
+        if runtime is None:
+            Scheduler sched = new Scheduler()
+            PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
+            SystemClock clock = new SystemClock( 1000 )
+            self.runtime = new ProcessRuntime( sched, pmm, clock, 256 )
+        else:
+            self.runtime = runtime
+        self.workerCount = numWorkers
+        self.taskChannel = new ChannelInner<I64>( DEFAULT_PROCESS_QUEUE_CAPACITY, self.runtime.getScheduler() )
+        self.shutdownFlag = new AtomicBoolean( False )
+        self.activeCount = new AtomicI64( 0 )
+        self.completedCount = new AtomicI64( 0 )
+        self.futurePoolCapacity = DEFAULT_PROCESS_QUEUE_CAPACITY
+        # I64 futurePoolBytes = self.futurePoolCapacity * FUTURE_SLOT_SIZE
+        I64 futurePoolPages = ( ( self.futurePoolCapacity * FUTURE_SLOT_SIZE ) + 4095 ) / 4096
+        if futurePoolPages < 1:
+            futurePoolPages = 1
+        self.futurePoolRegion = self.runtime.createSharedRegion( 0, futurePoolPages )
+        self.nextFutureSlot = new AtomicI64( 0 )
+        self.workers = new Memory<Process>( numWorkers )
+        I64 channelAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" channelAddr ) : input( "r" self.taskChannel ) : clobber()
+        I64 workerEntryAddr = addressof processWorkerLoop
+        I64 workerIndex = 0
+        while workerIndex < numWorkers:
+            I64 processId = self.runtime.allocateProcessId()
+            Process worker = new Process( self.runtime, processId, EXECUTOR_PROCESS_STACK_PAGES, DEFAULT_PROCESS_PRIORITY )
+            Task task = worker.getTask()
+            task.setEntryPoint( workerEntryAddr, task.registers.rsp )
+            task.registers.rdi = processId
+            task.registers.rsi = channelAddr
+            self.runtime.getScheduler().enqueue( task )
+            self.workers.set( workerIndex, worker )
+            workerIndex = workerIndex + 1
+    
+    protect function allocateFutureSlot( self ) -> I64:
+        
+        """
+        Allocate the next available future slot from the shared memory pool.
+        
+        Uses atomic round-robin allocation. The slot wraps around when the
+        pool capacity is exceeded, so callers must ensure slots are consumed
+        before they are reused.
+        
+        Returns:
+            I64:
+                The physical address of the allocated future slot.
+        """
+        
+        I64 slot = self.nextFutureSlot.fetchAdd( 1 ) % self.futurePoolCapacity
+        return self.futurePoolRegion.getPhysicalBase() + slot * FUTURE_SLOT_SIZE
+    
+    public function run( self, I64 fnAddr ) -> ProcessFutureBase:
+        
+        """
+        Submit a zero-argument function for execution and return a future.
+        
+        Builds a task descriptor with arity 0, allocates a future slot,
+        and sends the descriptor through the task channel to a worker.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute.
+        
+        Returns:
+            ProcessFutureBase:
+                A future that will hold the result of the function call.
+        
+        Raises:
+            ProcessError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ProcessError( "Executor is shut down", 200, None )
+        
+        I64 slotAddr = self.allocateFutureSlot()
+        ProcessFutureBase base = new ProcessFutureBase( self.runtime.getScheduler(), self.futurePoolRegion, slotAddr )
+        
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 0 )
+        desc.set( 1, fnAddr )
+        I64 baseAddr = addressof base
+        desc.set( 2, baseAddr )
+        desc.set( 3, 0 )
+        desc.set( 4, 0 )
+        desc.set( 5, 0 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function submit1( self, I64 fnAddr, I64 arg ) -> ProcessFutureBase:
+        
+        """
+        Submit a one-argument function for execution and return a future.
+        
+        Builds a task descriptor with arity 1, packing the argument at
+        descriptor slot 3.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute.
+            arg (I64):
+                The single argument to pass to the function.
+        
+        Returns:
+            ProcessFutureBase:
+                A future that will hold the result of the function call.
+        
+        Raises:
+            ProcessError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ProcessError( "Executor is shut down", 200, None )
+        
+        I64 slotAddr = self.allocateFutureSlot()
+        ProcessFutureBase base = new ProcessFutureBase( self.runtime.getScheduler(), self.futurePoolRegion, slotAddr )
+        
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 1 )
+        desc.set( 1, fnAddr )
+        I64 baseAddr = addressof base
+        desc.set( 2, baseAddr )
+        desc.set( 3, arg )
+        desc.set( 4, 0 )
+        desc.set( 5, 0 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function submit2( self, I64 fnAddr, I64 arg1, I64 arg2 ) -> ProcessFutureBase:
+        
+        """
+        Submit a two-argument function for execution and return a future.
+        
+        Builds a task descriptor with arity 2, packing arguments at
+        descriptor slots 3 and 4.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute.
+            arg1 (I64):
+                The first argument to pass to the function.
+            arg2 (I64):
+                The second argument to pass to the function.
+        
+        Returns:
+            ProcessFutureBase:
+                A future that will hold the result of the function call.
+        
+        Raises:
+            ProcessError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ProcessError( "Executor is shut down", 200, None )
+        
+        I64 slotAddr = self.allocateFutureSlot()
+        ProcessFutureBase base = new ProcessFutureBase( self.runtime.getScheduler(), self.futurePoolRegion, slotAddr )
+        
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 2 )
+        desc.set( 1, fnAddr )
+        I64 baseAddr = addressof base
+        desc.set( 2, baseAddr )
+        desc.set( 3, arg1 )
+        desc.set( 4, arg2 )
+        desc.set( 5, 0 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function submit3( self, I64 fnAddr, I64 arg1, I64 arg2, I64 arg3 ) -> ProcessFutureBase:
+        
+        """
+        Submit a three-argument function for execution and return a future.
+        
+        Builds a task descriptor with arity 3, packing arguments at
+        descriptor slots 3, 4, and 5.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute.
+            arg1 (I64):
+                The first argument to pass to the function.
+            arg2 (I64):
+                The second argument to pass to the function.
+            arg3 (I64):
+                The third argument to pass to the function.
+        
+        Returns:
+            ProcessFutureBase:
+                A future that will hold the result of the function call.
+        
+        Raises:
+            ProcessError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ProcessError( "Executor is shut down", 200, None )
+        
+        I64 slotAddr = self.allocateFutureSlot()
+        ProcessFutureBase base = new ProcessFutureBase( self.runtime.getScheduler(), self.futurePoolRegion, slotAddr )
+        
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 3 )
+        desc.set( 1, fnAddr )
+        I64 baseAddr = addressof base
+        desc.set( 2, baseAddr )
+        desc.set( 3, arg1 )
+        desc.set( 4, arg2 )
+        desc.set( 5, arg3 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function shutdown( self, Boolean wait ) -> Void:
+        
+        """
+        Shut down the executor, optionally waiting for workers to finish.
+        
+        Sets the shutdown flag to reject new submissions and closes the
+        task channel. If wait is True, spin-waits until every worker
+        process has finished.
+        
+        Parameters:
+            wait (Boolean):
+                If True, blocks until all worker processes have terminated.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.shutdownFlag.store( True )
+        self.taskChannel.closeReceive()
+        if wait:
+            I64 workerIndex = 0
+            while workerIndex < self.workerCount:
+                Process worker = self.workers.get( workerIndex )
+                while worker.isFinished() == False:
+                    asm volatile "pause"
+                workerIndex = workerIndex + 1
+    
+    public function isShutdown( self ) -> Boolean:
+        
+        """
+        Check whether the executor has been shut down.
+        
+        Returns:
+            Boolean:
+                True if shutdown has been called, False otherwise.
+        """
+        
+        return self.shutdownFlag.load()
+    
+    public function getActiveCount( self ) -> I64:
+        
+        """
+        Return the number of tasks currently being executed.
+        
+        Returns:
+            I64:
+                The count of active (submitted but not completed) tasks.
+        """
+        
+        return self.activeCount.load()
+    
+    public function getCompletedCount( self ) -> I64:
+        
+        """
+        Return the number of tasks that have completed execution.
+        
+        Returns:
+            I64:
+                The cumulative count of completed tasks.
+        """
+        
+        return self.completedCount.load()
+    
+    public function getWorkerCount( self ) -> I64:
+        
+        """
+        Return the number of worker processes in the executor.
+        
+        Returns:
+            I64:
+                The fixed worker count configured at construction.
+        """
+        
+        return self.workerCount
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by the executor.
+        
+        Shuts down if not already shut down, waits for all workers to
+        finish, cleans up every worker process, frees the worker array,
+        destroys the task channel, releases the future pool region, and
+        tears down all atomic counters.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load() == False:
+            self.shutdown( True )
+        I64 workerIndex = 0
+        while workerIndex < self.workerCount:
+            Process worker = self.workers.get( workerIndex )
+            worker.cleanup()
+            workerIndex = workerIndex + 1
+        self.workers.free()
+        self.taskChannel.destroy()
+        self.futurePoolRegion.release()
+        self.shutdownFlag.destroy()
+        self.activeCount.destroy()
+        self.completedCount.destroy()
+        self.nextFutureSlot.destroy()
+
+public class ProcessSubmitter0<R>:
+    
+    """
+    Type-safe submitter for zero-argument functions to a ProcessPoolExecutor.
+    
+    Wraps the executor's raw run method, converting Callable values to raw
+    function pointers and returning typed ProcessFuture<R> instances.
+    """
+    
+    protect ProcessPoolExecutor executor
+    """ The executor to submit tasks to. """
+    
+    public function ProcessSubmitter0( self, ProcessPoolExecutor executor ) -> Void:
+        
+        """
+        Construct a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ProcessPoolExecutor):
+                The executor that will execute submitted functions.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <>> fn ) -> ProcessFuture<R>:
+        
+        """
+        Submit a zero-argument callable for execution and return a typed future.
+        
+        Converts the callable to a raw function pointer via inline assembly
+        and delegates to the executor's run method.
+        
+        Parameters:
+            fn (Callable<R, <>>):
+                The zero-argument function to execute.
+        
+        Returns:
+            ProcessFuture<R>:
+                A typed future that will hold the result of the function call.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        ProcessFutureBase base = self.executor.run( fnAddr )
+        return new ProcessFuture<R>( base )
+
+public class ProcessSubmitter1<R, A>:
+    
+    """
+    Type-safe submitter for one-argument functions to a ProcessPoolExecutor.
+    
+    Wraps the executor's submit1 method, converting Callable values and
+    typed arguments to raw I64 values and returning typed ProcessFuture<R>
+    instances.
+    """
+    
+    protect ProcessPoolExecutor executor
+    """ The executor to submit tasks to. """
+    
+    public function ProcessSubmitter1( self, ProcessPoolExecutor executor ) -> Void:
+        
+        """
+        Construct a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ProcessPoolExecutor):
+                The executor that will execute submitted functions.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <A>> fn, A arg ) -> ProcessFuture<R>:
+        
+        """
+        Submit a one-argument callable for execution and return a typed future.
+        
+        Converts the callable and argument to raw I64 values via inline
+        assembly and delegates to the executor's submit1 method.
+        
+        Parameters:
+            fn (Callable<R, <A>>):
+                The one-argument function to execute.
+            arg (A):
+                The argument to pass to the function.
+        
+        Returns:
+            ProcessFuture<R>:
+                A typed future that will hold the result of the function call.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        I64 argRaw = 0
+        asm volatile "movq $1, $0" : output( "=r" argRaw ) : input( "r" arg ) : clobber()
+        ProcessFutureBase base = self.executor.submit1( fnAddr, argRaw )
+        return new ProcessFuture<R>( base )
+
+public class ProcessSubmitter2<R, A, B>:
+    
+    """
+    Type-safe submitter for two-argument functions to a ProcessPoolExecutor.
+    
+    Wraps the executor's submit2 method, converting Callable values and
+    typed arguments to raw I64 values and returning typed ProcessFuture<R>
+    instances.
+    """
+    
+    protect ProcessPoolExecutor executor
+    """ The executor to submit tasks to. """
+    
+    public function ProcessSubmitter2( self, ProcessPoolExecutor executor ) -> Void:
+        
+        """
+        Construct a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ProcessPoolExecutor):
+                The executor that will execute submitted functions.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <A, B>> fn, A arg1, B arg2 ) -> ProcessFuture<R>:
+        
+        """
+        Submit a two-argument callable for execution and return a typed future.
+        
+        Converts the callable and both arguments to raw I64 values via
+        inline assembly and delegates to the executor's submit2 method.
+        
+        Parameters:
+            fn (Callable<R, <A, B>>):
+                The two-argument function to execute.
+            arg1 (A):
+                The first argument to pass to the function.
+            arg2 (B):
+                The second argument to pass to the function.
+        
+        Returns:
+            ProcessFuture<R>:
+                A typed future that will hold the result of the function call.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        I64 arg1Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" arg1Raw ) : input( "r" arg1 ) : clobber()
+        I64 arg2Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" arg2Raw ) : input( "r" arg2 ) : clobber()
+        ProcessFutureBase base = self.executor.submit2( fnAddr, arg1Raw, arg2Raw )
+        return new ProcessFuture<R>( base )
+
+public class ProcessSubmitter3<R, A, B, C>:
+    
+    """
+    Type-safe submitter for three-argument functions to a ProcessPoolExecutor.
+    
+    Wraps the executor's submit3 method, converting Callable values and
+    typed arguments to raw I64 values and returning typed ProcessFuture<R>
+    instances.
+    """
+    
+    protect ProcessPoolExecutor executor
+    """ The executor to submit tasks to. """
+    
+    public function ProcessSubmitter3( self, ProcessPoolExecutor executor ) -> Void:
+        
+        """
+        Construct a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ProcessPoolExecutor):
+                The executor that will execute submitted functions.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <A, B, C>> fn, A arg1, B arg2, C arg3 ) -> ProcessFuture<R>:
+        
+        """
+        Submit a three-argument callable for execution and return a typed future.
+        
+        Converts the callable and all three arguments to raw I64 values via
+        inline assembly and delegates to the executor's submit3 method.
+        
+        Parameters:
+            fn (Callable<R, <A, B, C>>):
+                The three-argument function to execute.
+            arg1 (A):
+                The first argument to pass to the function.
+            arg2 (B):
+                The second argument to pass to the function.
+            arg3 (C):
+                The third argument to pass to the function.
+        
+        Returns:
+            ProcessFuture<R>:
+                A typed future that will hold the result of the function call.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        I64 arg1Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" arg1Raw ) : input( "r" arg1 ) : clobber()
+        I64 arg2Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" arg2Raw ) : input( "r" arg2 ) : clobber()
+        I64 arg3Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" arg3Raw ) : input( "r" arg3 ) : clobber()
+        ProcessFutureBase base = self.executor.submit3( fnAddr, arg1Raw, arg2Raw, arg3Raw )
+        return new ProcessFuture<R>( base )
+
+export {
+    ProcessPoolExecutor,
+    ProcessSubmitter0,
+    ProcessSubmitter1,
+    ProcessSubmitter2,
+    ProcessSubmitter3,
+    DEFAULT_PROCESS_QUEUE_CAPACITY,
+    EXECUTOR_PROCESS_STACK_PAGES,
+    FUTURE_SLOT_SIZE,
+    FUTURE_POOL_PAGES
+}
