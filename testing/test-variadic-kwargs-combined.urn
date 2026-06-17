@@ -1,0 +1,23 @@
+package testing
+
+from uranite.testing.assertions import assertEqualI64
+from uranite.collection.pair import Pair
+from uranite.io.console import putsln
+
+function process( String label, I64 values[], String opts{} ) -> I64:
+    I64 total = 0
+    I64 i = 0
+    while i < values.length():
+        total = total + values.get( i )
+        i = i + 1
+    return total + opts.length()
+
+public function main() -> I32:
+    putsln( "=== Variadic + Kwargs Combined Tests ===" )
+
+    I64 result = process( "test", 1, 2, 3, verbose="true", level="5" )
+    assertEqualI64( 8, result, "sum(1,2,3) + opts(2) = 8" )
+    putsln( "combined OK" )
+
+    putsln( "=== All variadic+kwargs tests passed ===" )
+    return 0
