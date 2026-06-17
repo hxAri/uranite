@@ -1,0 +1,125 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/sync/mutex.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Sleep-based kernel mutex for mutual exclusion between tasks. When contended, the calling task blocks instead of spinning, requiring scheduler integration for block and unblock operations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.sync.mutex
+
+from uranite.os.sync.spinlock import Spinlock
+
+public class KernelMutex:
+    
+    """
+    Sleep-based kernel mutex for mutual exclusion between tasks.
+    When contended, the calling task blocks instead of spinning,
+    which requires the scheduler for block and unblock operations.
+    A spinlock protects the internal state and is held only briefly.
+    """
+    
+    protect Spinlock guard
+    protect I64 owner
+    protect Boolean held
+    protect I64 waitCount
+    
+    public function KernelMutex( self ) -> Void:
+        
+        """
+        Construct an unheld kernel mutex with no owner and zero waiters.
+        The internal guard spinlock is initialized for protecting state transitions.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard = new Spinlock()
+        self.owner = 0
+        self.held = False
+        self.waitCount = 0
+    
+    public function acquire( self, I64 taskId ) -> Boolean:
+        
+        """
+        Attempt to acquire the mutex for the given task.
+        If the mutex is not held, it is acquired immediately and returns True.
+        If already held by another task, the wait count is incremented and
+        returns False. The caller is responsible for blocking the current
+        task via the scheduler when False is returned.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        if not self.held:
+            self.held = True
+            self.owner = taskId
+            self.guard.unlock()
+            return True
+        self.waitCount = self.waitCount + 1
+        self.guard.unlock()
+        return False
+    
+    public function release( self, I64 taskId ) -> Boolean:
+        
+        """
+        Release the mutex held by the given task.
+        Returns True if there are waiting tasks, indicating the caller
+        should wake one of them. Returns False if the releasing task
+        does not own the mutex or if there are no waiters.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        if self.owner != taskId:
+            self.guard.unlock()
+            return False
+        if self.waitCount > 0:
+            self.waitCount = self.waitCount - 1
+            self.guard.unlock()
+            return True
+        self.held = False
+        self.owner = 0
+        self.guard.unlock()
+        return False
+    
+    public function isHeld( self ) -> Boolean:
+        
+        """ Return whether the mutex is currently held by any task. """
+        
+        return self.held
+    
+    public function getOwner( self ) -> I64:
+        
+        """ Return the task ID of the current mutex owner, or 0 if unheld. """
+        
+        return self.owner
+    
+    public function getWaitCount( self ) -> I64:
+        
+        """ Return the number of tasks currently waiting to acquire this mutex. """
+        
+        return self.waitCount
+
+export {
+    KernelMutex
+}
