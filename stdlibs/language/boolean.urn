@@ -1,0 +1,86 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/boolean.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Boolean class, the truth value type representing True or False with logical operations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.boolean
+
+final class Boolean:
+    
+    """
+    Truth value type representing True or False.
+    Provides logical operations such as negation, conjunction, and disjunction.
+    """
+    
+    protect Boolean value
+    
+    public function Boolean( self, Boolean value ) -> Void:
+        
+        """ Construct a new Boolean wrapping the given truth value. """
+        
+        self.value = value
+    
+    public function getValue( self ) -> Boolean:
+        
+        """ Return the underlying truth value. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this Boolean, either "True" or "False". """
+        
+        if self.value:
+            return "True"
+        return "False"
+    
+    public function negate( self ) -> Boolean:
+        
+        """
+        Return a new Boolean with the opposite truth value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Boolean( not self.value )
+    
+    public function logicalAnd( self, Boolean other ) -> Boolean:
+        
+        """
+        Return a new Boolean representing the logical conjunction of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Boolean( self.value and other.value )
+    
+    public function logicalOr( self, Boolean other ) -> Boolean:
+        
+        """
+        Return a new Boolean representing the logical disjunction of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Boolean( self.value or other.value )
