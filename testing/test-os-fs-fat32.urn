@@ -1,0 +1,41 @@
+package testing
+
+from uranite.os.fs.fat32 import {
+    Fat32Info, Fat32DirEntry, Fat32FileSystem
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS FS FAT32 Tests ===" )
+
+    Fat32Info info = new Fat32Info()
+    assertEqualI64( 512, info.bytesPerSector, "bytesPerSector" )
+    assertEqualI64( 8, info.sectorsPerCluster, "sectorsPerCluster" )
+    assertEqualI64( 32, info.reservedSectors, "reservedSectors" )
+    assertEqualI64( 2, info.numberOfFats, "numberOfFats" )
+    assertEqualI64( 2, info.rootCluster, "rootCluster" )
+    assertEqualI64( 4096, info.getBytesPerCluster(), "bytesPerCluster" )
+    assertEqualI64( 0, info.clusterToSector( 2 ), "cluster2sector(2)" )
+    putsln( "Fat32Info OK" )
+
+    Fat32DirEntry entry = new Fat32DirEntry()
+    assertEqualI64( 0, entry.attributes, "attributes 0" )
+    assertEqualI64( 0, entry.firstCluster, "firstCluster 0" )
+    assertEqualI64( 0, entry.fileSize, "fileSize 0" )
+    assertFalse( entry.isDirectory(), "not dir" )
+    assertFalse( entry.isReadOnly(), "not readonly" )
+    assertFalse( entry.isHidden(), "not hidden" )
+    assertFalse( entry.isSystem(), "not system" )
+    entry.destroy()
+    putsln( "DirEntry OK" )
+
+    Fat32FileSystem fs = new Fat32FileSystem( 7, 1 )
+    assertEqualI64( 7, fs.getDeviceId(), "deviceId" )
+    assertEqualI64( 2, fs.getRootCluster(), "rootCluster" )
+    putsln( "filesystem OK" )
+
+    putsln( "=== All FAT32 tests passed ===" )
+    return 0
