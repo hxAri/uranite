@@ -1,0 +1,146 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/protocol.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Full kernel-level network protocol stack: Ethernet (L2), IPv4 (L3),
+# TCP/UDP (L4), and socket abstraction layer. Provides unified access
+# to all OS network primitives for kernel and protocol-level networking.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.protocol
+
+from uranite.os.net.ethernet import {
+    ETHERTYPE_IPV4, ETHERTYPE_ARP, ETHERTYPE_IPV6,
+    ETH_MTU, ETH_MIN_PAYLOAD,
+    EthernetFrame, ArpTable
+}
+from uranite.os.net.ipv4 import {
+    PROTO_ICMP, PROTO_TCP, PROTO_UDP,
+    ipAddr, ipOctet0, ipOctet1, ipOctet2, ipOctet3, isSameSubnet,
+    Ipv4Header, RoutingTable
+}
+from uranite.os.net.tcp import {
+    TCP_FIN, TCP_SYN, TCP_RST, TCP_PSH, TCP_ACK, TCP_URG,
+    TcpState, TCP_HEADER_SIZE,
+    TcpHeader, TcpConnectionTable
+}
+from uranite.os.net.udp import UDP_HEADER_SIZE, UdpHeader, UdpBindTable
+from uranite.os.net.socket import {
+    SOCKET_STREAM, SOCKET_DATAGRAM, SOCKET_RAW,
+    SOCKET_UNBOUND, SOCKET_BOUND, SOCKET_LISTENING, SOCKET_CONNECTED, SOCKET_CLOSED,
+    AF_INET, AF_INET6,
+    SocketTable
+}
+
+public class NetworkStack:
+
+    """
+    Full network protocol stack: Ethernet (L2) -> IPv4 (L3) -> TCP/UDP (L4)
+    with socket layer. Combines ARP resolution, IP routing, TCP connection
+    tracking, UDP port binding, and socket lifecycle management into a
+    single unified interface for kernel networking.
+    """
+
+    public ArpTable arpTable
+    public RoutingTable routingTable
+    public TcpConnectionTable tcpConnections
+    public UdpBindTable udpBindings
+    public SocketTable sockets
+
+    public function NetworkStack( self, I64 arpCapacity, I64 routeCapacity, I64 tcpCapacity, I64 udpCapacity, I64 socketCapacity ) -> Void:
+
+        """
+        Construct a network stack with specified capacities for each subsystem.
+
+        Parameters:
+            arpCapacity (I64):
+                Maximum ARP table entries.
+            routeCapacity (I64):
+                Maximum routing table entries.
+            tcpCapacity (I64):
+                Maximum concurrent TCP connections.
+            udpCapacity (I64):
+                Maximum UDP port bindings.
+            socketCapacity (I64):
+                Maximum open sockets.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.arpTable = new ArpTable( arpCapacity )
+        self.routingTable = new RoutingTable( routeCapacity )
+        self.tcpConnections = new TcpConnectionTable( tcpCapacity )
+        self.udpBindings = new UdpBindTable( udpCapacity )
+        self.sockets = new SocketTable( socketCapacity )
+
+    public function resolveAddress( self, I64 ipAddress ) -> I64:
+
+        """
+        Resolve an IPv4 address to a MAC address via ARP table lookup.
+        Returns the MAC address or 0 if not found.
+
+        Parameters:
+            ipAddress (I64):
+                IPv4 address to resolve.
+        """
+
+        return self.arpTable.lookup( ipAddress )
+
+    public function routePacket( self, I64 destination ) -> I64:
+
+        """
+        Determine the next-hop gateway for a destination via longest-prefix-match.
+        Returns the gateway address or 0 if no route matches.
+
+        Parameters:
+            destination (I64):
+                Destination IPv4 address.
+        """
+
+        return self.routingTable.lookup( destination )
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all resources held by every subsystem.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.arpTable.destroy()
+        self.routingTable.destroy()
+        self.tcpConnections.destroy()
+        self.udpBindings.destroy()
+        self.sockets.destroy()
+
+export {
+    NetworkStack,
+    ETHERTYPE_IPV4, ETHERTYPE_ARP, ETHERTYPE_IPV6, ETH_MTU, ETH_MIN_PAYLOAD,
+    EthernetFrame, ArpTable,
+    PROTO_ICMP, PROTO_TCP, PROTO_UDP,
+    ipAddr, ipOctet0, ipOctet1, ipOctet2, ipOctet3, isSameSubnet,
+    Ipv4Header, RoutingTable,
+    TCP_FIN, TCP_SYN, TCP_RST, TCP_PSH, TCP_ACK, TCP_URG,
+    TcpState, TCP_HEADER_SIZE, TcpHeader, TcpConnectionTable,
+    UDP_HEADER_SIZE, UdpHeader, UdpBindTable,
+    SOCKET_STREAM, SOCKET_DATAGRAM, SOCKET_RAW,
+    SOCKET_UNBOUND, SOCKET_BOUND, SOCKET_LISTENING, SOCKET_CONNECTED, SOCKET_CLOSED,
+    AF_INET, AF_INET6, SocketTable
+}
