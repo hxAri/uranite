@@ -1,0 +1,1121 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/hash-map.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides HashMap, a hash-based associative map using open addressing with
+# linear probing, and its companion HashMapIterator for value traversal.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.hashmap
+
+from uranite.collection.mutable-mapping import MutableMapping
+from uranite.collection.map import Map
+from uranite.collection.collection import Collection
+from uranite.collection.sequence import Sequence
+from uranite.collection.set import Set
+from uranite.collection.pair import Pair
+from uranite.collection.array-list import ArrayList
+from uranite.collection.hash-set import HashSet
+from uranite.iterators.iterator import Iterator
+from uranite.language.boolean import Boolean
+from uranite.language.callable import Callable
+from uranite.language.void import Void
+from uranite.language.string import String
+from uranite.memory.memory import Memory
+from uranite.errors.lookup import KeyError
+
+public class HashMap<K, V> implements MutableMapping<K, V>:
+    
+    """
+    Hash-based associative map using open addressing with linear probing.
+    
+    Keys are hashed to determine bucket placement. Collisions are resolved
+    by linear probing, and deleted slots are marked as tombstones (status 2)
+    to maintain probe chain integrity. The table automatically grows when
+    the load factor exceeds 75%.
+    """
+    
+    private Memory<K> keyData
+    private Memory<V> valueData
+    private Memory<Int> status
+    private Int count
+    private Int capacity
+    
+    public function HashMap( self ) -> Void:
+        
+        """
+        Create an empty map with a default initial capacity of 16 buckets.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.capacity = 16
+        self.keyData = new Memory<K>( self.capacity )
+        self.valueData = new Memory<V>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+    
+    public function HashMap( self, Int initialCapacity ) -> Void:
+        
+        """
+        Create an empty map with the specified initial capacity.
+        
+        Parameters:
+            initialCapacity (Int):
+                The number of buckets to pre-allocate.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = initialCapacity
+        self.keyData = new Memory<K>( self.capacity )
+        self.valueData = new Memory<V>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+    
+    private function computeIndex( self, K key ) -> Int:
+        
+        """
+        Compute the bucket index from the key's hash code, wrapping negative
+        values to ensure a positive index within the capacity range.
+        
+        Parameters:
+            key (K):
+                The key to compute the index for.
+        
+        Returns:
+            Int:
+                The non-negative bucket index.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Int hash = key.hashCode()
+        Int index = hash % self.capacity
+        if index < 0:
+            index = index + self.capacity
+        return index
+    
+    private function probeKey( self, K key ) -> Int:
+        
+        """
+        Perform linear probing to find the slot for the given key, reusing
+        the first deleted tombstone encountered during the probe.
+        
+        Parameters:
+            key (K):
+                The key to probe for.
+        
+        Returns:
+            Int:
+                The slot index where the key should be placed, or -1 if the
+                table is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int index = self.computeIndex( key )
+        Int firstDeleted = -1
+        for Int probeOffset = 0; probeOffset < self.capacity; probeOffset++:
+            Int slot = ( index + probeOffset ) % self.capacity
+            if self.status.get( slot ) == 0:
+                if firstDeleted >= 0:
+                    return firstDeleted
+                return slot
+            if self.status.get( slot ) == 2 and firstDeleted < 0:
+                firstDeleted = slot
+            if self.status.get( slot ) == 1 and self.keyData.get( slot ) == key:
+                return slot
+        if firstDeleted >= 0:
+            return firstDeleted
+        return -1
+    
+    private function findKey( self, K key ) -> Int:
+        
+        """
+        Search for an existing key in the table using linear probing.
+        
+        Parameters:
+            key (K):
+                The key to search for.
+        
+        Returns:
+            Int:
+                The slot index if the key is found, or -1 if absent.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int index = self.computeIndex( key )
+        for Int probeOffset = 0; probeOffset < self.capacity; probeOffset++:
+            Int slot = ( index + probeOffset ) % self.capacity
+            if self.status.get( slot ) == 0:
+                return -1
+            if self.status.get( slot ) == 1 and self.keyData.get( slot ) == key:
+                return slot
+        return -1
+    
+    private function grow( self ) -> Void:
+        
+        """
+        Double the table capacity and rehash all existing entries into the new buckets.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Int oldCapacity = self.capacity
+        Memory<K> oldKeys = self.keyData
+        Memory<V> oldValues = self.valueData
+        Memory<Int> oldStatus = self.status
+        self.capacity = oldCapacity * 2
+        self.keyData = new Memory<K>( self.capacity )
+        self.valueData = new Memory<V>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+        for Int slotIndex = 0; slotIndex < oldCapacity; slotIndex++:
+            if oldStatus.get( slotIndex ) == 1:
+                self.put( oldKeys.get( slotIndex ), oldValues.get( slotIndex ) )
+        oldKeys.free()
+        oldValues.free()
+        oldStatus.free()
+    
+    public function put( self, K key, V value ) -> Void:
+        
+        """
+        Insert or update a key-value pair. If the key already exists, its value
+        is replaced. The table grows automatically when the load factor exceeds 75%.
+        
+        Parameters:
+            key (K):
+                The key to insert or update.
+            value (V):
+                The value to associate with the key.
+        
+        Complexity:
+            Time: O(1) amortized, O(n) worst case
+            Space: O(1) amortized
+        """
+        
+        if self.count * 4 >= self.capacity * 3:
+            self.grow()
+        Int slot = self.probeKey( key )
+        if slot < 0:
+            self.grow()
+            slot = self.probeKey( key )
+        if self.status.get( slot ) == 1 and self.keyData.get( slot ) == key:
+            self.valueData.set( slot, value )
+            return
+        self.keyData.set( slot, key )
+        self.valueData.set( slot, value )
+        self.status.set( slot, 1 )
+        self.count = self.count + 1
+    
+    public function putIfAbsent( self, K key, V value ) -> V:
+        
+        """
+        Insert the key-value pair only if the key is not already present.
+        
+        Parameters:
+            key (K):
+                The key to insert.
+            value (V):
+                The value to associate if the key is absent.
+        
+        Returns:
+            V:
+                The existing value if the key was present, or the new value if inserted.
+        
+        Complexity:
+            Time: O(1) amortized, O(n) worst case
+            Space: O(1) amortized
+        """
+        
+        Int slot = self.findKey( key )
+        if slot >= 0:
+            return self.valueData.get( slot )
+        self.put( key, value )
+        return value
+    
+    public function putAll( self, Map<K, V> source ) -> Void:
+        
+        """
+        Copy all entries from the source map into this map.
+        
+        Parameters:
+            source (Map<K, V>):
+                The map whose entries are to be copied.
+        
+        Complexity:
+            Time: O(m) amortized where m is source size
+            Space: O(1) amortized
+        """
+        
+        Set<Pair<K, V>> entrySet = source.entries
+        Iterator<Pair<K, V>> iter = entrySet.iterator
+        while iter.has:
+            Pair<K, V> entry = iter.next
+            self.put( entry.key, entry.value )
+    
+    public function pop( self, K key ) -> V:
+
+        """
+        Remove the entry with the given key and return its value.
+
+        Parameters:
+            key (K):
+                The key of the entry to remove.
+
+        Returns:
+            V:
+                The value that was associated with the removed key.
+
+        Raises:
+            KeyError:
+                If the key is not present in the map.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        Int slot = self.findKey( key )
+        if slot >= 0:
+            V value = self.valueData.get( slot )
+            self.status.set( slot, 2 )
+            self.count = self.count - 1
+            return value
+        raise new KeyError( key.toString() )
+    
+    public function removeEntry( self, K key, V value ) -> Boolean:
+        
+        """
+        Remove the entry only if the key currently maps to the given value.
+        
+        Parameters:
+            key (K):
+                The key to check.
+            value (V):
+                The expected value that must match for removal.
+        
+        Returns:
+            Boolean:
+                True if the entry was found with the matching value and removed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int slot = self.findKey( key )
+        if slot >= 0 and self.valueData.get( slot ) == value:
+            self.status.set( slot, 2 )
+            self.count = self.count - 1
+            return True
+        return False
+    
+    public function replace( self, K key, V value ) -> V:
+
+        """
+        Replace the value for an existing key and return the old value.
+
+        Parameters:
+            key (K):
+                The key whose value is to be replaced.
+            value (V):
+                The new value.
+
+        Returns:
+            V:
+                The previous value associated with the key.
+
+        Raises:
+            KeyError:
+                If the key is not present in the map.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        Int slot = self.findKey( key )
+        if slot >= 0:
+            V old = self.valueData.get( slot )
+            self.valueData.set( slot, value )
+            return old
+        raise new KeyError( key.toString() )
+    
+    public function replaceEntry( self, K key, V oldValue, V newValue ) -> Boolean:
+        
+        """
+        Replace the value only if the key currently maps to the expected old value.
+        
+        Parameters:
+            key (K):
+                The key to check.
+            oldValue (V):
+                The expected current value.
+            newValue (V):
+                The new value to set if the current value matches.
+        
+        Returns:
+            Boolean:
+                True if the replacement was performed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int slot = self.findKey( key )
+        if slot >= 0 and self.valueData.get( slot ) == oldValue:
+            self.valueData.set( slot, newValue )
+            return True
+        return False
+    
+    public function merge( self, Map<K, V> other ) -> Void:
+        
+        """
+        Merge all entries from another map into this map, overwriting existing
+        keys with the values from the other map.
+        
+        Parameters:
+            other (Map<K, V>):
+                The map to merge from.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Set<Pair<K, V>> entrySet = other.entries
+        Iterator<Pair<K, V>> iter = entrySet.iterator
+        while iter.has:
+            Pair<K, V> entry = iter.next
+            self.put( entry.key, entry.value )
+    
+    public function computeIfAbsent( self, K key, Callable<V,<K>> mapping ) -> V:
+        
+        """
+        Compute and insert a value using the mapping function if the key is absent.
+        
+        Parameters:
+            key (K):
+                The key to check and potentially insert for.
+            mapping (Callable<V,<K>>):
+                The function to compute the value from the key.
+        
+        Returns:
+            V:
+                The existing value if present, or the newly computed value.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int slot = self.findKey( key )
+        if slot >= 0:
+            return self.valueData.get( slot )
+        V value = mapping( key )
+        self.put( key, value )
+        return value
+    
+    public function set( self, K key, V value ) -> Void:
+        
+        """
+        Store the given value at the given key, replacing any existing value.
+        
+        Parameters:
+            key (K):
+                The key to associate with the value.
+            value (V):
+                The value to store.
+        """
+        
+        self.put( key, value )
+    
+    public function contains( self, K key ) -> Boolean:
+        
+        """
+        Check whether the given key exists in the map.
+        
+        Parameters:
+            key (K):
+                The key to search for.
+        
+        Returns:
+            Boolean:
+                True if the key is present, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.containsKey( key )
+    
+    public function remove( self, K key ) -> Void:
+        
+        """
+        Remove the entry with the given key without returning its value.
+        
+        Parameters:
+            key (K):
+                The key of the entry to remove.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int slot = self.findKey( key )
+        if slot >= 0:
+            self.status.set( slot, 2 )
+            self.count = self.count - 1
+    
+    public function get( self, K key ) -> V:
+
+        """
+        Retrieve the value associated with the given key.
+
+        Parameters:
+            key (K):
+                The key to look up.
+
+        Returns:
+            V:
+                The value associated with the key.
+
+        Raises:
+            KeyError:
+                If the key is not present in the map.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        Int slot = self.findKey( key )
+        if slot >= 0:
+            return self.valueData.get( slot )
+        raise new KeyError( key.toString() )
+    
+    public function getOrDefault( self, K key, V defaultValue ) -> V:
+        
+        """
+        Retrieve the value for the given key, or return the default value if
+        the key is not present.
+        
+        Parameters:
+            key (K):
+                The key to look up.
+            defaultValue (V):
+                The value to return if the key is absent.
+        
+        Returns:
+            V:
+                The associated value, or the default.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int slot = self.findKey( key )
+        if slot >= 0:
+            return self.valueData.get( slot )
+        return defaultValue
+    
+    public function containsKey( self, K key ) -> Boolean:
+        
+        """
+        Check whether the given key exists in the map.
+        
+        Parameters:
+            key (K):
+                The key to search for.
+        
+        Returns:
+            Boolean:
+                True if the key is present, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.findKey( key ) >= 0
+    
+    public function containsValue( self, V value ) -> Boolean:
+        
+        """
+        Check whether the given value exists in the map via linear scan of
+        all occupied slots.
+        
+        Parameters:
+            value (V):
+                The value to search for.
+        
+        Returns:
+            Boolean:
+                True if the value is found, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and self.valueData.get( slotIndex ) == value:
+                return True
+        return False
+    
+    public property keys( self ) -> Set<K>:
+        
+        """
+        Return a set containing all keys currently in the map.
+        
+        Returns:
+            Set<K>:
+                A HashSet of all keys.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashSet<K> result = new HashSet<K>( self.count )
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                result.add( self.keyData.get( slotIndex ) )
+        return result
+    
+    public property values( self ) -> Sequence<V>:
+        
+        """
+        Return a sequence containing all values currently in the map.
+        
+        Returns:
+            Sequence<V>:
+                An ArrayList of all values.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        ArrayList<V> result = new ArrayList<V>( self.count )
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                result.add( self.valueData.get( slotIndex ) )
+        return result
+    
+    public property entries( self ) -> Set<Pair<K, V>>:
+        
+        """
+        Return a set of all key-value pairs currently in the map.
+        
+        Returns:
+            Set<Pair<K, V>>:
+                A HashSet of Pair objects representing each entry.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashSet<Pair<K, V>> result = new HashSet<Pair<K, V>>( self.count )
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                result.add( new Pair<K, V>( self.keyData.get( slotIndex ), self.valueData.get( slotIndex ) ) )
+        return result
+    
+    public function forEach( self, Callable<Void,<K,V>> action ) -> Void:
+        
+        """
+        Execute an action for each key-value pair in the map.
+        
+        Parameters:
+            action (Callable<Void,<K,V>>):
+                The action to execute, receiving the key and value as arguments.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                action( self.keyData.get( slotIndex ), self.valueData.get( slotIndex ) )
+    
+    public function append( self, V element ) -> Collection<V>:
+        
+        """
+        No-op for map collections; returns self unchanged.
+        
+        Complexity:
+            Time: O(1) amortized, O(n) worst case
+            Space: O(1) amortized
+        """
+        
+        return self
+    
+    public function clear( self ) -> Void:
+        
+        """
+        Remove all entries from the map by resetting all slot statuses to empty.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            self.status.set( slotIndex, 0 )
+        self.count = 0
+    
+    public property copy( self ) -> Collection<V>:
+        
+        """
+        Return a shallow copy of this map with the same entries.
+        
+        Returns:
+            Collection<V>:
+                A new HashMap containing copies of all key-value pairs.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashMap<K, V> result = new HashMap<K, V>( self.capacity )
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                result.put( self.keyData.get( slotIndex ), self.valueData.get( slotIndex ) )
+        return result
+    
+    public property empty( self ) -> Boolean:
+        
+        """
+        Check whether the map contains no entries.
+        
+        Returns:
+            Boolean:
+                True if the map has zero entries, False otherwise.
+        """
+        
+        return self.count == 0
+    
+    public function equals( self, Object object ) -> Boolean:
+        
+        """
+        Compare this map with another object for structural equality of all entries.
+        
+        Parameters:
+            object (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is a HashMap with the same entries.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if object instanceof HashMap:
+            HashMap<K, V> other = object as HashMap<K, V>
+            if self.count != other.count:
+                return False
+            for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+                if self.status.get( slotIndex ) == 1:
+                    if not other.containsKey( self.keyData.get( slotIndex ) ):
+                        return False
+                    if other.get( self.keyData.get( slotIndex ) ) != self.valueData.get( slotIndex ):
+                        return False
+            return True
+        return False
+    
+    public function exists( self, V element ) -> Boolean:
+        
+        """
+        Check whether the given value exists in the map.
+        
+        Parameters:
+            element (V):
+                The value to search for.
+        
+        Returns:
+            Boolean:
+                True if the value is found, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.containsValue( element )
+    
+    public function filter( self, Callable<Boolean,<V>> callback ) -> Collection<V>:
+        
+        """
+        Return a new map containing only entries whose values match the predicate.
+        
+        Parameters:
+            callback (Callable<Boolean,<V>>):
+                A predicate function that returns True for values to include.
+        
+        Returns:
+            Collection<V>:
+                A new HashMap with only the matching entries.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        HashMap<K, V> result = new HashMap<K, V>()
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and callback( self.valueData.get( slotIndex ) ):
+                result.put( self.keyData.get( slotIndex ), self.valueData.get( slotIndex ) )
+        return result
+    
+    public property length( self ) -> Int:
+        
+        """ Return the number of entries currently in the map. """
+        
+        return self.count
+    
+    public function remove( self, V element ) -> Boolean:
+        
+        """
+        Remove the first entry with a matching value.
+        
+        Parameters:
+            element (V):
+                The value to match for removal.
+        
+        Returns:
+            Boolean:
+                True if an entry was found and removed, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1 and self.valueData.get( slotIndex ) == element:
+                self.status.set( slotIndex, 2 )
+                self.count = self.count - 1
+                return True
+        return False
+    
+    public property iterator( self ) -> Iterator<V>:
+        
+        """
+        Return an iterator over the values in the map.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new HashMapIterator<V>( self.valueData, self.status, self.capacity )
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a string representation of the map in the format {key: value, ...}.
+        
+        Returns:
+            String:
+                The formatted string representation.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        String result = "{"
+        Boolean first = True
+        for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
+            if self.status.get( slotIndex ) == 1:
+                if not first:
+                    result = result + ", "
+                result = result + self.keyData.get( slotIndex ) + ": " + self.valueData.get( slotIndex )
+                first = False
+        result = result + "}"
+        return result
+
+    public property size( self ) -> Int:
+
+        """
+        Return the number of entries in the map.
+
+        Alias for the length property to match common collection conventions.
+
+        Returns:
+            Int:
+                The entry count.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count
+
+    public property isEmpty( self ) -> Boolean:
+
+        """
+        Test whether the map contains no entries.
+
+        Returns:
+            Boolean:
+                True if the map has zero entries.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count == 0
+
+    public property isNotEmpty( self ) -> Boolean:
+
+        """
+        Test whether the map contains at least one entry.
+
+        Returns:
+            Boolean:
+                True if the map has one or more entries.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count > 0
+
+    public function mapValues( self, Callable<V, <V>> transform ) -> HashMap<K, V>:
+
+        """
+        Return a new map with the same keys but values transformed by the
+        given function.
+
+        Parameters:
+            transform (Callable<V, <V>>):
+                Function applied to each value to produce the new value.
+
+        Returns:
+            HashMap<K, V>:
+                New map with transformed values.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        HashMap<K, V> result = new HashMap<K, V>( self.capacity )
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                result.put( self.keyData.get( bucketIndex ), transform( self.valueData.get( bucketIndex ) ) )
+        return result
+
+    public function filterEntries( self, Callable<Boolean, <K, V>> predicate ) -> HashMap<K, V>:
+
+        """
+        Return a new map containing only entries where the predicate returns
+        True for the key-value pair.
+
+        Parameters:
+            predicate (Callable<Boolean, <K, V>>):
+                Function receiving key and value, returning True to include.
+
+        Returns:
+            HashMap<K, V>:
+                New map with only matching entries.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        HashMap<K, V> result = new HashMap<K, V>()
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                if predicate( self.keyData.get( bucketIndex ), self.valueData.get( bucketIndex ) ):
+                    result.put( self.keyData.get( bucketIndex ), self.valueData.get( bucketIndex ) )
+        return result
+
+    public function any( self, Callable<Boolean, <K, V>> predicate ) -> Boolean:
+
+        """
+        Test whether at least one entry satisfies the predicate.
+
+        Short-circuits on the first match.
+
+        Parameters:
+            predicate (Callable<Boolean, <K, V>>):
+                Function receiving key and value, returning True for a match.
+
+        Returns:
+            Boolean:
+                True if any entry satisfies the predicate.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                if predicate( self.keyData.get( bucketIndex ), self.valueData.get( bucketIndex ) ):
+                    return True
+        return False
+
+    public function all( self, Callable<Boolean, <K, V>> predicate ) -> Boolean:
+
+        """
+        Test whether every entry satisfies the predicate.
+
+        Short-circuits on the first non-matching entry.
+
+        Parameters:
+            predicate (Callable<Boolean, <K, V>>):
+                Function receiving key and value, returning True for conformance.
+
+        Returns:
+            Boolean:
+                True if all entries satisfy the predicate.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int bucketIndex = 0; bucketIndex < self.capacity; bucketIndex++:
+            if self.status.get( bucketIndex ) == 1:
+                if not predicate( self.keyData.get( bucketIndex ), self.valueData.get( bucketIndex ) ):
+                    return False
+        return True
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all heap-allocated memory buffers held by this map.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.keyData.free()
+        self.valueData.free()
+        self.status.free()
+
+
+public class HashMapIterator<V> implements Iterator<V>:
+    
+    """
+    Iterator that traverses occupied slots in a HashMap's value array.
+    
+    Skips over empty and tombstone slots, yielding only values from
+    active entries.
+    """
+    
+    private Memory<V> valueData
+    private Memory<Int> status
+    private Int capacity
+    private Int position
+    
+    public function HashMapIterator( self, Memory<V> valueData, Memory<Int> status, Int capacity ) -> Void:
+        
+        """
+        Create an iterator over the given value array, starting at the first
+        occupied slot.
+        
+        Parameters:
+            valueData (Memory<V>):
+                The value storage buffer to iterate over.
+            status (Memory<Int>):
+                The slot status array (0=empty, 1=occupied, 2=deleted).
+            capacity (Int):
+                The total number of slots in the table.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.valueData = valueData
+        self.status = status
+        self.capacity = capacity
+        self.position = 0
+        while self.position < self.capacity and self.status.get( self.position ) != 1:
+            self.position = self.position + 1
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether more values remain to be iterated.
+        
+        Returns:
+            Boolean:
+                True if the iterator has not yet reached the end of the table.
+        """
+        
+        return self.position < self.capacity
+    
+    public property next( self ) -> V:
+        
+        """
+        Return the current value and advance to the next occupied slot.
+        
+        Returns:
+            V:
+                The value at the current position before advancing.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        V element = self.valueData.get( self.position )
+        self.position = self.position + 1
+        while self.position < self.capacity and self.status.get( self.position ) != 1:
+            self.position = self.position + 1
+        return element
+
+
+export {
+    HashMap,
+    HashMapIterator
+}
