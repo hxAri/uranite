@@ -1,0 +1,281 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/binary-writer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Binary writer for writing typed integers to a file descriptor.
+# Little-endian byte order (native x86_64). Uses raw sysWrite.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.binary-writer
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    memoryToPtr, writeByteAt, sysWrite, sysClose, sysFsync
+}
+
+public class BinaryWriter:
+    
+    """
+    Binary writer for serializing typed integer values to a file descriptor.
+    Writes multi-byte integers in little-endian byte order (native x86_64 layout).
+    Uses a single reusable temporary buffer for all write operations.
+    """
+    
+    protect I64 fd
+    """The underlying file descriptor to write to."""
+    protect Memory<I64> tmpBuf
+    """Reusable temporary buffer for assembling bytes before writing."""
+    protect I64 tmpAddr
+    """Raw pointer address of the temporary buffer."""
+    protect Boolean closed
+    """Whether this writer has been closed."""
+    protect Boolean ownsFd
+    """Whether this writer owns the file descriptor and should close it on cleanup."""
+    
+    public function BinaryWriter( self, I64 fd, Boolean ownsFd ) -> Void:
+        
+        """
+        Construct a new BinaryWriter wrapping the given file descriptor.
+        
+        Parameters:
+            fd (I64):
+                The file descriptor to write binary data to.
+            ownsFd (Boolean):
+                Whether this writer owns the file descriptor. If True, the
+                file descriptor will be closed when this writer is closed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.fd = fd
+        self.tmpBuf = new Memory<I64>( 1 )
+        self.tmpAddr = memoryToPtr( self.tmpBuf )
+        self.closed = False
+        self.ownsFd = ownsFd
+    
+    protect function writeExact( self, I64 count ) -> Void:
+        I64 written = 0
+        while written < count:
+            I64 bytesWritten = sysWrite( self.fd, self.tmpAddr + written, count - written )
+            written = written + bytesWritten
+    
+    public function writeI8( self, I64 value ) -> Void:
+        
+        """
+        Write a signed 8-bit integer to the stream.
+        Negative values are converted to their unsigned byte representation.
+        
+        Parameters:
+            value (I64):
+                The signed value to write, expected in the range -128 to 127.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 unsigned = value
+        if unsigned < 0:
+            unsigned = unsigned + 256
+        writeByteAt( self.tmpAddr, 0, unsigned & 255 )
+        self.writeExact( 1 )
+    
+    public function writeU8( self, I64 value ) -> Void:
+        
+        """
+        Write an unsigned 8-bit integer to the stream.
+        
+        Parameters:
+            value (I64):
+                The unsigned value to write, expected in the range 0 to 255.
+        """
+        
+        writeByteAt( self.tmpAddr, 0, value & 255 )
+        self.writeExact( 1 )
+    
+    public function writeI16( self, I64 value ) -> Void:
+        
+        """
+        Write a signed 16-bit integer to the stream in little-endian byte order.
+        Negative values are converted to their two's complement representation.
+        
+        Parameters:
+            value (I64):
+                The signed value to write, expected in the range -32768 to 32767.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 unsigned = value
+        if unsigned < 0:
+            unsigned = unsigned + 65536
+        writeByteAt( self.tmpAddr, 0, unsigned & 255 )
+        writeByteAt( self.tmpAddr, 1, ( unsigned / 256 ) & 255 )
+        self.writeExact( 2 )
+    
+    public function writeU16( self, I64 value ) -> Void:
+        
+        """
+        Write an unsigned 16-bit integer to the stream in little-endian byte order.
+        
+        Parameters:
+            value (I64):
+                The unsigned value to write, expected in the range 0 to 65535.
+        """
+        
+        writeByteAt( self.tmpAddr, 0, value & 255 )
+        writeByteAt( self.tmpAddr, 1, ( value / 256 ) & 255 )
+        self.writeExact( 2 )
+    
+    public function writeI32( self, I64 value ) -> Void:
+        
+        """
+        Write a signed 32-bit integer to the stream in little-endian byte order.
+        Negative values are converted to their two's complement representation.
+        
+        Parameters:
+            value (I64):
+                The signed value to write, expected in the range -2147483648 to 2147483647.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 unsigned = value
+        if unsigned < 0:
+            unsigned = unsigned + 4294967296
+        writeByteAt( self.tmpAddr, 0, unsigned & 255 )
+        writeByteAt( self.tmpAddr, 1, ( unsigned / 256 ) & 255 )
+        writeByteAt( self.tmpAddr, 2, ( unsigned / 65536 ) & 255 )
+        writeByteAt( self.tmpAddr, 3, ( unsigned / 16777216 ) & 255 )
+        self.writeExact( 4 )
+    
+    public function writeU32( self, I64 value ) -> Void:
+        
+        """
+        Write an unsigned 32-bit integer to the stream in little-endian byte order.
+        
+        Parameters:
+            value (I64):
+                The unsigned value to write, expected in the range 0 to 4294967295.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        writeByteAt( self.tmpAddr, 0, value & 255 )
+        writeByteAt( self.tmpAddr, 1, ( value / 256 ) & 255 )
+        writeByteAt( self.tmpAddr, 2, ( value / 65536 ) & 255 )
+        writeByteAt( self.tmpAddr, 3, ( value / 16777216 ) & 255 )
+        self.writeExact( 4 )
+    
+    public function writeI64( self, I64 value ) -> Void:
+        
+        """
+        Write a signed 64-bit integer to the stream in little-endian byte order.
+        Decomposes the value into low and high 32-bit halves before writing.
+        
+        Parameters:
+            value (I64):
+                The 64-bit value to write.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 low = value & 4294967295
+        I64 high = value / 4294967296
+        if high < 0:
+            high = 0 - high
+        writeByteAt( self.tmpAddr, 0, low & 255 )
+        writeByteAt( self.tmpAddr, 1, ( low / 256 ) & 255 )
+        writeByteAt( self.tmpAddr, 2, ( low / 65536 ) & 255 )
+        writeByteAt( self.tmpAddr, 3, ( low / 16777216 ) & 255 )
+        writeByteAt( self.tmpAddr, 4, high & 255 )
+        writeByteAt( self.tmpAddr, 5, ( high / 256 ) & 255 )
+        writeByteAt( self.tmpAddr, 6, ( high / 65536 ) & 255 )
+        writeByteAt( self.tmpAddr, 7, ( high / 16777216 ) & 255 )
+        self.writeExact( 8 )
+    
+    public function writeBytes( self, Memory<I64> data, I64 length ) -> Void:
+        
+        """
+        Write raw bytes from a Memory buffer directly to the file descriptor.
+        Handles partial writes by retrying until all bytes are written.
+        
+        Parameters:
+            data (Memory<I64>):
+                The source buffer containing the raw bytes to write.
+            length (I64):
+                The number of bytes to write from the buffer.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 dataAddr = memoryToPtr( data )
+        I64 written = 0
+        while written < length:
+            I64 bytesWritten = sysWrite( self.fd, dataAddr + written, length - written )
+            written = written + bytesWritten
+    
+    public function flush( self ) -> Void:
+        
+        """
+        Flush all buffered data to the underlying storage device by
+        calling fsync on the file descriptor.
+        """
+        
+        sysFsync( self.fd )
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close this writer, flushing any pending data and freeing the temporary
+        buffer. If this writer owns the file descriptor, the descriptor is also
+        closed. Subsequent calls after the first close are no-ops.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed == False:
+            self.flush()
+            self.tmpBuf.free()
+            if self.ownsFd:
+                sysClose( self.fd )
+            self.closed = True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Destructor that delegates to close to ensure resource cleanup.
+        """
+        
+        self.close()
+
+export {
+    BinaryWriter
+}
