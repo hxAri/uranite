@@ -1,0 +1,524 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/testing/assertions.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Assertion functions for unit testing. Each assertion raises
+# AssertionError on failure with a descriptive message.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.testing.assertions
+
+from uranite.testing.errors import AssertionError
+from uranite.convert.convert import intToString, floatToString, boolToString
+from uranite.functions.builtin import indexOf, startsWith, endsWith
+
+public function assertTrue( Boolean condition, String message ) -> Void:
+    
+    """
+    Assert that a condition is True. Raises AssertionError if the
+    condition is False.
+    
+    Parameters:
+        condition (Boolean):
+            The boolean value expected to be True.
+        message (String):
+            A descriptive message included in the error on failure.
+    
+    Raises:
+        AssertionError: If condition is False.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    if condition == False:
+        raise new AssertionError( "assertTrue failed: " + message, 0, None )
+
+public function assertFalse( Boolean condition, String message ) -> Void:
+    
+    """
+    Assert that a condition is False. Raises AssertionError if the
+    condition is True.
+    
+    Parameters:
+        condition (Boolean):
+            The boolean value expected to be False.
+        message (String):
+            A descriptive message included in the error on failure.
+    
+    Raises:
+        AssertionError: If condition is True.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    if condition:
+        raise new AssertionError( "assertFalse failed: " + message, 0, None )
+
+public function assertEqualI64( I64 expected, I64 actual, String message ) -> Void:
+    
+    """
+    Assert that two I64 values are equal. Raises AssertionError if
+    the values differ, including both values in the error message.
+    
+    Parameters:
+        expected (I64):
+            The expected integer value.
+        actual (I64):
+            The actual integer value to compare against expected.
+        message (String):
+            A descriptive message included in the error on failure.
+    
+    Raises:
+        AssertionError: If expected does not equal actual.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    if expected != actual:
+        String msg = "assertEqualI64 failed: expected " + intToString( expected ) + " but got " + intToString( actual ) + " - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertNotEqualI64( I64 left, I64 right, String message ) -> Void:
+
+    """
+    Assert that two I64 values are not equal. Raises AssertionError
+    if the values are the same.
+
+    Parameters:
+        left (I64):
+            The first integer value.
+        right (I64):
+            The second integer value expected to differ from the first.
+        message (String):
+            A descriptive message included in the error on failure.
+
+    Raises:
+        AssertionError: If left equals right.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if left == right:
+        String msg = "assertNotEqualI64 failed: values are equal (" + intToString( left ) + ") - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertEqualF64( F64 expected, F64 actual, F64 epsilon, String message ) -> Void:
+    
+    """
+    Assert that two F64 values are equal within a tolerance. Raises
+    AssertionError if the absolute difference exceeds epsilon.
+    
+    Parameters:
+        expected (F64):
+            The expected floating-point value.
+        actual (F64):
+            The actual floating-point value to compare.
+        epsilon (F64):
+            The maximum allowed absolute difference between expected
+            and actual for them to be considered equal.
+        message (String):
+            A descriptive message included in the error on failure.
+    
+    Raises:
+        AssertionError: If the absolute difference exceeds epsilon.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    F64 diff = expected - actual
+    if diff < 0.0:
+        diff = 0.0 - diff
+    if diff > epsilon:
+        String msg = "assertEqualF64 failed: expected " + floatToString( expected, 6 ) + " but got " + floatToString( actual, 6 ) + " (epsilon=" + floatToString( epsilon, 6 ) + ") - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertEqualStr( String expected, String actual, String message ) -> Void:
+    
+    """
+    Assert that two strings are equal. Raises AssertionError if the
+    strings differ, including both values in the error message.
+    
+    Parameters:
+        expected (String):
+            The expected string value.
+        actual (String):
+            The actual string value to compare.
+        message (String):
+            A descriptive message included in the error on failure.
+    
+    Raises:
+        AssertionError: If expected does not equal actual.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    if expected != actual:
+        String msg = "assertEqualStr failed: expected '" + expected + "' but got '" + actual + "' - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertNotEqualStr( String left, String right, String message ) -> Void:
+
+    """
+    Assert that two strings are not equal. Raises AssertionError if
+    the strings are identical.
+
+    Parameters:
+        left (String):
+            The first string value.
+        right (String):
+            The second string value expected to differ from the first.
+        message (String):
+            A descriptive message included in the error on failure.
+
+    Raises:
+        AssertionError: If left equals right.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if left == right:
+        String msg = "assertNotEqualStr failed: values are equal ('" + left + "') - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertGreaterThan( I64 left, I64 right, String message ) -> Void:
+
+    """
+    Assert that the first I64 value is strictly greater than the second.
+
+    Parameters:
+        left (I64):
+            The value expected to be greater.
+        right (I64):
+            The value expected to be less than left.
+        message (String):
+            A descriptive message included in the error on failure.
+
+    Raises:
+        AssertionError: If left is less than or equal to right.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if left <= right:
+        String msg = "assertGreaterThan failed: " + intToString( left ) + " <= " + intToString( right ) + " - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertLessThan( I64 left, I64 right, String message ) -> Void:
+
+    """
+    Assert that the first I64 value is strictly less than the second.
+
+    Parameters:
+        left (I64):
+            The value expected to be less.
+        right (I64):
+            The value expected to be greater than left.
+        message (String):
+            A descriptive message included in the error on failure.
+
+    Raises:
+        AssertionError: If left is greater than or equal to right.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if left >= right:
+        String msg = "assertLessThan failed: " + intToString( left ) + " >= " + intToString( right ) + " - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertGreaterOrEqual( I64 left, I64 right, String message ) -> Void:
+
+    """
+    Assert that the first I64 value is greater than or equal to the second.
+
+    Parameters:
+        left (I64):
+            The value expected to be greater than or equal to right.
+        right (I64):
+            The lower bound value.
+        message (String):
+            A descriptive message included in the error on failure.
+
+    Raises:
+        AssertionError: If left is strictly less than right.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if left < right:
+        String msg = "assertGreaterOrEqual failed: " + intToString( left ) + " < " + intToString( right ) + " - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertLessOrEqual( I64 left, I64 right, String message ) -> Void:
+
+    """
+    Assert that the first I64 value is less than or equal to the second.
+
+    Parameters:
+        left (I64):
+            The value expected to be less than or equal to right.
+        right (I64):
+            The upper bound value.
+        message (String):
+            A descriptive message included in the error on failure.
+
+    Raises:
+        AssertionError: If left is strictly greater than right.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if left > right:
+        String msg = "assertLessOrEqual failed: " + intToString( left ) + " > " + intToString( right ) + " - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function assertBetween( I64 value, I64 lower, I64 upper, String message ) -> Void:
+
+    """
+    Assert that a value falls within an inclusive range [lower, upper].
+
+    Parameters:
+        value (I64):
+            The value to check.
+        lower (I64):
+            The lower bound of the acceptable range (inclusive).
+        upper (I64):
+            The upper bound of the acceptable range (inclusive).
+        message (String):
+            A descriptive message included in the error on failure.
+
+    Raises:
+        AssertionError: If value is less than lower or greater than upper.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if value < lower or value > upper:
+        String msg = "assertBetween failed: " + intToString( value ) + " not in [" + intToString( lower ) + ", " + intToString( upper ) + "] - " + message
+        raise new AssertionError( msg, 0, None )
+
+public function fail( String message ) -> Void:
+    
+    """
+    Unconditionally fail the current test with the given message.
+    Use this to mark code paths that should never be reached.
+    
+    Parameters:
+        message (String):
+            A descriptive message explaining why the test failed.
+    
+    Raises:
+        AssertionError: Always raised.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    raise new AssertionError( "fail: " + message, 0, None )
+
+public function assertEqualBool( Boolean expected, Boolean actual, String message ) -> Void:
+
+    """
+    Assert that two boolean values are equal.
+
+    Parameters:
+        expected (Boolean):
+            The expected boolean value.
+        actual (Boolean):
+            The actual boolean value to check.
+        message (String):
+            Descriptive label for the assertion.
+
+    Raises:
+        AssertionError:
+            If expected != actual.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if expected != actual:
+        String errorMessage = message + ": expected " + boolToString( expected ) + " but got " + boolToString( actual )
+        raise new AssertionError( errorMessage, 0, None )
+
+public function assertContains( String haystack, String needle, String message ) -> Void:
+
+    """
+    Assert that haystack contains the needle substring.
+
+    Parameters:
+        haystack (String):
+            The string to search within.
+        needle (String):
+            The substring to search for.
+        message (String):
+            Descriptive label for the assertion.
+
+    Raises:
+        AssertionError:
+            If needle is not found in haystack.
+
+    Complexity:
+        Time: O(n * m) where n = haystack length, m = needle length
+    """
+
+    if indexOf( haystack, needle ) < 0:
+        String errorMessage = message + ": expected to contain '" + needle + "'"
+        raise new AssertionError( errorMessage, 0, None )
+
+public function assertStartsWith( String source, String prefix, String message ) -> Void:
+
+    """
+    Assert that source starts with the given prefix.
+
+    Parameters:
+        source (String):
+            The string to check.
+        prefix (String):
+            The expected prefix.
+        message (String):
+            Descriptive label for the assertion.
+
+    Raises:
+        AssertionError:
+            If source does not start with prefix.
+
+    Complexity:
+        Time: O(m) where m = prefix length
+    """
+
+    if not startsWith( source, prefix ):
+        String errorMessage = message + ": expected to start with '" + prefix + "'"
+        raise new AssertionError( errorMessage, 0, None )
+
+public function assertEndsWith( String source, String suffix, String message ) -> Void:
+
+    """
+    Assert that source ends with the given suffix.
+
+    Parameters:
+        source (String):
+            The string to check.
+        suffix (String):
+            The expected suffix.
+        message (String):
+            Descriptive label for the assertion.
+
+    Raises:
+        AssertionError:
+            If source does not end with suffix.
+
+    Complexity:
+        Time: O(m) where m = suffix length
+    """
+
+    if not endsWith( source, suffix ):
+        String errorMessage = message + ": expected to end with '" + suffix + "'"
+        raise new AssertionError( errorMessage, 0, None )
+
+public function assertNone( Object value, String message ) -> Void:
+
+    """
+    Assert that a value is None.
+
+    Parameters:
+        value (Object):
+            The value to check.
+        message (String):
+            Descriptive label for the assertion.
+
+    Raises:
+        AssertionError:
+            If value is not None.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if value is not None:
+        raise new AssertionError( message + ": expected None", 0, None )
+
+public function assertNotNone( Object value, String message ) -> Void:
+
+    """
+    Assert that a value is not None.
+
+    Parameters:
+        value (Object):
+            The value to check.
+        message (String):
+            Descriptive label for the assertion.
+
+    Raises:
+        AssertionError:
+            If value is None.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if value is None:
+        raise new AssertionError( message + ": expected non-None value", 0, None )
+
+export {
+    assertTrue,
+    assertFalse,
+    assertEqualI64,
+    assertNotEqualI64,
+    assertEqualF64,
+    assertEqualStr,
+    assertNotEqualStr,
+    assertGreaterThan,
+    assertLessThan,
+    assertGreaterOrEqual,
+    assertLessOrEqual,
+    assertBetween,
+    fail,
+    assertEqualBool,
+    assertContains,
+    assertStartsWith,
+    assertEndsWith,
+    assertNone,
+    assertNotNone
+}
