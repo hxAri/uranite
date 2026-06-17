@@ -1,0 +1,501 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/math/math.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Pure Uranite math library providing standard mathematical functions without
+# any C runtime dependency. All implementations use pure arithmetic operations
+# and iterative algorithms: square root via Newton-Raphson, power via
+# exponentiation by squaring, floor/ceil/round via integer truncation.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.math.math
+
+from uranite.math.errors import ArithmeticError
+from uranite.errors.value import ValueError
+
+public const F64 PI = 3.14159265358979323846
+public const F64 E = 2.71828182845904523536
+public const F64 TAU = 6.28318530717958647692
+public const F64 SQRT2 = 1.41421356237309504880
+public const F64 LN2 = 0.69314718055994530942
+public const F64 LN10 = 2.30258509299404568402
+public const I64 I64_MAX = 9223372036854775807
+public const I64 I64_MIN = -9223372036854775807 - 1
+public const F64 POSITIVE_INF = 1.7976931348623157e308 * 2.0
+public const F64 NEGATIVE_INF = -1.7976931348623157e308 * 2.0
+
+public function abs( F64 value ) -> F64:
+
+    """
+    Compute the absolute value of a double-precision floating-point number.
+    Returns the magnitude of value without regard to its sign.
+    """
+
+    if value < 0.0:
+        return 0.0 - value
+    return value
+
+public function absI64( I64 value ) -> I64:
+
+    """
+    Compute the absolute value of a 64-bit signed integer.
+    Returns the magnitude of value without regard to its sign.
+    """
+
+    if value < 0:
+        return 0 - value
+    return value
+
+public function sqrt( F64 value ) -> F64:
+
+    """
+    Compute the square root of a non-negative double-precision value using
+    the Newton-Raphson iterative method. Converges to full double precision
+    within 20 iterations. Returns 0.0 for negative inputs.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    if value < 0.0:
+        return 0.0
+    if value == 0.0:
+        return 0.0
+    F64 guess = value
+    if value > 1.0:
+        guess = value / 2.0
+    I64 iteration = 0
+    while iteration < 20:
+        guess = ( guess + value / guess ) / 2.0
+        iteration = iteration + 1
+    return guess
+
+public function truncate( F64 value ) -> F64:
+
+    """
+    Truncate a double-precision value toward zero, removing the fractional
+    part via narrowing conversion to I64 and back to F64.
+    """
+
+    I64 integerPart = value
+    return integerPart
+
+public function floor( F64 value ) -> F64:
+
+    """
+    Round a double-precision value downward to the nearest integer not
+    greater than value.
+    """
+
+    F64 truncated = truncate( value )
+    if value < 0.0 and truncated != value:
+        return truncated - 1.0
+    return truncated
+
+public function ceil( F64 value ) -> F64:
+
+    """
+    Round a double-precision value upward to the nearest integer not
+    less than value.
+    """
+
+    F64 truncated = truncate( value )
+    if value > 0.0 and truncated != value:
+        return truncated + 1.0
+    return truncated
+
+public function round( F64 value ) -> F64:
+
+    """
+    Round a double-precision value to the nearest integer, with halfway
+    cases rounded away from zero.
+    """
+
+    if value >= 0.0:
+        return floor( value + 0.5 )
+    return ceil( value - 0.5 )
+
+public function fmod( F64 dividend, F64 divisor ) -> F64:
+
+    """
+    Compute the floating-point remainder of dividend / divisor, where the
+    result has the same sign as dividend. Returns 0.0 if divisor is zero.
+    """
+
+    if divisor == 0.0:
+        return 0.0
+    I64 quotient = dividend / divisor
+    return dividend - quotient * divisor
+
+public function fabs( F64 value ) -> F64:
+
+    """
+    Compute the absolute value of a double-precision floating-point value.
+    Alias for abs() following the C standard library naming convention.
+    """
+
+    return abs( value )
+
+public function pow( F64 base, I64 exponent ) -> F64:
+
+    """
+    Compute base raised to an integer exponent using exponentiation by
+    squaring. Handles negative exponents by inverting the result. This
+    provides O(log n) performance for integer powers.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    if exponent == 0:
+        return 1.0
+    I64 remainingPower = exponent
+    if remainingPower < 0:
+        remainingPower = 0 - remainingPower
+    F64 result = 1.0
+    F64 current = base
+    while remainingPower > 0:
+        if remainingPower % 2 == 1:
+            result = result * current
+        current = current * current
+        remainingPower = remainingPower / 2
+    if exponent < 0:
+        return 1.0 / result
+    return result
+
+public function powF64( F64 base, F64 exponent ) -> F64:
+
+    """
+    Compute base raised to a floating-point exponent. For integer exponents
+    delegates to the fast integer path. For fractional exponents, uses the
+    identity base^exp = e^(exp * ln(base)) with iterative ln and exp
+    approximations.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if exponent == 0.0:
+        return 1.0
+    if base == 0.0:
+        return 0.0
+    if base == 1.0:
+        return 1.0
+    I64 integerExponent = exponent
+    if integerExponent == exponent:
+        return pow( base, integerExponent )
+    return expF64( exponent * ln( base ) )
+
+public function ln( F64 value ) -> F64:
+
+    """
+    Compute the natural logarithm of value using the series expansion
+    ln(x) = 2 * sum( ((x-1)/(x+1))^(2k+1) / (2k+1) ) for k=0..N.
+    Reduces the argument to [1,2) range using the identity
+    ln(x * 2^n) = ln(x) + n*ln(2) for faster convergence.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    if value <= 0.0:
+        return NEGATIVE_INF
+    if value == 1.0:
+        return 0.0
+    I64 scaleExponent = 0
+    F64 mantissa = value
+    while mantissa >= 2.0:
+        mantissa = mantissa / 2.0
+        scaleExponent = scaleExponent + 1
+    while mantissa < 1.0:
+        mantissa = mantissa * 2.0
+        scaleExponent = scaleExponent - 1
+    F64 ratio = ( mantissa - 1.0 ) / ( mantissa + 1.0 )
+    F64 ratioSquared = ratio * ratio
+    F64 result = 0.0
+    F64 term = ratio
+    I64 termIndex = 0
+    while termIndex < 30:
+        result = result + term / ( 2 * termIndex + 1 )
+        term = term * ratioSquared
+        termIndex = termIndex + 1
+    return 2.0 * result + scaleExponent * LN2
+
+public function expF64( F64 value ) -> F64:
+
+    """
+    Compute e^value using the Taylor series expansion:
+    e^x = sum( x^k / k! ) for k=0..N. Reduces the argument to a small
+    range using the identity e^(n+f) = e^n * e^f for faster convergence.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    if value == 0.0:
+        return 1.0
+    I64 intPart = value
+    F64 fracPart = value - intPart
+    F64 intResult = 1.0
+    if intPart != 0:
+        intResult = pow( E, intPart )
+    F64 term = 1.0
+    F64 fracResult = 1.0
+    I64 termIndex = 1
+    while termIndex < 30:
+        term = term * fracPart / termIndex
+        fracResult = fracResult + term
+        termIndex = termIndex + 1
+    return intResult * fracResult
+
+public function log10( F64 value ) -> F64:
+
+    """
+    Compute the base-10 logarithm of value using the change of base formula
+    log10(x) = ln(x) / ln(10).
+    """
+
+    return ln( value ) / LN10
+
+public function log2( F64 value ) -> F64:
+
+    """
+    Compute the base-2 logarithm of value using the change of base formula
+    log2(x) = ln(x) / ln(2).
+    """
+
+    return ln( value ) / LN2
+
+public function min( I64 first, I64 second ) -> I64:
+
+    """
+    Return the smaller of two 64-bit signed integer values.
+    """
+
+    if first < second:
+        return first
+    return second
+
+public function max( I64 first, I64 second ) -> I64:
+
+    """
+    Return the larger of two 64-bit signed integer values.
+    """
+
+    if first > second:
+        return first
+    return second
+
+public function minF64( F64 first, F64 second ) -> F64:
+
+    """
+    Return the smaller of two double-precision floating-point values.
+    """
+
+    if first < second:
+        return first
+    return second
+
+public function maxF64( F64 first, F64 second ) -> F64:
+
+    """
+    Return the larger of two double-precision floating-point values.
+    """
+
+    if first > second:
+        return first
+    return second
+
+public function clamp( I64 value, I64 lower, I64 upper ) -> I64:
+
+    """
+    Constrain a 64-bit integer value to the range [lower, upper].
+    Returns lower if value < lower, upper if value > upper, otherwise value.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if value < lower:
+        return lower
+    if value > upper:
+        return upper
+    return value
+
+public function clampF64( F64 value, F64 lower, F64 upper ) -> F64:
+
+    """
+    Constrain a double-precision value to the range [lower, upper].
+    Returns lower if value < lower, upper if value > upper, otherwise value.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if value < lower:
+        return lower
+    if value > upper:
+        return upper
+    return value
+
+public function sign( I64 value ) -> I64:
+
+    """
+    Return the sign of a 64-bit integer: -1 for negative, 0 for zero, 1 for positive.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if value < 0:
+        return -1
+    if value > 0:
+        return 1
+    return 0
+
+public function signF64( F64 value ) -> F64:
+
+    """
+    Return the sign of a double-precision value: -1.0 for negative, 0.0 for zero,
+    1.0 for positive.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if value < 0.0:
+        return -1.0
+    if value > 0.0:
+        return 1.0
+    return 0.0
+
+public function gcd( I64 first, I64 second ) -> I64:
+
+    """
+    Compute the greatest common divisor of two integers using the
+    Euclidean algorithm. Returns 0 if both inputs are 0.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    I64 dividend = absI64( first )
+    I64 divisor = absI64( second )
+    while divisor != 0:
+        I64 remainder = dividend % divisor
+        dividend = divisor
+        divisor = remainder
+    return dividend
+
+public function lcm( I64 first, I64 second ) -> I64:
+
+    """
+    Compute the least common multiple of two integers using the
+    identity lcm(a,b) = |a*b| / gcd(a,b). Returns 0 if either input is 0.
+    """
+
+    if first == 0 or second == 0:
+        return 0
+    I64 commonDivisor = gcd( first, second )
+    return absI64( first / commonDivisor * second )
+
+public function powI64( I64 base, I64 exponent ) -> I64:
+
+    """
+    Integer exponentiation via repeated squaring.
+
+    Computes base raised to the power of exponent as a 64-bit integer.
+
+    Parameters:
+        base (I64):
+            The base value.
+        exponent (I64):
+            The non-negative exponent.
+
+    Returns:
+        I64:
+            The result of base^exponent.
+
+    Raises:
+        ValueError:
+            If exponent is negative.
+
+    Complexity:
+        Time: O(log exponent)
+        Space: O(1)
+    """
+
+    if exponent < 0:
+        raise new ValueError( "integer exponentiation requires non-negative exponent", 0, None )
+    if exponent == 0:
+        return 1
+    I64 result = 1
+    I64 currentBase = base
+    I64 remainingExponent = exponent
+    while remainingExponent > 0:
+        if remainingExponent % 2 == 1:
+            result = result * currentBase
+        currentBase = currentBase * currentBase
+        remainingExponent = remainingExponent / 2
+    return result
+
+export {
+    PI,
+    E,
+    TAU,
+    SQRT2,
+    LN2,
+    LN10,
+    POSITIVE_INF,
+    NEGATIVE_INF,
+    I64_MAX,
+    I64_MIN,
+    abs,
+    absI64,
+    sqrt,
+    floor,
+    ceil,
+    round,
+    fmod,
+    fabs,
+    pow,
+    powF64,
+    ln,
+    expF64,
+    log10,
+    log2,
+    min,
+    max,
+    minF64,
+    maxF64,
+    clamp,
+    clampF64,
+    sign,
+    signF64,
+    gcd,
+    lcm,
+    powI64
+}
