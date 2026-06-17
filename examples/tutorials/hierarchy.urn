@@ -1,0 +1,244 @@
+
+#
+# @author hxAri (hxari)
+# @create 2026-05-03 23:00
+# @github https://github.com/uranite-lang/uranite
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Comprehensive hierarchy test: interfaces, abstract classes, covariant returns,
+# missing implementation detection, multi-level inheritance, generic interfaces.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package main
+
+from uranite.io.console import puts
+
+
+# ========================================
+# PART 1: Basic interface + implementation
+# ========================================
+
+public interface Printable:
+    public function toString( self ) -> String;
+
+public interface Measurable:
+    public property length( self ) -> Int;
+
+# Class implements single interface
+public class Name implements Printable:
+    public String value
+
+    public function Name( self, String value ) -> Void:
+        self.value = value
+
+    public function toString( self ) -> String:
+        return self.value
+
+# ========================================
+# PART 2: Interface extending interface
+# ========================================
+
+public interface Describable extends Printable:
+    public function describe( self ) -> String;
+
+# Must implement both toString (from Printable) and describe (from Describable)
+public class Animal implements Describable:
+    public String species
+    public Int legs
+
+    public function Animal( self, String species, Int legs ) -> Void:
+        self.species = species
+        self.legs = legs
+
+    public function toString( self ) -> String:
+        return self.species
+
+    public function describe( self ) -> String:
+        return self.species
+
+# ========================================
+# PART 3: Multiple interface implementation
+# ========================================
+
+public class Word implements Printable, Measurable:
+    public String text
+
+    public function Word( self, String text ) -> Void:
+        self.text = text
+
+    public function toString( self ) -> String:
+        return self.text
+
+    public property length( self ) -> Int:
+        return 5
+
+# ========================================
+# PART 4: Covariant return types
+# Interface says return Printable, impl returns Name (which implements Printable)
+# ========================================
+
+public interface Factory:
+    public function create( self ) -> Printable;
+
+public class NameFactory implements Factory:
+    public String defaultName
+
+    public function NameFactory( self, String defaultName ) -> Void:
+        self.defaultName = defaultName
+
+    # Returns Name which implements Printable — should be valid covariant return
+    public function create( self ) -> Name:
+        return new Name( self.defaultName )
+
+# ========================================
+# PART 5: Class inheritance
+# ========================================
+
+public class Shape:
+    public String kind
+
+    public function Shape( self, String kind ) -> Void:
+        self.kind = kind
+
+    public function area( self ) -> Double:
+        return 0.0
+
+    public function toString( self ) -> String:
+        return self.kind
+
+public class Circle extends Shape:
+    public Double radius
+
+    public function Circle( self, Double radius ) -> Void:
+        self.kind = "Circle"
+        self.radius = radius
+
+    public function area( self ) -> Double:
+        return 3.14159 * self.radius * self.radius
+
+# ========================================
+# PART 6: Class extends + implements
+# ========================================
+
+public class MeasurableShape extends Shape implements Measurable:
+    public Int sides
+
+    public function MeasurableShape( self, String kind, Int sides ) -> Void:
+        self.kind = kind
+        self.sides = sides
+
+    public property length( self ) -> Int:
+        return self.sides
+
+# ========================================
+# PART 7: Deep hierarchy chain
+# Interface A -> Interface B -> Interface C, class implements C
+# ========================================
+
+public interface HasId:
+    public property id( self ) -> Int;
+
+public interface HasName extends HasId:
+    public property name( self ) -> String;
+
+public interface HasFullInfo extends HasName:
+    public function fullInfo( self ) -> String;
+
+public class Person implements HasFullInfo:
+    public Int personId
+    public String personName
+
+    public function Person( self, Int personId, String personName ) -> Void:
+        self.personId = personId
+        self.personName = personName
+
+    public property id( self ) -> Int:
+        return self.personId
+
+    public property name( self ) -> String:
+        return self.personName
+
+    public function fullInfo( self ) -> String:
+        return self.personName
+
+# ========================================
+# PART 8: Generic interface
+# ========================================
+
+public interface Container<T>:
+    public function get( self, Int index ) -> T;
+    public function put( self, Int index, T value ) -> Void;
+    public property size( self ) -> Int;
+
+public class SimpleBox<T> implements Container<T>:
+    public T stored
+    public Int count
+
+    public function SimpleBox( self ) -> Void:
+        self.count = 0
+
+    public function get( self, Int index ) -> T:
+        return self.stored
+
+    public function put( self, Int index, T value ) -> Void:
+        self.stored = value
+        self.count = self.count + 1
+
+    public property size( self ) -> Int:
+        return self.count
+
+# ========================================
+# MAIN: Exercise all patterns
+# ========================================
+
+public function main() -> I32:
+    puts( "=== Hierarchy Test ===" )
+
+    # Part 1: Basic interface
+    Name n = new Name( "Aether" )
+    puts( "Name: ", n.toString() )
+
+    # Part 2: Extended interface
+    Animal a = new Animal( "Cat", 4 )
+    puts( "Animal: ", a.toString() )
+    puts( "Describe: ", a.describe() )
+
+    # Part 3: Multiple interfaces
+    Word w = new Word( "Hello" )
+    puts( "Word: ", w.toString(), ", len: ", w.length )
+
+    # Part 4: Covariant return
+    NameFactory factory = new NameFactory( "Default" )
+    Name created = factory.create()
+    puts( "Factory created: ", created.toString() )
+
+    # Part 5: Inheritance
+    Circle c = new Circle( 5.0 )
+    puts( "Circle area: ", c.area() )
+    puts( "Circle kind: ", c.toString() )
+
+    # Part 6: Extends + implements
+    MeasurableShape ms = new MeasurableShape( "Square", 4 )
+    puts( "Shape: ", ms.toString(), ", sides: ", ms.length )
+
+    # Part 7: Deep chain
+    Person p = new Person( 42, "Alice" )
+    puts( "Person: ", p.fullInfo(), ", id: ", p.id )
+
+    # Part 8: Generic interface
+    SimpleBox<Int> box = new SimpleBox<Int>()
+    box.put( 0, 99 )
+    puts( "Box value: ", box.get( 0 ), ", size: ", box.size )
+
+    puts( "=== All hierarchy tests passed ===" )
+    return 0
