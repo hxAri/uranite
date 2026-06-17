@@ -1,0 +1,55 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all language primitive types and core interfaces for convenient access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language
+
+from uranite.language.int import Int
+from uranite.language.i8 import I8
+from uranite.language.i16 import I16
+from uranite.language.i32 import I32
+from uranite.language.i64 import I64
+from uranite.language.uint import UInt
+from uranite.language.u8 import U8
+from uranite.language.u16 import U16
+from uranite.language.u32 import U32
+from uranite.language.u64 import U64
+from uranite.language.float import Float
+from uranite.language.f32 import F32
+from uranite.language.f64 import F64
+from uranite.language.double import Double
+from uranite.language.integer import Integer
+from uranite.language.long import Long
+from uranite.language.boolean import Boolean
+from uranite.language.char import Char
+from uranite.language.string import String
+from uranite.language.byte import Byte
+from uranite.language.none import NoneType
+from uranite.language.void import Void
+from uranite.operators.stringable import Stringable
+
+export {
+    Int, I8, I16, I32, I64,
+    UInt, U8, U16, U32, U64,
+    Float, F32, F64, Double,
+    Integer, Long,
+    Boolean, Char, String, Byte,
+    NoneType, Void,
+    Stringable
+}
