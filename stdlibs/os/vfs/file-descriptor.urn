@@ -1,0 +1,318 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/vfs/file-descriptor.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides open file descriptor representation and a per-process file descriptor table with free-list allocation for managing open file state in the virtual filesystem.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.vfs.file-descriptor
+
+from uranite.memory.memory import Memory
+
+public const I64 FLAG_READ = 1
+""" File access flag for read permission (bit 0). """
+
+public const I64 FLAG_WRITE = 2
+""" File access flag for write permission (bit 1). """
+
+public const I64 FLAG_APPEND = 4
+""" File access flag for append mode (bit 2). Writes go to end of file. """
+
+public const I64 FLAG_CREATE = 8
+""" File access flag for creation (bit 3). File created if not existing. """
+
+public const I64 FLAG_TRUNCATE = 16
+""" File access flag for truncation (bit 4). Contents discarded on open for write. """
+
+public class FileDescriptor:
+    
+    """
+    Represents an open file descriptor, which is per-open-file state maintained by the
+    kernel. The same VNode (file) can have multiple open file descriptors, each with
+    its own independent file offset and access flags. Reference counting allows the
+    descriptor to be shared across forked processes or duplicated file descriptors.
+    """
+    public I64 fdNumber
+    public I64 vnodeId
+    public I64 offset
+    public I64 flags
+    public I64 refCount
+    
+    public function FileDescriptor( self, I64 fd, I64 vnode, I64 openFlags ) -> Void:
+        """
+        Constructs a new file descriptor with the given fd number, associated VNode
+        identifier, and open flags. The file offset starts at zero and the reference
+        count is initialized to 1.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        self.fdNumber = fd
+        self.vnodeId = vnode
+        self.offset = 0
+        self.flags = openFlags
+        self.refCount = 1
+    
+    public function canRead( self ) -> Boolean:
+        """ Returns True if the read permission flag (bit 0) is set on this file descriptor. """
+        return ( self.flags & 1 ) != 0
+    
+    public function canWrite( self ) -> Boolean:
+        """ Returns True if the write permission flag (bit 1) is set on this file descriptor. """
+        return ( self.flags & 2 ) != 0
+    
+    public function isAppend( self ) -> Boolean:
+        """ Returns True if the append mode flag (bit 2) is set on this file descriptor. """
+        return ( self.flags & 4 ) != 0
+    
+    public function seek( self, I64 newOffset ) -> Void:
+        """ Sets the file offset to the specified position in bytes from the beginning of the file. """
+        self.offset = newOffset
+    
+    public function advanceOffset( self, I64 bytesRead ) -> Void:
+        """
+        Advances the file offset by the specified number of bytes. This is called after
+        a successful read or write operation to update the position for the next operation.
+        """
+        self.offset = self.offset + bytesRead
+    
+    public function retain( self ) -> I64:
+        """
+        Increments the reference count by one and returns the new count. Called when the
+        file descriptor is duplicated or inherited by a forked process.
+        """
+        self.refCount = self.refCount + 1
+        return self.refCount
+    
+    public function release( self ) -> Boolean:
+        """
+        Decrements the reference count by one. Returns True if the reference count reached
+        zero, indicating the file descriptor should be fully closed and its resources freed.
+        """
+        self.refCount = self.refCount - 1
+        return self.refCount == 0
+    
+    public function getFdNumber( self ) -> I64:
+        """ Returns the integer file descriptor number assigned to this open file. """
+        return self.fdNumber
+    
+    public function getVnodeId( self ) -> I64:
+        """ Returns the VNode identifier of the file associated with this descriptor. """
+        return self.vnodeId
+    
+    public function getOffset( self ) -> I64:
+        """
+        Returns the current file offset position in bytes.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        return self.offset
+
+public class FileDescriptorTable:
+    
+    """
+    Per-process table that maps file descriptor numbers to open file state (VNode ID,
+    offset, flags). The table has a fixed capacity and uses free-list chaining for O(1)
+    allocation and deallocation of file descriptor numbers. A sentinel value of -2 in the
+    nextFree array marks an allocated (in-use) slot, while free slots chain to the next
+    available slot.
+    """
+    protect Memory<I64> vnodeIds
+    protect Memory<I64> offsets
+    protect Memory<I64> fdFlags
+    protect Memory<I64> nextFree
+    protect I64 capacity
+    protect I64 freeHead
+    protect I64 openCount
+    
+    public function FileDescriptorTable( self, I64 maxFds ) -> Void:
+        
+        """
+        Constructs a new file descriptor table with the specified maximum number of
+        descriptors. All slots are initialized as free and chained together into a free
+        list, with the last slot marking the end of the list with -1.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxFds
+        self.freeHead = 0
+        self.openCount = 0
+        self.vnodeIds = new Memory<I64>( maxFds )
+        self.offsets = new Memory<I64>( maxFds )
+        self.fdFlags = new Memory<I64>( maxFds )
+        self.nextFree = new Memory<I64>( maxFds )
+        I64 slotIndex = 0
+        while slotIndex < maxFds:
+            self.vnodeIds.set( slotIndex, 0 )
+            self.offsets.set( slotIndex, 0 )
+            self.fdFlags.set( slotIndex, 0 )
+            if slotIndex < maxFds - 1:
+                self.nextFree.set( slotIndex, slotIndex + 1 )
+            else:
+                self.nextFree.set( slotIndex, 0 - 1 )
+            slotIndex = slotIndex + 1
+    
+    public function open( self, I64 vnodeId, I64 flags ) -> I64:
+        
+        """
+        Allocates a file descriptor for the given VNode with the specified access flags.
+        The lowest available fd number is assigned from the free list. The file offset
+        starts at zero. Returns the fd number on success, or -1 if the table is full.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.freeHead < 0:
+            return 0 - 1
+        I64 fd = self.freeHead
+        self.freeHead = self.nextFree.get( fd )
+        self.vnodeIds.set( fd, vnodeId )
+        self.offsets.set( fd, 0 )
+        self.fdFlags.set( fd, flags )
+        self.nextFree.set( fd, 0 - 2 )
+        self.openCount = self.openCount + 1
+        return fd
+    
+    public function close( self, I64 fd ) -> I64:
+        
+        """
+        Closes the file descriptor at the given fd number, returning the slot to the free
+        list. Returns the VNode ID that was referenced by the descriptor, so the caller
+        can release the VNode reference. Returns -1 if the fd is out of bounds or not
+        currently open.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if fd < 0 or fd >= self.capacity:
+            return 0 - 1
+        if self.nextFree.get( fd ) != 0 - 2:
+            return 0 - 1
+        I64 vnode = self.vnodeIds.get( fd )
+        self.vnodeIds.set( fd, 0 )
+        self.offsets.set( fd, 0 )
+        self.fdFlags.set( fd, 0 )
+        self.nextFree.set( fd, self.freeHead )
+        self.freeHead = fd
+        self.openCount = self.openCount - 1
+        return vnode
+    
+    public function getOffset( self, I64 fd ) -> I64:
+        
+        """
+        Returns the current file offset for the given file descriptor number. Returns 0
+        if the fd is out of bounds.
+        """
+        
+        if fd < 0 or fd >= self.capacity:
+            return 0
+        return self.offsets.get( fd )
+    
+    public function setOffset( self, I64 fd, I64 offset ) -> Void:
+        
+        """
+        Updates the file offset for the given file descriptor number. No action is taken
+        if the fd is out of bounds.
+        """
+        
+        if fd >= 0 and fd < self.capacity:
+            self.offsets.set( fd, offset )
+    
+    public function getVnodeId( self, I64 fd ) -> I64:
+        
+        """
+        Returns the VNode identifier associated with the given file descriptor number.
+        Returns -1 if the fd is out of bounds.
+        """
+        
+        if fd < 0 or fd >= self.capacity:
+            return 0 - 1
+        return self.vnodeIds.get( fd )
+    
+    public function canRead( self, I64 fd ) -> Boolean:
+        
+        """
+        Checks whether the given file descriptor has read permission. Returns False if the
+        fd is out of bounds or the read flag is not set.
+        """
+        
+        if fd < 0 or fd >= self.capacity:
+            return False
+        return ( self.fdFlags.get( fd ) & 1 ) != 0
+    
+    public function canWrite( self, I64 fd ) -> Boolean:
+        
+        """
+        Checks whether the given file descriptor has write permission. Returns False if the
+        fd is out of bounds or the write flag is not set.
+        """
+        
+        if fd < 0 or fd >= self.capacity:
+            return False
+        return ( self.fdFlags.get( fd ) & 2 ) != 0
+    
+    public function isOpen( self, I64 fd ) -> Boolean:
+        
+        """
+        Returns True if the given file descriptor number is currently open (allocated and
+        in use). Returns False if the fd is out of bounds or is in the free list.
+        """
+        
+        if fd < 0 or fd >= self.capacity:
+            return False
+        return self.nextFree.get( fd ) == 0 - 2
+    
+    public function getOpenCount( self ) -> I64:
+        
+        """ Returns the number of currently open file descriptors in this table. """
+        
+        return self.openCount
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the file descriptor table,
+        including the VNode ID, offset, flags, and free-list arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.vnodeIds.free()
+        self.offsets.free()
+        self.fdFlags.free()
+        self.nextFree.free()
+
+export {
+    FileDescriptor,
+    FileDescriptorTable,
+    FLAG_READ,
+    FLAG_WRITE,
+    FLAG_APPEND,
+    FLAG_CREATE,
+    FLAG_TRUNCATE
+}
