@@ -1,0 +1,137 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/color-distance.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the ColorDistance class with static functions for computing perceptual
+# and mathematical distance between two RGB colors. Includes standard Euclidean
+# distance in RGB space and the weighted redmean algorithm that approximates
+# human color perception by weighting channels based on the average red value
+# of the two colors being compared.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.color-distance
+
+from uranite.adelia.rgb import RGB
+from uranite.math.math import sqrt
+
+public final class ColorDistance:
+    
+    """
+    Static utility class providing distance and similarity metrics for comparing
+    two RGB colors. The Euclidean distance treats RGB as a 3D Cartesian space and
+    computes the straight-line distance between two color points. The redmean
+    algorithm improves perceptual accuracy by weighting the red, green, and blue
+    channel differences according to the average red value of the two colors,
+    approximating how the human eye perceives color differences more heavily in
+    greens and reds than in blues.
+    """
+    
+    public function euclidean( self, RGB first, RGB second ) -> F64:
+        
+        """
+        Compute the standard Euclidean distance between two colors in RGB space,
+        treating each color as a point in a 3D coordinate system where the axes
+        are red (0-255), green (0-255), and blue (0-255). The maximum possible
+        distance is approximately 441.67, which is the distance between black
+        (0,0,0) and white (255,255,255).
+        
+        Parameters:
+            first (RGB):
+                The first color to compare.
+            second (RGB):
+                The second color to compare.
+        
+        Returns:
+            F64:
+                The Euclidean distance from 0.0 (identical) to approximately 441.67.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 dr = first.red - second.red
+        F64 dg = first.green - second.green
+        F64 db = first.blue - second.blue
+        return sqrt( dr * dr + dg * dg + db * db )
+    
+    public function redmean( self, RGB first, RGB second ) -> F64:
+        
+        """
+        Compute a perceptually weighted color distance using the redmean algorithm.
+        This method weights the red, green, and blue channel differences based on
+        the average red value of the two colors being compared, producing results
+        that better approximate how the human eye perceives color differences. The
+        formula increases the weight of the red channel for colors with high red
+        content and increases the weight of the blue channel for colors with low
+        red content. Green always receives the highest weight because the human
+        eye is most sensitive to green variations.
+        
+        Parameters:
+            first (RGB):
+                The first color to compare.
+            second (RGB):
+                The second color to compare.
+        
+        Returns:
+            F64:
+                The weighted perceptual distance between the two colors.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 rMean = ( first.red + second.red ) / 2.0
+        F64 dr = first.red - second.red
+        F64 dg = first.green - second.green
+        F64 db = first.blue - second.blue
+        F64 rWeight = 2.0 + rMean / 256.0
+        F64 gWeight = 4.0
+        F64 bWeight = 2.0 + ( 255.0 - rMean ) / 256.0
+        return sqrt( rWeight * dr * dr + gWeight * dg * dg + bWeight * db * db )
+    
+    public function similarity( self, RGB first, RGB second ) -> F64:
+        
+        """
+        Compute a similarity percentage between two colors using the redmean
+        distance algorithm. Returns 0.0 when the colors are identical and 100.0
+        when they are maximally different. The result is normalized against
+        the maximum possible redmean distance (the distance between black and
+        white).
+        
+        Parameters:
+            first (RGB):
+                The first color to compare.
+            second (RGB):
+                The second color to compare.
+        
+        Returns:
+            F64:
+                A percentage from 0.0 (identical) to 100.0 (maximally different).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 dist = self.redmean( first, second )
+        F64 maxDist = sqrt( 2.5 * 255.0 * 255.0 + 4.0 * 255.0 * 255.0 + 2.5 * 255.0 * 255.0 )
+        return dist / maxDist * 100.0
+
+export {
+    ColorDistance
+}
