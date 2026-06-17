@@ -1,0 +1,38 @@
+package testing
+
+from uranite.errors.error import Error
+from uranite.errors.throwable import Throwable
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertEqualStr,
+    assertTrue,
+    assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Error Tests ===" )
+
+    Error err = new Error( "something went wrong", 500, None )
+
+    assertEqualI64( 500, err.getCode(), "getCode" )
+    assertEqualStr( "", err.getFile(), "getFile empty" )
+    assertEqualI64( 0, err.getLine(), "getLine zero" )
+    assertEqualStr( "something went wrong", err.getMessage(), "getMessage" )
+    assertEqualStr( "something went wrong", err.toString(), "toString" )
+
+    ?Throwable prev = err.getPrevious()
+    assertTrue( prev == None, "getPrevious is None" )
+    putsln( "basic Error OK" )
+
+    # chained errors
+    Error cause = new Error( "root cause", 100, None )
+    Error chained = new Error( "outer error", 200, cause )
+    assertEqualStr( "outer error", chained.getMessage(), "chained getMessage" )
+    assertEqualI64( 200, chained.getCode(), "chained getCode" )
+    ?Throwable chainedPrev = chained.getPrevious()
+    assertTrue( chainedPrev != None, "chained getPrevious not None" )
+    putsln( "chained Error OK" )
+
+    putsln( "=== All error tests passed ===" )
+    return 0
