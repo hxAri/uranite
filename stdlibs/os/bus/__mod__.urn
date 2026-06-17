@@ -1,0 +1,47 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/bus/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all PCI bus types and functions from the bus submodule for convenient access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.bus
+
+from uranite.os.bus.pci import {
+    PCI_CONFIG_ADDRESS,
+    PCI_CONFIG_DATA,
+    PCI_NO_DEVICE,
+    pciAddress,
+    pciRead32,
+    pciRead16,
+    pciRead8,
+    pciWrite32,
+    PciDevice,
+    PciBus
+}
+
+export {
+    PCI_CONFIG_ADDRESS,
+    PCI_CONFIG_DATA,
+    PCI_NO_DEVICE,
+    pciAddress,
+    pciRead32,
+    pciRead16,
+    pciRead8,
+    pciWrite32,
+    PciDevice,
+    PciBus
+}
