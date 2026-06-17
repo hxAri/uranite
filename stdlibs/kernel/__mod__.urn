@@ -1,0 +1,47 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+
+package uranite.kernel
+
+from uranite.kernel.arch import {
+    CpuContext, DescriptorTables, PageMapper,
+    Registers, halt, enableInterrupts, disableInterrupts,
+    readCr0, writeCr0, readCr2, readCr3, writeCr3, readCr4, writeCr4,
+    invlpg, readMsr, writeMsr, readRflags, readTsc,
+    GdtEntry, GdtPointer, Gdt, loadGdt,
+    IdtEntry, IdtPointer, Idt, loadIdt, GateType, InterruptVector, IRQ_BASE,
+    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER,
+    PageTableEntry, PageTable,
+    outb, inb, outw, inw, outl, inl, ioWait
+}
+from uranite.kernel.bus import PciScanner, PciBus, PciDevice
+from uranite.kernel.hal import {
+    HardwareAbstraction, InterruptTable, IrqEntry, MAX_IRQ_COUNT,
+    mmioRead32, mmioWrite32, memoryFence
+}
+from uranite.kernel.driver import {
+    DeviceDriverManager, DriverState, Driver, DriverDescriptor, DriverRegistry
+}
+from uranite.kernel.power import PowerController, PowerManager
+from uranite.kernel.io import {
+    BlockIoSubsystem, BufferCache, DmaChannel, IoRequestQueue,
+    RequestType, RequestStatus, DmaDirection
+}
+from uranite.kernel.debug import PerfCounters
+
+export {
+    CpuContext, DescriptorTables, PageMapper,
+    PciScanner, PciBus, PciDevice,
+    HardwareAbstraction, InterruptTable,
+    DeviceDriverManager, DriverState, Driver, DriverDescriptor, DriverRegistry,
+    PowerController, PowerManager,
+    BlockIoSubsystem, BufferCache, DmaChannel, IoRequestQueue,
+    PerfCounters
+}
