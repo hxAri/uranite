@@ -1,0 +1,40 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/none.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the NoneType class, representing the absence of a value for nullable types.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.none
+
+final class NoneType:
+    
+    """
+    Type of the None singleton, representing the absence of a value.
+    Used as the underlying type for nullable expressions that have no value.
+    """
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string "None" representing this absent value. """
+        
+        return "None"
+    
+    public function equals( self, ?NoneType other ) -> Boolean:
+        
+        """ Return True, since all NoneType instances are considered equal. """
+        
+        return True
