@@ -1,0 +1,156 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-12 03:30
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/errors/lookup.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Data retrieval error hierarchy: LookupError, IndexError, KeyError.
+# Raised by collections and associative containers on failed access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.lookup
+
+from uranite.errors.error import Error
+from uranite.convert.convert import intToString
+
+public class LookupError extends Error:
+
+    """
+    Base class for all failed data retrieval operations.
+
+    Raised when an element, key, or index cannot be found in a data
+    structure. Subclasses distinguish between positional access failures
+    (IndexError) and key-based access failures (KeyError).
+
+    Parameters:
+        message (String):
+            Human-readable description of the lookup failure.
+        code (I64):
+            Numeric error code (0 for generic lookup failures).
+        cause (?Error):
+            Optional underlying error that triggered the lookup failure,
+            or None if this is the root cause.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    public function LookupError( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct a LookupError with a descriptive message.
+
+        Parameters:
+            message (String):
+                Human-readable description of the lookup failure.
+            code (I64):
+                Numeric error code identifying the failure category.
+            cause (?Error):
+                Optional chained error that caused this failure, or None.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        parent( message, code, cause )
+
+public class IndexError extends LookupError:
+
+    """
+    Raised when a positional index is outside the valid range of a
+    sequential container such as ArrayList or StringBuilder.
+
+    Stores the requested index and container size for diagnostic purposes.
+    The error message is automatically formatted from these values.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    public I64 requestedIndex
+    """ The index that was requested but fell outside valid bounds. """
+    public I64 containerSize
+    """ The number of elements in the container at the time of the error. """
+
+    public function IndexError( self, I64 requestedIndex, I64 containerSize ) -> Void:
+
+        """
+        Construct an IndexError from the offending index and container size.
+
+        The error message is automatically formatted as:
+        "index N out of range for container of size M"
+
+        Parameters:
+            requestedIndex (I64):
+                The index that was attempted.
+            containerSize (I64):
+                The current number of elements in the container.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.requestedIndex = requestedIndex
+        self.containerSize = containerSize
+        String indexText = intToString( requestedIndex )
+        String sizeText = intToString( containerSize )
+        String errorMessage = "index " + indexText + " out of range for container of size " + sizeText
+        parent( errorMessage, 0, None )
+
+public class KeyError extends LookupError:
+
+    """
+    Raised when a key is not found in an associative container such
+    as HashMap or Kwargs.
+
+    Stores the requested key string for diagnostic purposes.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    public String requestedKey
+    """ The key that was queried but does not exist in the container. """
+
+    public function KeyError( self, String requestedKey ) -> Void:
+
+        """
+        Construct a KeyError from the missing key.
+
+        The error message is automatically formatted as:
+        "key not found: '<key>'"
+
+        Parameters:
+            requestedKey (String):
+                The key that was looked up but does not exist.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.requestedKey = requestedKey
+        String errorMessage = "key not found: '" + requestedKey + "'"
+        parent( errorMessage, 0, None )
+
+export {
+    LookupError,
+    IndexError,
+    KeyError
+}
