@@ -1,0 +1,38 @@
+package testing
+
+from uranite.security.identity import UserIdentity, ROOT_UID, NOBODY_UID
+from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Security Identity Tests ===" )
+
+    UserIdentity root = new UserIdentity( 0, 0, 12345 )
+    assertTrue( root.isRoot(), "root isRoot" )
+    assertEqualI64( 0, root.getUid(), "root uid" )
+    assertEqualI64( 0, root.getGid(), "root gid" )
+    assertTrue( root.canAccessAs( 1000 ), "root can access any" )
+    assertTrue( root.verifyToken( 12345 ), "token verify" )
+    assertFalse( root.verifyToken( 99999 ), "bad token" )
+    putsln( "root identity OK" )
+
+    UserIdentity user = new UserIdentity( 1000, 1000, 67890 )
+    assertFalse( user.isRoot(), "user not root" )
+    assertTrue( user.canAccessAs( 1000 ), "user can access own" )
+    assertFalse( user.canAccessAs( 2000 ), "user cannot access other" )
+    putsln( "user identity OK" )
+
+    user.dropToNobody()
+    assertTrue( user.isNobody(), "dropped to nobody" )
+    assertEqualI64( NOBODY_UID, user.getEffectiveUid(), "effective uid nobody" )
+    putsln( "dropToNobody OK" )
+
+    UserIdentity checker = new UserIdentity( 500, 500, 11111 )
+    assertTrue( checker.matchesIdentity( 500, 500 ), "matches self" )
+    assertFalse( checker.matchesIdentity( 500, 600 ), "no match different gid" )
+    assertTrue( checker.inGroup( 500 ), "in group 500" )
+    assertFalse( checker.inGroup( 999 ), "not in group 999" )
+    putsln( "matching OK" )
+
+    putsln( "=== All Security Identity Tests Passed ===" )
+    return 0
