@@ -1,0 +1,50 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/logging/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.logging.errors
+
+from uranite.errors.error import Error
+
+public class LoggingError extends Error:
+    
+    """
+    Represents an error that occurs during logging operations such as
+    handler failures, formatter errors, or invalid log configuration.
+    """
+    
+    public function LoggingError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new LoggingError with a descriptive message, error code,
+        and an optional underlying cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the logging error.
+            code (I64):
+                A numeric error code identifying the type of logging failure.
+            cause (?Error):
+                An optional underlying error that triggered this logging error,
+                or None if there is no root cause.
+        """
+        
+        parent( message, code, cause )
+
+export {
+    LoggingError
+}
