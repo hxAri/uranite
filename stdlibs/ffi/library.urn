@@ -1,0 +1,121 @@
+package uranite.ffi.library
+
+from uranite.ffi.errors import LibraryLoadError, SymbolNotFoundError
+
+extern function uranite_dlopen( String libraryPath, I64 flags ) -> I64;
+extern function uranite_dlsym( I64 libraryHandle, String symbolName ) -> I64;
+extern function uranite_dlclose( I64 libraryHandle ) -> I64;
+extern function uranite_dlerror() -> String;
+
+const I64 RTLD_LAZY = 1
+const I64 RTLD_NOW = 2
+const I64 RTLD_GLOBAL = 256
+const I64 RTLD_LOCAL = 0
+
+public class DynamicLibrary:
+    """
+    Wrapper around POSIX dynamic linking functions for loading shared objects
+    at runtime. Provides safe open/close lifecycle and symbol lookup.
+
+    The caller is responsible for correct type casting of resolved symbol
+    pointers. This is a low-level FFI primitive, not a type-safe binding
+    generator.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    protect I64 libraryHandle
+    protect String libraryPath
+    protect Boolean isLoaded
+
+    public function DynamicLibrary( self, String libraryPath ) -> Void:
+        """
+        Construct a DynamicLibrary from a filesystem path. Does not open
+        the library — call open() to load it into the process.
+
+        Parameters:
+            libraryPath (String):
+                Path to the shared object file (.so).
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        self.libraryPath = libraryPath
+        self.libraryHandle = 0
+        self.isLoaded = False
+
+    public function open( self ) -> Void:
+        """
+        Load the shared library into the process address space using
+        RTLD_NOW (immediate symbol resolution).
+
+        Raises:
+            LibraryLoadError: When the dynamic linker cannot load the library.
+
+        Complexity:
+            Time: O(n) where n is the number of symbols in the library
+            Space: O(1)
+        """
+        I64 handle = uranite_dlopen( self.libraryPath, RTLD_NOW )
+        if handle == 0:
+            String errorMessage = uranite_dlerror()
+            raise new LibraryLoadError( self.libraryPath, errorMessage )
+        self.libraryHandle = handle
+        self.isLoaded = True
+
+    public function close( self ) -> Void:
+        """
+        Unload the shared library from the process. After close, all
+        symbol pointers obtained from this library become invalid.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        if self.isLoaded:
+            uranite_dlclose( self.libraryHandle )
+            self.libraryHandle = 0
+            self.isLoaded = False
+
+    public function lookupSymbol( self, String symbolName ) -> I64:
+        """
+        Resolve a named symbol within the loaded library. Returns the
+        raw address as I64. The caller must cast this to the correct
+        function pointer type.
+
+        Parameters:
+            symbolName (String):
+                Name of the exported symbol to resolve.
+
+        Returns:
+            I64:
+                Raw address of the resolved symbol.
+
+        Raises:
+            SymbolNotFoundError: When the symbol does not exist in the library.
+
+        Complexity:
+            Time: O(1) amortized (hash table lookup in dynamic linker)
+            Space: O(1)
+        """
+        I64 symbolAddress = uranite_dlsym( self.libraryHandle, symbolName )
+        if symbolAddress == 0:
+            raise new SymbolNotFoundError( symbolName, self.libraryPath )
+        return symbolAddress
+
+    public function isOpen( self ) -> Boolean:
+        """
+        Check whether the library is currently loaded.
+
+        Returns:
+            Boolean:
+                True if the library has been opened and not yet closed.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        return self.isLoaded
