@@ -1,0 +1,213 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-15 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/requests/session.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# HTTP session with persistent default headers. Provides get/post/put/delete/patch
+# methods that accept URL strings and merge session-level headers into each request.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.requests.session
+
+from uranite.net.http.request import HttpRequest
+from uranite.net.http.response import HttpResponse
+from uranite.net.http.client import sendRequest
+from uranite.requests.response import Response
+from uranite.requests.headers import Headers, parseHeaders
+from uranite.requests.url import ParsedURL, parseURL
+from uranite.collection.array-list import ArrayList
+
+public class Session:
+
+    """
+    HTTP session with persistent default headers applied to every request.
+
+    Create a Session, configure shared headers (e.g., User-Agent, Authorization),
+    then use get/post/put/delete/patch with URL strings. Session-level headers
+    are merged into each request automatically.
+    """
+
+    public Headers headers
+    """Default headers applied to every request made through this session."""
+
+    public function Session( self ) -> Void:
+
+        """
+        Create a new session with no default headers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.headers = new Headers()
+
+    public function request( self, String method, String url, String body, String contentType ) -> Response:
+
+        """
+        Send an HTTP request using a URL string.
+
+        Parses the URL into host, port, and path components, constructs an
+        HttpRequest, applies session-level headers, and sends via the
+        low-level HTTP client.
+
+        Parameters:
+            method (String):
+                The HTTP method (e.g., "GET", "POST").
+            url (String):
+                The full URL (e.g., "http://127.0.0.1:8080/api/users").
+            body (String):
+                The request body, or empty string for no body.
+            contentType (String):
+                The Content-Type header, or empty string to omit.
+
+        Returns:
+            Response:
+                The server's response with parsed headers.
+
+        Complexity:
+            Time: O(n) where n is URL + headers size
+            Space: O(n)
+        """
+
+        ParsedURL parsed = parseURL( url )
+        HttpRequest httpRequest = new HttpRequest( method, parsed.path )
+
+        if body != "":
+            httpRequest.setBody( body )
+        if contentType != "":
+            httpRequest.setContentType( contentType )
+
+        String sessionHeaderBlock = self.headers.toString()
+        if sessionHeaderBlock != "":
+            httpRequest.addRawHeaders( sessionHeaderBlock )
+
+        HttpResponse httpResponse = sendRequest( parsed.ipAddress, parsed.port, httpRequest )
+        Headers responseHeaders = parseHeaders( httpResponse.rawHeaders )
+        return new Response( httpResponse.statusCode, httpResponse.body, httpResponse.rawHeaders )
+
+    public function get( self, String url ) -> Response:
+
+        """
+        Send an HTTP GET request to the given URL.
+
+        Parameters:
+            url (String):
+                The full URL.
+
+        Returns:
+            Response:
+                The server's response.
+        """
+
+        return self.request( "GET", url, "", "" )
+
+    public function post( self, String url, String body ) -> Response:
+
+        """
+        Send an HTTP POST request with a JSON body.
+
+        Parameters:
+            url (String):
+                The full URL.
+            body (String):
+                The JSON-encoded request body.
+
+        Returns:
+            Response:
+                The server's response.
+        """
+
+        return self.request( "POST", url, body, "application/json" )
+
+    public function put( self, String url, String body ) -> Response:
+
+        """
+        Send an HTTP PUT request with a JSON body.
+
+        Parameters:
+            url (String):
+                The full URL.
+            body (String):
+                The JSON-encoded request body.
+
+        Returns:
+            Response:
+                The server's response.
+        """
+
+        return self.request( "PUT", url, body, "application/json" )
+
+    public function del( self, String url ) -> Response:
+
+        """
+        Send an HTTP DELETE request.
+
+        Parameters:
+            url (String):
+                The full URL.
+
+        Returns:
+            Response:
+                The server's response.
+        """
+
+        return self.request( "DELETE", url, "", "" )
+
+    public function patch( self, String url, String body ) -> Response:
+
+        """
+        Send an HTTP PATCH request with a JSON body.
+
+        Parameters:
+            url (String):
+                The full URL.
+            body (String):
+                The JSON-encoded request body.
+
+        Returns:
+            Response:
+                The server's response.
+        """
+
+        return self.request( "PATCH", url, body, "application/json" )
+
+    public function postForm( self, String url, String body ) -> Response:
+
+        """
+        Send an HTTP POST request with URL-encoded form data.
+
+        Parameters:
+            url (String):
+                The full URL.
+            body (String):
+                The URL-encoded form data.
+
+        Returns:
+            Response:
+                The server's response.
+        """
+
+        return self.request( "POST", url, body, "application/x-www-form-urlencoded" )
+
+    public function destroy( self ) -> Void:
+
+        """Release resources held by session headers."""
+
+        self.headers.destroy()
+
+export {
+    Session
+}
