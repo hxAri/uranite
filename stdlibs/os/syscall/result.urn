@@ -1,0 +1,82 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/syscall/result.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides a wrapper for raw syscall return values, distinguishing between success (non-negative) and error (negative) results with convenient accessors.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.syscall.result
+
+public class SyscallResult:
+    
+    """
+    Wraps the raw return value from a syscall instruction (RAX after syscall). By
+    convention, a non-negative value indicates success and carries the result, while
+    a negative value indicates an error where the absolute value is the error code
+    from SyscallError.
+    """
+    
+    protect I64 raw
+    
+    public function SyscallResult( self, I64 raw ) -> Void:
+        
+        """
+        Constructs a new SyscallResult wrapping the raw value returned in RAX after
+        executing a syscall instruction.
+        """
+        
+        self.raw = raw
+    
+    public function isOk( self ) -> Boolean:
+        
+        """ Returns True if the syscall succeeded (raw return value is non-negative). """
+        
+        return self.raw >= 0
+    
+    public function isError( self ) -> Boolean:
+        
+        """ Returns True if the syscall failed (raw return value is negative). """
+        
+        return self.raw < 0
+    
+    public function value( self ) -> I64:
+        
+        """
+        Returns the success value of the syscall result. This method should only be
+        called when isOk() returns True, as the value is undefined for error results.
+        """
+        
+        return self.raw
+    
+    public function errorCode( self ) -> I64:
+        
+        """
+        Returns the error code as a positive integer by negating the raw return value.
+        This method should only be called when isError() returns True. The returned
+        code corresponds to a SyscallError enum value.
+        """
+        
+        return 0 - self.raw
+    
+    public function rawValue( self ) -> I64:
+        
+        """ Returns the raw uninterpreted return value from the syscall instruction. """
+        
+        return self.raw
+
+export {
+    SyscallResult
+}
