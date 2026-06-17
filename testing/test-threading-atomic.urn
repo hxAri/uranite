@@ -1,0 +1,36 @@
+package testing
+
+from uranite.functions.externs import malloc, free
+from uranite.functions.runtime import {
+    uraniteAtomicLoad, uraniteAtomicStore,
+    uraniteAtomicAdd, uraniteAtomicSub
+}
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Threading Atomic Tests ===" )
+
+    I64 ptr = malloc( 8 ) as I64
+
+    uraniteAtomicStore( ptr, 100 )
+    I64 val = uraniteAtomicLoad( ptr )
+    assertEqualI64( 100, val, "store+load" )
+    putsln( "store/load OK" )
+
+    I64 prev = uraniteAtomicAdd( ptr, 10 )
+    assertEqualI64( 100, prev, "add prev" )
+    val = uraniteAtomicLoad( ptr )
+    assertEqualI64( 110, val, "after add" )
+    putsln( "add OK" )
+
+    prev = uraniteAtomicSub( ptr, 5 )
+    assertEqualI64( 110, prev, "sub prev" )
+    val = uraniteAtomicLoad( ptr )
+    assertEqualI64( 105, val, "after sub" )
+    putsln( "sub OK" )
+
+    free( ptr as *Void )
+
+    putsln( "=== All atomic tests passed ===" )
+    return 0
