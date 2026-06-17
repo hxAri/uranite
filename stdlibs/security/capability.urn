@@ -1,0 +1,159 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/security/capability.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Capability-based security with permission set management. Wraps
+# the kernel Capability bitmask with a high-level set interface
+# for granting, revoking, and checking permissions.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.security.capability
+
+from uranite.os.security.capability import CapabilityFlag, Capability
+
+public class CapabilitySet:
+
+    """
+    Manages a mutable set of security capabilities for permission
+    checking. Wraps the immutable kernel Capability with grant/revoke
+    operations that replace the internal capability on each mutation.
+    Supports subset checks for privilege escalation prevention.
+    """
+
+    protect Capability capabilities
+
+    public function CapabilitySet( self ) -> Void:
+
+        """
+        Construct an empty capability set with no permissions granted.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.capabilities = new Capability( 0 )
+
+    public function grant( self, I64 flagBit ) -> Void:
+
+        """
+        Grant a permission flag to this capability set.
+
+        Parameters:
+            flagBit (I64):
+                Bit value of the permission to grant.
+        """
+
+        self.capabilities = self.capabilities.add( flagBit )
+
+    public function revoke( self, I64 flagBit ) -> Void:
+
+        """
+        Revoke a permission flag from this capability set.
+
+        Parameters:
+            flagBit (I64):
+                Bit value of the permission to revoke.
+        """
+
+        self.capabilities = self.capabilities.remove( flagBit )
+
+    public function check( self, I64 flagBit ) -> Boolean:
+
+        """
+        Check whether a specific permission is granted.
+
+        Parameters:
+            flagBit (I64):
+                Bit value of the permission to check.
+
+        Returns:
+            Boolean:
+                True if the permission is present in this set.
+        """
+
+        return self.capabilities.has( flagBit )
+
+    public function containsAll( self, Capability other ) -> Boolean:
+
+        """
+        Check whether this set contains all permissions from another
+        capability. Used to prevent privilege escalation during handle
+        duplication.
+
+        Parameters:
+            other (Capability):
+                Capability whose permissions must be a subset.
+
+        Returns:
+            Boolean:
+                True if all permissions in other are present here.
+        """
+
+        return self.capabilities.contains( other )
+
+    public function mergeWith( self, Capability other ) -> Void:
+
+        """
+        Merge permissions from another capability into this set.
+
+        Parameters:
+            other (Capability):
+                Capability whose permissions to add.
+        """
+
+        self.capabilities = self.capabilities.merge( other )
+
+    public function intersectWith( self, Capability other ) -> Void:
+
+        """
+        Reduce this set to only permissions also present in other.
+
+        Parameters:
+            other (Capability):
+                Capability to intersect with.
+        """
+
+        self.capabilities = self.capabilities.intersect( other )
+
+    public function getMask( self ) -> I64:
+
+        """ Return the raw permission bitmask. """
+
+        return self.capabilities.getMask()
+
+    public function isEmpty( self ) -> Boolean:
+
+        """ Return whether no permissions are granted. """
+
+        return self.capabilities.isEmpty()
+
+    public function getCapability( self ) -> Capability:
+
+        """
+        Return the underlying immutable Capability snapshot.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.capabilities
+
+export {
+    CapabilitySet,
+    CapabilityFlag, Capability
+}
