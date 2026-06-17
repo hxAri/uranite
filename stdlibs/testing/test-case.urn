@@ -1,0 +1,262 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/testing/test-case.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# TestCase base class with setUp/tearDown lifecycle, assertion
+# methods inherited from assertions module, and named test execution.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.testing.test-case
+
+from uranite.testing.errors import AssertionError
+from uranite.convert.convert import intToString, floatToString
+
+public class TestCase:
+    
+    """
+    Base class for unit tests providing lifecycle hooks and built-in
+    assertion methods. Subclasses override setUp and tearDown for
+    per-test initialization and cleanup, and use the assertion methods
+    to verify expected behavior.
+    """
+    
+    public String testName
+    """ The name identifying this test case. """
+    
+    public function TestCase( self, String name ) -> Void:
+        
+        """
+        Create a new TestCase with the given name.
+        
+        Parameters:
+            name (String):
+                The name identifying this test case.
+        """
+        
+        self.testName = name
+    
+    public function setUp( self ) -> Void:
+        
+        """
+        Called before each test method runs. Override in subclasses to
+        perform per-test initialization such as creating fixtures or
+        resetting state. The default implementation does nothing.
+        """
+        
+        return
+    
+    public function tearDown( self ) -> Void:
+        
+        """
+        Called after each test method runs, regardless of whether the
+        test passed or failed. Override in subclasses to perform cleanup
+        such as releasing resources. The default implementation does nothing.
+        """
+        
+        return
+    
+    public function assertTrue( self, Boolean condition, String message ) -> Void:
+        
+        """
+        Assert that a condition is True.
+        
+        Parameters:
+            condition (Boolean):
+                The boolean value expected to be True.
+            message (String):
+                A descriptive message included in the error on failure.
+        
+        Raises:
+            AssertionError: If condition is False.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if condition == False:
+            raise new AssertionError( "assertTrue failed: " + message, 0, None )
+    
+    public function assertFalse( self, Boolean condition, String message ) -> Void:
+        
+        """
+        Assert that a condition is False.
+        
+        Parameters:
+            condition (Boolean):
+                The boolean value expected to be False.
+            message (String):
+                A descriptive message included in the error on failure.
+        
+        Raises:
+            AssertionError: If condition is True.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if condition:
+            raise new AssertionError( "assertFalse failed: " + message, 0, None )
+    
+    public function assertEqualI64( self, I64 expected, I64 actual, String message ) -> Void:
+        
+        """
+        Assert that two I64 values are equal.
+        
+        Parameters:
+            expected (I64):
+                The expected integer value.
+            actual (I64):
+                The actual integer value to compare against expected.
+            message (String):
+                A descriptive message included in the error on failure.
+        
+        Raises:
+            AssertionError: If expected does not equal actual.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if expected != actual:
+            raise new AssertionError( "expected " + intToString( expected ) + " got " + intToString( actual ) + ": " + message, 0, None )
+    
+    public function assertEqualF64( self, F64 expected, F64 actual, F64 epsilon, String message ) -> Void:
+        
+        """
+        Assert that two F64 values are equal within a tolerance.
+        
+        Parameters:
+            expected (F64):
+                The expected floating-point value.
+            actual (F64):
+                The actual floating-point value to compare.
+            epsilon (F64):
+                The maximum allowed absolute difference between expected
+                and actual for them to be considered equal.
+            message (String):
+                A descriptive message included in the error on failure.
+        
+        Raises:
+            AssertionError: If the absolute difference exceeds epsilon.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 diff = expected - actual
+        if diff < 0.0:
+            diff = 0.0 - diff
+        if diff > epsilon:
+            raise new AssertionError( "expected " + floatToString( expected, 6 ) + " got " + floatToString( actual, 6 ) + ": " + message, 0, None )
+    
+    public function assertEqualStr( self, String expected, String actual, String message ) -> Void:
+        
+        """
+        Assert that two strings are equal.
+        
+        Parameters:
+            expected (String):
+                The expected string value.
+            actual (String):
+                The actual string value to compare.
+            message (String):
+                A descriptive message included in the error on failure.
+        
+        Raises:
+            AssertionError: If expected does not equal actual.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if expected != actual:
+            raise new AssertionError( "expected '" + expected + "' got '" + actual + "': " + message, 0, None )
+    
+    public function assertGreaterThan( self, I64 left, I64 right, String message ) -> Void:
+
+        """
+        Assert that the first I64 value is strictly greater than the second.
+
+        Parameters:
+            left (I64):
+                The value expected to be greater.
+            right (I64):
+                The value expected to be less than left.
+            message (String):
+                A descriptive message included in the error on failure.
+
+        Raises:
+            AssertionError: If left is less than or equal to right.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if left <= right:
+            raise new AssertionError( intToString( left ) + " <= " + intToString( right ) + ": " + message, 0, None )
+
+    public function assertLessThan( self, I64 left, I64 right, String message ) -> Void:
+
+        """
+        Assert that the first I64 value is strictly less than the second.
+
+        Parameters:
+            left (I64):
+                The value expected to be less.
+            right (I64):
+                The value expected to be greater than left.
+            message (String):
+                A descriptive message included in the error on failure.
+
+        Raises:
+            AssertionError: If left is greater than or equal to right.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if left >= right:
+            raise new AssertionError( intToString( left ) + " >= " + intToString( right ) + ": " + message, 0, None )
+    
+    public function fail( self, String message ) -> Void:
+        
+        """
+        Unconditionally fail the current test with the given message.
+        
+        Parameters:
+            message (String):
+                A descriptive message explaining why the test failed.
+        
+        Raises:
+            AssertionError: Always raised.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        raise new AssertionError( "FAIL: " + message, 0, None )
+
+export {
+    TestCase
+}
