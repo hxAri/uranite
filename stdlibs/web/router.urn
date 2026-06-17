@@ -1,0 +1,344 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/router.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Router: stores routes, matches incoming request path+method against
+# registered patterns, extracts path parameters into the request object.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.router
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt
+from uranite.functions.builtin import equals, substring
+from uranite.web.route import Route
+from uranite.web.request import HttpRequest
+
+const I64 MAX_ROUTES = 256
+""" Maximum number of routes that can be registered in a single Router. """
+
+function addrToRoute( I64 addr ) -> Route:
+    
+    """
+    Reinterpret a raw memory address as a Route object reference.
+    
+    Uses inline assembly to cast the integer address back to a Route
+    pointer. The caller must ensure the address points to a valid Route.
+    
+    Parameters:
+        addr (I64):
+            The memory address of a previously stored Route object.
+    
+    Returns:
+        Route:
+            The Route object at the given address.
+    """
+    
+    Route obj = new Route( "", "", 0 )
+    asm volatile "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+    return obj
+
+public class MatchResult:
+    
+    """
+    Holds the result of a route resolution attempt, containing the matched
+    handler address and a flag indicating whether a match was found.
+    """
+    
+    public I64 handlerAddr
+    """ The memory address of the matched route handler, or 0 if no match. """
+    public Boolean matched
+    """ Whether a matching route was found for the request. """
+    
+    public function MatchResult( self, I64 handlerAddr, Boolean matched ) -> Void:
+        
+        """
+        Construct a new MatchResult.
+        
+        Parameters:
+            handlerAddr (I64):
+                The handler function address, or 0 if unmatched.
+            matched (Boolean):
+                True if a route matched, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.handlerAddr = handlerAddr
+        self.matched = matched
+
+public class Router:
+    
+    """
+    HTTP request router that stores route definitions and matches incoming
+    requests against registered URL patterns.
+    
+    Routes are matched by HTTP method and URL path segment comparison.
+    Path parameters (segments prefixed with ':' in the route pattern)
+    are extracted and stored on the HttpRequest during resolution.
+    """
+    
+    public Memory<I64> routes
+    """ Storage for route object addresses. """
+    public I64 routeCount
+    """ The current number of registered routes. """
+    
+    public function Router( self ) -> Void:
+        
+        """
+        Construct a new Router with empty route storage.
+        
+        Allocates space for up to MAX_ROUTES route entries.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.routes = new Memory<I64>( MAX_ROUTES )
+        self.routeCount = 0
+    
+    public function addRoute( self, Route route ) -> Void:
+        
+        """
+        Register a route with the router.
+        
+        Stores the route's memory address for later resolution. If the
+        maximum number of routes has been reached, the route is silently
+        dropped.
+        
+        Parameters:
+            route (Route):
+                The route definition to register.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.routeCount < MAX_ROUTES:
+            I64 routeAddr = 0
+            asm volatile "movq $1, $0" : output( "=r" routeAddr ) : input( "r" route ) : clobber()
+            self.routes.set( self.routeCount, routeAddr )
+            self.routeCount = self.routeCount + 1
+    
+    public function resolve( self, String method, String path, HttpRequest req ) -> MatchResult:
+        
+        """
+        Match an incoming request against all registered routes.
+        
+        Splits the request path into segments and compares each segment
+        against registered route patterns. For parameter segments, the
+        corresponding path value is extracted and stored on the request
+        via setParam. The first matching route wins.
+        
+        Parameters:
+            method (String):
+                The HTTP method of the incoming request.
+            path (String):
+                The URL path of the incoming request.
+            req (HttpRequest):
+                The request object where extracted path parameters will be stored.
+        
+        Returns:
+            MatchResult:
+                A result containing the handler address and match status.
+                If no route matches, handlerAddr is 0 and matched is False.
+        
+        Complexity:
+            Time: O(r * s) where r is the number of registered routes and s is the number of segments in the longest pattern
+        """
+        
+        I64 pathPtr = stringToPtr( path )
+        I64 pathLen = stringLen( path )
+        Memory<I64> pathSegs = new Memory<I64>( 16 )
+        Memory<I64> pathSegStarts = new Memory<I64>( 16 )
+        Memory<I64> pathSegEnds = new Memory<I64>( 16 )
+        I64 pathSegCount = 0
+        I64 pi = 0
+        if pathLen > 0 and readByteAt( pathPtr, 0 ) == 47:
+            pi = 1
+        I64 segStart = pi
+        while pi <= pathLen:
+            Boolean atEnd = pi == pathLen
+            Boolean atSlash = False
+            if atEnd == False:
+                atSlash = readByteAt( pathPtr, pi ) == 47
+            if atEnd or atSlash:
+                if pi > segStart:
+                    pathSegStarts.set( pathSegCount, segStart )
+                    pathSegEnds.set( pathSegCount, pi )
+                    pathSegCount = pathSegCount + 1
+                segStart = pi + 1
+            pi = pi + 1
+        I64 ri = 0
+        while ri < self.routeCount:
+            I64 routeAddr = self.routes.get( ri )
+            Route route = addrToRoute( routeAddr )
+            if route.matchesMethod( method ) and route.segmentCount == pathSegCount:
+                Boolean allMatch = True
+                I64 si = 0
+                while si < route.segmentCount and allMatch:
+                    I64 paramFlag = route.isParam.get( si )
+                    if paramFlag == 1:
+                        String paramName = ptrToString( route.segmentPtrs.get( si ) )
+                        String paramNameClean = substring( paramName, 1, stringLen( paramName ) )
+                        I64 pStart = pathSegStarts.get( si )
+                        I64 pEnd = pathSegEnds.get( si )
+                        String paramValue = substring( path, pStart, pEnd )
+                        req.setParam( paramNameClean, paramValue )
+                    else:
+                        String routeSeg = ptrToString( route.segmentPtrs.get( si ) )
+                        I64 pStart = pathSegStarts.get( si )
+                        I64 pEnd = pathSegEnds.get( si )
+                        String pathSeg = substring( path, pStart, pEnd )
+                        if equals( routeSeg, pathSeg ) == False:
+                            allMatch = False
+                    si = si + 1
+                if allMatch:
+                    return new MatchResult( route.handlerAddr, True )
+            ri = ri + 1
+        return new MatchResult( 0, False )
+
+    public function get( self, String pattern, I64 handlerAddress ) -> Router:
+
+        """
+        Register a GET route and return this router for method chaining.
+
+        Parameters:
+            pattern (String):
+                The URL path pattern (e.g., "/users/:id").
+            handlerAddress (I64):
+                The memory address of the handler function.
+
+        Returns:
+            Router:
+                This router instance.
+
+        Complexity:
+            Time: O(s) where s is the number of segments in the pattern
+        """
+
+        self.addRoute( new Route( "GET", pattern, handlerAddress ) )
+        return self
+
+    public function post( self, String pattern, I64 handlerAddress ) -> Router:
+
+        """
+        Register a POST route and return this router for method chaining.
+
+        Parameters:
+            pattern (String):
+                The URL path pattern.
+            handlerAddress (I64):
+                The memory address of the handler function.
+
+        Returns:
+            Router:
+                This router instance.
+
+        Complexity:
+            Time: O(s) where s is the number of segments in the pattern
+        """
+
+        self.addRoute( new Route( "POST", pattern, handlerAddress ) )
+        return self
+
+    public function put( self, String pattern, I64 handlerAddress ) -> Router:
+
+        """
+        Register a PUT route and return this router for method chaining.
+
+        Parameters:
+            pattern (String):
+                The URL path pattern.
+            handlerAddress (I64):
+                The memory address of the handler function.
+
+        Returns:
+            Router:
+                This router instance.
+
+        Complexity:
+            Time: O(s) where s is the number of segments in the pattern
+        """
+
+        self.addRoute( new Route( "PUT", pattern, handlerAddress ) )
+        return self
+
+    public function del( self, String pattern, I64 handlerAddress ) -> Router:
+
+        """
+        Register a DELETE route and return this router for method chaining.
+
+        Parameters:
+            pattern (String):
+                The URL path pattern.
+            handlerAddress (I64):
+                The memory address of the handler function.
+
+        Returns:
+            Router:
+                This router instance.
+
+        Complexity:
+            Time: O(s) where s is the number of segments in the pattern
+        """
+
+        self.addRoute( new Route( "DELETE", pattern, handlerAddress ) )
+        return self
+
+    public function patch( self, String pattern, I64 handlerAddress ) -> Router:
+
+        """
+        Register a PATCH route and return this router for method chaining.
+
+        Parameters:
+            pattern (String):
+                The URL path pattern.
+            handlerAddress (I64):
+                The memory address of the handler function.
+
+        Returns:
+            Router:
+                This router instance.
+
+        Complexity:
+            Time: O(s) where s is the number of segments in the pattern
+        """
+
+        self.addRoute( new Route( "PATCH", pattern, handlerAddress ) )
+        return self
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release the heap-allocated route storage buffer.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.routes.free()
+
+export {
+    Router,
+    MatchResult,
+    MAX_ROUTES
+}
