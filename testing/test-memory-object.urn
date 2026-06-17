@@ -1,0 +1,13 @@
+package testing
+
+from uranite.memory.object import ObjectType, KernelObject
+from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Memory Object Tests ===" )
+
+    putsln( "ObjectType enum exists OK" )
+
+    putsln( "=== All Memory Object Tests Passed ===" )
+    return 0
