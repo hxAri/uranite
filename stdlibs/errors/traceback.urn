@@ -1,0 +1,87 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/errors/traceback.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Traceback class for recording stack frame information used in diagnostic reporting.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.traceback
+
+public Readonly class Traceback:
+    
+    """
+    Stack frame record for diagnostic reporting.
+    
+    Each Traceback instance captures the source location of a single stack frame,
+    including the file path, line number, function name, and module name. These
+    records are used to construct stack traces when errors or exceptions are raised.
+    """
+    
+    protect String file
+    protect I64 line
+    protect String functionName
+    protect String moduleName
+    
+    public function Traceback( self, String file, I64 line, String functionName, String moduleName ) -> Void:
+        
+        """
+        Create a new traceback entry for the given source location.
+        
+        Parameters:
+            file (String):
+                The file path of the source file containing this stack frame.
+            line (I32):
+                The line number within the source file.
+            functionName (String):
+                The name of the function at this stack frame.
+            moduleName (String):
+                The name of the module containing this stack frame.
+        """
+        
+        self.file = file
+        self.line = line
+        self.functionName = functionName
+        self.moduleName = moduleName
+    
+    public function getFile( self ) -> String:
+        
+        """ Return the source file path of this stack frame. """
+        
+        return self.file
+    
+    public function getLine( self ) -> I64:
+        
+        """ Return the source line number of this stack frame. """
+        
+        return self.line
+    
+    public function getFunctionName( self ) -> String:
+        
+        """ Return the function name at this stack frame. """
+        
+        return self.functionName
+    
+    public function getModuleName( self ) -> String:
+        
+        """ Return the module name containing this stack frame. """
+        
+        return self.moduleName
+    
+    public function toString( self ) -> String:
+        
+        """ Return a string representation of this traceback entry, which is the file path. """
+        
+        return self.file
