@@ -1,0 +1,73 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/logger-middleware.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.logger-middleware
+
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+from uranite.web.middleware import Middleware
+from uranite.io.console import putsln
+from uranite.convert.convert import intToString
+
+public class RequestLoggerMiddleware implements Middleware:
+    
+    """
+    Middleware that logs each HTTP request and its response status to the console.
+    
+    Outputs the HTTP method, request path, and response status code for every
+    processed request, providing basic request visibility for debugging and
+    monitoring purposes.
+    """
+    
+    public function RequestLoggerMiddleware( self ) -> Void:
+        
+        """
+        Construct a new RequestLoggerMiddleware instance.
+        """
+        
+        return
+    
+    public function process( self, HttpRequest req, HttpResponse res ) -> Boolean:
+        
+        """
+        Log the request method, path, and response status code to stdout.
+        
+        Prints a single line in the format "METHOD /path -> STATUS" for each
+        request that passes through the middleware chain.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request to log.
+            res (HttpResponse):
+                The outgoing HTTP response whose status code will be logged.
+        
+        Returns:
+            Boolean:
+                Always returns True, allowing the middleware chain to continue.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        putsln( req.method + " " + req.path + " -> " + intToString( res.statusCode ) )
+        return True
+
+export {
+    RequestLoggerMiddleware
+}
