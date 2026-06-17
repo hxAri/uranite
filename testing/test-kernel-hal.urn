@@ -1,0 +1,14 @@
+package testing
+
+from uranite.kernel.hal import HardwareAbstraction
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Kernel HAL Tests ===" )
+
+    HardwareAbstraction hal = new HardwareAbstraction()
+    putsln( "HardwareAbstraction constructed OK" )
+
+    putsln( "=== All Kernel HAL Tests Passed ===" )
+    return 0
