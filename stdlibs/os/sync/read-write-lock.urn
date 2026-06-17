@@ -1,0 +1,150 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/sync/read-write-lock.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Read-write lock allowing multiple concurrent readers or one exclusive writer with writer-preference policy to prevent writer starvation. A spinlock protects all internal state transitions.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.sync.read-write-lock
+
+from uranite.os.sync.spinlock import Spinlock
+
+public class ReadWriteLock:
+    
+    """
+    Read-write lock allowing multiple concurrent readers or one exclusive writer.
+    Uses writer-preference policy: once a writer is waiting, new readers will
+    queue behind it to prevent writer starvation. A spinlock protects all
+    internal state transitions.
+    """
+    
+    protect Spinlock guard
+    protect I64 readerCount
+    protect Boolean writerActive
+    protect I64 writerWaiting
+    
+    public function ReadWriteLock( self ) -> Void:
+        
+        """
+        Construct a read-write lock in the unlocked state with no active
+        readers or writers and no waiting writers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard = new Spinlock()
+        self.readerCount = 0
+        self.writerActive = False
+        self.writerWaiting = 0
+    
+    public function readLock( self ) -> Boolean:
+        
+        """
+        Attempt to acquire the read lock. Returns True if acquired successfully.
+        Returns False if a writer is currently active or waiting, enforcing
+        writer-preference to prevent writer starvation. The caller should
+        block the current task via the scheduler when False is returned.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        if self.writerActive or self.writerWaiting > 0:
+            self.guard.unlock()
+            return False
+        self.readerCount = self.readerCount + 1
+        self.guard.unlock()
+        return True
+    
+    public function readUnlock( self ) -> Boolean:
+
+        """
+        Release the read lock and decrement the reader count. Returns True if
+        the unlock succeeded (a read lock was held). Returns False if there
+        were no active readers, meaning the caller attempted an unbalanced unlock.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.guard.lock()
+        if self.readerCount == 0:
+            self.guard.unlock()
+            return False
+        self.readerCount = self.readerCount - 1
+        self.guard.unlock()
+        return True
+    
+    public function writeLock( self ) -> Boolean:
+        
+        """
+        Attempt to acquire the exclusive write lock. Returns True if acquired
+        successfully, meaning no readers are active and no other writer holds
+        the lock. Returns False if the lock is currently held, in which case
+        the writer waiting count is incremented and the caller should block.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        if self.writerActive or self.readerCount > 0:
+            self.writerWaiting = self.writerWaiting + 1
+            self.guard.unlock()
+            return False
+        self.writerActive = True
+        self.guard.unlock()
+        return True
+    
+    public function writeUnlock( self ) -> I64:
+        
+        """
+        Release the exclusive write lock and return the number of writers
+        still waiting. The caller can use this to decide whether to wake
+        another writer or allow queued readers to proceed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.guard.lock()
+        self.writerActive = False
+        I64 waiters = self.writerWaiting
+        self.guard.unlock()
+        return waiters
+    
+    public function getReaderCount( self ) -> I64:
+        
+        """ Return the number of readers currently holding the read lock. """
+        
+        return self.readerCount
+    
+    public function isWriterActive( self ) -> Boolean:
+        
+        """ Return whether a writer currently holds the exclusive write lock. """
+        
+        return self.writerActive
+
+export {
+    ReadWriteLock
+}
