@@ -1,0 +1,320 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/logging/logger.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Logger with configurable level, named loggers, formatted output.
+# Output goes to stdout via raw syscalls. Zero C runtime dependency.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.logging.logger
+
+from uranite.logging.level import LogLevel
+from uranite.io.writer import STDOUT_FD, STDERR_FD, writeFd, writeNewlineFd
+from uranite.string.format import padRight, padZero, formatUtcOffset
+from uranite.datetime.datetime import now, DateTime
+from uranite.convert.convert import intToString
+from uranite.sys.process import getpid, getUsername
+from uranite.collection.hash-map import HashMap
+from uranite.collection.hash-set import HashSet
+from uranite.collection.array-list import ArrayList
+
+public class Logger:
+    
+    """
+    Named logger with configurable level threshold and formatted output.
+    
+    Each Logger instance has a name, a minimum log level, and an output
+    file descriptor. Messages below the configured level are silently
+    discarded. ERROR and FATAL messages are automatically redirected to
+    stderr regardless of the configured output file descriptor.
+    
+    Output format matches the custom pattern:
+    {datetime}{utcoffset}   {level}   {username}  P{pid}:T0    --- [{program}] {name} : {message}
+    """
+    
+    public String name
+    """ The logger name, typically the fully qualified module or class name. """
+    public LogLevel level
+    """ The minimum log level threshold. Messages below this level are discarded. """
+    public I64 outputFileDescriptor
+    """ The file descriptor for log output (default: STDOUT_FD). """
+    public String username
+    """ The OS username resolved at construction time via /etc/passwd. """
+    public String program
+    """ The program identifier shown in log output, padded to 16 characters. """
+    public I64 utcOffsetSeconds
+    """ The UTC offset in seconds used for timestamp formatting (e.g., 25200 for +07:00). """
+    
+    public function Logger( self, String name, LogLevel level ) -> Void:
+        
+        """
+        Create a new Logger with the given name and minimum log level.
+        
+        Parameters:
+            name (String):
+                The logger name, typically the fully qualified module or class name.
+            level (LogLevel):
+                The minimum log level threshold (e.g., LogLevel.Info, LogLevel.Debug).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.name = name
+        self.level = level
+        self.outputFileDescriptor = STDOUT_FD
+        self.username = getUsername()
+        self.program = "Uranite"
+        self.utcOffsetSeconds = 0
+    
+    public function setLevel( self, LogLevel level ) -> Void:
+        
+        """
+        Set the minimum log level threshold.
+        
+        Parameters:
+            level (LogLevel):
+                The new minimum level. Messages below this are discarded.
+        """
+        
+        self.level = level
+    
+    public function setOutput( self, I64 fileDescriptor ) -> Void:
+        
+        """
+        Set the output file descriptor for log messages.
+        
+        Parameters:
+            fileDescriptor (I64):
+                The target file descriptor (e.g., STDOUT_FD, STDERR_FD).
+        """
+        
+        self.outputFileDescriptor = fileDescriptor
+    
+    public function setUsername( self, String username ) -> Void:
+        
+        """
+        Override the OS username shown in log output.
+        
+        Parameters:
+            username (String):
+                The username string to display.
+        """
+        
+        self.username = username
+    
+    public function setProgram( self, String program ) -> Void:
+        
+        """
+        Set the program identifier shown in log output.
+        
+        Parameters:
+            program (String):
+                The program name, padded to 16 characters in output.
+        """
+        
+        self.program = program
+    
+    public function setUtcOffset( self, I64 offsetSeconds ) -> Void:
+        
+        """
+        Set the UTC offset used for timestamp formatting.
+        
+        Parameters:
+            offsetSeconds (I64):
+                The UTC offset in seconds (e.g., 25200 for +07:00).
+        """
+        
+        self.utcOffsetSeconds = offsetSeconds
+    
+    public function isEnabled( self, LogLevel messageLevel ) -> Boolean:
+        
+        """
+        Check whether a message at the given level would be logged.
+        
+        Parameters:
+            messageLevel (LogLevel):
+                The log level to check.
+        
+        Returns:
+            Boolean:
+                True if messageLevel is at or above the configured threshold.
+        """
+        
+        return messageLevel >= self.level
+    
+    public function log( self, LogLevel messageLevel, String message ) -> Void:
+        
+        """
+        Log a message at the given level. Messages below the configured
+        threshold are silently discarded. ERROR and FATAL messages are
+        automatically redirected to stderr.
+        
+        Parameters:
+            messageLevel (LogLevel):
+                The severity level of this message.
+            message (String):
+                The log message text.
+        
+        Complexity:
+            Time: O(n) where n is the total output line length.
+        """
+        
+        if messageLevel < self.level:
+            return
+        DateTime dateTime = now()
+        String isoDatetime = padZero( dateTime.year, 4 ) + "-" + padZero( dateTime.month, 2 ) + "-" + padZero( dateTime.day, 2 ) + "T" + padZero( dateTime.hour, 2 ) + ":" + padZero( dateTime.minute, 2 ) + ":" + padZero( dateTime.second, 2 )
+        String utcOffset = formatUtcOffset( self.utcOffsetSeconds )
+        String levelPadded = padRight( messageLevel.name, 7 )
+        I64 processId = getpid()
+        String processIdString = intToString( processId )
+        String programPadded = padRight( self.program, 16 )
+        String namePadded = padRight( self.name, 40 )
+        I64 fileDescriptor = self.outputFileDescriptor
+        if messageLevel >= LogLevel.Error:
+            fileDescriptor = STDERR_FD
+        writeFd( fileDescriptor, isoDatetime )
+        writeFd( fileDescriptor, utcOffset )
+        writeFd( fileDescriptor, "   " )
+        writeFd( fileDescriptor, levelPadded )
+        writeFd( fileDescriptor, "   " )
+        writeFd( fileDescriptor, self.username )
+        writeFd( fileDescriptor, "  P" )
+        writeFd( fileDescriptor, processIdString )
+        writeFd( fileDescriptor, ":T0    --- [" )
+        writeFd( fileDescriptor, programPadded )
+        writeFd( fileDescriptor, "] " )
+        writeFd( fileDescriptor, namePadded )
+        writeFd( fileDescriptor, " : " )
+        writeFd( fileDescriptor, message )
+        writeNewlineFd( fileDescriptor )
+    
+    public function trace( self, String message ) -> Void:
+        
+        """ Log a message at TRACE level. """
+        
+        self.log( LogLevel.Trace, message )
+    
+    public function debug( self, String message ) -> Void:
+        
+        """ Log a message at DEBUG level. """
+        
+        self.log( LogLevel.Debug, message )
+    
+    public function info( self, String message ) -> Void:
+        
+        """ Log a message at INFO level. """
+        
+        self.log( LogLevel.Info, message )
+    
+    public function warn( self, String message ) -> Void:
+        
+        """ Log a message at WARN level. """
+        
+        self.log( LogLevel.Warn, message )
+    
+    public function error( self, String message ) -> Void:
+        
+        """ Log a message at ERROR level. """
+        
+        self.log( LogLevel.Error, message )
+    
+    public function fatal( self, String message ) -> Void:
+        
+        """ Log a message at FATAL level. """
+        
+        self.log( LogLevel.Fatal, message )
+
+    public function logStructured( self, LogLevel messageLevel, String message, HashMap<String, String> fields ) -> Void:
+
+        """
+        Log a message with key-value metadata fields appended.
+
+        The fields are formatted as key=value pairs separated by spaces
+        and appended after the message text. Useful for structured logging
+        where downstream systems parse field values.
+
+        Parameters:
+            messageLevel (LogLevel):
+                The severity level of the log entry.
+            message (String):
+                The primary log message text.
+            fields (HashMap<String, String>):
+                Key-value metadata pairs to include in the log line.
+
+        Complexity:
+            Time: O(n) where n is the number of fields
+        """
+
+        if not self.isEnabled( messageLevel ):
+            return
+        String structured = message
+        HashSet<String> fieldKeys = fields.keys
+        ArrayList<String> keyList = fieldKeys.toList()
+        I64 keyIndex = 0
+        while keyIndex < keyList.length:
+            String fieldKey = keyList.get( keyIndex )
+            String fieldValue = fields.get( fieldKey )
+            structured = structured + " " + fieldKey + "=" + fieldValue
+            keyIndex = keyIndex + 1
+        self.log( messageLevel, structured )
+
+public function getLogger( String name ) -> Logger:
+    
+    """
+    Create a new Logger with INFO as the default level.
+    
+    Parameters:
+        name (String):
+            The logger name, typically the fully qualified module or class name.
+    
+    Returns:
+        Logger:
+            A new Logger instance configured at INFO level.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Logger( name, LogLevel.Info )
+
+public function getDebugLogger( String name ) -> Logger:
+    
+    """
+    Create a new Logger with DEBUG as the default level.
+    
+    Parameters:
+        name (String):
+            The logger name, typically the fully qualified module or class name.
+    
+    Returns:
+        Logger:
+            A new Logger instance configured at DEBUG level.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Logger( name, LogLevel.Debug )
+
+export {
+    Logger,
+    getLogger,
+    getDebugLogger
+}
