@@ -1,0 +1,252 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/ansi-formatter.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the AnsiFormatter class with static functions for generating ANSI
+# 24-bit true color escape sequences for terminal text coloring. Supports
+# foreground and background color setting, text colorization with automatic
+# reset, and combined foreground-background styling. These escape codes are
+# compatible with modern terminal emulators that support the SGR (Select
+# Graphic Rendition) 24-bit color extension.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.ansi-formatter
+
+from uranite.language.i32 import I32
+from uranite.language.string import String
+
+public final class AnsiFormatter:
+    
+    """
+    Static utility class for generating ANSI 24-bit true color escape sequences
+    used to colorize text output in terminal emulators. The SGR (Select Graphic
+    Rendition) escape sequence format uses the pattern ESC[38;2;R;G;Bm for
+    foreground colors and ESC[48;2;R;G;Bm for background colors, where R, G,
+    and B are decimal values from 0 to 255. The reset sequence ESC[0m restores
+    the terminal to its default colors. All methods are static (no self parameter)
+    and return formatted escape code strings.
+    """
+    
+    public function foreground( self, I32 red, I32 green, I32 blue ) -> String:
+        
+        """
+        Generate an ANSI escape sequence that sets the terminal foreground (text)
+        color to the specified RGB value using the 24-bit true color format.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            String:
+                The ANSI escape sequence string such as "\x1b[38;2;255;0;0m".
+        """
+        
+        return "\x1b[38;2;" + red + ";" + green + ";" + blue + "m"
+    
+    public function background( self, I32 red, I32 green, I32 blue ) -> String:
+        
+        """
+        Generate an ANSI escape sequence that sets the terminal background color
+        to the specified RGB value using the 24-bit true color format.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            String:
+                The ANSI escape sequence string such as "\x1b[48;2;0;75;73m".
+        """
+        
+        return "\x1b[48;2;" + red + ";" + green + ";" + blue + "m"
+    
+    public function colorize( self, String text, I32 red, I32 green, I32 blue ) -> String:
+        
+        """
+        Wrap the given text string with a foreground color escape sequence and
+        an automatic reset sequence, so only the specified text is colored and
+        the terminal returns to default colors afterward.
+        
+        Parameters:
+            text (String):
+                The text to colorize.
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            String:
+                The text wrapped with foreground color and reset escape sequences.
+        """
+        
+        return self.foreground( red, green, blue ) + text + self.reset()
+    
+    public function highlight( self, String text, I32 red, I32 green, I32 blue ) -> String:
+        
+        """
+        Wrap the given text string with a background color escape sequence and
+        an automatic reset sequence, highlighting the text with the specified
+        background color.
+        
+        Parameters:
+            text (String):
+                The text to highlight.
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            String:
+                The text wrapped with background color and reset escape sequences.
+        """
+        
+        return self.background( red, green, blue ) + text + self.reset()
+    
+    public function style( self, String text, I32 fgRed, I32 fgGreen, I32 fgBlue, I32 bgRed, I32 bgGreen, I32 bgBlue ) -> String:
+        
+        """
+        Wrap the given text string with both a foreground and background color
+        escape sequence, followed by an automatic reset. This applies both
+        text color and highlight color simultaneously.
+        
+        Parameters:
+            text (String):
+                The text to style.
+            fgRed (I32):
+                The foreground red channel value from 0 to 255.
+            fgGreen (I32):
+                The foreground green channel value from 0 to 255.
+            fgBlue (I32):
+                The foreground blue channel value from 0 to 255.
+            bgRed (I32):
+                The background red channel value from 0 to 255.
+            bgGreen (I32):
+                The background green channel value from 0 to 255.
+            bgBlue (I32):
+                The background blue channel value from 0 to 255.
+        
+        Returns:
+            String:
+                The text wrapped with both foreground and background color sequences.
+        """
+        
+        return self.foreground( fgRed, fgGreen, fgBlue ) + self.background( bgRed, bgGreen, bgBlue ) + text + self.reset()
+    
+    public function reset( self ) -> String:
+        
+        """
+        Return the ANSI reset escape sequence that restores the terminal to its
+        default foreground and background colors and removes any text attributes.
+        
+        Returns:
+            String:
+                The reset escape sequence "\x1b[0m".
+        """
+        
+        return "\x1b[0m"
+    
+    public function foregroundHex( self, I32 hex ) -> String:
+        
+        """
+        Generate a foreground color escape sequence from a packed 24-bit hex value.
+        
+        Parameters:
+            hex (I32):
+                The packed hex color value in 0xRRGGBB format.
+        
+        Returns:
+            String:
+                The ANSI foreground escape sequence for the given hex color.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I32 r = ( hex >> 16 ) & 255
+        I32 g = ( hex >> 8 ) & 255
+        I32 b = hex & 255
+        
+        return self.foreground( r, g, b )
+    
+    public function backgroundHex( self, I32 hex ) -> String:
+        
+        """
+        Generate a background color escape sequence from a packed 24-bit hex value.
+        
+        Parameters:
+            hex (I32):()
+                The packed hex color value in 0xRRGGBB format.
+        
+        Returns:
+            String:
+                The ANSI background escape sequence for the given hex color.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I32 r = ( hex >> 16 ) & 255
+        I32 g = ( hex >> 8 ) & 255
+        I32 b = hex & 255
+        
+        return self.background( r, g, b )
+    
+    public function colorizeHex( self, String text, I32 hex ) -> String:
+        
+        """
+        Wrap text with a foreground color and reset using a packed 24-bit hex value.
+        
+        Parameters:
+            text (String):
+                The text to colorize.
+            hex (I32):
+                The packed hex color value in 0xRRGGBB format.
+        
+        Returns:
+            String:
+                The text wrapped with foreground color and reset escape sequences.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I32 r = ( hex >> 16 ) & 255
+        I32 g = ( hex >> 8 ) & 255
+        I32 b = hex & 255
+        
+        return self.colorize( text, r, g, b )
+
+export {
+    AnsiFormatter
+}
