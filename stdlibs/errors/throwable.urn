@@ -1,0 +1,103 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/errors/throwable.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Throwable interface, the root type for all error and exception types used with raise.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.throwable
+
+from uranite.errors.traceback import Traceback
+
+public interface Throwable:
+    
+    """
+    Root interface for all error and exception types in Uranite.
+    
+    Any type that can be used with the raise statement must implement this
+    interface. It defines the common contract for accessing error metadata
+    including the error code, source location, message, and optional chained cause.
+    """
+    
+    public function getCode( self ) -> I64:
+        
+        """
+        Return the numeric error code associated with this throwable.
+        
+        Returns:
+            I64:
+                The error code identifying the type of problem.
+        """
+    
+    public function getFile( self ) -> String:
+        
+        """
+        Return the source file path where this throwable originated.
+        
+        Returns:
+            String:
+                The file path of the source that raised this throwable.
+        """
+    
+    public function getLine( self ) -> I64:
+        
+        """
+        Return the source line number where this throwable originated.
+        
+        Returns:
+            I64:
+                The line number in the source file.
+        """
+    
+    public function getMessage( self ) -> String:
+        
+        """
+        Return the human-readable error message describing the problem.
+        
+        Returns:
+            String:
+                A descriptive message explaining the error or exception.
+        """
+    
+    public function getPrevious( self ) -> ?Throwable:
+        
+        """
+        Return the chained cause of this throwable, or None if this is the root cause.
+        
+        Returns:
+            ?Throwable:
+                The previous throwable that caused this one, or None.
+        """
+    
+    public function getTraceback( self ) -> ?Traceback:
+        
+        """
+        Return the traceback information for this throwable, or None if not available.
+        
+        Returns:
+            ?Traceback:
+                The traceback record containing source location info, or None.
+        """
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a string representation of this throwable.
+        
+        Returns:
+            String:
+                A human-readable string representation, typically the error message.
+        """
