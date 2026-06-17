@@ -1,0 +1,45 @@
+
+#
+# @author hxAri (hxari)
+# @create 2026-05-03 22:00
+# @github https://github.com/uranite-lang/uranite
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# HashSet<E> compilation and runtime test.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package main
+
+from uranite.io.console import puts
+from uranite.collection.hash-set import HashSet
+
+
+public function main() -> I32:
+    puts( "=== HashSet Test ===" )
+
+    HashSet<Int> set = new HashSet<Int>()
+    set.add( 10 )
+    set.add( 20 )
+    set.add( 30 )
+    set.add( 10 )
+
+    puts( "Size after adding 10,20,30,10: ", set.length )
+    puts( "Exists 20: ", set.exists( 20 ) )
+    puts( "Exists 99: ", set.exists( 99 ) )
+
+    set.remove( 20 )
+    puts( "Size after remove 20: ", set.length )
+    puts( "Exists 20 after remove: ", set.exists( 20 ) )
+
+    puts( "Done." )
+    return 0
