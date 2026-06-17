@@ -1,0 +1,27 @@
+package testing
+
+from uranite.collection.pair import Pair
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue,
+    assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Pair Tests ===" )
+
+    Pair<Int, Int> p1 = new Pair<Int, Int>( 1, 42 )
+    assertEqualI64( 1, p1.key, "p1 key" )
+    assertEqualI64( 42, p1.value, "p1 value" )
+    putsln( "constructor OK" )
+
+    # equals
+    Pair<Int, Int> p3 = new Pair<Int, Int>( 1, 42 )
+    Pair<Int, Int> p4 = new Pair<Int, Int>( 2, 99 )
+    assertTrue( p1.equals( p3 ), "equals same" )
+    assertFalse( p1.equals( p4 ), "equals diff" )
+    putsln( "equals OK" )
+
+    putsln( "=== All Pair tests passed ===" )
+    return 0
