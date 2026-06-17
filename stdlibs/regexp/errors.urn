@@ -1,0 +1,64 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/regexp/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.regexp.errors
+
+from uranite.errors.error import Error
+
+public class RegexSyntaxError extends Error:
+    """Raised when a regular expression pattern contains invalid syntax such as unmatched brackets, trailing backslashes, or malformed quantifiers."""
+
+    public function RegexSyntaxError( self, String message, I64 code, ?Error cause ) -> Void:
+        """
+        Construct a regex syntax error.
+
+        Parameters:
+            message (String):
+                Human-readable description of the syntax problem.
+            code (I64):
+                Numeric error code for programmatic handling.
+            cause (?Error):
+                Optional underlying error that caused this one.
+        """
+        parent( message, code, cause )
+
+public class RegexRuntimeError extends Error:
+    """Raised when a regex operation fails at runtime due to excessive backtracking, stack overflow, or other execution limits."""
+
+    public function RegexRuntimeError( self, String message, I64 code, ?Error cause ) -> Void:
+        """
+        Construct a regex runtime error.
+
+        Parameters:
+            message (String):
+                Human-readable description of the runtime failure.
+            code (I64):
+                Numeric error code for programmatic handling.
+            cause (?Error):
+                Optional underlying error that caused this one.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        parent( message, code, cause )
+
+export {
+    RegexSyntaxError,
+    RegexRuntimeError
+}
