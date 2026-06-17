@@ -1,0 +1,116 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/hsl.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the HSL struct representing a color in the Hue-Saturation-Lightness
+# color space. HSL is a cylindrical representation where hue is an angle on the
+# color wheel (0-360 degrees), saturation measures color intensity (0.0-1.0),
+# and lightness measures brightness from black (0.0) through pure color (0.5)
+# to white (1.0). HSL is particularly useful for palette generation because
+# hue rotation produces harmonious color schemes.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.hsl
+
+from uranite.language.boolean import Boolean
+from uranite.language.string import String
+
+public struct HSL:
+    
+    """
+    Represents a color in the Hue-Saturation-Lightness cylindrical color space.
+    Hue is expressed as an angle in degrees (0.0 to 360.0) on the color wheel
+    where 0 is red, 120 is green, and 240 is blue. Saturation ranges from 0.0
+    (completely desaturated gray) to 1.0 (fully saturated pure color). Lightness
+    ranges from 0.0 (black) through 0.5 (pure color at full saturation) to 1.0
+    (white). This color space is ideal for generating harmonious color palettes
+    through hue rotation and for adjusting perceived brightness independently
+    of color tone.
+    """
+    
+    public F64 hue
+    public F64 saturation
+    public F64 lightness
+    
+    public function HSL( self, F64 hue, F64 saturation, F64 lightness ) -> Void:
+        
+        """
+        Construct a new HSL color from hue, saturation, and lightness components.
+        
+        Parameters:
+            hue (F64):
+                The hue angle in degrees, from 0.0 to 360.0. Values outside this
+                range will wrap around the color wheel.
+            saturation (F64):
+                The color saturation from 0.0 (gray) to 1.0 (fully saturated).
+            lightness (F64):
+                The lightness from 0.0 (black) through 0.5 (pure color) to 1.0 (white).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.hue = hue
+        self.saturation = saturation
+        self.lightness = lightness
+    
+    public function equals( self, Object other ) -> Boolean:
+        
+        """
+        Compare this HSL color with another object for component-wise equality.
+        Two HSL colors are considered equal if their hue, saturation, and lightness
+        values are all identical. Returns false if the other object is not an HSL.
+        
+        Parameters:
+            other (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is an HSL with identical component values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if other instanceof HSL:
+            HSL otherHsl = other
+            return self.hue == otherHsl.hue and self.saturation == otherHsl.saturation and self.lightness == otherHsl.lightness
+        return False
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a human-readable string representation of this HSL color in the
+        format "HSL(hue, saturation, lightness)" showing the floating-point
+        values of each component.
+        
+        Returns:
+            String:
+                A string representation such as "HSL(178.0, 1.0, 0.15)".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return "HSL(" + self.hue + ", " + self.saturation + ", " + self.lightness + ")"
+
+export {
+    HSL
+}
