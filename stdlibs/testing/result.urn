@@ -1,0 +1,61 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/testing/result.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.testing.result
+
+public enum TestStatus backed I64:
+    
+    """
+    Status of a completed test case.
+    
+    Use variant.name for string representation (e.g., TestStatus.Pass.name returns "Pass").
+    """
+    
+    unit Pass 0
+    unit Fail 1
+    unit Error 2
+    unit Skip 3
+
+public class TestResult:
+    public String name
+    public TestStatus status
+    public String message
+    public I64 durationNanos
+    
+    public function TestResult( self, String name, TestStatus status, String message, I64 durationNanos ) -> Void:
+        self.name = name
+        self.status = status
+        self.message = message
+        self.durationNanos = durationNanos
+    
+    public function isPassed( self ) -> Boolean:
+        return self.status == TestStatus.Pass
+    
+    public function isFailed( self ) -> Boolean:
+        return self.status == TestStatus.Fail
+    
+    public function isError( self ) -> Boolean:
+        return self.status == TestStatus.Error
+    
+    public function isSkipped( self ) -> Boolean:
+        return self.status == TestStatus.Skip
+
+export {
+    TestResult,
+    TestStatus
+}
