@@ -1,0 +1,63 @@
+# 
+# @author hxAri (hxari)
+# @create 2026-05-04 11:00
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Extreme K-nucleotide benchmark for testing HashMap and String performance.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+from uranite.collection.hash-map import HashMap
+from uranite.language.int import Int
+from uranite.language.string import String
+from uranite.memory.memory import Memory
+
+extern function clock() -> I64;
+
+public function countSequences( String sequence, Int length ) -> HashMap<String, Int>:
+    HashMap<String, Int> counts = new HashMap<String, Int>()
+    Int n = sequence.length() - length + 1
+    for Int i = 0; i < n; i++:
+        String sub = sequence.substring( i, i + length )
+        Int current = counts.getOrDefault( sub, 0 )
+        counts.put( sub, current + 1 )
+    return counts
+
+public function main() -> I32:
+    # Simulated large DNA sequence
+    String base = "GGTATTTTAATTTATATTTATATTTTTTTAG"
+    String sequence = ""
+    for Int i = 0; i < 10000; i++:
+        sequence = sequence + base
+        
+    puts( "=== Uranite Extreme K-nucleotide Benchmark (seq length ", sequence.length(), ") ===" )
+    
+    I64 start = clock()
+    
+    # Standard k-nucleotide tasks
+    HashMap<String, Int> counts1 = countSequences( sequence, 1 )
+    HashMap<String, Int> counts2 = countSequences( sequence, 2 )
+    HashMap<String, Int> counts3 = countSequences( sequence, 3 )
+    
+    I64 end = clock()
+    Double elapsed = ( end - start ) / 1000000.0
+    
+    puts( "1-nucleotide counts: ", counts1.length, " unique" )
+    puts( "2-nucleotide counts: ", counts2.length, " unique" )
+    puts( "3-nucleotide counts: ", counts3.length, " unique" )
+    puts( "Elapsed time: ", elapsed, " seconds" )
+    
+    return 0
