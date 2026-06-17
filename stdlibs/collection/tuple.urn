@@ -1,0 +1,115 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/tuple.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Tuple interface for fixed-size immutable ordered sequences of elements.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.tuple
+
+from uranite.collection.sequence import Sequence
+from uranite.language.boolean import Boolean
+from uranite.language.string import String
+
+public interface Tuple<E> extends Sequence<E>:
+    
+    """
+    Fixed-size immutable ordered sequence of elements.
+    
+    A Tuple holds a fixed number of elements determined at construction time.
+    Unlike mutable sequences, tuples cannot be modified after creation, making
+    them suitable for use as keys in maps or as lightweight composite values.
+    """
+    
+    public function component( self, Int index ) -> E:
+        
+        """
+        Access an element by its positional index within the tuple.
+        
+        Parameters:
+            index (Int):
+                The zero-based position of the element to retrieve.
+        
+        Returns:
+            E:
+                The element at the specified position.
+        """
+    
+    public function toSequence( self ) -> Sequence<E>:
+        
+        """
+        Convert this tuple into a mutable sequence containing the same elements.
+        
+        Returns:
+            Sequence<E>:
+                A new mutable sequence with the same elements in the same order.
+        """
+    
+    public function concatenate( self, Tuple<E> other ) -> Tuple<E>:
+        
+        """
+        Join this tuple with another tuple, producing a new tuple containing all elements from both.
+        
+        Parameters:
+            other (Tuple<E>):
+                The tuple to concatenate with this one.
+        
+        Returns:
+            Tuple<E>:
+                A new tuple containing all elements from this tuple followed by all elements from the other.
+        """
+    
+    public function equals( self, Object other ) -> Boolean:
+        
+        """
+        Compare this tuple with another object for structural equality.
+        
+        Two tuples are considered equal if they have the same number of elements
+        and each element at every position is equal.
+        
+        Parameters:
+            other (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is a tuple with equal elements, False otherwise.
+        """
+    
+    public function hashCode( self ) -> Int:
+        
+        """
+        Compute a hash code from all elements of this tuple.
+        
+        Returns:
+            Int:
+                A hash code value derived from the elements of this tuple.
+        """
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a string representation of this tuple.
+        
+        Returns:
+            String:
+                A human-readable string showing the elements of the tuple.
+        """
+
+
+export {
+    Tuple
+}
