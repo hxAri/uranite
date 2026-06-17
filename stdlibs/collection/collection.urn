@@ -1,0 +1,95 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/collection.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the Collection interface, the root abstraction for all container types
+# that hold elements of a given type and support common operations like append,
+# remove, filter, and iteration.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection
+
+
+from uranite.iterators.iterable import Iterable
+from uranite.iterators.iterator import Iterator
+from uranite.language.boolean import Boolean
+from uranite.language.callable import Callable
+from uranite.language.void import Void
+
+public interface Collection<T> extends Iterable<T>:
+    
+    """
+    Base interface for all collections that hold elements of type T.
+    
+    Provides the common contract for appending, removing, filtering,
+    iterating, and querying elements that all collection types must support.
+    """
+    
+    public function append( self, T element ) -> Collection<T>:
+        
+        """ Append a single element to the collection and return self for chaining. """
+    
+    public function append( self, T element[] ) -> Collection<T>:
+        
+        """ Append multiple elements to the collection and return self for chaining. """
+    
+    public function clear( self ) -> Void:
+        
+        """ Remove all elements from the collection. """
+    
+    public property copy( self ) -> Collection<T>:
+        
+        """ Return a shallow copy of this collection. """
+    
+    public property empty( self ) -> Boolean:
+        
+        """ Check whether the collection contains no elements. """
+    
+    public function equals( self, Object object ) -> Boolean:
+        
+        """ Compare this collection with another object for structural equality. """
+    
+    public function exists( self, T element ) -> Boolean:
+        
+        """ Check whether the given element exists in the collection. """
+    
+    public function exists( self, T element[] ) -> Boolean:
+        
+        """ Check whether all of the given elements exist in the collection. """
+    
+    public function filter( self, Callable<Boolean,<T>> callback ) -> Collection<T>:
+        
+        """ Return a new collection containing only elements that match the predicate. """
+    
+    public function forEach( self, Callable<Void,<T>> action ) -> Void:
+
+        """ Execute an action for each element in the collection. """
+    
+    public property length( self ) -> Int:
+        
+        """ Return the number of elements in the collection. """
+    
+    public function remove( self, T element ) -> Boolean:
+        
+        """ Remove the given element from the collection, returning True if it was found. """
+    
+    public function remove( self, T element[] ) -> Boolean:
+        
+        """ Remove multiple elements from the collection, returning True if any were found. """
+
+export {
+    Collection
+}
