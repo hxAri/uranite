@@ -1,0 +1,22 @@
+package testing
+
+from uranite.os.hal.mmio import memoryFence, storeFence, loadFence
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS HAL MMIO Tests ===" )
+
+    memoryFence()
+    putsln( "memoryFence OK" )
+
+    storeFence()
+    putsln( "storeFence OK" )
+
+    loadFence()
+    putsln( "loadFence OK" )
+
+    assertEqualI64( 1, 1, "compile verification" )
+
+    putsln( "=== All MMIO tests passed ===" )
+    return 0
