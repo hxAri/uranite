@@ -1,0 +1,278 @@
+package uranite.async.epoll
+
+from uranite.os.syscall.invoke import syscall1, syscall2, syscall4
+from uranite.os.syscall.result import SyscallResult
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    memoryToPtr, 
+    readI32At, 
+    readI64At,
+    writeI32At, 
+    writeI64At
+}
+from uranite.async.errors import AsyncRuntimeError
+
+const I64 SYS_EPOLL_CREATE1 = 291
+""" Syscall number for epoll_create1 on x86-64 Linux. """
+
+const I64 SYS_EPOLL_CTL = 233
+""" Syscall number for epoll_ctl on x86-64 Linux. """
+
+const I64 SYS_EPOLL_WAIT = 232
+""" Syscall number for epoll_wait on x86-64 Linux. """
+
+const I64 EPOLL_CTL_ADD = 1
+""" epoll_ctl operation to register a new file descriptor. """
+
+const I64 EPOLL_CTL_DEL = 2
+""" epoll_ctl operation to remove a registered file descriptor. """
+
+const I64 EPOLL_CTL_MOD = 3
+""" epoll_ctl operation to modify events for a registered file descriptor. """
+
+const I64 EPOLLIN = 1
+""" Event flag indicating the file descriptor is ready for reading. """
+
+const I64 EPOLLOUT = 4
+""" Event flag indicating the file descriptor is ready for writing. """
+
+const I64 EPOLLERR = 8
+""" Event flag indicating an error condition on the file descriptor. """
+
+const I64 EPOLLHUP = 16
+""" Event flag indicating the peer closed its end of the connection. """
+
+const I64 EPOLLRDHUP = 8192
+""" Event flag indicating the peer shut down the writing half of the connection. """
+
+const I64 EPOLLET = 2147483648
+""" Event flag enabling edge-triggered notification mode. """
+
+const I64 EPOLLONESHOT = 1073741824
+""" Event flag disabling the descriptor after one event is reported. """
+
+const I64 EPOLL_EVENT_SIZE = 12
+""" Size in bytes of a single epoll_event structure (4-byte events + 8-byte data). """
+
+public function epollCreate() -> I64:
+    
+    """
+    Create a new epoll instance via the epoll_create1 syscall.
+    
+    Returns:
+        I64:
+            The file descriptor for the new epoll instance.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the epoll_create1 syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall1( SYS_EPOLL_CREATE1, 0 )
+    if syscallResult.isError():
+        raise new AsyncRuntimeError( "epoll_create1 failed", 0, None )
+    return syscallResult.value()
+
+function buildEpollEvent( I64 events, I64 fd ) -> Memory<I64>:
+    Memory<I64> ev = new Memory<I64>( 2 )
+    I64 ptr = memoryToPtr( ev )
+    writeI32At( ptr, 0, events )
+    writeI32At( ptr, 4, fd )
+    writeI64At( ptr, 4, fd )
+    return ev
+
+public function epollAdd( I64 epfd, I64 fd, I64 events ) -> Void:
+    
+    """
+    Register a file descriptor with an epoll instance for the specified events.
+    
+    Parameters:
+        epfd (I64):
+            The epoll instance file descriptor.
+        fd (I64):
+            The file descriptor to monitor.
+        events (I64):
+            Bitmask of event flags (EPOLLIN, EPOLLOUT, etc.) to watch for.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the epoll_ctl ADD operation fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> ev = buildEpollEvent( events, fd )
+    I64 evPtr = memoryToPtr( ev )
+    SyscallResult syscallResult = syscall4( SYS_EPOLL_CTL, epfd, EPOLL_CTL_ADD, fd, evPtr )
+    ev.free()
+    if syscallResult.isError():
+        raise new AsyncRuntimeError( "epoll_ctl ADD failed", 0, None )
+
+public function epollDel( I64 epfd, I64 fd ) -> Void:
+    
+    """
+    Remove a file descriptor from an epoll instance.
+    
+    Parameters:
+        epfd (I64):
+            The epoll instance file descriptor.
+        fd (I64):
+            The file descriptor to stop monitoring.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the epoll_ctl DEL operation fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall4( SYS_EPOLL_CTL, epfd, EPOLL_CTL_DEL, fd, 0 )
+    if syscallResult.isError():
+        raise new AsyncRuntimeError( "epoll_ctl DEL failed", 0, None )
+
+public function epollMod( I64 epfd, I64 fd, I64 events ) -> Void:
+    
+    """
+    Modify the events monitored for a file descriptor in an epoll instance.
+    
+    Parameters:
+        epfd (I64):
+            The epoll instance file descriptor.
+        fd (I64):
+            The file descriptor whose monitored events should be changed.
+        events (I64):
+            The new bitmask of event flags to watch for.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the epoll_ctl MOD operation fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> ev = buildEpollEvent( events, fd )
+    I64 evPtr = memoryToPtr( ev )
+    SyscallResult syscallResult = syscall4( SYS_EPOLL_CTL, epfd, EPOLL_CTL_MOD, fd, evPtr )
+    ev.free()
+    if syscallResult.isError():
+        raise new AsyncRuntimeError( "epoll_ctl MOD failed", 0, None )
+
+public function epollWait( I64 epfd, I64 eventsBufPtr, I64 maxEvents, I64 timeoutMs ) -> I64:
+    
+    """
+    Wait for events on an epoll instance, blocking up to the specified timeout.
+    Returns zero if interrupted by a signal (EINTR, errno 4) instead of raising.
+    
+    Parameters:
+        epfd (I64):
+            The epoll instance file descriptor.
+        eventsBufPtr (I64):
+            Pointer to the buffer that will receive epoll_event structures.
+        maxEvents (I64):
+            Maximum number of events to return in a single call.
+        timeoutMs (I64):
+            Timeout in milliseconds. Use -1 for indefinite blocking, 0 for
+            non-blocking poll.
+    
+    Returns:
+        I64:
+            The number of ready file descriptors, or zero on signal interruption.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the epoll_wait syscall fails with an error other than EINTR.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall4( SYS_EPOLL_WAIT, epfd, eventsBufPtr, maxEvents, timeoutMs )
+    if syscallResult.isError():
+        I64 err = syscallResult.errorCode()
+        if err == 4:
+            return 0
+        raise new AsyncRuntimeError( "epoll_wait failed", 0, None )
+    return syscallResult.value()
+
+public function epollEventGetEvents( I64 bufPtr, I64 index ) -> I64:
+    
+    """
+    Extract the event flags from an epoll_event at the given index in the
+    event buffer.
+    
+    Parameters:
+        bufPtr (I64):
+            Pointer to the start of the epoll event buffer.
+        index (I64):
+            Zero-based index of the event to read.
+    
+    Returns:
+        I64:
+            The event flags bitmask for the specified event.
+    """
+    
+    I64 offset = index * EPOLL_EVENT_SIZE
+    return readI32At( bufPtr, offset )
+
+public function epollEventGetFd( I64 bufPtr, I64 index ) -> I64:
+    
+    """
+    Extract the file descriptor from an epoll_event at the given index in the
+    event buffer.
+    
+    Parameters:
+        bufPtr (I64):
+            Pointer to the start of the epoll event buffer.
+        index (I64):
+            Zero-based index of the event to read.
+    
+    Returns:
+        I64:
+            The file descriptor associated with the specified event.
+    """
+    
+    I64 offset = index * EPOLL_EVENT_SIZE + 4
+    return readI64At( bufPtr, offset )
+
+public function allocateEventBuffer( I64 maxEvents ) -> Memory<I64>:
+    
+    """
+    Allocate a memory buffer large enough to hold the specified number of
+    epoll_event structures. Each event occupies EPOLL_EVENT_SIZE bytes.
+    
+    Parameters:
+        maxEvents (I64):
+            The maximum number of events the buffer should accommodate.
+    
+    Returns:
+        Memory<I64>:
+            A newly allocated buffer sized for the requested event count.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 totalBytes = maxEvents * EPOLL_EVENT_SIZE
+    I64 slots = ( totalBytes + 7 ) / 8
+    return new Memory<I64>( slots )
+
+export {
+    SYS_EPOLL_CREATE1, SYS_EPOLL_CTL, SYS_EPOLL_WAIT,
+    EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
+    EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLRDHUP, EPOLLET, EPOLLONESHOT,
+    EPOLL_EVENT_SIZE,
+    epollCreate, epollAdd, epollDel, epollMod, epollWait,
+    epollEventGetEvents, epollEventGetFd, allocateEventBuffer
+}
