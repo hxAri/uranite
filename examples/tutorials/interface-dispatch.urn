@@ -1,0 +1,35 @@
+package testing
+
+from uranite.io.console import puts
+
+
+public interface Greeter:
+    public function greet( self ) -> Void;
+
+public class EnglishGreeter implements Greeter:
+    public Int id
+
+    public function EnglishGreeter( self, Int id ) -> Void:
+        self.id = id
+
+    public function greet( self ) -> Void:
+        puts( "Hello, World!" )
+
+public class SpanishGreeter implements Greeter:
+    public Int id
+
+    public function SpanishGreeter( self, Int id ) -> Void:
+        self.id = id
+
+    public function greet( self ) -> Void:
+        puts( "Hola, Mundo!" )
+
+public function callGreet( Greeter g ) -> Void:
+    g.greet()
+
+public function main() -> I32:
+    Greeter eng = new EnglishGreeter( 1 )
+    callGreet( eng )
+    Greeter spa = new SpanishGreeter( 2 )
+    callGreet( spa )
+    return 0
