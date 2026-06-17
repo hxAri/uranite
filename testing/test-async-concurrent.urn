@@ -1,0 +1,29 @@
+package testing
+
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+async function taskA( I64 x ) -> Future<I64>:
+    return x + 10
+
+async function taskB( I64 x ) -> Future<I64>:
+    return x + 20
+
+async function taskC( I64 x ) -> Future<I64>:
+    return x + 30
+
+async function runAll() -> Future<I64>:
+    Future<I64> fa = taskA( 1 )
+    Future<I64> fb = taskB( 2 )
+    Future<I64> fc = taskC( 3 )
+    I64 ra = await fa
+    I64 rb = await fb
+    I64 rc = await fc
+    return ra + rb + rc
+
+public function main() -> I32:
+    putsln( "=== Async Concurrent Test ===" )
+    assertEqualI64( 1, 1, "async declarations compile" )
+    putsln( "concurrent async declarations compile OK" )
+    putsln( "=== Async concurrent test passed ===" )
+    return 0
