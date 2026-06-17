@@ -1,0 +1,408 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/driver/driver.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Device driver framework providing the Driver interface, DriverDescriptor metadata, and DriverRegistry for managing driver lifecycle (probe, init, attach, detach) and binding drivers to discovered hardware devices.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.driver.driver
+
+from uranite.memory.memory import Memory
+
+public enum DriverState backed I64:
+    
+    """
+    Represents the lifecycle state of a device driver. Drivers transition
+    through these states during their lifecycle: Unloaded -> Probing ->
+    Initialized -> Attached -> Detached. The Failed state indicates that
+    the driver encountered an error during initialization or operation.
+    """
+    
+    unit Attached 3
+    unit Detached 5
+    unit Failed 4
+    unit Initialized 2
+    unit Probing 1
+    unit Unloaded 0
+
+public interface Driver:
+    
+    """
+    Device driver interface defining the contract that all device drivers must
+    implement. The lifecycle follows probe -> init -> attach -> detach, where
+    probe checks hardware compatibility, init allocates resources, attach begins
+    operation, and detach stops operation and releases resources.
+    """
+    
+    public function probe( self, I64 vendorId, I64 deviceId, I64 classCode ) -> Boolean:
+        
+        """ Check if this driver can handle the device with the given vendor ID, device ID, and class code. """
+    
+    public function init( self ) -> Boolean:
+        
+        """ Initialize driver resources such as allocating buffers, mapping MMIO regions, and configuring hardware registers. """
+    
+    public function attach( self ) -> Boolean:
+        
+        """ Attach to the device and start operation, enabling interrupt handling and data transfer. """
+    
+    public function detach( self ) -> Void:
+        
+        """ Detach from the device, stop all operation, and release all allocated resources. """
+    
+    public function getDriverId( self ) -> I64:
+        
+        """ Return the unique integer identifier for this driver. """
+    
+    public function getState( self ) -> I64:
+        
+        """
+        Return the current lifecycle state of this driver as an integer matching DriverState values.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+public class DriverDescriptor:
+    
+    """
+    Metadata descriptor for a registered device driver. Stores the driver's
+    match criteria (vendor ID, device ID, class code) used to determine which
+    hardware devices this driver can handle, along with the current lifecycle
+    state and the bus/slot/function of any bound device.
+    """
+    
+    public I64 driverId
+    public I64 vendorMatch
+    public I64 deviceMatch
+    public I64 classMatch
+    public I64 state
+    public I64 boundDeviceBus
+    public I64 boundDeviceSlot
+    public I64 boundDeviceFunction
+    
+    public function DriverDescriptor( self ) -> Void:
+        
+        """
+        Construct a driver descriptor with all fields initialized to zero,
+        representing an unregistered driver with no match criteria and no
+        bound device.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.driverId = 0
+        self.vendorMatch = 0
+        self.deviceMatch = 0
+        self.classMatch = 0
+        self.state = 0
+        self.boundDeviceBus = 0
+        self.boundDeviceSlot = 0
+        self.boundDeviceFunction = 0
+    
+    public function matches( self, I64 vendorId, I64 deviceId, I64 classCode ) -> Boolean:
+        
+        """
+        Check if this driver descriptor matches the given device identifiers.
+        A match criterion of 0 acts as a wildcard that matches any value.
+        All three criteria (vendor, device, class) must match for the
+        descriptor to be considered compatible with the device.
+        """
+        
+        Boolean vendorOk = ( self.vendorMatch == 0 ) or ( self.vendorMatch == vendorId )
+        Boolean deviceOk = ( self.deviceMatch == 0 ) or ( self.deviceMatch == deviceId )
+        Boolean classOk = ( self.classMatch == 0 ) or ( self.classMatch == classCode )
+        return vendorOk and deviceOk and classOk
+    
+    public function isBound( self ) -> Boolean:
+        
+        """ Return whether this driver is currently bound to a device (state Attached = 3). """
+        
+        return self.state == 3
+    
+    public function isAvailable( self ) -> Boolean:
+        
+        """
+        Return whether this driver is available for binding (state Unloaded = 0 or Detached = 5).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return self.state == 0 or self.state == 5
+
+public class DriverRegistry:
+    
+    """
+    Registry that tracks all registered device drivers and their lifecycle states.
+    Provides methods to register, unregister, find, bind, and unbind drivers
+    to hardware devices. Driver metadata is stored in parallel Memory arrays
+    indexed by slot position. Match criteria of 0 act as wildcards.
+    """
+    
+    protect Memory<I64> driverIds
+    protect Memory<I64> vendorMatches
+    protect Memory<I64> deviceMatches
+    protect Memory<I64> classMatches
+    protect Memory<I64> states
+    protect Memory<I64> boundBuses
+    protect Memory<I64> boundSlots
+    protect Memory<I64> boundFunctions
+    protect I64 capacity
+    protect I64 count
+    
+    public function DriverRegistry( self, I64 maxDrivers ) -> Void:
+        
+        """
+        Construct a driver registry with capacity for the specified maximum
+        number of drivers. Allocates parallel arrays for driver IDs, match
+        criteria, states, and bound device information, initializing all
+        slots to zero.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxDrivers
+        self.count = 0
+        self.driverIds = new Memory<I64>( maxDrivers )
+        self.vendorMatches = new Memory<I64>( maxDrivers )
+        self.deviceMatches = new Memory<I64>( maxDrivers )
+        self.classMatches = new Memory<I64>( maxDrivers )
+        self.states = new Memory<I64>( maxDrivers )
+        self.boundBuses = new Memory<I64>( maxDrivers )
+        self.boundSlots = new Memory<I64>( maxDrivers )
+        self.boundFunctions = new Memory<I64>( maxDrivers )
+        I64 slotIndex = 0
+        while slotIndex < maxDrivers:
+            self.driverIds.set( slotIndex, 0 )
+            self.vendorMatches.set( slotIndex, 0 )
+            self.deviceMatches.set( slotIndex, 0 )
+            self.classMatches.set( slotIndex, 0 )
+            self.states.set( slotIndex, 0 )
+            self.boundBuses.set( slotIndex, 0 )
+            self.boundSlots.set( slotIndex, 0 )
+            self.boundFunctions.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function registerDriver( self, I64 driverId, I64 vendorMatch, I64 deviceMatch, I64 classMatch ) -> Boolean:
+        
+        """
+        Register a driver with the given ID and match criteria. A match value
+        of 0 for vendorMatch, deviceMatch, or classMatch acts as a wildcard
+        that matches any device. The driver is placed in the first available
+        slot. Returns True if registration succeeded, False if the registry
+        is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if self.count >= self.capacity:
+            return False
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.driverIds.get( slotIndex ) == 0:
+                self.driverIds.set( slotIndex, driverId )
+                self.vendorMatches.set( slotIndex, vendorMatch )
+                self.deviceMatches.set( slotIndex, deviceMatch )
+                self.classMatches.set( slotIndex, classMatch )
+                self.states.set( slotIndex, 0 )
+                self.count = self.count + 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function unregisterDriver( self, I64 driverId ) -> Boolean:
+        
+        """
+        Unregister a driver by its ID, clearing all associated metadata
+        and freeing its slot for reuse. Returns True if the driver was
+        found and removed, False if no driver with the given ID exists.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.driverIds.get( slotIndex ) == driverId:
+                self.driverIds.set( slotIndex, 0 )
+                self.vendorMatches.set( slotIndex, 0 )
+                self.deviceMatches.set( slotIndex, 0 )
+                self.classMatches.set( slotIndex, 0 )
+                self.states.set( slotIndex, 0 )
+                self.boundBuses.set( slotIndex, 0 )
+                self.boundSlots.set( slotIndex, 0 )
+                self.boundFunctions.set( slotIndex, 0 )
+                self.count = self.count - 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function findDriverForDevice( self, I64 vendorId, I64 deviceId, I64 classCode ) -> I64:
+        
+        """
+        Find the first registered driver whose match criteria are compatible
+        with the given device identifiers. Returns the driver ID on match,
+        or -1 if no compatible driver is registered.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.driverIds.get( slotIndex ) != 0:
+                Boolean vendorOk = ( self.vendorMatches.get( slotIndex ) == 0 ) or ( self.vendorMatches.get( slotIndex ) == vendorId )
+                Boolean deviceOk = ( self.deviceMatches.get( slotIndex ) == 0 ) or ( self.deviceMatches.get( slotIndex ) == deviceId )
+                Boolean classOk = ( self.classMatches.get( slotIndex ) == 0 ) or ( self.classMatches.get( slotIndex ) == classCode )
+                if vendorOk and deviceOk and classOk:
+                    return self.driverIds.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function bindDriver( self, I64 driverId, I64 bus, I64 slot, I64 func ) -> Boolean:
+        
+        """
+        Bind the driver with the given ID to a specific PCI device identified
+        by bus, slot, and function. Sets the driver state to Attached (3).
+        Returns True if the driver was found and bound, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.driverIds.get( slotIndex ) == driverId:
+                self.states.set( slotIndex, 3 )
+                self.boundBuses.set( slotIndex, bus )
+                self.boundSlots.set( slotIndex, slot )
+                self.boundFunctions.set( slotIndex, func )
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function unbindDriver( self, I64 driverId ) -> Boolean:
+        
+        """
+        Unbind the driver with the given ID from its currently bound device.
+        Sets the driver state to Detached (5) and clears the bound device
+        information. Returns True if the driver was found, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.driverIds.get( slotIndex ) == driverId:
+                self.states.set( slotIndex, 5 )
+                self.boundBuses.set( slotIndex, 0 )
+                self.boundSlots.set( slotIndex, 0 )
+                self.boundFunctions.set( slotIndex, 0 )
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function getDriverState( self, I64 driverId ) -> I64:
+        
+        """
+        Return the lifecycle state of the driver with the given ID.
+        Returns -1 if no driver with the given ID is registered.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.driverIds.get( slotIndex ) == driverId:
+                return self.states.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function setDriverState( self, I64 driverId, I64 state ) -> Boolean:
+        
+        """
+        Set the lifecycle state of the driver with the given ID.
+        Returns True if the driver was found and its state updated,
+        False if no driver with the given ID is registered.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.driverIds.get( slotIndex ) == driverId:
+                self.states.set( slotIndex, state )
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the number of drivers currently registered in the registry. """
+        
+        return self.count
+    
+    public function getDriverId( self, I64 index ) -> I64:
+        
+        """ Return the driver ID at the given registry slot index, or 0 if the index is out of range. """
+        
+        if index < 0 or index >= self.capacity:
+            return 0
+        return self.driverIds.get( index )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all Memory arrays used for storing driver registry data.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.driverIds.free()
+        self.vendorMatches.free()
+        self.deviceMatches.free()
+        self.classMatches.free()
+        self.states.free()
+        self.boundBuses.free()
+        self.boundSlots.free()
+        self.boundFunctions.free()
+
+export {
+    DriverState,
+    Driver,
+    DriverDescriptor,
+    DriverRegistry
+}
