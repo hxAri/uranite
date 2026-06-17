@@ -1,0 +1,293 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/http/client.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# HTTP client: connect to host, send request, read full response.
+# Supports GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.http.client
+
+from uranite.net.socket import {
+    tcpConnect, sendString, socketRecv, socketClose, ipToInt, INADDR_LOOPBACK
+}
+from uranite.io.syscall import readByteAt, writeByteAt, stringToPtr, stringLen
+from uranite.memory.allocator import alloc, realloc, dealloc
+from uranite.functions.builtin import ptrToString
+from uranite.string.builder import StringBuilder
+from uranite.net.http.request import HttpRequest
+from uranite.net.http.response import HttpResponse
+from uranite.net.http.parser import parseResponse
+from uranite.net.http.errors import HttpConnectionError
+
+const I64 RECV_BUF_SIZE = 8192
+""" Size in bytes of each individual socket receive chunk. """
+
+public function readFull( I64 fd ) -> String:
+    """
+    Read all available data from a socket until the remote end closes
+    the connection. Dynamically grows the receive buffer as needed.
+
+    Parameters:
+        fd (I64):
+            The connected socket file descriptor to read from.
+
+    Returns:
+        String:
+            The complete response data as a null-terminated string.
+
+    Complexity:
+        Time: O(n) where n is the total response size
+        Space: O(n), buffer doubles on overflow
+    """
+    I64 buf = alloc( RECV_BUF_SIZE )
+    I64 totalBuf = alloc( RECV_BUF_SIZE * 4 )
+    I64 totalLen = 0
+    I64 totalCap = RECV_BUF_SIZE * 4
+    Boolean reading = True
+    while reading:
+        I64 bytesReceived = socketRecv( fd, buf, RECV_BUF_SIZE, 0 )
+        if bytesReceived <= 0:
+            reading = False
+        else:
+            if totalLen + bytesReceived > totalCap:
+                totalCap = totalCap * 2
+                totalBuf = realloc( totalBuf, totalCap )
+            I64 byteIndex = 0
+            while byteIndex < bytesReceived:
+                writeByteAt( totalBuf, totalLen, readByteAt( buf, byteIndex ) )
+                totalLen = totalLen + 1
+                byteIndex = byteIndex + 1
+    dealloc( buf )
+    writeByteAt( totalBuf, totalLen, 0 )
+    return ptrToString( totalBuf )
+
+public function sendRequest( I64 ip, I64 port, HttpRequest req ) -> HttpResponse:
+    """
+    Send an HTTP request to the specified host and return the parsed response.
+    Opens a TCP connection, sends the serialized request, reads the full
+    response, and parses it into an HttpResponse.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number to connect to.
+        req (HttpRequest):
+            The HTTP request to send.
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response from the server.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    I64 fd = tcpConnect( ip, port )
+    String data = req.serialize()
+    sendString( fd, data )
+    String raw = readFull( fd )
+    socketClose( fd )
+    return parseResponse( raw )
+
+public function get( I64 ip, I64 port, String path ) -> HttpResponse:
+    """
+    Send an HTTP GET request and return the parsed response.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number.
+        path (String):
+            Request target path (e.g. "/api/users").
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response from the server.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    HttpRequest req = new HttpRequest( "GET", path )
+    return sendRequest( ip, port, req )
+
+public function post( I64 ip, I64 port, String path, String body, String contentType ) -> HttpResponse:
+    """
+    Send an HTTP POST request with the given body and content type.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number.
+        path (String):
+            Request target path.
+        body (String):
+            Request body content.
+        contentType (String):
+            Value for the Content-Type header (e.g. "application/json").
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response from the server.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    HttpRequest req = new HttpRequest( "POST", path )
+    req.setBody( body )
+    req.setContentType( contentType )
+    return sendRequest( ip, port, req )
+
+public function put( I64 ip, I64 port, String path, String body, String contentType ) -> HttpResponse:
+    """
+    Send an HTTP PUT request with the given body and content type.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number.
+        path (String):
+            Request target path.
+        body (String):
+            Request body content.
+        contentType (String):
+            Value for the Content-Type header.
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response from the server.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    HttpRequest req = new HttpRequest( "PUT", path )
+    req.setBody( body )
+    req.setContentType( contentType )
+    return sendRequest( ip, port, req )
+
+public function del( I64 ip, I64 port, String path ) -> HttpResponse:
+    """
+    Send an HTTP DELETE request and return the parsed response.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number.
+        path (String):
+            Request target path.
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response from the server.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    HttpRequest req = new HttpRequest( "DELETE", path )
+    return sendRequest( ip, port, req )
+
+public function patch( I64 ip, I64 port, String path, String body, String contentType ) -> HttpResponse:
+    """
+    Send an HTTP PATCH request with the given body and content type.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number.
+        path (String):
+            Request target path.
+        body (String):
+            Request body content.
+        contentType (String):
+            Value for the Content-Type header.
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response from the server.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    HttpRequest req = new HttpRequest( "PATCH", path )
+    req.setBody( body )
+    req.setContentType( contentType )
+    return sendRequest( ip, port, req )
+
+public function head( I64 ip, I64 port, String path ) -> HttpResponse:
+    """
+    Send an HTTP HEAD request. The response body will be empty per
+    HTTP specification, but headers are fully populated.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number.
+        path (String):
+            Request target path.
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response (body empty).
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    HttpRequest req = new HttpRequest( "HEAD", path )
+    return sendRequest( ip, port, req )
+
+public function options( I64 ip, I64 port, String path ) -> HttpResponse:
+    """
+    Send an HTTP OPTIONS request to discover supported methods and
+    capabilities of the server resource.
+
+    Parameters:
+        ip (I64):
+            IPv4 address as a 32-bit integer in network byte order.
+        port (I64):
+            TCP port number.
+        path (String):
+            Request target path (use "*" for server-wide options).
+
+    Returns:
+        HttpResponse:
+            The parsed HTTP response from the server.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    HttpRequest req = new HttpRequest( "OPTIONS", path )
+    return sendRequest( ip, port, req )
+
+export {
+    sendRequest,
+    readFull,
+    get, post, put, del, patch, head, options,
+    RECV_BUF_SIZE
+}
