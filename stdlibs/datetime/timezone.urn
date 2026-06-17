@@ -1,0 +1,668 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-06 02:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/datetime/timezone.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Timezone support with UTC offset and common timezone definitions.
+# All offsets in seconds from UTC.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.datetime.timezone
+
+from uranite.datetime.datetime import DateTime, fromTimestamp
+from uranite.datetime.errors import DateTimeError
+from uranite.convert.convert import intToString
+
+public const I64 UTC_OFFSET = 0
+""" UTC offset in seconds (0). """
+public const I64 GMT_OFFSET = 0
+""" GMT offset in seconds (0). """
+public const I64 EST_OFFSET = -18000
+""" US Eastern Standard Time offset in seconds (-5 hours). """
+public const I64 EDT_OFFSET = -14400
+""" US Eastern Daylight Time offset in seconds (-4 hours). """
+public const I64 CST_OFFSET = -21600
+""" US Central Standard Time offset in seconds (-6 hours). """
+public const I64 CDT_OFFSET = -18000
+""" US Central Daylight Time offset in seconds (-5 hours). """
+public const I64 MST_OFFSET = -25200
+""" US Mountain Standard Time offset in seconds (-7 hours). """
+public const I64 MDT_OFFSET = -21600
+""" US Mountain Daylight Time offset in seconds (-6 hours). """
+public const I64 PST_OFFSET = -28800
+""" US Pacific Standard Time offset in seconds (-8 hours). """
+public const I64 PDT_OFFSET = -25200
+""" US Pacific Daylight Time offset in seconds (-7 hours). """
+public const I64 AKST_OFFSET = -32400
+""" Alaska Standard Time offset in seconds (-9 hours). """
+public const I64 AKDT_OFFSET = -28800
+""" Alaska Daylight Time offset in seconds (-8 hours). """
+public const I64 HST_OFFSET = -36000
+""" Hawaii Standard Time offset in seconds (-10 hours). """
+public const I64 CET_OFFSET = 3600
+""" Central European Time offset in seconds (+1 hour). """
+public const I64 CEST_OFFSET = 7200
+""" Central European Summer Time offset in seconds (+2 hours). """
+public const I64 EET_OFFSET = 7200
+""" Eastern European Time offset in seconds (+2 hours). """
+public const I64 EEST_OFFSET = 10800
+""" Eastern European Summer Time offset in seconds (+3 hours). """
+public const I64 IST_OFFSET = 19800
+""" India Standard Time offset in seconds (+5:30 hours). """
+public const I64 CST_CHINA_OFFSET = 28800
+""" China Standard Time offset in seconds (+8 hours). """
+public const I64 JST_OFFSET = 32400
+""" Japan Standard Time offset in seconds (+9 hours). """
+public const I64 KST_OFFSET = 32400
+""" Korea Standard Time offset in seconds (+9 hours). """
+public const I64 AEST_OFFSET = 36000
+""" Australian Eastern Standard Time offset in seconds (+10 hours). """
+public const I64 AEDT_OFFSET = 39600
+""" Australian Eastern Daylight Time offset in seconds (+11 hours). """
+public const I64 NZST_OFFSET = 43200
+""" New Zealand Standard Time offset in seconds (+12 hours). """
+public const I64 NZDT_OFFSET = 46800
+""" New Zealand Daylight Time offset in seconds (+13 hours). """
+public const I64 WIB_OFFSET = 25200
+""" Western Indonesia Time offset in seconds (+7 hours). """
+
+public class Timezone:
+    
+    """
+    Represents a timezone as a named abbreviation paired with a fixed
+    UTC offset in seconds. Provides methods for formatting the offset,
+    extracting hour and minute components, and converting DateTimes
+    between timezones.
+    """
+    
+    public String name
+    """ The timezone abbreviation (e.g. "UTC", "EST", "JST"). """
+    public I64 offset
+    """ The UTC offset in seconds. Negative for west of UTC, positive for east. """
+    
+    public function Timezone( self, String name, I64 offset ) -> Void:
+        
+        """
+        Create a new Timezone with the given abbreviation and UTC offset.
+        
+        Parameters:
+            name (String):
+                The timezone abbreviation.
+            offset (I64):
+                The offset from UTC in seconds.
+        """
+        
+        self.name = name
+        self.offset = offset
+    
+    public function abbreviation( self ) -> String:
+        
+        """
+        Return the timezone abbreviation.
+        
+        Returns:
+            The timezone name string (e.g. "UTC", "PST").
+        """
+        
+        return self.name
+    
+    public function offsetHours( self ) -> I64:
+        
+        """
+        Return the whole hours component of the UTC offset.
+        
+        Returns:
+            The offset divided by 3600, truncated toward zero.
+        """
+        
+        return self.offset / 3600
+    
+    public function offsetMinutes( self ) -> I64:
+        
+        """
+        Return the remaining minutes component of the UTC offset after
+        removing the whole hours. Always returns a non-negative value.
+        
+        Returns:
+            The absolute value of the minutes remainder (0-59).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 totalMinutes = self.offset / 60
+        I64 hours = totalMinutes / 60
+        I64 mins = totalMinutes - hours * 60
+        if mins < 0:
+            mins = 0 - mins
+        return mins
+    
+    public function formatOffset( self ) -> String:
+        
+        """
+        Format the UTC offset as a string in the form "+HH:MM" or
+        "-HH:MM". Returns "+00:00" for zero offsets.
+        
+        Returns:
+            A formatted offset string such as "+05:30" or "-08:00".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.offset == 0:
+            return "+00:00"
+        I64 sign = 1
+        I64 absOffset = self.offset
+        if absOffset < 0:
+            sign = -1
+            absOffset = 0 - absOffset
+        I64 hours = absOffset / 3600
+        I64 mins = ( absOffset - hours * 3600 ) / 60
+        String hStr = intToString( hours )
+        if hours < 10:
+            hStr = "0" + hStr
+        String mStr = intToString( mins )
+        if mins < 10:
+            mStr = "0" + mStr
+        if sign < 0:
+            return "-" + hStr + ":" + mStr
+        return "+" + hStr + ":" + mStr
+    
+    public function convertFrom( self, DateTime dt ) -> DateTime:
+        
+        """
+        Convert a DateTime from its current timezone to this timezone
+        by extracting the UTC timestamp and reinterpreting it with
+        this timezone's offset.
+        
+        Parameters:
+            dt (DateTime):
+                The source DateTime to convert.
+        
+        Returns:
+            A new DateTime adjusted to this timezone's offset.
+        """
+        
+        I64 ts = dt.toTimestamp()
+        return fromTimestamp( ts, dt.nanosecond, self.offset )
+
+public function utcTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Coordinated Universal Time (UTC+00:00).
+    
+    Returns:
+        A Timezone with abbreviation "UTC" and zero offset.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "UTC", UTC_OFFSET )
+
+public function gmtTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Greenwich Mean Time (GMT+00:00).
+    
+    Returns:
+        A Timezone with abbreviation "GMT" and zero offset.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "GMT", GMT_OFFSET )
+
+public function estTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Eastern Standard Time (UTC-05:00).
+    
+    Returns:
+        A Timezone with abbreviation "EST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "EST", EST_OFFSET )
+
+public function edtTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Eastern Daylight Time (UTC-04:00).
+    
+    Returns:
+        A Timezone with abbreviation "EDT".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "EDT", EDT_OFFSET )
+
+public function cstTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Central Standard Time (UTC-06:00).
+    
+    Returns:
+        A Timezone with abbreviation "CST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "CST", CST_OFFSET )
+
+public function cdtTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Central Daylight Time (UTC-05:00).
+    
+    Returns:
+        A Timezone with abbreviation "CDT".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "CDT", CDT_OFFSET )
+
+public function mstTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Mountain Standard Time (UTC-07:00).
+    
+    Returns:
+        A Timezone with abbreviation "MST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "MST", MST_OFFSET )
+
+public function mdtTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Mountain Daylight Time (UTC-06:00).
+    
+    Returns:
+        A Timezone with abbreviation "MDT".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "MDT", MDT_OFFSET )
+
+public function pstTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Pacific Standard Time (UTC-08:00).
+    
+    Returns:
+        A Timezone with abbreviation "PST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "PST", PST_OFFSET )
+
+public function pdtTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing US Pacific Daylight Time (UTC-07:00).
+    
+    Returns:
+        A Timezone with abbreviation "PDT".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "PDT", PDT_OFFSET )
+
+public function cetTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Central European Time (UTC+01:00).
+    
+    Returns:
+        A Timezone with abbreviation "CET".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "CET", CET_OFFSET )
+
+public function cestTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Central European Summer Time (UTC+02:00).
+    
+    Returns:
+        A Timezone with abbreviation "CEST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "CEST", CEST_OFFSET )
+
+public function eetTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Eastern European Time (UTC+02:00).
+    
+    Returns:
+        A Timezone with abbreviation "EET".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "EET", EET_OFFSET )
+
+public function eestTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Eastern European Summer Time (UTC+03:00).
+    
+    Returns:
+        A Timezone with abbreviation "EEST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "EEST", EEST_OFFSET )
+
+public function istTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing India Standard Time (UTC+05:30).
+    
+    Returns:
+        A Timezone with abbreviation "IST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "IST", IST_OFFSET )
+
+public function jstTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Japan Standard Time (UTC+09:00).
+    
+    Returns:
+        A Timezone with abbreviation "JST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "JST", JST_OFFSET )
+
+public function kstTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Korea Standard Time (UTC+09:00).
+    
+    Returns:
+        A Timezone with abbreviation "KST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "KST", KST_OFFSET )
+
+public function aestTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Australian Eastern Standard Time (UTC+10:00).
+    
+    Returns:
+        A Timezone with abbreviation "AEST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "AEST", AEST_OFFSET )
+
+public function nzstTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing New Zealand Standard Time (UTC+12:00).
+    
+    Returns:
+        A Timezone with abbreviation "NZST".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "NZST", NZST_OFFSET )
+
+public function wibTimezone() -> Timezone:
+    
+    """
+    Create a Timezone representing Western Indonesia Time (UTC+07:00).
+    
+    Returns:
+        A Timezone with abbreviation "WIB".
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( "WIB", WIB_OFFSET )
+
+public function fromOffset( String name, I64 offsetSeconds ) -> Timezone:
+    
+    """
+    Create a custom Timezone from an abbreviation and an offset
+    specified in seconds.
+    
+    Parameters:
+        name (String):
+            The timezone abbreviation.
+        offsetSeconds (I64):
+            The offset from UTC in seconds.
+    
+    Returns:
+        A new Timezone with the given name and offset.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( name, offsetSeconds )
+
+public function fromHoursOffset( String name, I64 hours ) -> Timezone:
+    
+    """
+    Create a custom Timezone from an abbreviation and an offset
+    specified in whole hours.
+    
+    Parameters:
+        name (String):
+            The timezone abbreviation.
+        hours (I64):
+            The offset from UTC in hours.
+    
+    Returns:
+        A new Timezone with the given name and the hours converted
+        to seconds.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new Timezone( name, hours * 3600 )
+
+public function fromHoursMinutesOffset( String name, I64 hours, I64 minutes ) -> Timezone:
+    
+    """
+    Create a custom Timezone from an abbreviation and an offset
+    specified in hours and minutes. For negative offsets, the minutes
+    are subtracted from the hour component.
+    
+    Parameters:
+        name (String):
+            The timezone abbreviation.
+        hours (I64):
+            The hours component of the offset (negative for west of UTC).
+        minutes (I64):
+            The minutes component of the offset (always non-negative).
+    
+    Returns:
+        A new Timezone with the computed offset in seconds.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 totalSecs = hours * 3600
+    if hours < 0:
+        totalSecs = totalSecs - minutes * 60
+    else:
+        totalSecs = totalSecs + minutes * 60
+    return new Timezone( name, totalSecs )
+
+public function lookupTimezone( String name ) -> Timezone:
+    
+    """
+    Look up a timezone by its standard abbreviation. Supports common
+    abbreviations including UTC, GMT, EST, EDT, CST, CDT, MST, MDT,
+    PST, PDT, CET, CEST, EET, EEST, IST, JST, KST, AEST, NZST,
+    and WIB.
+    
+    Parameters:
+        name (String):
+            The timezone abbreviation to look up.
+    
+    Returns:
+        A Timezone matching the given abbreviation.
+    
+    Raises:
+        DateTimeError: If the abbreviation is not recognized.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    if name == "UTC":
+        return utcTimezone()
+    if name == "GMT":
+        return gmtTimezone()
+    if name == "EST":
+        return estTimezone()
+    if name == "EDT":
+        return edtTimezone()
+    if name == "CST":
+        return cstTimezone()
+    if name == "CDT":
+        return cdtTimezone()
+    if name == "MST":
+        return mstTimezone()
+    if name == "MDT":
+        return mdtTimezone()
+    if name == "PST":
+        return pstTimezone()
+    if name == "PDT":
+        return pdtTimezone()
+    if name == "CET":
+        return cetTimezone()
+    if name == "CEST":
+        return cestTimezone()
+    if name == "EET":
+        return eetTimezone()
+    if name == "EEST":
+        return eestTimezone()
+    if name == "IST":
+        return istTimezone()
+    if name == "JST":
+        return jstTimezone()
+    if name == "KST":
+        return kstTimezone()
+    if name == "AEST":
+        return aestTimezone()
+    if name == "NZST":
+        return nzstTimezone()
+    if name == "WIB":
+        return wibTimezone()
+    raise new DateTimeError( "unknown timezone: " + name, -1, None )
+
+export {
+    Timezone,
+    utcTimezone, gmtTimezone,
+    estTimezone, edtTimezone,
+    cstTimezone, cdtTimezone,
+    mstTimezone, mdtTimezone,
+    pstTimezone, pdtTimezone,
+    cetTimezone, cestTimezone,
+    eetTimezone, eestTimezone,
+    istTimezone, jstTimezone, kstTimezone,
+    aestTimezone, nzstTimezone, wibTimezone,
+    fromOffset, fromHoursOffset, fromHoursMinutesOffset,
+    lookupTimezone,
+    UTC_OFFSET, GMT_OFFSET,
+    EST_OFFSET, EDT_OFFSET,
+    CST_OFFSET, CDT_OFFSET,
+    MST_OFFSET, MDT_OFFSET,
+    PST_OFFSET, PDT_OFFSET,
+    CET_OFFSET, CEST_OFFSET,
+    EET_OFFSET, EEST_OFFSET,
+    IST_OFFSET, JST_OFFSET, KST_OFFSET,
+    AEST_OFFSET, NZST_OFFSET, WIB_OFFSET,
+    CST_CHINA_OFFSET, AKST_OFFSET, AKDT_OFFSET,
+    HST_OFFSET, AEDT_OFFSET, NZDT_OFFSET
+}
