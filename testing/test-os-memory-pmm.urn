@@ -1,0 +1,42 @@
+package testing
+
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue
+}
+from uranite.io.console import putsln
+from uranite.sys.process import exit
+
+public function main() -> I32:
+    putsln( "=== OS Memory PMM Tests ===" )
+
+    PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
+    assertEqualI64( 256, pmm.totalCount(), "totalFrames" )
+    assertEqualI64( 0, pmm.usedCount(), "used 0" )
+    assertEqualI64( 256, pmm.freeCount(), "free 256" )
+
+    I64 frame1 = pmm.allocFrame()
+    assertTrue( frame1 != 0, "frame1 valid" )
+    assertEqualI64( 1, pmm.usedCount(), "used 1" )
+    assertEqualI64( 255, pmm.freeCount(), "free 255" )
+
+    I64 frame2 = pmm.allocFrame()
+    assertTrue( frame2 != 0, "frame2 valid" )
+    assertEqualI64( 2, pmm.usedCount(), "used 2" )
+    putsln( "allocFrame OK" )
+
+    pmm.freeFrame( frame1 )
+    assertEqualI64( 1, pmm.usedCount(), "used after free" )
+    assertEqualI64( 255, pmm.freeCount(), "free after free" )
+    putsln( "freeFrame OK" )
+
+    I64 contig = pmm.allocContiguous( 4 )
+    assertTrue( contig != 0, "contig valid" )
+    assertEqualI64( 5, pmm.usedCount(), "used after contig" )
+    putsln( "allocContiguous OK" )
+
+    pmm.destroy()
+
+    putsln( "=== All PMM tests passed ===" )
+    exit( 0 )
+    return 0
