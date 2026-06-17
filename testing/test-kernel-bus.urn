@@ -1,0 +1,14 @@
+package testing
+
+from uranite.kernel.bus import PciScanner
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Kernel Bus Tests ===" )
+
+    PciScanner scanner = new PciScanner( 32 )
+    putsln( "PciScanner constructed OK" )
+
+    putsln( "=== All Kernel Bus Tests Passed ===" )
+    return 0
