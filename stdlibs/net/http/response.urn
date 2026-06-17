@@ -1,0 +1,86 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/http/response.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.http.response
+
+public class HttpResponse:
+
+    """
+    Parsed HTTP response containing status code, headers, and body.
+    Populated by the HTTP parser after reading a raw response from
+    a socket connection.
+    """
+
+    public I64 statusCode
+    """HTTP status code (e.g. 200, 404, 500)."""
+    public String statusText
+    """HTTP reason phrase (e.g. "OK", "Not Found")."""
+    public String body
+    """Response body content."""
+    public String contentType
+    """Value of the Content-Type header, or empty if not present."""
+    public I64 contentLength
+    """Value of the Content-Length header, or 0 if not present."""
+    public String version
+    """HTTP version string (e.g. "HTTP/1.1")."""
+    public String rawHeaders
+    """Unparsed header block as a single string."""
+
+    public function HttpResponse( self, I64 statusCode, String statusText, String body ) -> Void:
+        """
+        Construct an HTTP response with the given status and body.
+
+        Parameters:
+            statusCode (I64):
+                HTTP status code.
+            statusText (String):
+                HTTP reason phrase.
+            body (String):
+                Response body content.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        self.statusCode = statusCode
+        self.statusText = statusText
+        self.body = body
+        self.contentType = ""
+        self.contentLength = 0
+        self.version = "HTTP/1.1"
+        self.rawHeaders = ""
+
+    public function isOk( self ) -> Boolean:
+        """Return True if status code is in the 2xx success range."""
+        return self.statusCode >= 200 and self.statusCode < 300
+
+    public function isRedirect( self ) -> Boolean:
+        """Return True if status code is in the 3xx redirect range."""
+        return self.statusCode >= 300 and self.statusCode < 400
+
+    public function isClientError( self ) -> Boolean:
+        """Return True if status code is in the 4xx client error range."""
+        return self.statusCode >= 400 and self.statusCode < 500
+
+    public function isServerError( self ) -> Boolean:
+        """Return True if status code is 500 or above."""
+        return self.statusCode >= 500
+
+export {
+    HttpResponse
+}
