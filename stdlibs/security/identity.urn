@@ -1,0 +1,207 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/security/identity.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# User and group identity management for access control. Wraps the
+# kernel ProcessIdentity with high-level privilege checking and
+# token-based authentication verification.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.security.identity
+
+from uranite.os.identity.identity import ProcessIdentity, ROOT_UID, ROOT_GID, NOBODY_UID, NOBODY_GID
+
+public class UserIdentity:
+
+    """
+    User and group identity for access control decisions. Wraps the
+    kernel ProcessIdentity with high-level privilege queries, identity
+    matching, and token verification. Supports effective UID/GID
+    escalation and de-escalation.
+    """
+
+    protect ProcessIdentity identity
+
+    public function UserIdentity( self, I64 userId, I64 groupId, I64 authToken ) -> Void:
+
+        """
+        Construct an identity with real user/group IDs and an authentication
+        token. Effective IDs initially equal real IDs.
+
+        Parameters:
+            userId (I64):
+                Real user identifier for this identity.
+            groupId (I64):
+                Real group identifier for this identity.
+            authToken (I64):
+                Kernel-assigned unforgeable authentication token.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.identity = new ProcessIdentity( userId, groupId, authToken )
+
+    public function isRoot( self ) -> Boolean:
+
+        """ Return whether this identity has root (superuser) privileges. """
+
+        return self.identity.isRoot()
+
+    public function getUid( self ) -> I64:
+
+        """ Return the real user identifier. """
+
+        return self.identity.getUid()
+
+    public function getGid( self ) -> I64:
+
+        """ Return the real group identifier. """
+
+        return self.identity.getGid()
+
+    public function getEffectiveUid( self ) -> I64:
+
+        """ Return the effective user identifier used for permission checks. """
+
+        return self.identity.getEffectiveUid()
+
+    public function getEffectiveGid( self ) -> I64:
+
+        """ Return the effective group identifier used for permission checks. """
+
+        return self.identity.getEffectiveGid()
+
+    public function setEffectiveUid( self, I64 effectiveUid ) -> Void:
+
+        """
+        Set effective user identifier for privilege escalation or de-escalation.
+
+        Parameters:
+            effectiveUid (I64):
+                New effective user identifier.
+        """
+
+        self.identity.setEffectiveUid( effectiveUid )
+
+    public function setEffectiveGid( self, I64 effectiveGid ) -> Void:
+
+        """
+        Set effective group identifier for privilege escalation or de-escalation.
+
+        Parameters:
+            effectiveGid (I64):
+                New effective group identifier.
+        """
+
+        self.identity.setEffectiveGid( effectiveGid )
+
+    public function canAccessAs( self, I64 targetUid ) -> Boolean:
+
+        """
+        Check whether this identity can access resources owned by targetUid.
+        Root can access anything; non-root can only access own resources.
+
+        Parameters:
+            targetUid (I64):
+                User identifier of the resource owner.
+
+        Returns:
+            Boolean:
+                True if access is permitted.
+        """
+
+        if self.identity.isRoot():
+            return True
+        return self.identity.getEffectiveUid() == targetUid
+
+    public function matchesIdentity( self, I64 otherUid, I64 otherGid ) -> Boolean:
+
+        """
+        Check whether this identity matches a given user/group pair
+        by comparing effective identifiers.
+
+        Parameters:
+            otherUid (I64):
+                User identifier to compare against.
+            otherGid (I64):
+                Group identifier to compare against.
+
+        Returns:
+            Boolean:
+                True if both effective UID and GID match.
+        """
+
+        return self.identity.matches( otherUid, otherGid )
+
+    public function inGroup( self, I64 groupId ) -> Boolean:
+
+        """
+        Check whether this identity belongs to the specified group.
+
+        Parameters:
+            groupId (I64):
+                Group identifier to check membership against.
+
+        Returns:
+            Boolean:
+                True if effective GID matches.
+        """
+
+        return self.identity.inGroup( groupId )
+
+    public function verifyToken( self, I64 expectedToken ) -> Boolean:
+
+        """
+        Verify authentication token against an expected value.
+
+        Parameters:
+            expectedToken (I64):
+                Expected token value.
+
+        Returns:
+            Boolean:
+                True if stored token matches.
+        """
+
+        return self.identity.verifyToken( expectedToken )
+
+    public function isNobody( self ) -> Boolean:
+
+        """ Return whether this identity is the unprivileged nobody user. """
+
+        return self.identity.getEffectiveUid() == NOBODY_UID
+
+    public function dropToNobody( self ) -> Void:
+
+        """
+        De-escalate privileges to the nobody user/group.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.identity.setEffectiveUid( NOBODY_UID )
+        self.identity.setEffectiveGid( NOBODY_GID )
+
+export {
+    UserIdentity,
+    ProcessIdentity,
+    ROOT_UID, ROOT_GID,
+    NOBODY_UID, NOBODY_GID
+}
