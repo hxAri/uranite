@@ -1,0 +1,77 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#  
+# Error Handling: try/except/finally, raise, except-as, multiple except clauses.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.error
+
+from uranite.io.console import puts
+from uranite.errors.exception import Exception
+
+# Basic try/except
+public function safe_divide( I64 a, I64 b ) -> I64:
+    if b == 0:
+        raise new Exception( "division by zero", 0, None )
+    return a / b
+
+# Function demonstrating finally
+public function with_cleanup() -> Void:
+    try:
+        puts( "doing work..." )
+        raise new Exception( "something went wrong", 0, None )
+    except as e:
+        puts( "error caught" )
+    finally:
+        puts( "cleanup always runs" )
+
+# Nested try/except
+public function nested_handling() -> Void:
+    try:
+        try:
+            raise new Exception( "inner error", 0, None )
+        except as e:
+            puts( "inner handler caught it" )
+        puts( "after inner try" )
+    except as e:
+        puts( "outer handler (should not reach)" )
+
+public function main() -> I32:
+    # Basic exception handling
+    try:
+        I64 result = safe_divide( 10, 0 )
+        puts( "result = ", result )
+    except as e:
+        puts( "caught: division by zero" )
+
+    # Successful path
+    try:
+        I64 quotient = safe_divide( 100, 5 )
+        puts( "100 / 5 = ", quotient )
+    except as e:
+        puts( "unexpected error" )
+
+    # With finally
+    puts( "\nWith cleanup:" )
+    with_cleanup()
+
+    # Nested
+    puts( "\nNested handling:" )
+    nested_handling()
+
+    return 0
