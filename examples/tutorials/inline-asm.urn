@@ -1,0 +1,21 @@
+
+package main
+
+from uranite.io.console import puts
+
+
+function main() -> I32:
+    asm volatile "nop"
+    asm "nop"
+
+    I64 result = 0
+    asm "mov $$42, $0" : output( "=r" result )
+    puts( "asm mov result: ", result )
+
+    I64 a = 10
+    I64 b = 32
+    I64 sum = 0
+    asm "add $1, $0" : output( "=r" sum ) : input( "r" a, "0" b )
+    puts( "asm add result: ", sum )
+
+    return 0

@@ -1,0 +1,67 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/syscall/number.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the syscall dispatch identifiers for the Uranite kernel, organized by category with gaps for future expansion, following the x86_64 register convention.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.syscall.number
+
+enum SyscallNumber backed I64:
+    
+    """
+    Syscall dispatch identifiers for the Uranite kernel. Each value is placed in RAX
+    before executing the syscall instruction. On x86_64, arguments are passed in
+    RDI, RSI, RDX, R10 (not RCX, which is clobbered), R8, and R9. The return value
+    is placed in RAX, where negative values indicate error codes. On RISC-V (future),
+    a7 holds the syscall number, a0-a5 hold arguments, a0 holds the return value,
+    and the ecall instruction is used. Numbers are grouped by category with gaps
+    reserved for future expansion.
+    """
+    
+    unit ClockGet 51
+    unit ClockSet 52
+    unit DebugLog 53
+    unit HandleClose 2
+    unit HandleDuplicate 1
+    unit HandleInfo 4
+    unit HandleReplace 3
+    unit MemoryInfo 33
+    unit MemoryMap 30
+    unit MemoryProtect 32
+    unit MemoryUnmap 31
+    unit ObjectInfo 15
+    unit ObjectIoctl 12
+    unit ObjectRead 10
+    unit ObjectSignal 14
+    unit ObjectWait 13
+    unit ObjectWrite 11
+    unit PortClose 43
+    unit PortCreate 40
+    unit PortReceive 42
+    unit PortSend 41
+    unit SystemInfo 50
+    unit TaskCreate 20
+    unit TaskExit 21
+    unit TaskInfo 25
+    unit TaskKill 22
+    unit TaskResume 24
+    unit TaskSuspend 23
+    unit TaskYield 26
+
+export {
+    SyscallNumber
+}

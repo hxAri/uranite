@@ -1,0 +1,233 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/memory/allocator.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Userspace memory allocator built entirely on mmap/munmap syscalls.
+# Provides alloc/dealloc/realloc/allocZeroed for arbitrary-size blocks.
+# Each allocation prepends an 8-byte header storing the mapped region size
+# so dealloc and realloc can retrieve it without external bookkeeping.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.memory.allocator
+
+from uranite.os.syscall.invoke import syscall2, syscall6
+from uranite.os.syscall.result import SyscallResult
+from uranite.io.syscall import readI64At, writeI64At, readByteAt, writeByteAt
+from uranite.errors.error import Error
+
+const I64 SYS_MMAP = 9
+""" Linux syscall number for mmap. """
+const I64 SYS_MUNMAP = 11
+""" Linux syscall number for munmap. """
+const I64 PROT_READ = 1
+""" Memory protection flag: page can be read. """
+const I64 PROT_WRITE = 2
+""" Memory protection flag: page can be written. """
+const I64 PROT_RW = 3
+""" Memory protection flags: page can be read and written. """
+const I64 MAP_PRIVATE = 2
+""" Mapping flag: changes are private (copy-on-write). """
+const I64 MAP_ANONYMOUS = 32
+""" Mapping flag: not backed by any file. """
+const I64 MAP_PRIVATE_ANON = 34
+""" Combined MAP_PRIVATE and MAP_ANONYMOUS flags. """
+const I64 HEADER_SIZE = 8
+""" Size in bytes of the allocation header that stores the total mapped region size. """
+const I64 PAGE_SIZE = 4096
+""" System page size in bytes used for aligning mmap allocations. """
+
+public class AllocationError extends Error:
+    
+    """
+    Raised when a memory allocation or deallocation operation fails,
+    typically due to an mmap or munmap syscall returning an error.
+    """
+    
+    public function AllocationError( self, String message, I64 code, ?Error cause ) -> Void:
+        
+        """
+        Create a new AllocationError.
+        
+        Parameters:
+            message (String):
+                A description of the allocation failure.
+            code (I64):
+                The syscall error code returned by the kernel.
+            cause (?Error):
+                An optional underlying error, or None.
+        """
+        
+        parent( message, code, cause )
+
+public function alignToPage( I64 size ) -> I64:
+    
+    """
+    Round a byte size up to the nearest multiple of the system page
+    size (4096 bytes). Returns the size unchanged if it is already
+    page-aligned.
+    
+    Parameters:
+        size (I64):
+            The byte size to align.
+    
+    Returns:
+        The smallest multiple of PAGE_SIZE that is greater than or
+        equal to size.
+    """
+    
+    I64 remainder = size % PAGE_SIZE
+    if remainder == 0:
+        return size
+    return size + PAGE_SIZE - remainder
+
+public function alloc( I64 size ) -> I64:
+    
+    """
+    Allocate at least the requested number of bytes using mmap. An
+    8-byte header is prepended to store the total mapped region size,
+    enabling dealloc and realloc to operate without external metadata.
+    The returned pointer points past the header to the usable region.
+    
+    Parameters:
+        size (I64):
+            The minimum number of usable bytes to allocate.
+    
+    Returns:
+        A pointer (as I64) to the start of the usable memory region.
+    
+    Raises:
+        AllocationError: If the mmap syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 totalSize = alignToPage( size + HEADER_SIZE )
+    SyscallResult syscallResult = syscall6( SYS_MMAP, 0, totalSize, PROT_RW, MAP_PRIVATE_ANON, -1, 0 )
+    if syscallResult.isError():
+        raise new AllocationError( "mmap allocation failed", syscallResult.errorCode(), None )
+    I64 base = syscallResult.value()
+    writeI64At( base, 0, totalSize )
+    return base + HEADER_SIZE
+
+public function dealloc( I64 ptr ) -> Void:
+    
+    """
+    Free a previously allocated memory region by calling munmap. The
+    pointer must have been returned by alloc, realloc, or allocZeroed.
+    Reads the allocation header to determine the mapped region size.
+    
+    Parameters:
+        ptr (I64):
+            The pointer (as I64) to the usable memory region to free.
+    
+    Raises:
+        AllocationError: If the munmap syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 base = ptr - HEADER_SIZE
+    I64 totalSize = readI64At( base, 0 )
+    SyscallResult syscallResult = syscall2( SYS_MUNMAP, base, totalSize )
+    if syscallResult.isError():
+        raise new AllocationError( "munmap deallocation failed", syscallResult.errorCode(), None )
+
+public function realloc( I64 ptr, I64 newSize ) -> I64:
+    
+    """
+    Resize a previously allocated memory region. If the new size
+    maps to the same page-aligned total, the original pointer is
+    returned unchanged. Otherwise, a new region is allocated, the
+    existing data is copied byte-by-byte, and the old region is freed.
+    
+    Parameters:
+        ptr (I64):
+            The pointer (as I64) to the existing allocation.
+        newSize (I64):
+            The desired new usable size in bytes.
+    
+    Returns:
+        A pointer to the resized memory region, which may differ
+        from the original pointer.
+    
+    Raises:
+        AllocationError: If the underlying alloc or dealloc fails.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    I64 oldBase = ptr - HEADER_SIZE
+    I64 oldTotalSize = readI64At( oldBase, 0 )
+    I64 oldUsable = oldTotalSize - HEADER_SIZE
+    I64 newTotalSize = alignToPage( newSize + HEADER_SIZE )
+    if newTotalSize == oldTotalSize:
+        return ptr
+    I64 newPtr = alloc( newSize )
+    I64 copySize = oldUsable
+    if newSize < copySize:
+        copySize = newSize
+    I64 copyIndex = 0
+    while copyIndex < copySize:
+        I64 byteValue = readByteAt( ptr, copyIndex )
+        writeByteAt( newPtr, copyIndex, byteValue )
+        copyIndex = copyIndex + 1
+    dealloc( ptr )
+    return newPtr
+
+public function allocZeroed( I64 size ) -> I64:
+    
+    """
+    Allocate memory and zero-initialize all bytes. Equivalent to
+    calling alloc followed by filling every byte with zero.
+    
+    Parameters:
+        size (I64):
+            The number of usable bytes to allocate and zero.
+    
+    Returns:
+        A pointer (as I64) to the zero-initialized memory region.
+    
+    Raises:
+        AllocationError: If the underlying alloc fails.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    I64 ptr = alloc( size )
+    I64 byteIndex = 0
+    while byteIndex < size:
+        writeByteAt( ptr, byteIndex, 0 )
+        byteIndex = byteIndex + 1
+    return ptr
+
+export {
+    AllocationError,
+    alloc,
+    dealloc,
+    realloc,
+    allocZeroed,
+    alignToPage,
+    HEADER_SIZE,
+    PAGE_SIZE
+}

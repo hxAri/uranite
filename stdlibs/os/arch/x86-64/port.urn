@@ -1,0 +1,167 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/port.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides x86 I/O port access functions for reading and writing 8-bit, 16-bit,
+# and 32-bit values to the separate 64KB I/O address space used by legacy PC
+# hardware such as the PIC, PIT, serial UART, and PCI configuration space.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.x86-64.port
+
+public function outb( I64 port, I64 value ) -> Void:
+    
+    """
+    Write a single byte value to the specified x86 I/O port address using the
+    outb instruction. The x86 architecture provides a separate 64KB I/O address
+    space distinct from main memory, accessed through dedicated in/out instructions.
+    Legacy hardware devices such as the Programmable Interrupt Controller (PIC),
+    Programmable Interval Timer (PIT), serial UART controllers, PS/2 keyboard
+    controller, and PCI configuration space all communicate through this I/O
+    port mechanism rather than memory-mapped registers.
+    
+    Parameters:
+        port (I64):
+            The I/O port address (0-65535) to write to.
+        value (I64):
+            The byte value to write (only the low 8 bits are used).
+    """
+    
+    asm volatile "outb $0, $1" : : input( "{ax}" value as I8, "N{dx}" port as I16 )
+
+public function inb( I64 port ) -> I64:
+    
+    """
+    Read a single byte from the specified x86 I/O port address using the inb
+    instruction. The result is returned in the accumulator register (AL) and
+    zero-extended to a full I64 value. This is the most common I/O port width
+    used by legacy PC hardware for status registers, data registers, and
+    control registers.
+    
+    Parameters:
+        port (I64):
+            The I/O port address (0-65535) to read from.
+    
+    Returns:
+        I64:
+            The byte value read from the port, zero-extended to I64.
+    """
+    
+    I8 result = 0 as I8
+    asm "inb $1, $0" : output( "={ax}" result ) : input( "N{dx}" port as I16 )
+    return result as I64
+
+public function outw( I64 port, I64 value ) -> Void:
+    
+    """
+    Write a 16-bit word value to the specified x86 I/O port address using the
+    outw instruction. Some hardware devices use 16-bit I/O port access for
+    transferring larger values in a single operation, such as certain PCI
+    configuration registers and some VGA registers.
+    
+    Parameters:
+        port (I64):
+            The I/O port address (0-65535) to write to.
+        value (I64):
+            The word value to write (only the low 16 bits are used).
+    """
+    
+    asm volatile "outw $0, $1" : : input( "{ax}" value as I16, "N{dx}" port as I16 )
+
+public function inw( I64 port ) -> I64:
+    
+    """
+    Read a 16-bit word from the specified x86 I/O port address using the inw
+    instruction. The result is returned in AX and zero-extended to I64. Used
+    for hardware that requires 16-bit port access width.
+    
+    Parameters:
+        port (I64):
+            The I/O port address (0-65535) to read from.
+    
+    Returns:
+        I64:
+            The 16-bit word value read from the port, zero-extended to I64.
+    """
+    
+    I16 result = 0 as I16
+    asm "inw $1, $0" : output( "={ax}" result ) : input( "N{dx}" port as I16 )
+    return result as I64
+
+public function outl( I64 port, I64 value ) -> Void:
+    
+    """
+    Write a 32-bit doubleword value to the specified x86 I/O port address using
+    the outl instruction. 32-bit port access is commonly used by PCI configuration
+    space reads and writes, where the configuration register address is written
+    to port 0xCF8 and data is transferred through port 0xCFC.
+    
+    Parameters:
+        port (I64):
+            The I/O port address (0-65535) to write to.
+        value (I64):
+            The doubleword value to write (only the low 32 bits are used).
+    """
+    
+    asm volatile "outl $0, $1" : : input( "{ax}" value as I32, "N{dx}" port as I16 )
+
+public function inl( I64 port ) -> I64:
+    
+    """
+    Read a 32-bit doubleword from the specified x86 I/O port address using the
+    inl instruction. The result is returned in EAX and zero-extended to I64.
+    Primarily used for PCI configuration space access where 32-bit register
+    reads are standard.
+    
+    Parameters:
+        port (I64):
+            The I/O port address (0-65535) to read from.
+    
+    Returns:
+        I64:
+            The 32-bit doubleword value read from the port, zero-extended to I64.
+    """
+    
+    I32 result = 0 as I32
+    asm "inl $1, $0" : output( "={ax}" result ) : input( "N{dx}" port as I16 )
+    return result as I64
+
+public function ioWait() -> Void:
+    
+    """
+    Insert a short delay of approximately one microsecond by performing a dummy
+    write to I/O port 0x80, which is the POST diagnostic code port on IBM PC
+    compatible hardware. This delay is required between consecutive I/O port
+    operations targeting slow devices such as the Programmable Interrupt Controller
+    and Programmable Interval Timer, which need time to process each command
+    before accepting the next one.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    asm volatile "outb $0, $$0x80" : : input( "{ax}" 0 as I8 )
+
+export {
+    outb,
+    inb,
+    outw,
+    inw,
+    outl,
+    inl,
+    ioWait
+}

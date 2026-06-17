@@ -1,0 +1,274 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/memory/heap.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Kernel heap allocator composed of power-of-2 slab caches for small allocations and direct PMM allocation for large requests. SlabCache provides O(1) fixed-size object allocation via a free list, while KernelHeap routes requests to the appropriate cache based on size.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.memory.heap
+
+from uranite.memory.memory import Memory
+from uranite.os.memory.pmm import PhysicalMemoryManager
+
+public class SlabCache:
+    
+    """
+    Fixed-size object cache backed by 4KB pages from the Physical Memory Manager.
+    Unused slots are chained into a free list, providing O(1) allocation and
+    deallocation. Each cache handles objects of a single size, and multiple
+    caches are combined by KernelHeap to serve various allocation sizes.
+    """
+    
+    protect I64 objectSize
+    protect Memory<I64> backing
+    protect I64 capacity
+    protect I64 used
+    protect I64 firstFree
+    
+    public function SlabCache( self, I64 objectSize, I64 pageCount ) -> Void:
+        
+        """
+        Construct a slab cache for objects of the given size, backed by the
+        specified number of 4KB pages. Computes the total capacity from the
+        available bytes and initializes a free list where each slot points
+        to the next free slot, with the last slot pointing to -1.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.objectSize = objectSize
+        I64 totalBytes = pageCount * 4096
+        self.capacity = totalBytes / objectSize
+        self.used = 0
+        self.firstFree = 0
+        self.backing = new Memory<I64>( self.capacity )
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if slotIndex < self.capacity - 1:
+                self.backing.set( slotIndex, slotIndex + 1 )
+            else:
+                self.backing.set( slotIndex, -1 )
+            slotIndex = slotIndex + 1
+    
+    public function allocate( self ) -> I64:
+        
+        """
+        Allocate one object slot from the cache by popping the head of the
+        free list. Returns the slot index of the allocated object, or -1
+        if the cache is full and no free slots remain.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.firstFree < 0:
+            return -1
+        I64 slot = self.firstFree
+        self.firstFree = self.backing.get( slot )
+        self.used = self.used + 1
+        return slot
+    
+    public function deallocate( self, I64 slot ) -> Void:
+        
+        """
+        Return an object slot back to the cache by pushing it onto the
+        head of the free list. The slot index must be valid and within
+        the capacity of the cache.
+        """
+        
+        if slot >= 0 and slot < self.capacity:
+            self.backing.set( slot, self.firstFree )
+            self.firstFree = slot
+            self.used = self.used - 1
+    
+    public function getObjectSize( self ) -> I64:
+        
+        """ Return the fixed object size in bytes that this cache handles. """
+        
+        return self.objectSize
+    
+    public function getUsed( self ) -> I64:
+        
+        """ Return the number of currently allocated object slots. """
+        
+        return self.used
+    
+    public function getCapacity( self ) -> I64:
+        
+        """ Return the total number of object slots available in this cache. """
+        
+        return self.capacity
+    
+    public function isFull( self ) -> Boolean:
+        
+        """ Return whether all object slots in this cache are currently allocated. """
+        
+        return self.firstFree < 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the backing memory used for the slab cache storage.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.backing.free()
+
+public class KernelHeap:
+    
+    """
+    Kernel heap allocator that routes allocation requests to power-of-2 slab
+    caches (16, 32, 64, 128, 256, 512, 1024, 2048 bytes). Small allocations
+    below 4096 bytes are served by the slab cache matching the rounded-up size.
+    Large allocations of 4096 bytes or more bypass the caches entirely and
+    allocate contiguous pages directly from the Physical Memory Manager.
+    """
+    
+    protect SlabCache cache16
+    protect SlabCache cache32
+    protect SlabCache cache64
+    protect SlabCache cache128
+    protect SlabCache cache256
+    protect SlabCache cache512
+    protect SlabCache cache1024
+    protect SlabCache cache2048
+    protect PhysicalMemoryManager pmm
+    protect Boolean initialized
+    
+    public function KernelHeap( self, PhysicalMemoryManager pmm ) -> Void:
+        
+        """
+        Construct a kernel heap backed by the given Physical Memory Manager.
+        The heap is not usable until init() is called to create the slab caches.
+        """
+        
+        self.pmm = pmm
+        self.initialized = False
+    
+    public function init( self ) -> Void:
+        
+        """
+        Initialize all slab caches with 4 pages (16KB) each. This must be
+        called after the Physical Memory Manager and Virtual Memory Manager
+        are fully initialized and ready to serve allocation requests.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.cache16 = new SlabCache( 16, 4 )
+        self.cache32 = new SlabCache( 32, 4 )
+        self.cache64 = new SlabCache( 64, 4 )
+        self.cache128 = new SlabCache( 128, 4 )
+        self.cache256 = new SlabCache( 256, 4 )
+        self.cache512 = new SlabCache( 512, 4 )
+        self.cache1024 = new SlabCache( 1024, 4 )
+        self.cache2048 = new SlabCache( 2048, 4 )
+        self.initialized = True
+    
+    public function kmalloc( self, I64 size ) -> I64:
+        
+        """
+        Allocate memory of the given size in bytes. Routes the request to the
+        smallest slab cache that can fit the allocation. For sizes exceeding
+        2048 bytes, rounds up to the nearest page boundary and allocates
+        contiguous physical frames directly from the PMM. Returns a slot
+        index for slab allocations, or a physical frame address for large ones.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if size <= 16:
+            return self.cache16.allocate()
+        if size <= 32:
+            return self.cache32.allocate()
+        if size <= 64:
+            return self.cache64.allocate()
+        if size <= 128:
+            return self.cache128.allocate()
+        if size <= 256:
+            return self.cache256.allocate()
+        if size <= 512:
+            return self.cache512.allocate()
+        if size <= 1024:
+            return self.cache1024.allocate()
+        if size <= 2048:
+            return self.cache2048.allocate()
+        I64 pages = ( size + 4095 ) / 4096
+        return self.pmm.allocContiguous( pages )
+    
+    public function kfree( self, I64 ptr, I64 size ) -> Void:
+        
+        """
+        Free previously allocated memory. The original allocation size must
+        be provided so the heap can route the deallocation to the correct slab
+        cache. For large allocations exceeding 2048 bytes, the corresponding
+        physical frames are returned to the PMM. The size must match the
+        original kmalloc request, or be tracked externally by the caller.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if size <= 16:
+            self.cache16.deallocate( ptr )
+        elif size <= 32:
+            self.cache32.deallocate( ptr )
+        elif size <= 64:
+            self.cache64.deallocate( ptr )
+        elif size <= 128:
+            self.cache128.deallocate( ptr )
+        elif size <= 256:
+            self.cache256.deallocate( ptr )
+        elif size <= 512:
+            self.cache512.deallocate( ptr )
+        elif size <= 1024:
+            self.cache1024.deallocate( ptr )
+        elif size <= 2048:
+            self.cache2048.deallocate( ptr )
+        else:
+            I64 pages = ( size + 4095 ) / 4096
+            I64 pageOffset = 0
+            while pageOffset < pages:
+                self.pmm.freeFrame( ptr + ( pageOffset * 4096 ) )
+                pageOffset = pageOffset + 1
+    
+    public function isInitialized( self ) -> Boolean:
+        
+        """
+        Return whether the kernel heap has been initialized and is ready to serve allocations.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return self.initialized
+
+export {
+    SlabCache,
+    KernelHeap
+}

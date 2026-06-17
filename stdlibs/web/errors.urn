@@ -1,0 +1,261 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.errors
+
+from uranite.errors.error import Error
+
+public class HttpError extends Error:
+    
+    """
+    Base error for all HTTP-related failures. Carries an HTTP status code
+    in addition to the standard error message and cause chain.
+    """
+    
+    public I64 statusCode
+    """The HTTP status code associated with this error."""
+    
+    public function HttpError( self, String message, I64 statusCode, ?Error cause ) -> Void:
+        
+        """
+        Create a new HttpError with a message, HTTP status code, and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the HTTP error.
+            statusCode (I64):
+                The HTTP status code (e.g., 400, 404, 500).
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, statusCode, cause )
+        self.statusCode = statusCode
+
+public class BadRequestError extends HttpError:
+    
+    """
+    Error representing an HTTP 400 Bad Request response, raised when the
+    client sends a malformed or invalid request.
+    """
+    
+    public function BadRequestError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new BadRequestError (HTTP 400) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of what was wrong with the request.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, 400, cause )
+
+public class UnauthorizedError extends HttpError:
+    
+    """
+    Error representing an HTTP 401 Unauthorized response, raised when
+    authentication is required but was not provided or is invalid.
+    """
+    
+    public function UnauthorizedError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new UnauthorizedError (HTTP 401) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the authentication failure.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, 401, cause )
+
+public class ForbiddenError extends HttpError:
+    
+    """
+    Error representing an HTTP 403 Forbidden response, raised when the
+    client is authenticated but lacks permission to access the resource.
+    """
+    
+    public function ForbiddenError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new ForbiddenError (HTTP 403) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the authorization failure.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, 403, cause )
+
+public class NotFoundError extends HttpError:
+    
+    """
+    Error representing an HTTP 404 Not Found response, raised when the
+    requested resource does not exist on the server.
+    """
+    
+    public function NotFoundError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new NotFoundError (HTTP 404) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the missing resource.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        parent( message, 404, cause )
+
+public class MethodNotAllowedError extends HttpError:
+    
+    """
+    Error representing an HTTP 405 Method Not Allowed response, raised when
+    the request method is not supported for the target resource.
+    """
+    
+    public function MethodNotAllowedError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new MethodNotAllowedError (HTTP 405) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the method restriction.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, 405, cause )
+
+public class ConflictError extends HttpError:
+    
+    """
+    Error representing an HTTP 409 Conflict response, raised when the
+    request conflicts with the current state of the resource.
+    """
+    
+    public function ConflictError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new ConflictError (HTTP 409) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the conflict.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, 409, cause )
+
+public class InternalServerError extends HttpError:
+    
+    """
+    Error representing an HTTP 500 Internal Server Error response, raised
+    when the server encounters an unexpected condition that prevents it
+    from fulfilling the request.
+    """
+    
+    public function InternalServerError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new InternalServerError (HTTP 500) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the server error.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, 500, cause )
+
+public class ServiceUnavailableError extends HttpError:
+    
+    """
+    Error representing an HTTP 503 Service Unavailable response, raised
+    when the server is temporarily unable to handle the request due to
+    maintenance or overload.
+    """
+    
+    public function ServiceUnavailableError( self, String message, ?Error cause ) -> Void:
+        
+        """
+        Create a new ServiceUnavailableError (HTTP 503) with a message and optional cause.
+        
+        Parameters:
+            message (String):
+                A human-readable description of the unavailability.
+            cause (?Error):
+                An optional chained error that triggered this one, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, 503, cause )
+
+export {
+    HttpError,
+    BadRequestError, UnauthorizedError, ForbiddenError,
+    NotFoundError, MethodNotAllowedError, ConflictError,
+    InternalServerError, ServiceUnavailableError
+}

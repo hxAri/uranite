@@ -1,0 +1,48 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/i16.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the I16 class, a signed 16-bit integer type extending Int.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.I16
+
+from uranite.language.int import Int
+
+final class I16 extends Int:
+    
+    """
+    Signed 16-bit integer (-32768 to 32767).
+    Extends Int and stores the value internally as I64 for uniform arithmetic.
+    """
+    
+    public function I16( self, I16 value ) -> Void:
+        
+        """ Construct a new I16 from the given 16-bit signed value, widening to I64 internally. """
+        
+        self.value = value as I64
+    
+    public function toI16( self ) -> I16:
+        
+        """ Return this value narrowed back to a signed 16-bit integer. """
+        
+        return self.value as I16
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this I16's numeric value. """
+        
+        return self.value as String

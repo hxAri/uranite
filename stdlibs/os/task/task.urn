@@ -1,0 +1,248 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/task/task.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the kernel task (thread/process) representation including lifecycle state management, CPU register context, address space binding, and time slice tracking for preemptive scheduling.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.task.task
+
+from uranite.memory.memory import Memory
+from uranite.os.arch.x86-64.cpu import Registers
+from uranite.os.memory.vmm import AddressSpace
+from uranite.os.security.handle import HandleTable
+
+enum TaskState:
+    
+    """
+    Enumerates the lifecycle states of a kernel task. Tasks transition between these
+    states as they are created, scheduled, blocked on resources, and eventually
+    terminated.
+    """
+    
+    unit Created
+    unit Ready
+    unit Running
+    unit Blocked
+    unit Terminated
+
+enum BlockReason:
+    
+    """
+    Identifies the reason a task is blocked, enabling targeted wakeup by the subsystem
+    that owns the blocking resource. Each variant corresponds to a different kernel
+    synchronization or I/O mechanism.
+    """
+    
+    unit Unblocked
+    unit Mutex
+    unit Semaphore
+    unit IoWait
+    unit Sleep
+    unit PortReceive
+
+public class Task:
+    
+    """
+    Kernel execution unit representing a thread or process. A task holds everything
+    needed to pause execution, switch to another task, and later resume: saved CPU
+    registers, stack information, virtual address space reference, handle table for
+    kernel object access, scheduling priority, and time slice tracking. Tasks are
+    linked together in the scheduler's run queue via an intrusive next pointer.
+    """
+    
+    public I64 id
+    public TaskState state
+    public BlockReason blockReason
+    public Registers registers
+    public I64 stackBase
+    public I64 stackSize
+    public ?AddressSpace addressSpace
+    public HandleTable handles
+    public I64 priority
+    public I64 timeSlice
+    public I64 timeUsed
+    public ?Task next
+    
+    public function Task( self, I64 id, I64 stackSize, I64 priority ) -> Void:
+        
+        """
+        Constructs a new task with the given unique identifier, stack size in bytes, and
+        scheduling priority. The task starts in the Created state with zeroed registers,
+        no address space, a handle table supporting 256 handles, a default time slice of
+        10 ticks, and no next pointer in the run queue.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.id = id
+        self.state = TaskState.Created
+        self.blockReason = BlockReason.Unblocked
+        self.registers = new Registers()
+        self.stackBase = 0
+        self.stackSize = stackSize
+        self.addressSpace = None
+        self.handles = new HandleTable( 256 )
+        self.priority = priority
+        self.timeSlice = 10
+        self.timeUsed = 0
+        self.next = None
+    
+    public function setEntryPoint( self, I64 entryAddr, I64 stackTop ) -> Void:
+        
+        """
+        Initializes the task's entry point by setting the instruction pointer (RIP) and
+        stack pointer (RSP) in the saved register context. The stack base is calculated
+        as stackTop minus the configured stack size. When the scheduler first switches
+        to this task, execution begins at entryAddr with the stack pointer at stackTop.
+        """
+        
+        self.registers.rip = entryAddr
+        self.registers.rsp = stackTop
+        self.stackBase = stackTop - self.stackSize
+    
+    public function makeReady( self ) -> Void:
+        
+        """
+        Transitions the task to the Ready state, making it eligible for scheduling by
+        the run queue. Clears any block reason and resets the time usage counter to zero
+        for a fresh time slice.
+        """
+        
+        self.state = TaskState.Ready
+        self.blockReason = BlockReason.Unblocked
+        self.timeUsed = 0
+    
+    public function markRunning( self ) -> Void:
+        
+        """
+        Marks the task as currently running on the CPU. This is called by the scheduler
+        when this task is selected for execution.
+        """
+        
+        self.state = TaskState.Running
+    
+    public function block( self, BlockReason reason ) -> Void:
+        
+        """
+        Blocks the task with the specified reason, removing it from the run queue until
+        the blocking condition is resolved. The block reason enables targeted wakeup by
+        the appropriate kernel subsystem (mutex, semaphore, I/O completion, etc.).
+        """
+        
+        self.state = TaskState.Blocked
+        self.blockReason = reason
+    
+    public function unblock( self ) -> Void:
+        
+        """
+        Unblocks the task by transitioning it back to the Ready state and clearing the
+        block reason, making it eligible for scheduling again.
+        """
+        
+        self.state = TaskState.Ready
+        self.blockReason = BlockReason.Unblocked
+    
+    public function terminate( self ) -> Void:
+        
+        """
+        Permanently terminates the task by setting its state to Terminated and destroying
+        its handle table to release all kernel object references. A terminated task cannot
+        be resumed or rescheduled.
+        """
+        
+        self.state = TaskState.Terminated
+        self.handles.destroy()
+    
+    public function isRunnable( self ) -> Boolean:
+
+        """ Returns True if the task is in the Ready or Running state and able to execute. """
+
+        return self.state == TaskState.Ready or self.state == TaskState.Running
+    
+    public function isBlocked( self ) -> Boolean:
+        
+        """ Returns True if the task is in the Blocked state, waiting on a resource. """
+        
+        return self.state == TaskState.Blocked
+    
+    public function isTerminated( self ) -> Boolean:
+        
+        """ Returns True if the task has been permanently terminated. """
+        
+        return self.state == TaskState.Terminated
+    
+    public function isTimeSliceExpired( self ) -> Boolean:
+        
+        """
+        Returns True if the task has consumed its entire time slice, indicating that
+        preemptive scheduling should occur to give other tasks a turn on the CPU.
+        """
+        
+        return self.timeUsed >= self.timeSlice
+    
+    public function tick( self ) -> Void:
+        
+        """
+        Increments the time usage counter by one tick. Called from the timer interrupt
+        handler on each timer tick while this task is running.
+        """
+        
+        self.timeUsed = self.timeUsed + 1
+    
+    public function setNext( self, ?Task t ) -> Void:
+        
+        """ Sets the next pointer for intrusive linked list chaining in the run queue. """
+        
+        self.next = t
+    
+    public function clearNext( self ) -> Void:
+        
+        """ Clears the next pointer by setting it to None, unlinking this task from the run queue. """
+        
+        self.next = None
+    
+    public function getNext( self ) -> ?Task:
+        
+        """ Returns the next task in the run queue linked list, or None if this is the last task. """
+        
+        return self.next
+    
+    public function getState( self ) -> TaskState:
+        
+        """ Returns the current lifecycle state of this task. """
+        
+        return self.state
+    
+    public function setState( self, TaskState s ) -> Void:
+        
+        """
+        Sets the lifecycle state of this task to the specified value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.state = s
+
+export {
+    TaskState,
+    BlockReason,
+    Task
+}

@@ -1,0 +1,61 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-04-27 17:05
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Example demonstrating event loop, .
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+package main
+
+from uranite.functions.runtime import uraniteSleep
+from uranite.io.console import puts
+
+async function taskA() -> Future<Void>:
+    puts( "Task A: starting, sleeping 100ms..." )
+    uraniteSleep( 100 )
+    puts( "Task A: resumed and finished." )
+
+async function taskB() -> Future<Void>:
+    puts( "Task B: starting, sleeping 50ms..." )
+    uraniteSleep( 50 )
+    puts( "Task B: resumed and finished." )
+
+async function taskC() -> Future<I64>:
+    puts( "Task C: computing..." )
+    uraniteSleep( 75 )
+    puts( "Task C: done computing." )
+    return 42
+
+public async function main() -> Future<I32>:
+    puts( "=== Uranite Event Loop Test ===" )
+
+    # Spawn tasks without await — get Future handles
+    Future<Void> a = taskA()
+    Future<Void> b = taskB()
+    Future<I64> c = taskC()
+
+    puts( "Tasks spawned, awaiting results..." )
+
+    await a
+    puts( "Task A finished." )
+
+    await b
+    puts( "Task B finished." )
+
+    I64 result = await c
+    puts( "Task C result = ", result )
+
+    puts( "All tasks finished." )
+    return 0

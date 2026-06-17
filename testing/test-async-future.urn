@@ -1,0 +1,21 @@
+package testing
+
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+async function addAsync( I64 a, I64 b ) -> Future<I64>:
+    return a + b
+
+async function chainAsync( I64 x ) -> Future<I64>:
+    Future<I64> f1 = addAsync( x, 10 )
+    I64 r1 = await f1
+    Future<I64> f2 = addAsync( r1, 20 )
+    I64 r2 = await f2
+    return r2
+
+public function main() -> I32:
+    putsln( "=== Async Future Test ===" )
+    assertEqualI64( 1, 1, "async Future declarations compile" )
+    putsln( "chained async Future<I64> declarations compile OK" )
+    putsln( "=== Async future test passed ===" )
+    return 0

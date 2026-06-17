@@ -1,0 +1,58 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all collection types including lists, maps, sets, sequences, and utility types.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection
+
+
+from uranite.collection.array-list import ArrayList, ArrayListIterator
+from uranite.collection.collection import Collection
+from uranite.collection.generator import Generator
+from uranite.collection.hash-map import HashMap, HashMapIterator
+from uranite.collection.hash-set import HashSet, HashSetIterator
+from uranite.collection.immutable-sequence import ImmutableSequence
+from uranite.collection.map import Map
+from uranite.collection.mutable-mapping import MutableMapping
+from uranite.collection.mutable-sequence import MutableSequence
+from uranite.collection.mutable-set import MutableSet
+from uranite.collection.pair import Pair
+from uranite.collection.sequence import Sequence
+from uranite.collection.set import Set
+from uranite.collection.tuple import Tuple
+
+
+export {
+    ArrayList,
+    ArrayListIterator,
+    Collection,
+    Generator,
+    HashMap,
+    HashMapIterator,
+    HashSet,
+    HashSetIterator,
+    ImmutableSequence,
+    Map,
+    MutableMapping,
+    MutableSequence,
+    MutableSet,
+    Pair,
+    Sequence,
+    Set,
+    Tuple
+}

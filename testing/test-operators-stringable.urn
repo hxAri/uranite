@@ -1,0 +1,45 @@
+package testing
+
+from uranite.operators.stringable import Stringable
+from uranite.testing.assertions import assertEqualStr
+from uranite.io.console import putsln
+
+public class Label implements Stringable:
+    public String text
+
+    public function Label( self, String text ) -> Void:
+        self.text = text
+
+    public function toString( self ) -> String:
+        return "Label(" + self.text + ")"
+
+public class Pair implements Stringable:
+    public Int x
+    public Int y
+
+    public function Pair( self, Int x, Int y ) -> Void:
+        self.x = x
+        self.y = y
+
+    public function toString( self ) -> String:
+        return "Pair"
+
+public function main() -> I32:
+    putsln( "=== Stringable Tests ===" )
+
+    Label l1 = new Label( "hello" )
+    assertEqualStr( "Label(hello)", l1.toString(), "label toString" )
+
+    Label l2 = new Label( "" )
+    assertEqualStr( "Label()", l2.toString(), "empty label toString" )
+
+    Label l3 = new Label( "world 123" )
+    assertEqualStr( "Label(world 123)", l3.toString(), "spaces label toString" )
+    putsln( "Label OK" )
+
+    Pair p = new Pair( 1, 2 )
+    assertEqualStr( "Pair", p.toString(), "pair toString" )
+    putsln( "Pair OK" )
+
+    putsln( "=== All Stringable tests passed ===" )
+    return 0

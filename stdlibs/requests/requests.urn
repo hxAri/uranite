@@ -1,0 +1,342 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/requests/requests.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level HTTP requests API. Provides get(), post(), put(), delete(),
+# patch() that accept URL strings (e.g., "http://127.0.0.1:8080/api").
+# Also retains the raw IP-based request() for power users and backwards
+# compatibility. All functions return Response objects.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.requests.requests
+
+from uranite.net.http.request import HttpRequest
+from uranite.net.http.response import HttpResponse
+from uranite.net.http.client import sendRequest
+from uranite.requests.response import Response
+from uranite.requests.headers import Headers, parseHeaders
+from uranite.requests.url import ParsedURL, parseURL
+from uranite.requests.errors import RequestError, RequestConnectionError
+
+public function request( String method, I64 ip, I64 port, String path, String body, String contentType ) -> Response:
+
+    """
+    Send an HTTP request using a raw 32-bit IP address and port.
+
+    Low-level entry point for when the caller has already resolved the
+    target address. Prefer the URL-based overloads for ergonomic usage.
+
+    Parameters:
+        method (String):
+            The HTTP method (e.g., "GET", "POST").
+        ip (I64):
+            The target server IP address as a packed 32-bit integer.
+        port (I64):
+            The target server port number.
+        path (String):
+            The request URI path (e.g., "/api/users").
+        body (String):
+            The request body content, or empty string for no body.
+        contentType (String):
+            The Content-Type header value, or empty string to omit.
+
+    Returns:
+        Response:
+            A Response object containing the status code, body, and headers.
+
+    Complexity:
+        Time: O(n) where n is request + response size
+        Space: O(n)
+    """
+
+    HttpRequest httpRequest = new HttpRequest( method, path )
+    if body != "":
+        httpRequest.setBody( body )
+    if contentType != "":
+        httpRequest.setContentType( contentType )
+    HttpResponse httpResponse = sendRequest( ip, port, httpRequest )
+    return new Response( httpResponse.statusCode, httpResponse.body, httpResponse.rawHeaders )
+
+public function request( String method, String url, String body, String contentType ) -> Response:
+
+    """
+    Send an HTTP request using a URL string.
+
+    Parses the URL into host, port, and path, converts the host to a
+    packed IPv4 address, and delegates to the low-level request function.
+
+    Parameters:
+        method (String):
+            The HTTP method (e.g., "GET", "POST").
+        url (String):
+            The full URL (e.g., "http://127.0.0.1:8080/api/users").
+        body (String):
+            The request body content, or empty string for no body.
+        contentType (String):
+            The Content-Type header value, or empty string to omit.
+
+    Returns:
+        Response:
+            A Response object containing the status code, body, and headers.
+
+    Complexity:
+        Time: O(n) where n is URL + request + response size
+        Space: O(n)
+    """
+
+    ParsedURL parsed = parseURL( url )
+    return request( method, parsed.ipAddress, parsed.port, parsed.path, body, contentType )
+
+public function get( String url ) -> Response:
+
+    """
+    Send an HTTP GET request to the given URL.
+
+    Parameters:
+        url (String):
+            The full URL (e.g., "http://127.0.0.1:8080/api/users").
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "GET", url, "", "" )
+
+public function get( I64 ip, I64 port, String path ) -> Response:
+
+    """
+    Send an HTTP GET request using a raw IP address.
+
+    Parameters:
+        ip (I64):
+            The target server IP as a packed 32-bit integer.
+        port (I64):
+            The target server port number.
+        path (String):
+            The request URI path.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "GET", ip, port, path, "", "" )
+
+public function post( String url, String body ) -> Response:
+
+    """
+    Send an HTTP POST request with a JSON body.
+
+    Parameters:
+        url (String):
+            The full URL.
+        body (String):
+            The JSON-encoded request body.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "POST", url, body, "application/json" )
+
+public function post( I64 ip, I64 port, String path, String body ) -> Response:
+
+    """
+    Send an HTTP POST request with a JSON body using a raw IP address.
+
+    Parameters:
+        ip (I64):
+            The target server IP as a packed 32-bit integer.
+        port (I64):
+            The target server port number.
+        path (String):
+            The request URI path.
+        body (String):
+            The JSON-encoded request body.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "POST", ip, port, path, body, "application/json" )
+
+public function put( String url, String body ) -> Response:
+
+    """
+    Send an HTTP PUT request with a JSON body.
+
+    Parameters:
+        url (String):
+            The full URL.
+        body (String):
+            The JSON-encoded request body.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "PUT", url, body, "application/json" )
+
+public function put( I64 ip, I64 port, String path, String body ) -> Response:
+
+    """
+    Send an HTTP PUT request with a JSON body using a raw IP address.
+
+    Parameters:
+        ip (I64):
+            The target server IP as a packed 32-bit integer.
+        port (I64):
+            The target server port number.
+        path (String):
+            The request URI path.
+        body (String):
+            The JSON-encoded request body.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "PUT", ip, port, path, body, "application/json" )
+
+public function del( String url ) -> Response:
+
+    """
+    Send an HTTP DELETE request.
+
+    Parameters:
+        url (String):
+            The full URL.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "DELETE", url, "", "" )
+
+public function del( I64 ip, I64 port, String path ) -> Response:
+
+    """
+    Send an HTTP DELETE request using a raw IP address.
+
+    Parameters:
+        ip (I64):
+            The target server IP as a packed 32-bit integer.
+        port (I64):
+            The target server port number.
+        path (String):
+            The request URI path.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "DELETE", ip, port, path, "", "" )
+
+public function patch( String url, String body ) -> Response:
+
+    """
+    Send an HTTP PATCH request with a JSON body.
+
+    Parameters:
+        url (String):
+            The full URL.
+        body (String):
+            The JSON-encoded request body.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "PATCH", url, body, "application/json" )
+
+public function patch( I64 ip, I64 port, String path, String body ) -> Response:
+
+    """
+    Send an HTTP PATCH request with a JSON body using a raw IP address.
+
+    Parameters:
+        ip (I64):
+            The target server IP as a packed 32-bit integer.
+        port (I64):
+            The target server port number.
+        path (String):
+            The request URI path.
+        body (String):
+            The JSON-encoded request body.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "PATCH", ip, port, path, body, "application/json" )
+
+public function postForm( String url, String body ) -> Response:
+
+    """
+    Send an HTTP POST with URL-encoded form data.
+
+    Parameters:
+        url (String):
+            The full URL.
+        body (String):
+            The URL-encoded form data.
+
+    Returns:
+        Response:
+            The server's response.
+    """
+
+    return request( "POST", url, body, "application/x-www-form-urlencoded" )
+
+public function postForm( I64 ip, I64 port, String path, String body ) -> Response:
+
+    """
+    Send an HTTP POST with URL-encoded form data using a raw IP address.
+
+    Parameters:
+        ip (I64):
+            The target server IP as a packed 32-bit integer.
+        port (I64):
+            The target server port number.
+        path (String):
+            The request URI path.
+        body (String):
+            The URL-encoded form data.
+
+    Returns:
+        Response:
+            The server's response.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return request( "POST", ip, port, path, body, "application/x-www-form-urlencoded" )
+
+export {
+    request,
+    get, post, put, del, patch, postForm
+}

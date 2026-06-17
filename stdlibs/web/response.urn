@@ -1,0 +1,321 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/response.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Web framework response object: fluent API for status, headers,
+# content type, body, redirect, cookies.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.response
+
+from uranite.string.builder import StringBuilder
+from uranite.convert.convert import intToString
+from uranite.io.syscall import stringLen
+
+public class HttpResponse:
+    
+    """
+    Represents an outgoing HTTP response with a fluent builder API for
+    setting status codes, headers, content type, body, redirects, and cookies.
+    
+    The response is serialized into a complete HTTP/1.1 response string
+    via the serialize method for transmission over a socket.
+    """
+    
+    public I64 statusCode
+    """ The HTTP status code (e.g., 200, 404, 500). Defaults to 200. """
+    public String statusText
+    """ The HTTP status reason phrase (e.g., "OK", "Not Found"). """
+    public String body
+    """ The response body content. """
+    public String contentTypeValue
+    """ The Content-Type header value. Defaults to "text/plain". """
+    public Boolean sent
+    """ Whether the response body has been finalized and is ready to send. """
+    public StringBuilder headerBuilder
+    """ Builder for accumulating custom response headers. """
+    
+    public function HttpResponse( self ) -> Void:
+        
+        """
+        Construct a new HttpResponse with default values.
+        
+        Defaults to status 200 OK with text/plain content type and an empty body.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.statusCode = 200
+        self.statusText = "OK"
+        self.body = ""
+        self.contentTypeValue = "text/plain"
+        self.sent = False
+        self.headerBuilder = new StringBuilder()
+    
+    public function status( self, I64 code ) -> HttpResponse:
+        
+        """
+        Set the HTTP status code and automatically resolve its reason phrase.
+        
+        Parameters:
+            code (I64):
+                The HTTP status code to set (e.g., 200, 404, 500).
+        
+        Returns:
+            HttpResponse:
+                Self, for method chaining.
+        """
+        
+        self.statusCode = code
+        self.statusText = statusCodeText( code )
+        return self
+    
+    public function header( self, String name, String value ) -> HttpResponse:
+        
+        """
+        Add a custom HTTP response header.
+        
+        Parameters:
+            name (String):
+                The header name (e.g., "X-Request-Id").
+            value (String):
+                The header value.
+        
+        Returns:
+            HttpResponse:
+                Self, for method chaining.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.headerBuilder.append( name )
+        self.headerBuilder.append( ": " )
+        self.headerBuilder.append( value )
+        self.headerBuilder.append( "\r\n" )
+        return self
+    
+    public function contentType( self, String ct ) -> HttpResponse:
+        
+        """
+        Set the Content-Type header for this response.
+        
+        Parameters:
+            ct (String):
+                The MIME type string (e.g., "application/json", "text/html").
+        
+        Returns:
+            HttpResponse:
+                Self, for method chaining.
+        """
+        
+        self.contentTypeValue = ct
+        return self
+    
+    public function json( self, String jsonBody ) -> Void:
+        
+        """
+        Set the response body as JSON content.
+        
+        Sets the Content-Type to "application/json" and marks the response
+        as sent.
+        
+        Parameters:
+            jsonBody (String):
+                The JSON-encoded response body string.
+        """
+        
+        self.contentTypeValue = "application/json"
+        self.body = jsonBody
+        self.sent = True
+    
+    public function text( self, String textBody ) -> Void:
+        
+        """
+        Set the response body as plain text content.
+        
+        Sets the Content-Type to "text/plain" and marks the response as sent.
+        
+        Parameters:
+            textBody (String):
+                The plain text response body string.
+        """
+        
+        self.contentTypeValue = "text/plain"
+        self.body = textBody
+        self.sent = True
+    
+    public function html( self, String htmlBody ) -> Void:
+        
+        """
+        Set the response body as HTML content.
+        
+        Sets the Content-Type to "text/html" and marks the response as sent.
+        
+        Parameters:
+            htmlBody (String):
+                The HTML response body string.
+        """
+        
+        self.contentTypeValue = "text/html"
+        self.body = htmlBody
+        self.sent = True
+    
+    public function redirect( self, String url ) -> Void:
+        
+        """
+        Issue an HTTP 302 redirect to the specified URL.
+        
+        Sets the status to 302 Found, adds a Location header, clears the body,
+        and marks the response as sent.
+        
+        Parameters:
+            url (String):
+                The target URL to redirect the client to.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.statusCode = 302
+        self.statusText = "Found"
+        self.header( "Location", url )
+        self.body = ""
+        self.sent = True
+    
+    public function cookie( self, String name, String value ) -> HttpResponse:
+        
+        """
+        Set a cookie on the response via the Set-Cookie header.
+        
+        The cookie is set with Path=/ by default.
+        
+        Parameters:
+            name (String):
+                The cookie name.
+            value (String):
+                The cookie value.
+        
+        Returns:
+            HttpResponse:
+                Self, for method chaining.
+        """
+        
+        self.header( "Set-Cookie", name + "=" + value + "; Path=/" )
+        return self
+    
+    public function serialize( self ) -> String:
+        
+        """
+        Serialize the response into a complete HTTP/1.1 response string.
+        
+        Builds the status line, Content-Type, Content-Length, Connection: close,
+        any custom headers, and the body into a single string ready for
+        transmission over a socket.
+        
+        Returns:
+            String:
+                The fully formatted HTTP/1.1 response string.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        StringBuilder sb = new StringBuilder()
+        sb.append( "HTTP/1.1 " )
+        sb.appendI64( self.statusCode )
+        sb.append( " " )
+        sb.append( self.statusText )
+        sb.append( "\r\n" )
+        sb.append( "Content-Type: " )
+        sb.append( self.contentTypeValue )
+        sb.append( "\r\n" )
+        I64 bodyLen = stringLen( self.body )
+        sb.append( "Content-Length: " )
+        sb.appendI64( bodyLen )
+        sb.append( "\r\n" )
+        sb.append( "Connection: close\r\n" )
+        String extraHeaders = self.headerBuilder.build()
+        I64 extraLen = stringLen( extraHeaders )
+        if extraLen > 0:
+            sb.append( extraHeaders )
+        sb.append( "\r\n" )
+        if bodyLen > 0:
+            sb.append( self.body )
+        return sb.build()
+
+public function statusCodeText( I64 code ) -> String:
+    
+    """
+    Map an HTTP status code to its standard reason phrase.
+    
+    Supports common status codes: 200, 201, 204, 301, 302, 304, 400, 401,
+    403, 404, 405, 409, 500, 502, 503.
+    
+    Parameters:
+        code (I64):
+            The HTTP status code.
+    
+    Returns:
+        String:
+            The corresponding reason phrase, or "Unknown" for unrecognized codes.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    if code == 200:
+        return "OK"
+    if code == 201:
+        return "Created"
+    if code == 204:
+        return "No Content"
+    if code == 301:
+        return "Moved Permanently"
+    if code == 302:
+        return "Found"
+    if code == 304:
+        return "Not Modified"
+    if code == 400:
+        return "Bad Request"
+    if code == 401:
+        return "Unauthorized"
+    if code == 403:
+        return "Forbidden"
+    if code == 404:
+        return "Not Found"
+    if code == 405:
+        return "Method Not Allowed"
+    if code == 409:
+        return "Conflict"
+    if code == 500:
+        return "Internal Server Error"
+    if code == 502:
+        return "Bad Gateway"
+    if code == 503:
+        return "Service Unavailable"
+    return "Unknown"
+
+export {
+    HttpResponse,
+    statusCodeText
+}

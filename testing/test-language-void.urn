@@ -1,0 +1,40 @@
+package testing
+
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+I64 callCount = 0
+
+public function doNothing() -> Void:
+    callCount = callCount + 1
+
+public function doSomething( Int x ) -> Void:
+    callCount = callCount + 1
+
+public function sideEffect( Int a, Int b ) -> Void:
+    I64 sum = a + b
+    assertEqualI64( 30, sum, "sideEffect sum" )
+    callCount = callCount + 1
+
+public function multipleArgs( Int a, String b, F64 c ) -> Void:
+    callCount = callCount + 1
+
+public function nested() -> Void:
+    doNothing()
+    doSomething( 99 )
+    callCount = callCount + 1
+
+public function main() -> I32:
+    putsln( "=== Void Tests ===" )
+
+    doNothing()
+    doSomething( 42 )
+    sideEffect( 10, 20 )
+    multipleArgs( 1, "test", 3.14 )
+    nested()
+
+    assertEqualI64( 7, callCount, "all void functions called" )
+    putsln( "void calls OK" )
+
+    putsln( "=== All Void tests passed ===" )
+    return 0

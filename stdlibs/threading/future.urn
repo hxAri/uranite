@@ -1,0 +1,432 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-28 20:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/future.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Typed future for asynchronous task results. FutureBase provides the
+# non-generic core (state machine, blocking, raw I64 result storage).
+# Future<R> wraps FutureBase with compile-time type safety via generics.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.future
+
+from uranite.memory.memory import Memory
+from uranite.os.ipc.signal import Event
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import BlockReason
+from uranite.threading.atomic import AtomicI64
+from uranite.threading.errors import ThreadError, ThreadCancellationError
+
+const I64 FUTURE_PENDING = 0
+"""State value indicating the future has not yet started execution."""
+
+const I64 FUTURE_RUNNING = 1
+"""State value indicating the future's task is currently executing."""
+
+const I64 FUTURE_FINISHED = 2
+"""State value indicating the future has completed successfully with a result."""
+
+const I64 FUTURE_CANCELLED = 3
+"""State value indicating the future was cancelled before completion."""
+
+const I64 FUTURE_ERROR = 4
+"""State value indicating the future's task failed with an error."""
+
+enum FutureState:
+    
+    """
+    Enumeration of all possible states a future can be in during its
+    lifecycle, from initial creation through completion or failure.
+    """
+    
+    unit Pending 0
+    unit Running 1
+    unit Finished 2
+    unit Cancelled 3
+    unit Error 4
+
+public class FutureBase:
+    
+    """
+    Non-generic core of the future system. Manages the state machine,
+    result storage, completion signaling, and blocking wait logic using
+    raw I64 values. Future<R> wraps this class to provide compile-time
+    type safety via monomorphized generics.
+    
+    State transitions follow a linear progression: Pending -> Running ->
+    Finished/Cancelled/Error. The completion event is signaled when the
+    future reaches a terminal state (Finished, Cancelled, or Error).
+    """
+    
+    protect Memory<I64> resultBuffer
+    """Single-element buffer storing the raw I64 result value."""
+    
+    protect Memory<I64> exceptionSlot
+    """Single-element buffer storing a raw pointer to the exception, if any."""
+    
+    protect AtomicI64 state
+    """Atomic state variable tracking the future's lifecycle phase."""
+    
+    protect Event completionEvent
+    """Kernel event used to signal and wake waiters on completion."""
+    
+    protect Scheduler scheduler
+    """Scheduler used for cooperative blocking when waiting for results."""
+    
+    public function FutureBase( self, Scheduler scheduler ) -> Void:
+        
+        """
+        Create a new FutureBase in the Pending state with empty result and
+        exception buffers.
+        
+        Parameters:
+            scheduler (Scheduler):
+                The scheduler to use for cooperative blocking when a task
+                waits for this future's completion.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.resultBuffer = new Memory<I64>( 1 )
+        self.resultBuffer.set( 0, 0 )
+        self.exceptionSlot = new Memory<I64>( 1 )
+        self.exceptionSlot.set( 0, 0 )
+        self.state = new AtomicI64( FUTURE_PENDING )
+        self.completionEvent = new Event()
+        self.scheduler = scheduler
+    
+    public function setRunning( self ) -> Void:
+        
+        """
+        Atomically transition the future from Pending to Running state.
+        Only succeeds if the current state is Pending; otherwise this is
+        a no-op (compare-exchange fails silently).
+        """
+        
+        self.state.compareExchange( FUTURE_PENDING, FUTURE_RUNNING )
+    
+    public function completeRaw( self, I64 value ) -> Void:
+        
+        """
+        Complete the future successfully with a raw I64 result value.
+        Stores the result, sets the state to Finished, and signals the
+        completion event to wake any blocked waiters.
+        
+        Parameters:
+            value (I64):
+                The raw result value to store.
+        """
+        
+        self.resultBuffer.set( 0, value )
+        self.state.store( FUTURE_FINISHED )
+        self.completionEvent.signal( 1 )
+    
+    public function failRaw( self, I64 exceptionPtr ) -> Void:
+        
+        """
+        Fail the future with a raw exception pointer. Stores the exception
+        address, sets the state to Error, and signals the completion event
+        to wake any blocked waiters.
+        
+        Parameters:
+            exceptionPtr (I64):
+                Raw memory address of the exception object, or 0 if no
+                specific exception is available.
+        """
+        
+        self.exceptionSlot.set( 0, exceptionPtr )
+        self.state.store( FUTURE_ERROR )
+        self.completionEvent.signal( 1 )
+    
+    public function waitForCompletion( self ) -> Void:
+        
+        """
+        Block the calling task until the future reaches a terminal state
+        (Finished, Cancelled, or Error). Uses cooperative blocking through
+        the scheduler when running inside a scheduled task, or falls back
+        to a busy-wait spin loop with pause instructions when no task
+        context is available.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        while self.state.load() < FUTURE_FINISHED:
+            I64 taskId = 0
+            if self.scheduler.getCurrentTask() != None:
+                taskId = self.scheduler.getCurrentTask().id
+            if taskId > 0:
+                Boolean shouldBlock = self.completionEvent.registerWait( taskId, 1 )
+                if shouldBlock:
+                    self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+                    self.scheduler.blockCurrent()
+            else:
+                asm volatile "pause"
+    
+    public function getState( self ) -> I64:
+        
+        """
+        Return the current state of the future as a raw integer constant.
+        
+        Returns:
+            I64:
+                One of FUTURE_PENDING, FUTURE_RUNNING, FUTURE_FINISHED,
+                FUTURE_CANCELLED, or FUTURE_ERROR.
+        """
+        
+        return self.state.load()
+    
+    public function getRawResult( self ) -> I64:
+        
+        """
+        Return the raw I64 result value. Only meaningful after the future
+        has reached the Finished state.
+        
+        Returns:
+            I64:
+                The raw result value stored by completeRaw.
+        """
+        
+        return self.resultBuffer.get( 0 )
+    
+    public function getRawException( self ) -> I64:
+        
+        """
+        Return the raw exception pointer. Only meaningful after the future
+        has reached the Error state.
+        
+        Returns:
+            I64:
+                The raw exception pointer stored by failRaw.
+        """
+        
+        return self.exceptionSlot.get( 0 )
+    
+    public function isDone( self ) -> Boolean:
+        
+        """
+        Check whether the future has reached a terminal state.
+        
+        Returns:
+            Boolean:
+                True if the future is Finished, Cancelled, or in Error state.
+        """
+        
+        return self.state.load() >= FUTURE_FINISHED
+    
+    public function cancel( self ) -> Boolean:
+        
+        """
+        Attempt to cancel the future. Only succeeds if the future is still
+        in the Pending state; a Running or completed future cannot be
+        cancelled.
+        
+        Returns:
+            Boolean:
+                True if the future was successfully cancelled, False if it
+                had already progressed past the Pending state.
+        """
+        
+        return self.state.compareExchange( FUTURE_PENDING, FUTURE_CANCELLED )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by this future, including the result
+        buffer, exception slot, and atomic state variable.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.resultBuffer.free()
+        self.exceptionSlot.free()
+        self.state.destroy()
+
+public class Future<R>:
+    
+    """
+    Type-safe generic wrapper around FutureBase that provides compile-time
+    typed access to the result of an asynchronous task. The type parameter
+    R specifies the return type of the underlying computation. Internally
+    delegates all state management to the wrapped FutureBase.
+    """
+    
+    protect FutureBase base
+    """The underlying non-generic FutureBase managing state and raw storage."""
+    
+    public function Future( self, FutureBase base ) -> Void:
+        
+        """
+        Create a new typed future wrapping an existing FutureBase.
+        
+        Parameters:
+            base (FutureBase):
+                The non-generic future core to wrap.
+        """
+        
+        self.base = base
+    
+    public function result( self ) -> R:
+        
+        """
+        Block until the future completes and return the typed result.
+        Reconstructs the value of type R from the raw I64 stored in the
+        FutureBase by writing it into a temporary Memory<R> buffer and
+        reading it back with proper type interpretation.
+        
+        Returns:
+            R:
+                The result value produced by the completed task.
+        
+        Raises:
+            ThreadError:
+                If the task execution failed with an error.
+            ThreadCancellationError:
+                If the future was cancelled before completion.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.base.waitForCompletion()
+        I64 currentState = self.base.getState()
+        if currentState == FUTURE_ERROR:
+            raise new ThreadError( "Task execution failed", 100, None )
+        if currentState == FUTURE_CANCELLED:
+            raise new ThreadCancellationError( "Future was cancelled", 101, None )
+        I64 raw = self.base.getRawResult()
+        Memory<R> temp = new Memory<R>( 1 )
+        I64 tempAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" tempAddr ) : input( "r" temp ) : clobber()
+        asm volatile "movq $0, ($1)" : : input( "r" raw, "r" tempAddr ) : clobber( "memory" )
+        R value = temp.get( 0 )
+        temp.free()
+        return value
+    
+    public function wait( self ) -> Void:
+        
+        """
+        Block until the future completes without retrieving the result.
+        Useful when you need to ensure completion but do not need the
+        return value.
+        
+        Raises:
+            ThreadError:
+                If the task execution failed with an error.
+            ThreadCancellationError:
+                If the future was cancelled before completion.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.base.waitForCompletion()
+        I64 currentState = self.base.getState()
+        if currentState == FUTURE_ERROR:
+            raise new ThreadError( "Task execution failed", 100, None )
+        if currentState == FUTURE_CANCELLED:
+            raise new ThreadCancellationError( "Future was cancelled", 101, None )
+    
+    public function state( self ) -> FutureState:
+        
+        """
+        Return the current state of the future as a FutureState enum value.
+        
+        Returns:
+            FutureState:
+                The current lifecycle state of the future.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 currentState = self.base.getState()
+        if currentState == FUTURE_RUNNING:
+            return FutureState.Running
+        elif currentState == FUTURE_FINISHED:
+            return FutureState.Finished
+        elif currentState == FUTURE_CANCELLED:
+            return FutureState.Cancelled
+        elif currentState == FUTURE_ERROR:
+            return FutureState.Error
+        return FutureState.Pending
+    
+    public function isDone( self ) -> Boolean:
+        
+        """
+        Check whether the future has reached a terminal state.
+        
+        Returns:
+            Boolean:
+                True if the future is Finished, Cancelled, or in Error state.
+        """
+        
+        return self.base.isDone()
+    
+    public function cancel( self ) -> Boolean:
+        
+        """
+        Attempt to cancel the future. Only succeeds if the future is still
+        in the Pending state.
+        
+        Returns:
+            Boolean:
+                True if the future was successfully cancelled, False otherwise.
+        """
+        
+        return self.base.cancel()
+    
+    public function getBase( self ) -> FutureBase:
+        
+        """
+        Return the underlying FutureBase instance for low-level access.
+        
+        Returns:
+            FutureBase:
+                The non-generic future core wrapped by this instance.
+        """
+        
+        return self.base
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by the underlying FutureBase.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.base.destroy()
+
+export {
+    FutureState,
+    FutureBase,
+    Future,
+    FUTURE_PENDING,
+    FUTURE_RUNNING,
+    FUTURE_FINISHED,
+    FUTURE_CANCELLED,
+    FUTURE_ERROR
+}

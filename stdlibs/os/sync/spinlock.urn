@@ -1,0 +1,101 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/sync/spinlock.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Interrupt-safe spinlock using atomic xchg instruction. Disables interrupts before acquiring the lock to prevent deadlock when an interrupt handler attempts to acquire the same lock on the same CPU.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.sync.spinlock
+
+public class Spinlock:
+
+    """
+    Atomic spinlock using xchg instruction. Works in both kernel and
+    user space. Interrupt management is the caller's responsibility
+    when used in kernel context.
+    """
+
+    protect I64 locked
+
+    public function Spinlock( self ) -> Void:
+
+        """
+        Construct an unlocked spinlock with the locked flag initialized
+        to zero.
+        """
+
+        self.locked = 0
+
+    public function lock( self ) -> Void:
+
+        """
+        Acquire the spinlock by spinning in a loop using atomic xchg
+        until the lock is acquired. The pause instruction hints the CPU
+        to reduce power consumption during the spin wait.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 expected = 1
+        I64 old = 1
+        I64 lockAddr = addressof self.locked
+        while old != 0:
+            asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+            if old != 0:
+                asm volatile "pause"
+
+    public function unlock( self ) -> Void:
+
+        """
+        Release the spinlock by clearing the lock flag with a memory
+        barrier to ensure all writes performed while the lock was held
+        are visible before release.
+        """
+
+        asm volatile "" : : : clobber( "memory" )
+        self.locked = 0
+
+    public function tryLock( self ) -> Boolean:
+
+        """
+        Attempt to acquire the spinlock without spinning. Performs a
+        single atomic exchange and returns True if the lock was
+        successfully acquired, False if already held.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 expected = 1
+        I64 old = 0
+        I64 lockAddr = addressof self.locked
+        asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+        if old != 0:
+            return False
+        return True
+
+    public function isLocked( self ) -> Boolean:
+
+        """ Return whether the spinlock is currently held. """
+
+        return self.locked != 0
+
+export {
+    Spinlock
+}

@@ -1,0 +1,745 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-28 20:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/executor.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level thread pool executor with typed futures. Workers dispatch
+# calls via asm indirect call through a shared channel. Pure OS-module
+# threading, no C/C++ runtime.
+#
+# Descriptor layout in Memory<I64>(6):
+#   [0] = arity (0-3)
+#   [1] = fnAddr (function pointer as I64)
+#   [2] = futureBaseAddr (FutureBase pointer as I64)
+#   [3] = arg1 (raw I64, if arity >= 1)
+#   [4] = arg2 (raw I64, if arity >= 2)
+#   [5] = arg3 (raw I64, if arity >= 3)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.executor
+
+from uranite.memory.memory import Memory
+from uranite.os.ipc.signal import Event
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import Task, BlockReason
+from uranite.threading.thread import Thread, ThreadRuntime, DEFAULT_STACK_PAGES, DEFAULT_PRIORITY
+from uranite.threading.channel import ChannelInner
+from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.threading.errors import ThreadError
+from uranite.threading.future import { FutureBase, Future, FUTURE_PENDING, FUTURE_RUNNING, FUTURE_FINISHED, FUTURE_ERROR }
+from uranite.language.callable import Callable
+
+const I64 DEFAULT_QUEUE_CAPACITY = 256
+"""Default capacity for the executor's internal task channel queue."""
+
+const I64 EXECUTOR_WORKER_STACK_PAGES = 16
+"""Number of memory pages allocated for each worker thread's stack."""
+
+public function executorWorkerLoop( I64 threadId, I64 channelAddr ) -> Void:
+    
+    """
+    Entry point for each worker thread in the executor pool. Continuously
+    receives task descriptors from the shared channel, dispatches the
+    function call via inline assembly indirect call, and stores the result
+    or error in the associated FutureBase.
+    
+    The descriptor is a Memory<I64>(6) block with arity, function address,
+    FutureBase address, and up to three arguments. The worker loop exits
+    when the channel is closed or a zero descriptor address is received.
+    
+    Parameters:
+        threadId (I64):
+            Unique identifier of this worker thread, unused in the loop
+            body but required by the thread entry point calling convention.
+        channelAddr (I64):
+            Raw memory address of the ChannelInner<I64> used to receive
+            task descriptors from the executor.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(n)
+    """
+    
+    ChannelInner<I64> channel = new ChannelInner<I64>( 1, new Scheduler() )
+    asm volatile "movq $1, $0" : output( "=r" channel ) : input( "r" channelAddr ) : clobber()
+    
+    FutureBase fb = new FutureBase( new Scheduler() )
+    Memory<I64> desc = new Memory<I64>( 1 )
+    
+    Boolean running = True
+    while running:
+        I64 descAddr = 0
+        try:
+            descAddr = channel.receive()
+        except as e:
+            running = False
+            break
+        
+        if descAddr == 0:
+            running = False
+            break
+        
+        asm volatile "movq $1, $0" : output( "=r" desc ) : input( "r" descAddr ) : clobber()
+        
+        I64 arity = desc.get( 0 )
+        I64 fnAddr = desc.get( 1 )
+        I64 fbAddr = desc.get( 2 )
+        
+        asm volatile "movq $1, $0" : output( "=r" fb ) : input( "r" fbAddr ) : clobber()
+        fb.setRunning()
+        
+        I64 result = 0
+        Boolean failed = False
+        try:
+            if arity == 0:
+                asm volatile "call *$1" : output( "={rax}" result ) : input( "r" fnAddr ) : clobber( "memory", "rdi", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+            elif arity == 1:
+                I64 a1 = desc.get( 3 )
+                asm volatile "call *$2" : output( "={rax}" result ) : input( "{rdi}" a1, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+            elif arity == 2:
+                I64 a1 = desc.get( 3 )
+                I64 a2 = desc.get( 4 )
+                asm volatile "call *$3" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "r" fnAddr ) : clobber( "memory", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+            elif arity == 3:
+                I64 a1 = desc.get( 3 )
+                I64 a2 = desc.get( 4 )
+                I64 a3 = desc.get( 5 )
+                asm volatile "call *$4" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "{rdx}" a3, "r" fnAddr ) : clobber( "memory", "rcx", "r8", "r9", "r10", "r11" )
+        except as e:
+            failed = True
+        
+        if failed:
+            fb.failRaw( 0 )
+        else:
+            fb.completeRaw( result )
+        
+        desc.free()
+
+public class ThreadPoolExecutor:
+    
+    """
+    High-level thread pool executor that manages a fixed set of worker
+    threads and dispatches callable tasks to them via a shared channel.
+    Each submitted task returns a FutureBase that can be polled or awaited
+    for the result. Workers use inline assembly indirect calls to invoke
+    the target function with up to three I64 arguments.
+    
+    Built entirely on bare-metal OS modules with no C/C++ runtime dependency.
+    Use TaskSubmitter0 through TaskSubmitter3 for type-safe generic submission.
+    """
+    
+    protect Memory<Thread> workers
+    """Storage for the pool's worker thread instances."""
+    
+    protect I64 workerCount
+    """Number of worker threads in the pool."""
+    
+    protect ChannelInner<I64> taskChannel
+    """Channel used to send task descriptors to worker threads."""
+    
+    protect ThreadRuntime runtime
+    """Thread runtime providing scheduler, memory, and clock access."""
+    
+    protect AtomicI64 activeCount
+    """Atomic counter of currently active (in-flight) tasks."""
+    
+    protect AtomicI64 completedCount
+    """Atomic counter of tasks that have completed execution."""
+    
+    protect AtomicBoolean shutdownFlag
+    """Atomic flag indicating whether the executor has been shut down."""
+    
+    public function ThreadPoolExecutor( self, I64 numWorkers, ?ThreadRuntime runtime=None ) -> Void:
+        
+        """
+        Create a new thread pool executor with the specified number of worker
+        threads. If no ThreadRuntime is provided, a default runtime is created
+        with a new Scheduler, PhysicalMemoryManager (1 MB), SystemClock, and
+        capacity for 256 tasks.
+        
+        Parameters:
+            numWorkers (I64):
+                Number of worker threads to spawn. Must be at least 1.
+            runtime (?ThreadRuntime):
+                Optional pre-configured thread runtime. When None, a default
+                runtime is created internally.
+        
+        Raises:
+            ThreadError:
+                If numWorkers is less than or equal to zero.
+
+        Complexity:
+            Time: O(w) where w is numWorkers
+            Space: O(w)
+        """
+
+        if numWorkers <= 0:
+            raise new ThreadError( "Workers must greater than or equal 1 not 0", 1 )
+        if runtime is None:
+            Scheduler sched = new Scheduler()
+            PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
+            SystemClock clock = new SystemClock( 1000 )
+            self.runtime = new ThreadRuntime( sched, pmm, clock, 256 )
+        else:
+            self.runtime = runtime
+        self.workerCount = numWorkers
+        self.taskChannel = new ChannelInner<I64>( DEFAULT_QUEUE_CAPACITY, self.runtime.getScheduler() )
+        self.shutdownFlag = new AtomicBoolean( False )
+        self.activeCount = new AtomicI64( 0 )
+        self.completedCount = new AtomicI64( 0 )
+        self.workers = new Memory<Thread>( numWorkers )
+        
+        I64 channelAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" channelAddr ) : input( "r" self.taskChannel ) : clobber()
+        I64 workerEntryAddr = addressof executorWorkerLoop
+        I64 workerIndex = 0
+        while workerIndex < numWorkers:
+            I64 threadId = self.runtime.allocateThreadId()
+            Thread worker = new Thread( self.runtime, threadId, EXECUTOR_WORKER_STACK_PAGES, DEFAULT_PRIORITY )
+            Task task = worker.getTask()
+            task.setEntryPoint( workerEntryAddr, task.registers.rsp )
+            task.registers.rdi = threadId
+            task.registers.rsi = channelAddr
+            self.runtime.getScheduler().enqueue( task )
+            self.workers.set( workerIndex, worker )
+            workerIndex = workerIndex + 1
+    
+    public function run( self, I64 fnAddr ) -> FutureBase:
+        
+        """
+        Submit a zero-argument function for execution on a worker thread.
+        The function is identified by its raw address and called with no
+        arguments. Returns immediately with a FutureBase that tracks the
+        asynchronous result.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute. The function must
+                accept zero arguments and return an I64.
+        
+        Returns:
+            FutureBase:
+                A future representing the pending result of the function call.
+        
+        Raises:
+            ThreadError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ThreadError( "Executor is shut down", 200, None )
+        
+        FutureBase base = new FutureBase( self.runtime.getScheduler() )
+        I64 baseAddr = addressof base
+        
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 0 )
+        desc.set( 1, fnAddr )
+        desc.set( 2, baseAddr )
+        desc.set( 3, 0 )
+        desc.set( 4, 0 )
+        desc.set( 5, 0 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function submit1( self, I64 fnAddr, I64 arg ) -> FutureBase:
+        
+        """
+        Submit a one-argument function for execution on a worker thread.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute. The function must
+                accept one I64 argument and return an I64.
+            arg (I64):
+                The single argument to pass to the function via the rdi
+                register.
+        
+        Returns:
+            FutureBase:
+                A future representing the pending result of the function call.
+        
+        Raises:
+            ThreadError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ThreadError( "Executor is shut down", 200, None )
+        
+        FutureBase base = new FutureBase( self.runtime.getScheduler() )
+        I64 baseAddr = addressof base
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 1 )
+        desc.set( 1, fnAddr )
+        desc.set( 2, baseAddr )
+        desc.set( 3, arg )
+        desc.set( 4, 0 )
+        desc.set( 5, 0 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function submit2( self, I64 fnAddr, I64 arg1, I64 arg2 ) -> FutureBase:
+        
+        """
+        Submit a two-argument function for execution on a worker thread.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute. The function must
+                accept two I64 arguments and return an I64.
+            arg1 (I64):
+                First argument, passed via the rdi register.
+            arg2 (I64):
+                Second argument, passed via the rsi register.
+        
+        Returns:
+            FutureBase:
+                A future representing the pending result of the function call.
+        
+        Raises:
+            ThreadError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ThreadError( "Executor is shut down", 200, None )
+        
+        FutureBase base = new FutureBase( self.runtime.getScheduler() )
+        I64 baseAddr = addressof base
+        
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 2 )
+        desc.set( 1, fnAddr )
+        desc.set( 2, baseAddr )
+        desc.set( 3, arg1 )
+        desc.set( 4, arg2 )
+        desc.set( 5, 0 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function submit3( self, I64 fnAddr, I64 arg1, I64 arg2, I64 arg3 ) -> FutureBase:
+        
+        """
+        Submit a three-argument function for execution on a worker thread.
+        
+        Parameters:
+            fnAddr (I64):
+                Raw address of the function to execute. The function must
+                accept three I64 arguments and return an I64.
+            arg1 (I64):
+                First argument, passed via the rdi register.
+            arg2 (I64):
+                Second argument, passed via the rsi register.
+            arg3 (I64):
+                Third argument, passed via the rdx register.
+        
+        Returns:
+            FutureBase:
+                A future representing the pending result of the function call.
+        
+        Raises:
+            ThreadError:
+                If the executor has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdownFlag.load():
+            raise new ThreadError( "Executor is shut down", 200, None )
+        
+        FutureBase base = new FutureBase( self.runtime.getScheduler() )
+        I64 baseAddr = addressof base
+        
+        Memory<I64> desc = new Memory<I64>( 6 )
+        desc.set( 0, 3 )
+        desc.set( 1, fnAddr )
+        desc.set( 2, baseAddr )
+        desc.set( 3, arg1 )
+        desc.set( 4, arg2 )
+        desc.set( 5, arg3 )
+        
+        I64 descAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        self.taskChannel.send( descAddr )
+        self.activeCount.increment()
+        
+        return base
+    
+    public function shutdown( self, Boolean wait ) -> Void:
+        
+        """
+        Initiate executor shutdown. Sets the shutdown flag and closes the
+        task channel so workers stop receiving new descriptors. Optionally
+        waits for all worker threads to finish their current tasks.
+        
+        Parameters:
+            wait (Boolean):
+                When True, blocks until every worker thread has finished
+                execution. When False, returns immediately after signaling
+                shutdown.
+
+        Complexity:
+            Time: O(w) where w is workerCount when wait=True, O(1) otherwise
+            Space: O(1)
+        """
+
+        self.shutdownFlag.store( True )
+        self.taskChannel.closeReceive()
+        if wait:
+            I64 workerIndex = 0
+            while workerIndex < self.workerCount:
+                Thread worker = self.workers.get( workerIndex )
+                while worker.isFinished() == False:
+                    asm volatile "pause"
+                workerIndex = workerIndex + 1
+    
+    public function isShutdown( self ) -> Boolean:
+        
+        """
+        Check whether the executor has been shut down.
+        
+        Returns:
+            Boolean:
+                True if shutdown has been initiated, False otherwise.
+        """
+        
+        return self.shutdownFlag.load()
+    
+    public function getActiveCount( self ) -> I64:
+        
+        """
+        Return the number of tasks currently in flight (submitted but not
+        yet completed).
+        
+        Returns:
+            I64:
+                Count of active tasks.
+        """
+        
+        return self.activeCount.load()
+    
+    public function getCompletedCount( self ) -> I64:
+        
+        """
+        Return the total number of tasks that have completed execution.
+        
+        Returns:
+            I64:
+                Cumulative count of completed tasks.
+        """
+        
+        return self.completedCount.load()
+    
+    public function getWorkerCount( self ) -> I64:
+        
+        """
+        Return the number of worker threads in the pool.
+        
+        Returns:
+            I64:
+                The fixed worker count configured at construction.
+        """
+        
+        return self.workerCount
+    
+    public function shutdownAndAwait( self ) -> Void:
+
+        """
+        Graceful shutdown: stop accepting new tasks, wait for all running
+        tasks to complete, then release all resources.
+
+        Equivalent to calling shutdown(True) followed by destroy().
+
+        Complexity:
+            Time: O(w) where w is workerCount
+            Space: O(1)
+        """
+
+        self.shutdown( True )
+        self.destroy()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all resources held by the executor. If not already shut down,
+        performs a blocking shutdown first. Frees worker storage, task channel,
+        and all atomic counters.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        if self.shutdownFlag.load() == False:
+            self.shutdown( True )
+        self.workers.free()
+        self.taskChannel.destroy()
+        self.shutdownFlag.destroy()
+        self.activeCount.destroy()
+        self.completedCount.destroy()
+
+public class TaskSubmitter0<R>:
+    
+    """
+    Type-safe wrapper for submitting zero-argument callables to a
+    ThreadPoolExecutor. Converts the Callable into a raw function address
+    and returns a typed Future<R> instead of an untyped FutureBase.
+    """
+    
+    protect ThreadPoolExecutor executor
+    """The underlying executor that performs the actual task dispatch."""
+    
+    public function TaskSubmitter0( self, ThreadPoolExecutor executor ) -> Void:
+        
+        """
+        Create a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ThreadPoolExecutor):
+                The executor pool to submit tasks to.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <>> fn ) -> Future<R>:
+        
+        """
+        Submit a zero-argument callable for asynchronous execution.
+        
+        Parameters:
+            fn (Callable<R, <>>):
+                The callable to execute. Must accept no arguments and
+                return a value of type R.
+        
+        Returns:
+            Future<R>:
+                A typed future that will contain the result of the callable
+                once execution completes.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        FutureBase base = self.executor.run( fnAddr )
+        return new Future<R>( base )
+
+public class TaskSubmitter1<R, A>:
+    
+    """
+    Type-safe wrapper for submitting one-argument callables to a
+    ThreadPoolExecutor. Converts the Callable and its argument into raw
+    I64 values and returns a typed Future<R>.
+    """
+    
+    protect ThreadPoolExecutor executor
+    """The underlying executor that performs the actual task dispatch."""
+    
+    public function TaskSubmitter1( self, ThreadPoolExecutor executor ) -> Void:
+        
+        """
+        Create a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ThreadPoolExecutor):
+                The executor pool to submit tasks to.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <A>> fn, A arg ) -> Future<R>:
+        
+        """
+        Submit a one-argument callable for asynchronous execution.
+        
+        Parameters:
+            fn (Callable<R, <A>>):
+                The callable to execute. Must accept one argument of type A
+                and return a value of type R.
+            arg (A):
+                The argument to pass to the callable.
+        
+        Returns:
+            Future<R>:
+                A typed future that will contain the result of the callable
+                once execution completes.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        I64 argRaw = 0
+        asm volatile "movq $1, $0" : output( "=r" argRaw ) : input( "r" arg ) : clobber()
+        FutureBase base = self.executor.submit1( fnAddr, argRaw )
+        return new Future<R>( base )
+
+public class TaskSubmitter2<R, A, B>:
+    
+    """
+    Type-safe wrapper for submitting two-argument callables to a
+    ThreadPoolExecutor. Converts the Callable and both arguments into raw
+    I64 values and returns a typed Future<R>.
+    """
+    
+    protect ThreadPoolExecutor executor
+    """The underlying executor that performs the actual task dispatch."""
+    
+    public function TaskSubmitter2( self, ThreadPoolExecutor executor ) -> Void:
+        
+        """
+        Create a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ThreadPoolExecutor):
+                The executor pool to submit tasks to.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <A, B>> fn, A arg1, B arg2 ) -> Future<R>:
+        
+        """
+        Submit a two-argument callable for asynchronous execution.
+        
+        Parameters:
+            fn (Callable<R, <A, B>>):
+                The callable to execute. Must accept two arguments of types
+                A and B, and return a value of type R.
+            arg1 (A):
+                The first argument to pass to the callable.
+            arg2 (B):
+                The second argument to pass to the callable.
+        
+        Returns:
+            Future<R>:
+                A typed future that will contain the result of the callable
+                once execution completes.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        I64 a1Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
+        I64 a2Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
+        FutureBase base = self.executor.submit2( fnAddr, a1Raw, a2Raw )
+        return new Future<R>( base )
+
+public class TaskSubmitter3<R, A, B, C>:
+    
+    """
+    Type-safe wrapper for submitting three-argument callables to a
+    ThreadPoolExecutor. Converts the Callable and all three arguments into
+    raw I64 values and returns a typed Future<R>.
+    """
+    
+    protect ThreadPoolExecutor executor
+    """The underlying executor that performs the actual task dispatch."""
+    
+    public function TaskSubmitter3( self, ThreadPoolExecutor executor ) -> Void:
+        
+        """
+        Create a new submitter bound to the given executor.
+        
+        Parameters:
+            executor (ThreadPoolExecutor):
+                The executor pool to submit tasks to.
+        """
+        
+        self.executor = executor
+    
+    public function submit( self, Callable<R, <A, B, C>> fn, A arg1, B arg2, C arg3 ) -> Future<R>:
+        
+        """
+        Submit a three-argument callable for asynchronous execution.
+        
+        Parameters:
+            fn (Callable<R, <A, B, C>>):
+                The callable to execute. Must accept three arguments of
+                types A, B, and C, and return a value of type R.
+            arg1 (A):
+                The first argument to pass to the callable.
+            arg2 (B):
+                The second argument to pass to the callable.
+            arg3 (C):
+                The third argument to pass to the callable.
+        
+        Returns:
+            Future<R>:
+                A typed future that will contain the result of the callable
+                once execution completes.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 fnAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        I64 a1Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
+        I64 a2Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
+        I64 a3Raw = 0
+        asm volatile "movq $1, $0" : output( "=r" a3Raw ) : input( "r" arg3 ) : clobber()
+        FutureBase base = self.executor.submit3( fnAddr, a1Raw, a2Raw, a3Raw )
+        return new Future<R>( base )
+
+export {
+    ThreadPoolExecutor,
+    TaskSubmitter0,
+    TaskSubmitter1,
+    TaskSubmitter2,
+    TaskSubmitter3
+}

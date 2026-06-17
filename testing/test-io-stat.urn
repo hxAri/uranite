@@ -1,0 +1,21 @@
+package testing
+
+from uranite.io.stat import statPath, FileStat, FileType
+from uranite.testing.assertions import {
+    assertTrue,
+    assertFalse,
+    assertGreaterThan
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO Stat Tests ===" )
+
+    FileStat st = statPath( "/tmp" )
+    assertTrue( st.isDirectory(), "isDirectory /tmp" )
+    assertFalse( st.isFile(), "not isFile /tmp" )
+    assertGreaterThan( st.getSize(), -1, "size >= 0" )
+    putsln( "stat OK" )
+
+    putsln( "=== All IO stat tests passed ===" )
+    return 0

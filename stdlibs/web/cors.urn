@@ -1,0 +1,169 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/cors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# CORS middleware: adds Access-Control-Allow-* headers.
+# Handles preflight OPTIONS requests automatically.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.cors
+
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+from uranite.web.middleware import Middleware
+from uranite.functions.builtin import equals
+
+public class CorsMiddleware implements Middleware:
+    
+    """
+    Cross-Origin Resource Sharing (CORS) middleware that adds the appropriate
+    Access-Control-Allow-* headers to every response. Automatically handles
+    preflight OPTIONS requests by responding with a 204 No Content status.
+    """
+    
+    public String allowOrigin
+    """The value of the Access-Control-Allow-Origin header. Defaults to "*" (all origins)."""
+    
+    public String allowMethods
+    """The value of the Access-Control-Allow-Methods header listing permitted HTTP methods."""
+    
+    public String allowHeaders
+    """The value of the Access-Control-Allow-Headers header listing permitted request headers."""
+    
+    public Boolean allowCredentials
+    """Whether to include the Access-Control-Allow-Credentials header. Defaults to False."""
+    
+    public I64 maxAge
+    """The cache duration in seconds for preflight responses. Defaults to 86400 (24 hours)."""
+    
+    public function CorsMiddleware( self ) -> Void:
+        
+        """
+        Create a new CorsMiddleware with permissive defaults: all origins
+        allowed, standard HTTP methods, common headers, no credentials,
+        and a 24-hour preflight cache.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.allowOrigin = "*"
+        self.allowMethods = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        self.allowHeaders = "Content-Type, Authorization, Accept"
+        self.allowCredentials = False
+        self.maxAge = 86400
+    
+    public function setOrigin( self, String origin ) -> CorsMiddleware:
+        
+        """
+        Set the allowed origin for CORS requests.
+        
+        Parameters:
+            origin (String):
+                The origin value, such as "https://example.com" or "*" for all origins.
+        
+        Returns:
+            This CorsMiddleware instance for method chaining.
+        """
+        
+        self.allowOrigin = origin
+        return self
+    
+    public function setMethods( self, String methods ) -> CorsMiddleware:
+        
+        """
+        Set the allowed HTTP methods for CORS requests.
+        
+        Parameters:
+            methods (String):
+                A comma-separated list of allowed HTTP methods.
+        
+        Returns:
+            This CorsMiddleware instance for method chaining.
+        """
+        
+        self.allowMethods = methods
+        return self
+    
+    public function setHeaders( self, String headers ) -> CorsMiddleware:
+        
+        """
+        Set the allowed request headers for CORS requests.
+        
+        Parameters:
+            headers (String):
+                A comma-separated list of allowed header names.
+        
+        Returns:
+            This CorsMiddleware instance for method chaining.
+        """
+        
+        self.allowHeaders = headers
+        return self
+    
+    public function setCredentials( self, Boolean allow ) -> CorsMiddleware:
+        
+        """
+        Set whether credentials (cookies, authorization headers) are allowed
+        in CORS requests.
+        
+        Parameters:
+            allow (Boolean):
+                True to include Access-Control-Allow-Credentials: true, False to omit it.
+        
+        Returns:
+            This CorsMiddleware instance for method chaining.
+        """
+        
+        self.allowCredentials = allow
+        return self
+    
+    public function process( self, HttpRequest req, HttpResponse res ) -> Boolean:
+        
+        """
+        Add CORS headers to the response. If the request is a preflight
+        OPTIONS request, respond immediately with 204 No Content and stop
+        further processing.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request.
+            res (HttpResponse):
+                The HTTP response to add CORS headers to.
+        
+        Returns:
+            True if request processing should continue, False if the preflight
+            response has already been sent.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        res.header( "Access-Control-Allow-Origin", self.allowOrigin )
+        res.header( "Access-Control-Allow-Methods", self.allowMethods )
+        res.header( "Access-Control-Allow-Headers", self.allowHeaders )
+        if self.allowCredentials:
+            res.header( "Access-Control-Allow-Credentials", "true" )
+        if equals( req.method, "OPTIONS" ):
+            res.status( 204 ).text( "" )
+            return False
+        return True
+
+export {
+    CorsMiddleware
+}

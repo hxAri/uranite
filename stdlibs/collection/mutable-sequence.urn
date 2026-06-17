@@ -1,0 +1,167 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/mutable-sequence.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the MutableSequence interface for ordered collections that support in-place element modification.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.mutablesequence
+
+from uranite.collection.sequence import Sequence
+from uranite.language.boolean import Boolean
+from uranite.language.void import Void
+
+public interface MutableSequence<E> extends Sequence<E>:
+    
+    """
+    Sequence that supports in-place modification of elements.
+    
+    This interface extends Sequence with mutating operations such as add, insert,
+    remove, sort, and reverse, allowing concrete sequence implementations to modify
+    their contents after construction.
+    """
+    
+    public function add( self, E element ) -> Void:
+        
+        """
+        Append an element to the end of this sequence.
+        
+        Parameters:
+            element (E):
+                The element to append.
+        """    
+    
+    public function addAll( self, Sequence<E> elements ) -> Void:
+        
+        """
+        Append all elements from another sequence to the end of this sequence.
+        
+        Parameters:
+            elements (Sequence<E>):
+                The sequence whose elements will be appended.
+        """    
+    
+    public function insert( self, Int index, E element ) -> Void:
+        
+        """
+        Insert an element at the given index, shifting all subsequent elements to the right.
+        
+        Parameters:
+            index (Int):
+                The position at which to insert the element.
+            element (E):
+                The element to insert.
+        """    
+    
+    public function removeAt( self, Int index ) -> E:
+        
+        """
+        Remove and return the element at the given index, shifting subsequent elements to the left.
+        
+        Parameters:
+            index (Int):
+                The position of the element to remove.
+        
+        Returns:
+            E:
+                The element that was removed.
+        """    
+    
+    public function removeFirst( self ) -> E:
+        
+        """
+        Remove and return the first element of this sequence.
+        
+        Returns:
+            E:
+                The element that was removed from the beginning of the sequence.
+        """    
+    
+    public function removeLast( self ) -> E:
+        
+        """
+        Remove and return the last element of this sequence.
+        
+        Returns:
+            E:
+                The element that was removed from the end of the sequence.
+        """
+    
+    public function removeElement( self, E element ) -> Boolean:
+        
+        """
+        Remove the first occurrence of the given element from this sequence.
+        
+        Parameters:
+            element (E):
+                The element to search for and remove.
+        
+        Returns:
+            Boolean:
+                True if the element was found and removed, False otherwise.
+        """
+    
+    public function clear( self ) -> Void:
+        
+        """ Remove all elements from this sequence, leaving it empty. """
+    
+    public function sort( self ) -> Void:
+        
+        """ Sort all elements in this sequence in-place using their natural ordering. """
+    
+    public function reverse( self ) -> Void:
+        
+        """ Reverse the order of all elements in this sequence in-place. """
+    
+    public function swap( self, Int indexA, Int indexB ) -> Void:
+        
+        """
+        Swap the elements at two indices in this sequence.
+        
+        Parameters:
+            indexA (Int):
+                The position of the first element to swap.
+            indexB (Int):
+                The position of the second element to swap.
+        """
+    
+    public function fill( self, E element ) -> Void:
+        
+        """
+        Set all elements in this sequence to the given value.
+        
+        Parameters:
+            element (E):
+                The value to assign to every position in the sequence.
+        """
+    
+    public function resize( self, Int newSize ) -> Void:
+        
+        """
+        Change the logical size of this sequence.
+        
+        If the new size is larger than the current size, additional positions are
+        added with default values. If the new size is smaller, excess elements are removed.
+        
+        Parameters:
+            newSize (Int):
+                The desired new size of the sequence.
+        """
+
+
+export {
+    MutableSequence
+}

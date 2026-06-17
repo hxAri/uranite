@@ -1,0 +1,41 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/generator.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the Generator interface, a lazy iterator that yields values on demand
+# via coroutine-style execution, extending the Iterator protocol.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection
+
+
+from uranite.iterators import Iterator
+
+
+public interface Generator<T> extends Iterator<T>:
+    
+    """
+    Lazy iterator that yields values on demand via coroutine-style execution.
+    
+    A Generator extends the Iterator protocol, allowing elements to be produced
+    lazily rather than computed eagerly. This enables efficient processing of
+    potentially infinite or expensive-to-compute sequences.
+    """
+
+
+export {
+    Generator
+}

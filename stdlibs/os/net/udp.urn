@@ -1,0 +1,237 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/udp.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides UDP Layer 4 connectionless datagram transport protocol support, including datagram header representation and a port binding table for listener management.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.net.udp
+
+from uranite.memory.memory import Memory
+
+public const I64 UDP_HEADER_SIZE = 8
+""" UDP datagram header size in bytes. Four 16-bit fields: source port, dest port, length, checksum. """
+
+public class UdpHeader:
+    
+    """
+    Represents a UDP datagram header as defined in RFC 768. The header is exactly 8 bytes
+    and contains the source port, destination port, total datagram length (header plus
+    payload), and a checksum for integrity verification. UDP provides connectionless,
+    unreliable datagram delivery with minimal protocol overhead.
+    """
+    
+    public I64 srcPort
+    public I64 dstPort
+    public I64 length
+    public I64 checksum
+    
+    public function UdpHeader( self ) -> Void:
+        
+        """
+        Constructs a new UDP header with ports set to zero, length set to 8 (header only,
+        no payload), and checksum set to zero.
+        """
+        
+        self.srcPort = 0
+        self.dstPort = 0
+        self.length = 8
+        self.checksum = 0
+    
+    public function configure( self, I64 src, I64 dst, I64 payloadLen ) -> Void:
+        
+        """
+        Configures this UDP header with the specified source port, destination port, and
+        payload length. The total datagram length is automatically calculated as 8 (header
+        size) plus the payload length.
+        """
+        
+        self.srcPort = src
+        self.dstPort = dst
+        self.length = 8 + payloadLen
+    
+    public function getPayloadLength( self ) -> I64:
+        
+        """
+        Returns the payload length in bytes by subtracting the 8-byte header size from
+        the total datagram length.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.length - 8
+
+public class UdpBindTable:
+    
+    """
+    Maps UDP port numbers to listener identifiers for incoming datagram delivery. When a
+    UDP datagram arrives, the kernel looks up the destination port in this table to
+    determine which listener should receive the data. Each binding associates a port
+    number with a listener ID and an optional local address filter, where an address
+    of 0 matches any local address (wildcard binding).
+    """
+    
+    public Memory<I64> ports
+    public Memory<I64> listenerIds
+    public Memory<I64> addresses
+    public I64 capacity
+    public I64 count
+    
+    public function UdpBindTable( self, I64 maxBindings ) -> Void:
+        
+        """
+        Constructs a new UDP binding table with the specified maximum number of port
+        bindings. All slots are initialized to empty.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxBindings
+        self.count = 0
+        self.ports = new Memory<I64>( maxBindings )
+        self.listenerIds = new Memory<I64>( maxBindings )
+        self.addresses = new Memory<I64>( maxBindings )
+        I64 slotIndex = 0
+        while slotIndex < maxBindings:
+            self.ports.set( slotIndex, 0 )
+            self.listenerIds.set( slotIndex, 0 )
+            self.addresses.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function bind( self, I64 port, I64 listenerId, I64 addr ) -> Boolean:
+        
+        """
+        Binds a port to the specified listener ID with an optional local address filter.
+        An address of 0 creates a wildcard binding that accepts datagrams on any local
+        address. Returns False if the port is already bound to another listener or if
+        the table is full. Returns True on successful binding.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if self.count >= self.capacity:
+            return False
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ports.get( slotIndex ) == port and self.listenerIds.get( slotIndex ) != 0:
+                return False
+            slotIndex = slotIndex + 1
+        slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.listenerIds.get( slotIndex ) == 0:
+                self.ports.set( slotIndex, port )
+                self.listenerIds.set( slotIndex, listenerId )
+                self.addresses.set( slotIndex, addr )
+                self.count = self.count + 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function unbind( self, I64 port ) -> Boolean:
+        
+        """
+        Removes the binding for the specified port, freeing the slot for reuse. Returns
+        True if the port was bound and has been successfully unbound, or False if no
+        binding exists for the given port.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ports.get( slotIndex ) == port and self.listenerIds.get( slotIndex ) != 0:
+                self.ports.set( slotIndex, 0 )
+                self.listenerIds.set( slotIndex, 0 )
+                self.addresses.set( slotIndex, 0 )
+                self.count = self.count - 1
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function findListener( self, I64 port, I64 addr ) -> I64:
+        
+        """
+        Finds the listener ID for an incoming datagram addressed to the specified port
+        and local address. A binding with address 0 (wildcard) matches any destination
+        address. Returns the listener ID if a matching binding is found, or 0 if no
+        listener is bound to the port.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ports.get( slotIndex ) == port and self.listenerIds.get( slotIndex ) != 0:
+                I64 bindAddr = self.addresses.get( slotIndex )
+                if bindAddr == 0 or bindAddr == addr:
+                    return self.listenerIds.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function isBound( self, I64 port ) -> Boolean:
+        
+        """
+        Checks whether the specified port has an active binding in the table. Returns
+        True if a listener is bound to the port, or False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ports.get( slotIndex ) == port and self.listenerIds.get( slotIndex ) != 0:
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of active port bindings in the UDP binding table. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the UDP binding table,
+        including the ports, listener IDs, and addresses arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.ports.free()
+        self.listenerIds.free()
+        self.addresses.free()
+
+export {
+    UDP_HEADER_SIZE,
+    UdpHeader,
+    UdpBindTable
+}

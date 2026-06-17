@@ -1,0 +1,161 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-29 14:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process-handle.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# ProcessHandle owns a Process and enforces cleanup on join or detach.
+# Exactly one ProcessHandle per Process. join() always calls cleanup().
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.process-handle
+
+from uranite.os.task.task import BlockReason
+from uranite.os.ipc.signal import Event
+from uranite.process.process import Process, ProcessRuntime
+from uranite.process.errors import ProcessError, ProcessCrashedError
+
+public class ProcessHandle:
+    
+    """
+    Ownership handle for a Process that enforces cleanup on join or detach.
+    
+    Provides RAII-style lifecycle management for a single Process. Exactly
+    one ProcessHandle exists per Process. Calling join blocks until the
+    process finishes, retrieves its result, and cleans up its resources.
+    Calling detach releases ownership so the process runs independently.
+    A process can only be joined or detached once.
+    """
+    
+    protect Process process
+    """ The owned process instance. """
+    protect ProcessRuntime runtime
+    """ The runtime managing the owned process. """
+    protect Boolean joined
+    """ Flag tracking whether join or detach has already been called. """
+    
+    public function ProcessHandle( self, Process process, ProcessRuntime runtime ) -> Void:
+        
+        """
+        Construct a new handle taking ownership of the given process.
+        
+        Parameters:
+            process (Process):
+                The process to own and manage.
+            runtime (ProcessRuntime):
+                The runtime that created the process.
+        """
+        
+        self.process = process
+        self.runtime = runtime
+        self.joined = False
+    
+    public function join( self ) -> I64:
+        
+        """
+        Block until the process finishes and return its result.
+        
+        Waits for the process to reach a terminal state using cooperative
+        blocking via the scheduler. After completion, cleans up all process
+        resources. Raises ProcessCrashedError if the process crashed, or
+        ProcessError if join is called more than once.
+        
+        Returns:
+            I64:
+                The result value produced by the process.
+        
+        Raises:
+            ProcessError:
+                If this handle has already been joined or detached.
+            ProcessCrashedError:
+                If the process terminated due to a crash.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.joined:
+            raise new ProcessError( "Process already joined", 1, None )
+        
+        self.joined = True
+        
+        if self.process.isFinished() == False:
+            Event completionEvent = self.process.getCompletionEvent()
+            I64 taskId = 0
+            if self.runtime.getScheduler().getCurrentTask() != None:
+                taskId = self.runtime.getScheduler().getCurrentTask().id
+            if taskId > 0:
+                Boolean shouldBlock = completionEvent.registerWait( taskId, 1 )
+                if shouldBlock:
+                    self.runtime.getScheduler().getCurrentTask().block( BlockReason.Semaphore )
+                    self.runtime.getScheduler().blockCurrent()
+        
+        if self.process.hasCrashed():
+            self.process.cleanup()
+            raise new ProcessCrashedError( "Process crashed", 2, None )
+        
+        I64 result = self.process.getResult()
+        self.process.cleanup()
+        return result
+    
+    public function isFinished( self ) -> Boolean:
+        
+        """
+        Check whether the owned process has reached a terminal state.
+        
+        Returns:
+            Boolean:
+                True if the process is finished, crashed, or detached.
+        """
+        
+        return self.process.isFinished()
+    
+    public function getProcessId( self ) -> I64:
+        
+        """
+        Return the process ID of the owned process.
+        
+        Returns:
+            I64:
+                The unique process identifier.
+        """
+        
+        return self.process.getProcessId()
+    
+    public function detach( self ) -> Void:
+        
+        """
+        Release ownership of the process, allowing it to run independently.
+        
+        After detaching, the process's resources will be freed automatically
+        upon completion. The handle becomes unusable after this call.
+        
+        Raises:
+            ProcessError:
+                If this handle has already been joined or detached.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.joined:
+            raise new ProcessError( "Process already joined, cannot detach", 3, None )
+        self.joined = True
+        self.process.detach()
+
+export {
+    ProcessHandle
+}

@@ -1,0 +1,229 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/css-formatter.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the CssFormatter class with static functions for generating CSS color
+# string representations in hex (#RRGGBB), rgb(R, G, B), and hsl(H, S%, L%)
+# formats. These output strings are valid CSS color values that can be embedded
+# directly in stylesheets or inline style attributes.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.css-formatter
+
+from uranite.language.string import String
+from uranite.math.math import round
+
+public final class CssFormatter:
+    
+    """
+    Static utility class for generating CSS-compatible color value strings in
+    three standard formats: hexadecimal (#RRGGBB), functional RGB notation
+    (rgb(R, G, B)), and functional HSL notation (hsl(H, S%, L%)). All output
+    strings conform to the CSS Color Module Level 4 specification and can be
+    used directly in stylesheets, inline styles, or any context expecting a
+    CSS color value. All methods are static (no self parameter).
+    """
+    
+    public function hex( self, I32 hexValue ) -> String:
+        
+        """
+        Format a packed 24-bit hex color value as a CSS hex color string with
+        a leading hash symbol and six lowercase hexadecimal digits.
+        
+        Parameters:
+            hexValue (I32):
+                The packed hex color value in 0xRRGGBB format.
+        
+        Returns:
+            String:
+                A CSS hex color string such as "#004b49".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I32 r = ( hexValue >> 16 ) & 255
+        I32 g = ( hexValue >> 8 ) & 255
+        I32 b = hexValue & 255
+        return "#" + self.byteToHex( r ) + self.byteToHex( g ) + self.byteToHex( b )
+    
+    public function rgb( self, I32 red, I32 green, I32 blue ) -> String:
+        
+        """
+        Format RGB channel values as a CSS rgb() functional notation string
+        with integer decimal values separated by commas.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            String:
+                A CSS rgb string such as "rgb(0, 75, 73)".
+        """
+        
+        return "rgb(" + red + ", " + green + ", " + blue + ")"
+    
+    public function hsl( self, F64 hue, F64 saturation, F64 lightness ) -> String:
+        
+        """
+        Format HSL component values as a CSS hsl() functional notation string
+        with the hue in degrees (no unit suffix) and saturation and lightness
+        as percentages with the percent symbol.
+        
+        Parameters:
+            hue (F64):
+                The hue angle in degrees from 0.0 to 360.0.
+            saturation (F64):
+                The saturation from 0.0 to 1.0.
+            lightness (F64):
+                The lightness from 0.0 to 1.0.
+        
+        Returns:
+            String:
+                A CSS hsl string such as "hsl(178, 100%, 15%)".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 h = round( hue )
+        F64 s = round( saturation * 100.0 )
+        F64 l = round( lightness * 100.0 )
+        return "hsl(" + h + ", " + s + "%, " + l + "%)"
+    
+    public function hexFromRgb( self, I32 red, I32 green, I32 blue ) -> String:
+        
+        """
+        Format RGB channel values as a CSS hex color string by first packing
+        them into a 24-bit integer and then formatting with a leading hash.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            String:
+                A CSS hex color string such as "#004b49".
+        """
+        
+        I32 hexVal = ( red << 16 ) | ( green << 8 ) | blue
+        return self.hex( hexVal )
+    
+    private function byteToHex( self, I32 value ) -> String:
+        
+        """
+        Convert a single byte value (0-255) to a two-character lowercase
+        hexadecimal string. Values less than 16 are zero-padded to maintain
+        the two-character width.
+        
+        Parameters:
+            value (I32):
+                The byte value from 0 to 255.
+        
+        Returns:
+            String:
+                A two-character hex string such as "00", "4b", or "ff".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        String digits = "0123456789abcdef"
+        I32 high = ( value >> 4 ) & 15
+        I32 low = value & 15
+        String highChar = ""
+        String lowChar = ""
+        if high == 0:
+            highChar = "0"
+        elif high == 1:
+            highChar = "1"
+        elif high == 2:
+            highChar = "2"
+        elif high == 3:
+            highChar = "3"
+        elif high == 4:
+            highChar = "4"
+        elif high == 5:
+            highChar = "5"
+        elif high == 6:
+            highChar = "6"
+        elif high == 7:
+            highChar = "7"
+        elif high == 8:
+            highChar = "8"
+        elif high == 9:
+            highChar = "9"
+        elif high == 10:
+            highChar = "a"
+        elif high == 11:
+            highChar = "b"
+        elif high == 12:
+            highChar = "c"
+        elif high == 13:
+            highChar = "d"
+        elif high == 14:
+            highChar = "e"
+        else:
+            highChar = "f"
+        if low == 0:
+            lowChar = "0"
+        elif low == 1:
+            lowChar = "1"
+        elif low == 2:
+            lowChar = "2"
+        elif low == 3:
+            lowChar = "3"
+        elif low == 4:
+            lowChar = "4"
+        elif low == 5:
+            lowChar = "5"
+        elif low == 6:
+            lowChar = "6"
+        elif low == 7:
+            lowChar = "7"
+        elif low == 8:
+            lowChar = "8"
+        elif low == 9:
+            lowChar = "9"
+        elif low == 10:
+            lowChar = "a"
+        elif low == 11:
+            lowChar = "b"
+        elif low == 12:
+            lowChar = "c"
+        elif low == 13:
+            lowChar = "d"
+        elif low == 14:
+            lowChar = "e"
+        else:
+            lowChar = "f"
+        return highChar + lowChar
+
+export {
+    CssFormatter
+}

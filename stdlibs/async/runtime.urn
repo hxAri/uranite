@@ -1,0 +1,261 @@
+package uranite.async.runtime
+
+from uranite.async.scheduler import NativeScheduler
+from uranite.async.task import {
+    STATE_COMPLETED, 
+    FIELD_ENTRY_FN, 
+    STATE_FAILED,
+    FIELD_HAS_ERROR,
+    FIELD_RESULT,
+    FIELD_STATE
+}
+from uranite.io.syscall import readI64At
+
+const NativeScheduler scheduler = new NativeScheduler()
+""" Global scheduler instance shared by all async operations in the program. """
+
+function taskTrampoline() -> Void:
+    I64 curIdx = scheduler.currentTaskIdx
+    I64 curAddr = scheduler.taskSlots.get( curIdx )
+    I64 fnAddr = readI64At( curAddr, FIELD_ENTRY_FN * 8 )
+    I64 result = 0
+    asm volatile "call *$2" : output( "={rax}" result ) : input( "{rdi}" 0, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+    scheduler.taskComplete( result )
+
+public function runtimeInit() -> Void:
+    
+    """
+    Initialize the global async runtime. Must be called once before spawning
+    any async tasks. Sets up the epoll instance and registers the task
+    trampoline function with the scheduler.
+    """
+    
+    I64 trampolineAddr = addressof taskTrampoline
+    scheduler.init( trampolineAddr )
+
+public function runtimeSpawn( I64 funcPtr, I64 userData ) -> I64:
+    
+    """
+    Spawn a new async task that will execute the function at the given address.
+    
+    Parameters:
+        funcPtr (I64):
+            Address of the function to execute as an async task.
+        userData (I64):
+            User-defined data passed to the task (currently unused by the scheduler).
+    
+    Returns:
+        I64:
+            The unique task identifier assigned to the spawned task.
+    """
+    
+    return scheduler.spawn( funcPtr, userData )
+
+public function runtimeAwait( I64 taskId ) -> I64:
+    
+    """
+    Block the current task until the specified task completes, then return
+    its result. If the awaited task failed, raises an AsyncRuntimeError.
+    
+    Parameters:
+        taskId (I64):
+            Identifier of the task to wait for.
+    
+    Returns:
+        I64:
+            The result value produced by the completed task.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the awaited task terminated with an error.
+    """
+    
+    return scheduler.awaitTask( taskId )
+
+public function runtimeYield() -> Void:
+    
+    """
+    Voluntarily suspend the current task, allowing other tasks to run.
+    The current task transitions to the suspended state and will be
+    resumed in a later scheduling round.
+    """
+    
+    scheduler.taskYield()
+
+public function runtimeRun() -> Void:
+    
+    """
+    Run the scheduler event loop until all tasks have completed or failed.
+    This is the main entry point for driving async execution to completion.
+    After all tasks finish, performs cleanup of task resources.
+    """
+    
+    scheduler.run()
+
+public function runtimeComplete( I64 result ) -> Void:
+    
+    """
+    Mark the current task as successfully completed with the given result value.
+    Wakes any tasks that are awaiting this task and yields back to the scheduler.
+    
+    Parameters:
+        result (I64):
+            The result value to store for this task.
+    """
+    
+    scheduler.taskComplete( result )
+
+public function runtimeError( String message ) -> Void:
+    
+    """
+    Mark the current task as failed with an error. Wakes any tasks that are
+    awaiting this task and yields back to the scheduler.
+    
+    Parameters:
+        message (String):
+            Description of the error that caused the task to fail.
+    """
+    
+    scheduler.taskError( message )
+
+public function runtimeHasPending() -> Boolean:
+    
+    """
+    Check whether any tasks are still pending execution in the scheduler.
+    
+    Returns:
+        Boolean:
+            True if at least one task is not yet completed or failed.
+    """
+    
+    return scheduler.hasPending()
+
+public function runtimeAwaitFd( I64 fd, I64 events ) -> Void:
+    
+    """
+    Suspend the current task until the specified file descriptor becomes ready
+    for the given events. Registers the fd with epoll and yields to the scheduler.
+    
+    Parameters:
+        fd (I64):
+            The file descriptor to wait on.
+        events (I64):
+            Bitmask of epoll event flags to wait for (e.g., EPOLLIN).
+    """
+    
+    scheduler.awaitFd( fd, events )
+
+public function runtimeSleep( I64 milliseconds ) -> Void:
+    
+    """
+    Suspend the current task for the specified duration. Uses a timerfd
+    internally and yields to the scheduler, allowing other tasks to run
+    while waiting.
+    
+    Parameters:
+        milliseconds (I64):
+            Duration to sleep in milliseconds.
+    """
+    
+    scheduler.sleep( milliseconds )
+
+public function runtimeTaskHasError( I64 taskId ) -> Boolean:
+    
+    """
+    Check whether the specified task has terminated with an error.
+    
+    Parameters:
+        taskId (I64):
+            Identifier of the task to check.
+    
+    Returns:
+        Boolean:
+            True if the task failed or was not found; False if it completed
+            successfully or is still running.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 idx = scheduler.findTaskIndex( taskId )
+    if idx == -1:
+        return True
+    I64 taskAddr = scheduler.taskSlots.get( idx )
+    I64 hasErr = readI64At( taskAddr, FIELD_HAS_ERROR * 8 )
+    return hasErr != 0
+
+public function runtimeTaskGetError( I64 taskId ) -> String:
+    
+    """
+    Retrieve the error message for a failed task.
+    
+    Parameters:
+        taskId (I64):
+            Identifier of the task whose error message to retrieve.
+    
+    Returns:
+        String:
+            A description of why the awaited task failed.
+    """
+    
+    return "awaited task failed"
+
+public function runtimeTaskState( I64 taskId ) -> I64:
+    
+    """
+    Query the current state of a task by its identifier.
+    
+    Parameters:
+        taskId (I64):
+            Identifier of the task to query.
+    
+    Returns:
+        I64:
+            The task's current state constant (STATE_CREATED, STATE_RUNNING,
+            STATE_SUSPENDED, STATE_IO_WAITING, STATE_COMPLETED, or STATE_FAILED).
+            Returns STATE_FAILED if the task is not found.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 idx = scheduler.findTaskIndex( taskId )
+    if idx == -1:
+        return STATE_FAILED
+    I64 taskAddr = scheduler.taskSlots.get( idx )
+    return readI64At( taskAddr, FIELD_STATE * 8 )
+
+public function runtimeTaskResult( I64 taskId ) -> I64:
+    
+    """
+    Retrieve the result value of a completed task. Does not block; the task
+    must already be finished.
+    
+    Parameters:
+        taskId (I64):
+            Identifier of the task whose result to retrieve.
+    
+    Returns:
+        I64:
+            The result value stored by the task, or 0 if the task was not found.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 idx = scheduler.findTaskIndex( taskId )
+    if idx == -1:
+        return 0
+    I64 taskAddr = scheduler.taskSlots.get( idx )
+    return readI64At( taskAddr, FIELD_RESULT * 8 )
+
+export {
+    runtimeInit, runtimeSpawn, runtimeAwait,
+    runtimeYield, runtimeRun, runtimeComplete,
+    runtimeError, runtimeHasPending, runtimeAwaitFd,
+    runtimeSleep, runtimeTaskHasError, runtimeTaskGetError,
+    runtimeTaskState, runtimeTaskResult
+}

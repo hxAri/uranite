@@ -1,0 +1,494 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/stat.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# File status information from Linux stat syscall. Parses struct stat
+# (x86_64 layout, 144 bytes) into typed fields.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.stat
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    stringToPtr, memoryToPtr, readI32At, readI64At,
+    sysStat, sysFstat, sysLstat,
+    S_IFMT, S_IFREG, S_IFDIR, S_IFLNK, S_IFIFO, S_IFSOCK, S_IFCHR, S_IFBLK
+}
+
+public enum FileType:
+    
+    """
+    Enumeration of filesystem entry types as identified by the mode
+    field of a stat structure. Values correspond to the S_IFMT mask
+    results from the Linux stat syscall.
+    """
+    
+    unit Unknown 0
+    """The file type could not be determined."""
+    unit Regular 1
+    """A regular file."""
+    unit Directory 2
+    """A directory."""
+    unit Symlink 3
+    """A symbolic link."""
+    unit Pipe 4
+    """A named pipe (FIFO)."""
+    unit Socket 5
+    """A Unix domain socket."""
+    unit CharDevice 6
+    """A character device."""
+    unit BlockDevice 7
+    """A block device."""
+
+public Readonly class FileStat:
+    
+    """
+    Immutable representation of file status information obtained from
+    the Linux stat, lstat, or fstat syscalls. Parses the x86_64 struct
+    stat layout (144 bytes) into typed fields for device, inode, mode,
+    ownership, size, and timestamps.
+    """
+    
+    public I64 deviceId
+    """The device ID of the filesystem containing the file."""
+    public I64 inodeNumber
+    """The inode number uniquely identifying the file on its device."""
+    public I64 linkCount
+    """The number of hard links pointing to this inode."""
+    public I64 mode
+    """The file mode bits encoding file type and permissions."""
+    public I64 uid
+    """The user ID of the file owner."""
+    public I64 gid
+    """The group ID of the file owner."""
+    public I64 size
+    """The file size in bytes."""
+    public I64 blockSize
+    """The preferred block size for filesystem I/O operations."""
+    public I64 blocks
+    """The number of 512-byte blocks allocated for the file."""
+    public I64 accessTime
+    """The last access time as a Unix epoch timestamp in seconds."""
+    public I64 modifyTime
+    """The last modification time as a Unix epoch timestamp in seconds."""
+    public I64 changeTime
+    """The last status change time as a Unix epoch timestamp in seconds."""
+    
+    public function FileStat( self, I64 deviceId, I64 inodeNumber, I64 linkCount, I64 mode, I64 uid, I64 gid, I64 size, I64 blockSize, I64 blocks, I64 accessTime, I64 modifyTime, I64 changeTime ) -> Void:
+        
+        """
+        Construct a FileStat with all stat fields populated directly
+        from parsed syscall output.
+        
+        Parameters:
+            deviceId (I64):
+                The device ID of the filesystem containing the file.
+            inodeNumber (I64):
+                The inode number of the file.
+            linkCount (I64):
+                The number of hard links to the file.
+            mode (I64):
+                The raw mode bits encoding type and permissions.
+            uid (I64):
+                The user ID of the file owner.
+            gid (I64):
+                The group ID of the file owner.
+            size (I64):
+                The file size in bytes.
+            blockSize (I64):
+                The preferred I/O block size.
+            blocks (I64):
+                The number of 512-byte blocks allocated.
+            accessTime (I64):
+                The last access time as Unix epoch seconds.
+            modifyTime (I64):
+                The last modification time as Unix epoch seconds.
+            changeTime (I64):
+                The last status change time as Unix epoch seconds.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.deviceId = deviceId
+        self.inodeNumber = inodeNumber
+        self.linkCount = linkCount
+        self.mode = mode
+        self.uid = uid
+        self.gid = gid
+        self.size = size
+        self.blockSize = blockSize
+        self.blocks = blocks
+        self.accessTime = accessTime
+        self.modifyTime = modifyTime
+        self.changeTime = changeTime
+    
+    public function getDeviceId( self ) -> I64:
+        
+        """
+        Return the device ID of the filesystem containing the file.
+        
+        Returns:
+            I64:
+                The device identifier.
+        """
+        
+        return self.deviceId
+    
+    public function getInodeNumber( self ) -> I64:
+        
+        """
+        Return the inode number uniquely identifying the file within
+        its filesystem.
+        
+        Returns:
+            I64:
+                The inode number.
+        """
+        
+        return self.inodeNumber
+    
+    public function getLinkCount( self ) -> I64:
+        
+        """
+        Return the number of hard links pointing to this file.
+        
+        Returns:
+            I64:
+                The hard link count.
+        """
+        
+        return self.linkCount
+    
+    public function getMode( self ) -> I64:
+        
+        """
+        Return the raw file mode bits encoding both the file type
+        and permission bits.
+        
+        Returns:
+            I64:
+                The raw mode value from the stat structure.
+        """
+        
+        return self.mode
+    
+    public function getUid( self ) -> I64:
+        
+        """
+        Return the user ID of the file owner.
+        
+        Returns:
+            I64:
+                The owner's user ID.
+        """
+        
+        return self.uid
+    
+    public function getGid( self ) -> I64:
+        
+        """
+        Return the group ID of the file owner.
+        
+        Returns:
+            I64:
+                The owner's group ID.
+        """
+        
+        return self.gid
+    
+    public function getSize( self ) -> I64:
+        
+        """
+        Return the file size in bytes.
+        
+        Returns:
+            I64:
+                The file size.
+        """
+        
+        return self.size
+    
+    public function getBlockSize( self ) -> I64:
+        
+        """
+        Return the preferred block size for filesystem I/O operations
+        on this file.
+        
+        Returns:
+            I64:
+                The optimal I/O block size in bytes.
+        """
+        
+        return self.blockSize
+    
+    public function getBlocks( self ) -> I64:
+        
+        """
+        Return the number of 512-byte blocks allocated for the file
+        on disk.
+        
+        Returns:
+            I64:
+                The allocated block count.
+        """
+        
+        return self.blocks
+    
+    public function getAccessTime( self ) -> I64:
+        
+        """
+        Return the last access time of the file.
+        
+        Returns:
+            I64:
+                The access time as a Unix epoch timestamp in seconds.
+        """
+        
+        return self.accessTime
+    
+    public function getModifyTime( self ) -> I64:
+        
+        """
+        Return the last modification time of the file content.
+        
+        Returns:
+            I64:
+                The modification time as a Unix epoch timestamp in
+                seconds.
+        """
+        
+        return self.modifyTime
+    
+    public function getChangeTime( self ) -> I64:
+        
+        """
+        Return the last status change time of the file metadata.
+        
+        Returns:
+            I64:
+                The status change time as a Unix epoch timestamp in
+                seconds.
+        """
+        
+        return self.changeTime
+    
+    public function getFileType( self ) -> FileType:
+        
+        """
+        Determine the file type by masking the mode bits with S_IFMT
+        and mapping the result to a FileType enum variant.
+        
+        Returns:
+            FileType:
+                The type of the filesystem entry, or FileType.Unknown
+                if the type is not recognized.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 masked = self.mode & S_IFMT
+        if masked == S_IFREG:
+            return FileType.Regular
+        elif masked == S_IFDIR:
+            return FileType.Directory
+        elif masked == S_IFLNK:
+            return FileType.Symlink
+        elif masked == S_IFIFO:
+            return FileType.Pipe
+        elif masked == S_IFSOCK:
+            return FileType.Socket
+        elif masked == S_IFCHR:
+            return FileType.CharDevice
+        elif masked == S_IFBLK:
+            return FileType.BlockDevice
+        return FileType.Unknown
+    
+    public function isFile( self ) -> Boolean:
+        
+        """
+        Check whether this entry is a regular file.
+        
+        Returns:
+            Boolean:
+                True if the file type is S_IFREG.
+        """
+        
+        return ( self.mode & S_IFMT ) == S_IFREG
+    
+    public function isDirectory( self ) -> Boolean:
+        
+        """
+        Check whether this entry is a directory.
+        
+        Returns:
+            Boolean:
+                True if the file type is S_IFDIR.
+        """
+        
+        return ( self.mode & S_IFMT ) == S_IFDIR
+    
+    public function isSymlink( self ) -> Boolean:
+        
+        """
+        Check whether this entry is a symbolic link. Only meaningful
+        when the FileStat was obtained via lstatPath, since statPath
+        follows symlinks.
+        
+        Returns:
+            Boolean:
+                True if the file type is S_IFLNK.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return ( self.mode & S_IFMT ) == S_IFLNK
+
+function parseStatBuffer( I64 bufAddr ) -> FileStat:
+    
+    """
+    Parse a raw x86_64 struct stat buffer into a FileStat object by
+    reading fields at their fixed byte offsets. The buffer must be at
+    least 144 bytes (18 I64 words).
+    
+    Parameters:
+        bufAddr (I64):
+            The memory address of the raw stat buffer.
+    
+    Returns:
+        FileStat:
+            A new FileStat populated with all parsed fields.
+    """
+    
+    I64 deviceId = readI64At( bufAddr, 0 )
+    I64 inodeNumber = readI64At( bufAddr, 8 )
+    I64 linkCount = readI64At( bufAddr, 16 )
+    I64 mode = readI32At( bufAddr, 24 )
+    I64 uid = readI32At( bufAddr, 28 )
+    I64 gid = readI32At( bufAddr, 32 )
+    I64 size = readI64At( bufAddr, 48 )
+    I64 blockSize = readI64At( bufAddr, 56 )
+    I64 blocks = readI64At( bufAddr, 64 )
+    I64 accessTime = readI64At( bufAddr, 72 )
+    I64 modifyTime = readI64At( bufAddr, 88 )
+    I64 changeTime = readI64At( bufAddr, 104 )
+    return new FileStat( deviceId, inodeNumber, linkCount, mode, uid, gid, size, blockSize, blocks, accessTime, modifyTime, changeTime )
+
+public function statPath( String path ) -> FileStat:
+    
+    """
+    Obtain file status information for the given path using the stat
+    syscall. Follows symbolic links to report on the target file.
+    
+    Parameters:
+        path (String):
+            The filesystem path to stat.
+    
+    Returns:
+        FileStat:
+            The file status information.
+    
+    Raises:
+        IOError:
+            If the stat syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> buf = new Memory<I64>( 18 )
+    I64 bufAddr = memoryToPtr( buf )
+    I64 pathPtr = stringToPtr( path )
+    sysStat( pathPtr, bufAddr )
+    FileStat result = parseStatBuffer( bufAddr )
+    buf.free()
+    return result
+
+public function lstatPath( String path ) -> FileStat:
+    
+    """
+    Obtain file status information for the given path using the lstat
+    syscall. Does not follow symbolic links, so the returned FileStat
+    describes the link itself rather than its target.
+    
+    Parameters:
+        path (String):
+            The filesystem path to lstat.
+    
+    Returns:
+        FileStat:
+            The file status information for the link or file.
+    
+    Raises:
+        IOError:
+            If the lstat syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> buf = new Memory<I64>( 18 )
+    I64 bufAddr = memoryToPtr( buf )
+    I64 pathPtr = stringToPtr( path )
+    sysLstat( pathPtr, bufAddr )
+    FileStat result = parseStatBuffer( bufAddr )
+    buf.free()
+    return result
+
+public function fstatFd( I64 fd ) -> FileStat:
+    
+    """
+    Obtain file status information for an open file descriptor using
+    the fstat syscall.
+    
+    Parameters:
+        fd (I64):
+            The open file descriptor to stat.
+    
+    Returns:
+        FileStat:
+            The file status information.
+    
+    Raises:
+        IOError:
+            If the fstat syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> buf = new Memory<I64>( 18 )
+    I64 bufAddr = memoryToPtr( buf )
+    sysFstat( fd, bufAddr )
+    FileStat result = parseStatBuffer( bufAddr )
+    buf.free()
+    return result
+
+export {
+    FileType,
+    FileStat,
+    statPath,
+    lstatPath,
+    fstatFd
+}

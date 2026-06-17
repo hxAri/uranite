@@ -1,0 +1,142 @@
+package uranite.coroutine.scheduler
+
+from uranite.errors.error import Error
+from uranite.memory.memory import Memory
+from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.fiber.fiber import {
+    Fiber,
+    fiberSuspend,
+    fiberTrampoline,
+    gCurrentFiberPtr,
+    gCallerRspPtr,
+    FIBER_CREATED,
+    FIBER_RUNNING,
+    FIBER_SUSPENDED,
+    FIBER_TERMINATED,
+    F_STATE,
+    F_CONTEXT_RSP
+}
+from uranite.async.context import swapContext
+
+public class SchedulerError extends Error:
+    
+    public function SchedulerError( self, String message ) -> Void:
+        parent( message, 0, None )
+
+const I64 MAX_COROUTINES = 512
+
+public interface Scheduler:
+    
+    public function spawn( self, I64 entryFn ) -> I64 raises SchedulerError:
+        
+        """ Spawn new coroutine, return ID. """
+    
+    public function run( self ) -> Void:
+        
+        """ Run event loop until all coroutines complete. """
+    
+    public function hasPending( self ) -> Boolean:
+        
+        """
+        Check for pending coroutines.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+public class CoroutineScheduler implements Scheduler:
+    public Memory<I64> slots
+    public I64 count
+    public I64 nextId
+    public I64 currentIdx
+    public Memory<I64> mainRspBuf
+    
+    public function CoroutineScheduler( self ) -> Void:
+        self.slots = new Memory<I64>( MAX_COROUTINES )
+        self.count = 0
+        self.nextId = 1
+        self.currentIdx = -1
+        self.mainRspBuf = new Memory<I64>( 1 )
+        self.mainRspBuf.set( 0, 0 )
+        I64 slotIndex = 0
+        while slotIndex < MAX_COROUTINES:
+            self.slots.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+
+    public function spawn( self, I64 entryFn ) -> I64:
+        if self.count >= MAX_COROUTINES:
+            raise new SchedulerError( "maximum coroutine count reached" )
+        Fiber fiber = new Fiber( entryFn )
+        I64 fiberAddr = memoryToPtr( fiber.data )
+        I64 id = self.nextId
+        self.nextId = self.nextId + 1
+        I64 slotIndex = 0
+        while slotIndex < MAX_COROUTINES:
+            I64 slot = self.slots.get( slotIndex )
+            if slot == 0:
+                self.slots.set( slotIndex, fiberAddr )
+                self.count = self.count + 1
+                return id
+            slotIndex = slotIndex + 1
+        raise new SchedulerError( "no free coroutine slot" )
+    
+    public function yieldCurrent( self ) -> Void:
+        if self.currentIdx < 0:
+            return
+        fiberSuspend( 0 )
+    
+    public function hasPending( self ) -> Boolean:
+        I64 slotIndex = 0
+        while slotIndex < MAX_COROUTINES:
+            I64 fiberAddr = self.slots.get( slotIndex )
+            if fiberAddr != 0:
+                I64 state = readI64At( fiberAddr, F_STATE * 8 )
+                if state == FIBER_CREATED or state == FIBER_SUSPENDED:
+                    return True
+            slotIndex = slotIndex + 1
+        return False
+
+    public function runOnce( self ) -> Void:
+        I64 slotIndex = 0
+        while slotIndex < MAX_COROUTINES:
+            I64 fiberAddr = self.slots.get( slotIndex )
+            if fiberAddr != 0:
+                I64 state = readI64At( fiberAddr, F_STATE * 8 )
+                if state == FIBER_CREATED or state == FIBER_SUSPENDED:
+                    self.currentIdx = slotIndex
+                    writeI64At( fiberAddr, F_STATE * 8, FIBER_RUNNING )
+                    I64 mainPtr = memoryToPtr( self.mainRspBuf )
+                    I64 fiberRspPtr = fiberAddr + F_CONTEXT_RSP * 8
+                    gCurrentFiberPtr = fiberAddr
+                    gCallerRspPtr = mainPtr
+                    swapContext( mainPtr, fiberRspPtr )
+                    self.currentIdx = -1
+                    return
+            slotIndex = slotIndex + 1
+    
+    public function run( self ) -> Void:
+        while self.hasPending():
+            self.runOnce()
+        self.cleanup()
+    
+    public function cleanup( self ) -> Void:
+        I64 slotIndex = 0
+        while slotIndex < MAX_COROUTINES:
+            I64 fiberAddr = self.slots.get( slotIndex )
+            if fiberAddr != 0:
+                self.slots.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+        self.count = 0
+    
+    public function destroy( self ) -> Void:
+        self.cleanup()
+        self.slots.free()
+        self.mainRspBuf.free()
+
+export {
+    Scheduler,
+    SchedulerError,
+    CoroutineScheduler,
+    MAX_COROUTINES
+}

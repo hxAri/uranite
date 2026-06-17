@@ -1,0 +1,79 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/color-name-entry.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the ColorNameEntry struct that associates a human-readable color name
+# string with its corresponding hexadecimal color value. Used as the data element
+# in the color name database for looking up named colors by hex code or finding
+# the closest named color to an arbitrary hex value.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.color-name-entry
+
+from uranite.language.string import String
+
+public struct ColorNameEntry:
+    
+    """
+    Associates a human-readable color name with its hexadecimal color value.
+    For example, the name "Deep Jungle Green" is associated with the hex value
+    0x004B49. This struct serves as the fundamental data element in the color
+    name database, enabling bidirectional lookups between color names and their
+    numeric representations.
+    """
+    
+    public String name
+    public I32 hex
+    
+    public function ColorNameEntry( self, String name, I32 hex ) -> Void:
+        
+        """
+        Construct a new color name entry binding the given name string to a
+        hexadecimal color value.
+        
+        Parameters:
+            name (String):
+                The human-readable name for this color, such as "Alice Blue"
+                or "Deep Jungle Green".
+            hex (I32):
+                The 24-bit hexadecimal color value where bits 16-23 are red,
+                bits 8-15 are green, and bits 0-7 are blue.
+        """
+        
+        self.name = name
+        self.hex = hex
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a human-readable string representation of this color name entry
+        in the format "ColorNameEntry(name, hex)" showing the name and its
+        associated hexadecimal value.
+        
+        Returns:
+            String:
+                A string representation such as "ColorNameEntry(Deep Jungle Green, 19273)".
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return "ColorNameEntry(" + self.name + ", " + self.hex + ")"
+
+export {
+    ColorNameEntry
+}

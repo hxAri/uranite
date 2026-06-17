@@ -1,0 +1,12 @@
+package testing
+
+from uranite.sys.errors import SyscallError
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Sys Errors Tests ===" )
+
+    putsln( "SyscallError imported OK" )
+
+    putsln( "=== All Sys Errors Tests Passed ===" )
+    return 0

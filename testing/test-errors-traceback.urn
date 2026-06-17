@@ -1,0 +1,27 @@
+package testing
+
+from uranite.errors.traceback import Traceback
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Traceback Tests ===" )
+
+    Traceback tb = new Traceback( "main.urn", 42, "doStuff", "testing" )
+    assertEqualStr( "main.urn", tb.getFile(), "getFile" )
+    assertEqualI64( 42, tb.getLine(), "getLine" )
+    assertEqualStr( "doStuff", tb.getFunctionName(), "getFunctionName" )
+    assertEqualStr( "testing", tb.getModuleName(), "getModuleName" )
+    assertEqualStr( "main.urn", tb.toString(), "toString returns file" )
+    putsln( "traceback 1 OK" )
+
+    Traceback tb2 = new Traceback( "utils.urn", 100, "parseInput", "uranite.utils" )
+    assertEqualStr( "utils.urn", tb2.getFile(), "tb2 getFile" )
+    assertEqualI64( 100, tb2.getLine(), "tb2 getLine" )
+    assertEqualStr( "parseInput", tb2.getFunctionName(), "tb2 getFunctionName" )
+    assertEqualStr( "uranite.utils", tb2.getModuleName(), "tb2 getModuleName" )
+    assertEqualStr( "utils.urn", tb2.toString(), "tb2 toString" )
+    putsln( "traceback 2 OK" )
+
+    putsln( "=== All traceback tests passed ===" )
+    return 0

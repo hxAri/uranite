@@ -1,0 +1,75 @@
+package testing
+
+from uranite.convert.convert import {
+    intToString,
+    stringToInt,
+    floatToString,
+    stringToFloat,
+    boolToString,
+    hexToInt,
+    intToHex,
+    intToBin
+}
+from uranite.testing.assertions import {
+    assertEqualStr,
+    assertEqualI64,
+    assertEqualF64,
+    assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Convert Tests ===" )
+
+    # intToString
+    assertEqualStr( "0", intToString( 0 ), "intToString(0)" )
+    assertEqualStr( "42", intToString( 42 ), "intToString(42)" )
+    assertEqualStr( "-99", intToString( -99 ), "intToString(-99)" )
+    assertEqualStr( "1000000", intToString( 1000000 ), "intToString(1000000)" )
+    putsln( "intToString OK" )
+
+    # stringToInt
+    assertEqualI64( 0, stringToInt( "0" ), "stringToInt('0')" )
+    assertEqualI64( 42, stringToInt( "42" ), "stringToInt('42')" )
+    assertEqualI64( -99, stringToInt( "-99" ), "stringToInt('-99')" )
+    assertEqualI64( 123, stringToInt( "+123" ), "stringToInt('+123')" )
+    putsln( "stringToInt OK" )
+
+    # floatToString
+    assertEqualStr( "3.14", floatToString( 3.14, 2 ), "floatToString(3.14,2)" )
+    assertEqualStr( "-1.5", floatToString( -1.5, 1 ), "floatToString(-1.5,1)" )
+    assertEqualStr( "0.000", floatToString( 0.0, 3 ), "floatToString(0.0,3)" )
+    putsln( "floatToString OK" )
+
+    # stringToFloat
+    assertEqualF64( 3.14, stringToFloat( "3.14" ), 0.001, "stringToFloat('3.14')" )
+    assertEqualF64( -1.5, stringToFloat( "-1.5" ), 0.001, "stringToFloat('-1.5')" )
+    assertEqualF64( 100.0, stringToFloat( "100" ), 0.001, "stringToFloat('100')" )
+    putsln( "stringToFloat OK" )
+
+    # boolToString
+    assertEqualStr( "true", boolToString( True ), "boolToString(True)" )
+    assertEqualStr( "false", boolToString( False ), "boolToString(False)" )
+    putsln( "boolToString OK" )
+
+    # hexToInt
+    assertEqualI64( 255, hexToInt( "0xFF" ), "hexToInt('0xFF')" )
+    assertEqualI64( 16, hexToInt( "0x10" ), "hexToInt('0x10')" )
+    assertEqualI64( 255, hexToInt( "FF" ), "hexToInt('FF')" )
+    assertEqualI64( 57005, hexToInt( "0xDEAD" ), "hexToInt('0xDEAD')" )
+    putsln( "hexToInt OK" )
+
+    # intToHex
+    assertEqualStr( "0xff", intToHex( 255 ), "intToHex(255)" )
+    assertEqualStr( "0x0", intToHex( 0 ), "intToHex(0)" )
+    assertEqualStr( "0x10", intToHex( 16 ), "intToHex(16)" )
+    putsln( "intToHex OK" )
+
+    # intToBin
+    assertEqualStr( "0b1010", intToBin( 10 ), "intToBin(10)" )
+    assertEqualStr( "0b0", intToBin( 0 ), "intToBin(0)" )
+    assertEqualStr( "0b11111111", intToBin( 255 ), "intToBin(255)" )
+    putsln( "intToBin OK" )
+
+    putsln( "=== All convert tests passed ===" )
+    return 0

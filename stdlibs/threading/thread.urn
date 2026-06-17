@@ -1,0 +1,622 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/thread.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Core thread types: ThreadRuntime manages kernel subsystem access,
+# Thread represents an individual execution context with its own stack.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.thread
+
+from uranite.memory.memory import Memory
+from uranite.os.task.task import Task, TaskState, BlockReason
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.sync.spinlock import Spinlock
+from uranite.os.ipc.signal import Event
+from uranite.os.time.clock import SystemClock
+from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.threading.errors import ThreadError
+
+const I64 DEFAULT_STACK_PAGES = 8
+"""Default number of memory pages allocated for a thread's stack."""
+
+const I64 PAGE_SIZE = 4096
+"""Size of a single memory page in bytes."""
+
+const I64 DEFAULT_PRIORITY = 5
+"""Default scheduling priority for newly created threads."""
+
+const I64 STATE_NEW = 0
+"""Thread state indicating it has been created but not yet started."""
+
+const I64 STATE_RUNNING = 1
+"""Thread state indicating it is currently executing."""
+
+const I64 STATE_FINISHED = 2
+"""Thread state indicating it has completed execution."""
+
+const I64 STATE_DETACHED = 3
+"""Thread state indicating it has been detached from its owner."""
+
+public class ThreadRuntime:
+    
+    """
+    Central runtime providing access to kernel subsystems needed for
+    threading: the task scheduler, physical memory manager, system clock,
+    and a task pointer registry. All threads in a program share a single
+    ThreadRuntime instance which manages thread ID allocation, stack
+    allocation/deallocation, and task registration.
+    
+    Built entirely on bare-metal OS modules with no C/C++ runtime dependency.
+    """
+    
+    protect Scheduler scheduler
+    """The kernel task scheduler managing thread execution order."""
+    
+    protect PhysicalMemoryManager pmm
+    """Physical memory manager for allocating and freeing thread stacks."""
+    
+    protect SystemClock clock
+    """System clock providing timing services."""
+    
+    protect Spinlock guard
+    """Spinlock protecting the task pointer registry from concurrent modification."""
+    
+    protect AtomicI64 nextThreadId
+    """Atomic counter for generating unique thread identifiers."""
+    
+    protect AtomicBoolean initialized
+    """Atomic flag indicating the runtime has been initialized."""
+    
+    protect Memory<I64> taskPointers
+    """Registry mapping task IDs to their raw task pointers."""
+    
+    protect I64 maxTasks
+    """Maximum number of concurrent tasks the runtime can track."""
+    
+    public function ThreadRuntime( self, Scheduler scheduler, PhysicalMemoryManager pmm, SystemClock clock, I64 maxTasks ) -> Void:
+        
+        """
+        Create a new thread runtime with the given kernel subsystems.
+        
+        Parameters:
+            scheduler (Scheduler):
+                The kernel task scheduler for enqueuing and managing threads.
+            pmm (PhysicalMemoryManager):
+                The physical memory manager for stack allocation.
+            clock (SystemClock):
+                The system clock for timing operations.
+            maxTasks (I64):
+                Maximum number of concurrent tasks the runtime can track.
+                Task IDs must be less than this value.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.scheduler = scheduler
+        self.pmm = pmm
+        self.clock = clock
+        self.guard = new Spinlock()
+        self.nextThreadId = new AtomicI64( 1 )
+        self.initialized = new AtomicBoolean( True )
+        self.maxTasks = maxTasks
+        self.taskPointers = new Memory<I64>( maxTasks )
+        I64 slotIndex = 0
+        while slotIndex < maxTasks:
+            self.taskPointers.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function allocateStack( self, I64 stackPages ) -> I64:
+        
+        """
+        Allocate a contiguous region of physical memory for a thread stack.
+        Allocates one extra page beyond the requested size for a guard page.
+        
+        Parameters:
+            stackPages (I64):
+                Number of pages for the usable stack area.
+        
+        Returns:
+            I64:
+                Base address of the allocated stack region.
+        """
+        
+        I64 totalPages = stackPages + 1
+        I64 baseAddr = self.pmm.allocContiguous( totalPages )
+        return baseAddr
+    
+    public function freeStack( self, I64 stackBase, I64 stackPages ) -> Void:
+        
+        """
+        Free a previously allocated thread stack region.
+        
+        Parameters:
+            stackBase (I64):
+                Base address of the stack region to free.
+            stackPages (I64):
+                Number of usable stack pages (the guard page is freed
+                automatically).
+        """
+        
+        I64 totalPages = stackPages + 1
+        self.pmm.freeRegion( stackBase, totalPages )
+    
+    public function allocateThreadId( self ) -> I64:
+        
+        """
+        Atomically allocate a unique thread identifier.
+        
+        Returns:
+            I64:
+                A unique, monotonically increasing thread ID.
+        """
+        
+        return self.nextThreadId.fetchAdd( 1 )
+    
+    public function registerTask( self, I64 taskId, I64 taskPointer ) -> Void:
+        
+        """
+        Register a task pointer in the runtime's task registry. Protected
+        by a spinlock for thread safety.
+        
+        Parameters:
+            taskId (I64):
+                The task identifier to register. Must be greater than 0
+                and less than maxTasks.
+            taskPointer (I64):
+                Raw pointer to the task structure.
+        """
+        
+        self.guard.lock()
+        if taskId > 0 and taskId < self.maxTasks:
+            self.taskPointers.set( taskId, taskPointer )
+        self.guard.unlock()
+    
+    public function lookupTaskPointer( self, I64 taskId ) -> I64:
+        
+        """
+        Look up a task pointer by its identifier.
+        
+        Parameters:
+            taskId (I64):
+                The task identifier to look up.
+        
+        Returns:
+            I64:
+                The raw task pointer, or 0 if the task ID is out of range
+                or not registered.
+        """
+        
+        if taskId <= 0 or taskId >= self.maxTasks:
+            return 0
+        return self.taskPointers.get( taskId )
+    
+    public function unregisterTask( self, I64 taskId ) -> Void:
+        
+        """
+        Remove a task from the runtime's task registry. Protected by a
+        spinlock for thread safety.
+        
+        Parameters:
+            taskId (I64):
+                The task identifier to unregister.
+        """
+        
+        self.guard.lock()
+        if taskId > 0 and taskId < self.maxTasks:
+            self.taskPointers.set( taskId, 0 )
+        self.guard.unlock()
+    
+    public function getScheduler( self ) -> Scheduler:
+        
+        """
+        Return the kernel task scheduler.
+        
+        Returns:
+            Scheduler:
+                The scheduler instance managed by this runtime.
+        """
+        
+        return self.scheduler
+    
+    public function getPmm( self ) -> PhysicalMemoryManager:
+        
+        """
+        Return the physical memory manager.
+        
+        Returns:
+            PhysicalMemoryManager:
+                The PMM instance managed by this runtime.
+        """
+        
+        return self.pmm
+    
+    public function getClock( self ) -> SystemClock:
+        
+        """
+        Return the system clock.
+        
+        Returns:
+            SystemClock:
+                The clock instance managed by this runtime.
+        """
+        
+        return self.clock
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by the runtime, including the task
+        pointer registry and atomic counters.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.taskPointers.free()
+        self.nextThreadId.destroy()
+        self.initialized.destroy()
+
+public class ThreadConfig:
+    
+    """
+    Builder for configuring thread parameters before spawning. Provides
+    a fluent interface for setting stack size, scheduling priority, and
+    thread name. Each setter returns the config instance for method chaining.
+    """
+    
+    public I64 stackPages
+    """Number of memory pages for the thread's stack."""
+    
+    public I64 priority
+    """Scheduling priority for the thread."""
+    
+    public String name
+    """Human-readable name for the thread, used for debugging."""
+    
+    public function ThreadConfig( self ) -> Void:
+        
+        """
+        Create a new thread configuration with default values: 8 stack
+        pages, priority 5, and an empty name.
+        """
+        
+        self.stackPages = DEFAULT_STACK_PAGES
+        self.priority = DEFAULT_PRIORITY
+        self.name = ""
+    
+    public function setStackSize( self, I64 pages ) -> ThreadConfig:
+        
+        """
+        Set the number of stack pages for the thread.
+        
+        Parameters:
+            pages (I64):
+                Number of memory pages to allocate for the stack.
+        
+        Returns:
+            ThreadConfig:
+                This configuration instance for method chaining.
+        """
+        
+        self.stackPages = pages
+        return self
+    
+    public function setPriority( self, I64 prio ) -> ThreadConfig:
+        
+        """
+        Set the scheduling priority for the thread.
+        
+        Parameters:
+            prio (I64):
+                The priority level. Higher values indicate higher priority.
+        
+        Returns:
+            ThreadConfig:
+                This configuration instance for method chaining.
+        """
+        
+        self.priority = prio
+        return self
+    
+    public function setName( self, String threadName ) -> ThreadConfig:
+
+        """
+        Set a human-readable name for the thread.
+
+        Parameters:
+            threadName (String):
+                The thread name, used for debugging and identification.
+
+        Returns:
+            ThreadConfig:
+                This configuration instance for method chaining.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        self.name = threadName
+        return self
+
+public class Thread:
+    
+    """
+    Individual execution context with its own stack, task, and lifecycle
+    state. Wraps an OS-level Task with thread-specific state management
+    including completion signaling, result storage, and panic tracking.
+    
+    A thread progresses through states: New -> Running -> Finished (or
+    Detached). The completion event is signaled when the thread finishes,
+    allowing JoinHandle or other waiters to be notified.
+    """
+    
+    protect Task task
+    """The underlying OS task representing this thread's execution context."""
+    
+    protect I64 threadId
+    """Unique identifier for this thread."""
+    
+    protect I64 stackBasePhys
+    """Physical base address of the allocated stack region."""
+    
+    protect I64 stackPages
+    """Number of usable stack pages allocated for this thread."""
+    
+    protect ThreadRuntime runtime
+    """Reference to the shared thread runtime for resource management."""
+    
+    protect Event completionEvent
+    """Event signaled when the thread finishes execution."""
+    
+    protect AtomicI64 state
+    """Atomic state tracking the thread's lifecycle phase."""
+    
+    protect Memory<I64> resultSlot
+    """Single-element buffer storing the thread's return value."""
+    
+    protect AtomicBoolean panicked
+    """Atomic flag indicating whether the thread terminated due to a panic."""
+    
+    public function Thread( self, ThreadRuntime runtime, I64 threadId, I64 stackPages, I64 priority ) -> Void:
+        
+        """
+        Create a new thread with the given configuration. Allocates a stack
+        from the runtime's physical memory manager, creates an OS task with
+        the specified priority, and registers the task in the runtime.
+        
+        The thread is created in the New state and must be started via
+        start() to begin execution.
+        
+        Parameters:
+            runtime (ThreadRuntime):
+                The shared thread runtime for stack allocation and scheduling.
+            threadId (I64):
+                Unique identifier for this thread.
+            stackPages (I64):
+                Number of memory pages to allocate for the thread's stack.
+            priority (I64):
+                Scheduling priority for the thread's underlying task.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.runtime = runtime
+        self.threadId = threadId
+        self.stackPages = stackPages
+        self.resultSlot = new Memory<I64>( 1 )
+        self.resultSlot.set( 0, 0 )
+        self.state = new AtomicI64( STATE_NEW )
+        self.panicked = new AtomicBoolean( False )
+        self.completionEvent = new Event()
+        
+        I64 stackBase = runtime.allocateStack( stackPages )
+        self.stackBasePhys = stackBase
+        
+        I64 taskId = runtime.getScheduler().allocateTaskId()
+        I64 stackSize = ( stackPages + 1 ) * PAGE_SIZE
+        self.task = new Task( taskId, stackSize, priority )
+        
+        I64 stackTop = stackBase + stackSize
+        self.task.setEntryPoint( 0, stackTop )
+        
+        runtime.registerTask( taskId, 0 )
+    
+    public function start( self, I64 entryAddr ) -> Void:
+        
+        """
+        Start the thread's execution at the given function address. Sets
+        the entry point, passes the thread ID in rdi, transitions the state
+        to Running, and enqueues the task in the scheduler.
+        
+        Parameters:
+            entryAddr (I64):
+                Raw address of the entry point function. The function
+                receives the thread ID as its first argument via rdi.
+        """
+        
+        self.task.setEntryPoint( entryAddr, self.task.registers.rsp )
+        self.task.registers.rdi = self.threadId
+        self.state.store( STATE_RUNNING )
+        self.runtime.getScheduler().enqueue( self.task )
+    
+    public function getThreadId( self ) -> I64:
+        
+        """
+        Return the unique identifier of this thread.
+        
+        Returns:
+            I64:
+                The thread's numeric identifier.
+        """
+        
+        return self.threadId
+    
+    public function getTask( self ) -> Task:
+        
+        """
+        Return the underlying OS task for direct register manipulation
+        or scheduler interaction.
+        
+        Returns:
+            Task:
+                The OS-level task backing this thread.
+        """
+        
+        return self.task
+    
+    public function getCompletionEvent( self ) -> Event:
+        
+        """
+        Return the completion event that is signaled when this thread
+        finishes execution.
+        
+        Returns:
+            Event:
+                The kernel event used for completion notification.
+        """
+        
+        return self.completionEvent
+    
+    public function setResult( self, I64 value ) -> Void:
+        
+        """
+        Store a result value for this thread, to be retrieved by the
+        joiner after the thread finishes.
+        
+        Parameters:
+            value (I64):
+                The result value to store.
+        """
+        
+        self.resultSlot.set( 0, value )
+    
+    public function getResult( self ) -> I64:
+        
+        """
+        Retrieve the result value stored by the thread.
+        
+        Returns:
+            I64:
+                The result value, or 0 if no result was set.
+        """
+        
+        return self.resultSlot.get( 0 )
+    
+    public function markFinished( self ) -> Void:
+        
+        """
+        Transition the thread to the Finished state and signal the
+        completion event to wake any blocked joiners.
+        """
+        
+        self.state.store( STATE_FINISHED )
+        self.completionEvent.signal( 1 )
+    
+    public function markPanicked( self ) -> Void:
+        
+        """
+        Mark the thread as having panicked and transition to the Finished
+        state. The panic flag can be checked by joiners to detect abnormal
+        termination.
+        """
+        
+        self.panicked.store( True )
+        self.markFinished()
+    
+    public function hasPanicked( self ) -> Boolean:
+        
+        """
+        Check whether the thread terminated due to a panic.
+        
+        Returns:
+            Boolean:
+                True if the thread panicked during execution.
+        """
+        
+        return self.panicked.load()
+    
+    public function isFinished( self ) -> Boolean:
+        
+        """
+        Check whether the thread has finished execution.
+        
+        Returns:
+            Boolean:
+                True if the thread is in the Finished or Detached state.
+        """
+        
+        return self.state.load() >= STATE_FINISHED
+    
+    public function isDetached( self ) -> Boolean:
+        
+        """
+        Check whether the thread has been detached from its owner.
+        
+        Returns:
+            Boolean:
+                True if the thread is in the Detached state.
+        """
+        
+        return self.state.load() == STATE_DETACHED
+    
+    public function detach( self ) -> Void:
+        
+        """
+        Transition the thread to the Detached state, indicating that no
+        owner will join or clean up this thread.
+        """
+        
+        self.state.store( STATE_DETACHED )
+    
+    public function cleanup( self ) -> Void:
+        
+        """
+        Release all resources held by this thread: unregisters the task
+        from the runtime, terminates the OS task, frees the stack memory,
+        and destroys the result slot and atomic state variables.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.runtime.unregisterTask( self.task.id )
+        self.task.terminate()
+        self.runtime.freeStack( self.stackBasePhys, self.stackPages )
+        self.resultSlot.free()
+        self.state.destroy()
+        self.panicked.destroy()
+
+export {
+    ThreadRuntime,
+    ThreadConfig,
+    Thread,
+    DEFAULT_STACK_PAGES,
+    DEFAULT_PRIORITY,
+    PAGE_SIZE,
+    STATE_NEW,
+    STATE_RUNNING,
+    STATE_FINISHED,
+    STATE_DETACHED
+}

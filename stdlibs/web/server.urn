@@ -1,0 +1,324 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/server.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# HttpServer: socket binding, accept loop, request parsing,
+# route dispatch, response serialization. Uses raw syscalls.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.server
+
+from uranite.net.socket import { tcpListen, socketAccept, socketRecv, sendString, socketClose, setTcpNoDelay }
+from uranite.io.syscall import readByteAt, writeByteAt, stringToPtr, stringLen
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString, substring, indexOf
+from uranite.web.config import ServerConfig
+from uranite.web.router import Router, MatchResult
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+from uranite.web.route import Route
+from uranite.io.console import putsln
+
+const I64 RECV_BUF_SIZE = 16384
+""" Size in bytes of the receive buffer for incoming client data. """
+
+function parseMethod( String raw ) -> String:
+    
+    """
+    Extract the HTTP method from a raw HTTP request string.
+    
+    Reads from the start of the string up to the first space character
+    (ASCII 32), which separates the method from the request URI.
+    
+    Parameters:
+        raw (String):
+            The raw HTTP request data.
+    
+    Returns:
+        String:
+            The HTTP method (e.g., "GET", "POST").
+    """
+    
+    I64 ptr = stringToPtr( raw )
+    I64 len = stringLen( raw )
+    I64 spacePos = 0
+    Boolean found = False
+    while spacePos < len and found == False:
+        if readByteAt( ptr, spacePos ) == 32:
+            found = True
+        else:
+            spacePos = spacePos + 1
+    return substring( raw, 0, spacePos )
+
+function parsePath( String raw ) -> String:
+    
+    """
+    Extract the request URI path from a raw HTTP request string.
+    
+    Parses the text between the first and second space characters in the
+    HTTP request line (e.g., "GET /path HTTP/1.1" yields "/path").
+    
+    Parameters:
+        raw (String):
+            The raw HTTP request data.
+    
+    Returns:
+        String:
+            The request URI path, or "/" if no path could be parsed.
+    """
+    
+    I64 ptr = stringToPtr( raw )
+    I64 len = stringLen( raw )
+    I64 firstSpace = -1
+    I64 scanOffset = 0
+    while scanOffset < len and firstSpace == -1:
+        if readByteAt( ptr, scanOffset ) == 32:
+            firstSpace = scanOffset
+        scanOffset = scanOffset + 1
+    if firstSpace == -1:
+        return "/"
+    I64 pathStart = firstSpace + 1
+    I64 secondSpace = -1
+    scanOffset = pathStart
+    while scanOffset < len and secondSpace == -1:
+        if readByteAt( ptr, scanOffset ) == 32:
+            secondSpace = scanOffset
+        scanOffset = scanOffset + 1
+    if secondSpace == -1:
+        secondSpace = len
+    return substring( raw, pathStart, secondSpace )
+
+function parseBody( String raw ) -> String:
+    
+    """
+    Extract the body content from a raw HTTP request string.
+    
+    Locates the double CRLF sequence (\\r\\n\\r\\n) that separates headers
+    from the body and returns everything after it.
+    
+    Parameters:
+        raw (String):
+            The raw HTTP request data.
+    
+    Returns:
+        String:
+            The request body, or empty string if no body is present.
+    """
+    
+    I64 ptr = stringToPtr( raw )
+    I64 len = stringLen( raw )
+    I64 scanOffset = 0
+    while scanOffset < len - 3:
+        if readByteAt( ptr, scanOffset ) == 13 and readByteAt( ptr, scanOffset + 1 ) == 10 and readByteAt( ptr, scanOffset + 2 ) == 13 and readByteAt( ptr, scanOffset + 3 ) == 10:
+            I64 bodyStart = scanOffset + 4
+            if bodyStart < len:
+                return substring( raw, bodyStart, len )
+            return ""
+        scanOffset = scanOffset + 1
+    return ""
+
+function parseHeaders( String raw ) -> String:
+    
+    """
+    Extract the raw header block from an HTTP request string.
+    
+    Returns the text between the first CRLF (end of request line) and the
+    double CRLF (end of headers), which contains all header lines.
+    
+    Parameters:
+        raw (String):
+            The raw HTTP request data.
+    
+    Returns:
+        String:
+            The raw header block, or empty string if no headers are found.
+    """
+    
+    I64 ptr = stringToPtr( raw )
+    I64 len = stringLen( raw )
+    I64 firstLineEnd = -1
+    I64 scanOffset = 0
+    while scanOffset < len - 1 and firstLineEnd == -1:
+        if readByteAt( ptr, scanOffset ) == 13 and readByteAt( ptr, scanOffset + 1 ) == 10:
+            firstLineEnd = scanOffset
+        scanOffset = scanOffset + 1
+    if firstLineEnd == -1:
+        return ""
+    I64 headerStart = firstLineEnd + 2
+    I64 headerEnd = -1
+    scanOffset = headerStart
+    while scanOffset < len - 3 and headerEnd == -1:
+        if readByteAt( ptr, scanOffset ) == 13 and readByteAt( ptr, scanOffset + 1 ) == 10 and readByteAt( ptr, scanOffset + 2 ) == 13 and readByteAt( ptr, scanOffset + 3 ) == 10:
+            headerEnd = scanOffset
+        scanOffset = scanOffset + 1
+    if headerEnd == -1:
+        headerEnd = len
+    return substring( raw, headerStart, headerEnd )
+
+public class HttpServer:
+    
+    """
+    HTTP/1.1 server that binds to a TCP socket, accepts client connections,
+    parses raw HTTP requests, dispatches to matched route handlers, and
+    sends serialized responses.
+    
+    Uses raw syscalls for all network I/O with no C runtime dependency.
+    Each connection is handled synchronously in the accept loop.
+    """
+    
+    public I64 serverFd
+    """ The file descriptor of the listening server socket, or -1 if not started. """
+    public Router router
+    """ The router used to match incoming requests to handlers. """
+    public ServerConfig config
+    """ The server configuration (port, backlog, etc.). """
+    public Boolean running
+    """ Whether the server accept loop is currently active. """
+    
+    public function HttpServer( self, I64 port ) -> Void:
+
+        """
+        Construct a new HttpServer on the given port with default configuration
+        (host "0.0.0.0", backlog 128, max 1024 connections, 30s timeouts,
+        10 MB body limit) and an empty router.
+
+        Parameters:
+            port (I64):
+                The TCP port number to listen on.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.config = new ServerConfig( port, "0.0.0.0" )
+        self.router = new Router()
+        self.serverFd = -1
+        self.running = False
+
+    public function HttpServer( self, ServerConfig config, Router router ) -> Void:
+
+        """
+        Construct a new HttpServer with the given configuration and router.
+
+        The server is not started until start() is called.
+
+        Parameters:
+            config (ServerConfig):
+                The server configuration specifying port and backlog.
+            router (Router):
+                The router containing registered route definitions.
+        """
+
+        self.config = config
+        self.router = router
+        self.serverFd = -1
+        self.running = False
+    
+    public function start( self ) -> Void:
+        
+        """
+        Bind the server socket and begin listening for connections.
+        
+        Opens a TCP socket on the configured port with the configured
+        backlog and marks the server as running.
+        """
+        
+        self.serverFd = tcpListen( self.config.port, self.config.backlog )
+        self.running = True
+        putsln( "Server listening on port " + "..." )
+    
+    public function acceptLoop( self ) -> Void:
+        
+        """
+        Enter the main accept loop, handling one connection at a time.
+        
+        Blocks on socketAccept, enables TCP_NODELAY on each accepted client
+        socket, and delegates to handleConnection. Runs until the server
+        is stopped via stop().
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        while self.running:
+            I64 clientFd = socketAccept( self.serverFd, 0, 0 )
+            setTcpNoDelay( clientFd )
+            self.handleConnection( clientFd )
+    
+    public function handleConnection( self, I64 clientFd ) -> Void:
+        
+        """
+        Handle a single client connection from receive through response.
+        
+        Reads raw HTTP data from the client socket, parses the method, path,
+        body, and headers, constructs an HttpRequest and HttpResponse, resolves
+        the route, serializes the response, and sends it back before closing
+        the connection.
+        
+        Parameters:
+            clientFd (I64):
+                The file descriptor of the accepted client socket.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 receiveBuffer = alloc( RECV_BUF_SIZE )
+        I64 bytesReceived = socketRecv( clientFd, receiveBuffer, RECV_BUF_SIZE - 1, 0 )
+        if bytesReceived <= 0:
+            socketClose( clientFd )
+            return
+        writeByteAt( receiveBuffer, bytesReceived, 0 )
+        String rawData = ptrToString( receiveBuffer )
+        String method = parseMethod( rawData )
+        String path = parsePath( rawData )
+        String body = parseBody( rawData )
+        String headers = parseHeaders( rawData )
+        HttpRequest req = new HttpRequest( method, path, body, headers )
+        HttpResponse res = new HttpResponse()
+        MatchResult matchResult = self.router.resolve( method, req.path, req )
+        if matchResult.matched:
+            res.status( 200 )
+        else:
+            res.status( 404 ).json( "{\"error\":\"not found\"}" )
+        String responseData = res.serialize()
+        sendString( clientFd, responseData )
+        socketClose( clientFd )
+    
+    public function stop( self ) -> Void:
+        
+        """
+        Stop the server and close the listening socket.
+        
+        Sets the running flag to False to exit the accept loop and closes
+        the server socket if it was opened.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.running = False
+        if self.serverFd >= 0:
+            socketClose( self.serverFd )
+
+export {
+    HttpServer,
+    RECV_BUF_SIZE
+}

@@ -1,0 +1,39 @@
+package testing
+
+from uranite.os.vfs.vnode import VNode, PERM_OWNER_READ, PERM_OWNER_WRITE
+from uranite.os.vfs.file-descriptor import FileDescriptor, FLAG_READ, FLAG_WRITE
+from uranite.os.vfs.mount import MountEntry
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS VFS Combined Tests ===" )
+
+    VNode vn = new VNode( 1, 1, 10, 100 )
+    assertTrue( vn.isFile(), "isFile" )
+    assertEqualI64( 1, vn.getVnodeId(), "vnodeId" )
+
+    I64 perms = PERM_OWNER_READ | PERM_OWNER_WRITE
+    vn.setPermissions( perms )
+    assertTrue( vn.canOwnerRead(), "canRead" )
+    assertTrue( vn.canOwnerWrite(), "canWrite" )
+    putsln( "VNode OK" )
+
+    I64 fdFlags = FLAG_READ | FLAG_WRITE
+    FileDescriptor fd = new FileDescriptor( 0, 1, fdFlags )
+    assertTrue( fd.canRead(), "fd canRead" )
+    assertTrue( fd.canWrite(), "fd canWrite" )
+    assertEqualI64( 0, fd.getOffset(), "offset 0" )
+    fd.advanceOffset( 100 )
+    assertEqualI64( 100, fd.getOffset(), "offset 100" )
+    putsln( "FileDescriptor OK" )
+
+    MountEntry me = new MountEntry( 1, 10, 20, 0, 1, 0 )
+    assertEqualI64( 1, me.getMountId(), "mountId" )
+    assertFalse( me.isReadOnly(), "not readonly" )
+    putsln( "MountEntry OK" )
+
+    putsln( "=== All VFS combined tests passed ===" )
+    return 0

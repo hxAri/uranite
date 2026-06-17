@@ -1,0 +1,214 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/identity/identity.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides process identity management for kernel tasks, including user and group
+# identifiers, effective privilege levels, and token-based authentication verification.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.identity.identity
+
+from uranite.os.security.capability import Capability
+
+public class ProcessIdentity:
+    
+    """
+    Represents the identity of a running task within the kernel, tracking who the
+    task is running as. Integrated with the capability system so that identity
+    determines the default capability set. Uses token-based verification with
+    unforgeable kernel-assigned credentials to prevent identity spoofing.
+    """
+    
+    protect I64 uid
+    protect I64 gid
+    protect I64 token
+    protect I64 effectiveUid
+    protect I64 effectiveGid
+    
+    public function ProcessIdentity( self, I64 userId, I64 groupId, I64 authToken ) -> Void:
+        
+        """
+        Construct a new process identity with the given user identifier, group
+        identifier, and authentication token. The effective user and group identifiers
+        are initially set equal to the real identifiers.
+        
+        Parameters:
+            userId (I64):
+                The real user identifier assigned to this process.
+            groupId (I64):
+                The real group identifier assigned to this process.
+            authToken (I64):
+                The kernel-assigned unforgeable authentication token.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.uid = userId
+        self.gid = groupId
+        self.token = authToken
+        self.effectiveUid = userId
+        self.effectiveGid = groupId
+    
+    public function getUid( self ) -> I64:
+        
+        """ Return the real user identifier of this process identity. """
+        
+        return self.uid
+    
+    public function getGid( self ) -> I64:
+        
+        """ Return the real group identifier of this process identity. """
+        
+        return self.gid
+    
+    public function getToken( self ) -> I64:
+        
+        """ Return the kernel-assigned authentication token for this identity. """
+        
+        return self.token
+    
+    public function getEffectiveUid( self ) -> I64:
+        
+        """ Return the effective user identifier used for permission checks. """
+        
+        return self.effectiveUid
+    
+    public function getEffectiveGid( self ) -> I64:
+        
+        """ Return the effective group identifier used for permission checks. """
+        
+        return self.effectiveGid
+    
+    public function setEffectiveUid( self, I64 euid ) -> Void:
+        
+        """
+        Set the effective user identifier for privilege escalation or de-escalation.
+        This changes the identity used for subsequent permission checks without
+        altering the real user identifier.
+        
+        Parameters:
+            euid (I64):
+                The new effective user identifier to apply.
+        """
+        
+        self.effectiveUid = euid
+    
+    public function setEffectiveGid( self, I64 egid ) -> Void:
+        
+        """
+        Set the effective group identifier for privilege escalation or de-escalation.
+        This changes the group identity used for subsequent permission checks without
+        altering the real group identifier.
+        
+        Parameters:
+            egid (I64):
+                The new effective group identifier to apply.
+        """
+        
+        self.effectiveGid = egid
+    
+    public function isRoot( self ) -> Boolean:
+        
+        """
+        Check whether this identity is running with root privileges by testing
+        if the effective user identifier is zero.
+        
+        Returns:
+            Boolean:
+                True if the effective user identifier equals zero, indicating
+                superuser privileges.
+        """
+        
+        return self.effectiveUid == 0
+    
+    public function matches( self, I64 otherUid, I64 otherGid ) -> Boolean:
+        
+        """
+        Check whether this identity matches a given user and group identifier
+        pair by comparing against the effective identifiers.
+        
+        Parameters:
+            otherUid (I64):
+                The user identifier to compare against.
+            otherGid (I64):
+                The group identifier to compare against.
+        
+        Returns:
+            Boolean:
+                True if both the effective user and group identifiers match.
+        """
+        
+        return self.effectiveUid == otherUid and self.effectiveGid == otherGid
+    
+    public function inGroup( self, I64 groupId ) -> Boolean:
+        
+        """
+        Check whether this identity belongs to a specific group by comparing
+        the effective group identifier.
+        
+        Parameters:
+            groupId (I64):
+                The group identifier to check membership against.
+        
+        Returns:
+            Boolean:
+                True if the effective group identifier matches the given group.
+        """
+        
+        return self.effectiveGid == groupId
+    
+    public function verifyToken( self, I64 expectedToken ) -> Boolean:
+        
+        """
+        Verify that the authentication token matches an expected value. Used by
+        the kernel to validate identity claims during capability-gated operations.
+        
+        Parameters:
+            expectedToken (I64):
+                The expected token value to compare against.
+        
+        Returns:
+            Boolean:
+                True if the stored token matches the expected token.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.token == expectedToken
+
+public const I64 ROOT_UID = 0
+""" The well-known user identifier for the root superuser. """
+
+public const I64 ROOT_GID = 0
+""" The well-known group identifier for the root group. """
+
+public const I64 NOBODY_UID = 65534
+""" The well-known user identifier for the unprivileged nobody user. """
+
+public const I64 NOBODY_GID = 65534
+""" The well-known group identifier for the unprivileged nobody group. """
+
+export {
+    ProcessIdentity,
+    ROOT_UID,
+    ROOT_GID,
+    NOBODY_UID,
+    NOBODY_GID
+}

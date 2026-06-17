@@ -1,0 +1,333 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/ethernet.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides Ethernet Layer 2 frame handling and ARP table management for kernel networking.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.net.ethernet
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public const I64 ETHERTYPE_IPV4 = 2048
+"""
+EtherType constant for IPv4 (0x0800). The EtherType field in an Ethernet frame
+header identifies the protocol encapsulated in the payload.
+"""
+
+public const I64 ETHERTYPE_ARP = 2054
+"""
+EtherType constant for ARP (0x0806). Address Resolution Protocol frames use this
+EtherType to resolve IPv4 addresses to MAC addresses on the local network segment.
+"""
+
+public const I64 ETHERTYPE_IPV6 = 34525
+"""
+EtherType constant for IPv6 (0x86DD). IPv6 frames use this EtherType value in the
+Ethernet header to indicate an IPv6 payload.
+"""
+
+public const I64 ETH_MTU = 1500
+"""
+Maximum transmission unit for Ethernet payload data (1500 bytes). The largest
+payload size that can be carried in a standard Ethernet frame without fragmentation.
+"""
+
+public const I64 ETH_MIN_PAYLOAD = 46
+"""
+Minimum Ethernet frame payload size (46 bytes). Frames with payloads shorter than
+this must be padded to meet the minimum frame size required by the Ethernet
+specification (64 bytes total including header and FCS).
+"""
+
+public class EthernetFrame:
+    
+    """
+    Represents an Ethernet Layer 2 frame header. The Ethernet frame format consists of
+    a 6-byte destination MAC address, 6-byte source MAC address, 2-byte EtherType field,
+    and 46-1500 bytes of payload followed by a 4-byte frame check sequence (FCS). MAC
+    addresses are stored as I64 values with only the lower 48 bits used.
+    """
+    
+    public I64 destMac
+    public I64 srcMac
+    public I64 ethertype
+    public I64 payloadLength
+    
+    public function EthernetFrame( self ) -> Void:
+        
+        """
+        Constructs a new EthernetFrame with all fields initialized to zero, representing
+        an empty frame that must be configured before use.
+        """
+        
+        self.destMac = 0
+        self.srcMac = 0
+        self.ethertype = 0
+        self.payloadLength = 0
+    
+    public function configure( self, I64 dst, I64 src, I64 ethType, I64 len ) -> Void:
+        
+        """
+        Configures this Ethernet frame header with the specified destination MAC address,
+        source MAC address, EtherType protocol identifier, and payload length in bytes.
+        """
+        
+        self.destMac = dst
+        self.srcMac = src
+        self.ethertype = ethType
+        self.payloadLength = len
+    
+    public function isBroadcast( self ) -> Boolean:
+        
+        """
+        Returns True if the destination MAC address is the broadcast address
+        (FF:FF:FF:FF:FF:FF = 281474976710655 decimal). Broadcast frames are delivered
+        to all hosts on the local network segment.
+        """
+        
+        return self.destMac == 281474976710655
+    
+    public function isMulticast( self ) -> Boolean:
+        
+        """
+        Returns True if the destination MAC address has the multicast bit set (bit 40,
+        the least significant bit of the first octet). Multicast frames are delivered
+        to a group of hosts that have subscribed to the multicast address.
+        """
+        
+        return ( self.destMac & 1099511627776 ) != 0
+    
+    public function isIpv4( self ) -> Boolean:
+        
+        """
+        Returns True if this frame carries an IPv4 payload, indicated by an EtherType
+        value of 0x0800 (2048 decimal).
+        """
+        
+        return self.ethertype == 2048
+    
+    public function isArp( self ) -> Boolean:
+        
+        """
+        Returns True if this frame carries an ARP payload, indicated by an EtherType
+        value of 0x0806 (2054 decimal).
+        """
+        
+        return self.ethertype == 2054
+    
+    public function isIpv6( self ) -> Boolean:
+        
+        """
+        Returns True if this frame carries an IPv6 payload, indicated by an EtherType
+        value of 0x86DD (34525 decimal).
+        """
+        
+        return self.ethertype == 34525
+    
+    public function getTotalSize( self ) -> I64:
+        
+        """
+        Returns the total frame size in bytes, calculated as the 14-byte header
+        (6 bytes destination MAC + 6 bytes source MAC + 2 bytes EtherType) plus
+        the payload length. Does not include the 4-byte FCS.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return 14 + self.payloadLength
+
+public class ArpTable:
+    
+    """
+    Address Resolution Protocol table that maps IPv4 addresses to MAC (hardware) addresses.
+    The ARP table is used by the network stack to resolve Layer 3 addresses to Layer 2
+    addresses for local network communication. Each entry has an associated state value
+    where 1 indicates a resolved entry and 0 indicates an empty slot. The table uses a
+    spinlock for thread-safe concurrent access from interrupt handlers and kernel threads.
+    """
+    
+    public Memory<I64> ipAddresses
+    public Memory<I64> macAddresses
+    public Memory<I64> timestamps
+    public Memory<I64> states
+    public I64 capacity
+    public I64 count
+    public Spinlock lock
+    
+    public function ArpTable( self, I64 maxEntries ) -> Void:
+        
+        """
+        Constructs a new ARP table with the specified maximum number of entries. All
+        slots are initialized to empty (state 0). A spinlock is created for concurrent
+        access protection.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxEntries
+        self.count = 0
+        self.lock = new Spinlock()
+        self.ipAddresses = new Memory<I64>( maxEntries )
+        self.macAddresses = new Memory<I64>( maxEntries )
+        self.timestamps = new Memory<I64>( maxEntries )
+        self.states = new Memory<I64>( maxEntries )
+        I64 slotIndex = 0
+        while slotIndex < maxEntries:
+            self.ipAddresses.set( slotIndex, 0 )
+            self.macAddresses.set( slotIndex, 0 )
+            self.timestamps.set( slotIndex, 0 )
+            self.states.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+
+    public function update( self, I64 ip, I64 mac, I64 timestamp ) -> Boolean:
+
+        """
+        Adds or updates an ARP entry for the given IPv4 address with the specified MAC
+        address and timestamp. If the IP already exists in the table, the MAC and timestamp
+        are updated in place and the state is set to resolved (1). If the IP is not found,
+        a new entry is created in the first available empty slot. Returns True on success
+        or False if the table is full and the entry does not already exist.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        self.lock.lock()
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ipAddresses.get( slotIndex ) == ip and self.states.get( slotIndex ) != 0:
+                self.macAddresses.set( slotIndex, mac )
+                self.timestamps.set( slotIndex, timestamp )
+                self.states.set( slotIndex, 1 )
+                self.lock.unlock()
+                return True
+            slotIndex = slotIndex + 1
+        slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.states.get( slotIndex ) == 0:
+                self.ipAddresses.set( slotIndex, ip )
+                self.macAddresses.set( slotIndex, mac )
+                self.timestamps.set( slotIndex, timestamp )
+                self.states.set( slotIndex, 1 )
+                self.count = self.count + 1
+                self.lock.unlock()
+                return True
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return False
+
+    public function lookup( self, I64 ip ) -> I64:
+
+        """
+        Looks up the MAC address associated with the given IPv4 address in the ARP table.
+        Returns the MAC address as an I64 if a resolved entry exists for the IP, or 0 if
+        no matching entry is found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ipAddresses.get( slotIndex ) == ip and self.states.get( slotIndex ) == 1:
+                return self.macAddresses.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return 0
+
+    public function remove( self, I64 ip ) -> Boolean:
+
+        """
+        Removes the ARP table entry for the given IPv4 address. Clears the IP, MAC,
+        timestamp, and state fields for the matching slot and decrements the entry count.
+        Returns True if the entry was found and removed, or False if no matching entry exists.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        self.lock.lock()
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ipAddresses.get( slotIndex ) == ip and self.states.get( slotIndex ) != 0:
+                self.ipAddresses.set( slotIndex, 0 )
+                self.macAddresses.set( slotIndex, 0 )
+                self.timestamps.set( slotIndex, 0 )
+                self.states.set( slotIndex, 0 )
+                self.count = self.count - 1
+                self.lock.unlock()
+                return True
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return False
+
+    public function contains( self, I64 ip ) -> Boolean:
+
+        """
+        Checks whether the ARP table contains a resolved entry for the given IPv4 address.
+        Returns True if a resolved entry (state 1) exists for the IP, or False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.ipAddresses.get( slotIndex ) == ip and self.states.get( slotIndex ) == 1:
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of active entries currently stored in the ARP table. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by this ARP table, including
+        the IP address, MAC address, timestamp, and state arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.ipAddresses.free()
+        self.macAddresses.free()
+        self.timestamps.free()
+        self.states.free()
+
+export {
+    ETHERTYPE_IPV4,
+    ETHERTYPE_ARP,
+    ETHERTYPE_IPV6,
+    ETH_MTU,
+    ETH_MIN_PAYLOAD,
+    EthernetFrame,
+    ArpTable
+}

@@ -1,0 +1,58 @@
+#
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/iterators/iterable.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the Iterable generic interface, which represents types capable of
+# producing an Iterator over their contained elements. Any collection or
+# data structure that implements Iterable can be traversed in for-each loops
+# and other iteration contexts by providing a fresh Iterator instance on demand.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.iterators.iterable
+
+from uranite.iterators.iterator import Iterator
+from uranite.iterators.traversable import Traversable
+
+public interface Iterable<T> extends Traversable:
+    
+    """
+    Generic interface for types that can produce an Iterator over their
+    contained elements of type T. Extending Traversable, this interface
+    provides the concrete mechanism for sequential element access through
+    the iterator property. Collections such as ArrayList, HashSet, and
+    HashMap implement this interface to enable for-each loop traversal
+    and other iteration patterns. Each call to the iterator property
+    should return a fresh Iterator starting from the first element,
+    allowing multiple independent traversals over the same collection.
+    """
+    
+    public property iterator() -> Iterator<T>:
+        
+        """
+        Return a fresh Iterator instance positioned at the first element of
+        this collection. Each invocation creates a new independent iterator,
+        allowing multiple concurrent traversals over the same underlying data
+        without interference. The returned iterator yields elements of type T
+        in the collection's natural ordering.
+        
+        Returns:
+            Iterator<T>:
+                A new iterator starting from the first element of this collection.
+        """
+
+export {
+    Iterable
+}

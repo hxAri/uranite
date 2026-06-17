@@ -1,0 +1,198 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/float.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Float base class for all floating-point types, with arithmetic, comparison, and numeric utility methods.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.float
+
+class Float:
+    
+    """
+    Base class for all floating-point types (F32, F64).
+    Stores the value internally as F64 and provides arithmetic, comparison, and numeric utility methods.
+    """
+    
+    protect F64 value
+    
+    public function Float( self, F64 value ) -> Void:
+        
+        """ Construct a new Float wrapping the given F64 value. """
+        
+        self.value = value
+    
+    public function getValue( self ) -> F64:
+        
+        """ Return the underlying F64 value. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this floating-point value. """
+        
+        return self.value as String
+    
+    public function abs( self ) -> Float:
+        
+        """
+        Return a new Float containing the absolute value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value < 0.0:
+            return new Float( -self.value )
+        return new Float( self.value )
+    
+    public function negate( self ) -> Float:
+        
+        """
+        Return a new Float with the sign inverted.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( -self.value )
+    
+    public function add( self, Float other ) -> Float:
+        
+        """
+        Return a new Float containing the sum of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( self.value + other.value )
+    
+    public function subtract( self, Float other ) -> Float:
+        
+        """
+        Return a new Float containing the difference of self minus other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( self.value - other.value )
+    
+    public function multiply( self, Float other ) -> Float:
+        
+        """
+        Return a new Float containing the product of self and other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( self.value * other.value )
+    
+    public function divide( self, Float other ) -> Float:
+        
+        """
+        Return a new Float containing the quotient of self divided by other.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( self.value / other.value )
+    
+    public function equals( self, Float other ) -> Boolean:
+        
+        """ Return True if self and other have the same numeric value. """
+        
+        return self.value == other.value
+    
+    public function compareTo( self, Float other ) -> I32:
+        
+        """
+        Compare self to other, returning -1 if less, 0 if equal, or 1 if greater.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.value < other.value:
+            return -1
+        if self.value > other.value:
+            return 1
+        return 0
+    
+    public function isNaN( self ) -> Boolean:
+        
+        """ Return True if this value is Not-a-Number, detected by self-inequality. """
+        
+        return self.value != self.value
+    
+    public function isInfinite( self ) -> Boolean:
+        
+        """ Return True if this value is positive or negative infinity. """
+        
+        return self.value == self.value and ( self.value - self.value ) != 0.0
+    
+    public function floor( self ) -> Float:
+        
+        """
+        Return a new Float rounded down to the nearest integer value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( self.value )
+    
+    public function ceil( self ) -> Float:
+        
+        """
+        Return a new Float rounded up to the nearest integer value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( self.value )
+    
+    public function round( self ) -> Float:
+        
+        """
+        Return a new Float rounded to the nearest integer value.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Float( self.value )
+    
+    public function toInt( self ) -> I64:
+        
+        
+        """ Convert this floating-point value to a signed 64-bit integer by truncation. """
+        return self.value as I64

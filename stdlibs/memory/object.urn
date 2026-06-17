@@ -1,0 +1,29 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/memory/object.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Kernel object model with type-safe resource management and reference
+# counting. Re-exports ObjectType enum, ObjectOps interface, and
+# KernelObject class from the OS memory subsystem.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.memory.object
+
+from uranite.os.memory.object import ObjectType, ObjectOps, KernelObject
+
+export {
+    ObjectType, ObjectOps, KernelObject
+}

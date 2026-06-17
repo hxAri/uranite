@@ -1,0 +1,324 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-12 15:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/tcp.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level TCP socket wrapper. Provides TcpSocket for connected-mode
+# communication and TcpListener for accepting incoming connections.
+# Built on the raw socket syscall functions in uranite.net.socket.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.tcp
+
+from uranite.net.socket import {
+    createTcpSocket, tcpConnect, tcpListen, socketAccept,
+    socketClose, socketShutdown, sendString, recvString,
+    setReuseAddr, setReusePort, setTcpNoDelay,
+    ipToInt, htons, buildSockaddrIn
+}
+from uranite.net.errors import SocketError
+from uranite.memory.memory import Memory
+from uranite.io.syscall import memoryToPtr, writeI32At
+
+public class TcpSocket:
+
+    """
+    Connected TCP socket for bidirectional stream communication.
+
+    Wraps a Linux TCP file descriptor with typed send/receive operations
+    and socket option methods. Tracks connection state to prevent
+    operations on closed sockets.
+    """
+
+    public I64 fileDescriptor
+    """ The underlying Linux socket file descriptor. """
+    public Boolean connected
+    """ Whether the socket is currently connected. """
+
+    public function TcpSocket( self ) -> Void:
+
+        """
+        Create an unconnected TCP socket.
+
+        Allocates a new AF_INET SOCK_STREAM socket via the socket syscall.
+        The socket must be connected via connect() before send/receive.
+
+        Raises:
+            SocketError:
+                If the socket cannot be created.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.fileDescriptor = createTcpSocket()
+        self.connected = False
+
+    public function TcpSocket( self, I64 existingFd ) -> Void:
+
+        """
+        Wrap an existing connected file descriptor as a TcpSocket.
+
+        Used internally by TcpListener.accept() to wrap accepted connections.
+
+        Parameters:
+            existingFd (I64):
+                An already-connected socket file descriptor.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.fileDescriptor = existingFd
+        self.connected = True
+
+    public function connect( self, I64 ipAddress, I64 port ) -> Void:
+
+        """
+        Connect this socket to a remote host at the given IP and port.
+
+        Parameters:
+            ipAddress (I64):
+                The IPv4 address as a packed integer (use ipToInt to construct).
+            port (I64):
+                The TCP port number to connect to.
+
+        Raises:
+            SocketError:
+                If the connection cannot be established.
+
+        Complexity:
+            Time: O(1) (network latency notwithstanding)
+            Space: O(1)
+        """
+
+        if self.connected:
+            raise new SocketError( "socket already connected", 0, None )
+        I64 sockaddrPtr = buildSockaddrIn( port, ipAddress )
+        self.fileDescriptor = tcpConnect( ipAddress, port )
+        self.connected = True
+
+    public function send( self, String data ) -> I64:
+
+        """
+        Send a string over the connected socket.
+
+        Parameters:
+            data (String):
+                The data to send.
+
+        Returns:
+            I64:
+                The number of bytes actually sent.
+
+        Raises:
+            SocketError:
+                If the socket is not connected or the send fails.
+
+        Complexity:
+            Time: O(n) where n is the data length
+        """
+
+        if not self.connected:
+            raise new SocketError( "socket not connected", 0, None )
+        return sendString( self.fileDescriptor, data )
+
+    public function receive( self, I64 maxLength ) -> String:
+
+        """
+        Receive up to maxLength bytes from the connected socket.
+
+        Returns an empty string on EOF (remote side closed).
+
+        Parameters:
+            maxLength (I64):
+                Maximum number of bytes to receive.
+
+        Returns:
+            String:
+                The received data, or empty string on connection close.
+
+        Raises:
+            SocketError:
+                If the socket is not connected or the receive fails.
+
+        Complexity:
+            Time: O(n) where n is the received data length
+        """
+
+        if not self.connected:
+            raise new SocketError( "socket not connected", 0, None )
+        return recvString( self.fileDescriptor, maxLength )
+
+    public function setNoDelay( self ) -> Void:
+
+        """
+        Enable TCP_NODELAY to disable Nagle's algorithm.
+
+        This reduces latency for small messages at the cost of potentially
+        increased network overhead.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        setTcpNoDelay( self.fileDescriptor )
+
+    public function setAddressReuse( self ) -> Void:
+
+        """
+        Enable SO_REUSEADDR on this socket.
+
+        Allows rebinding to a recently-used address without waiting for
+        the TIME_WAIT period to expire.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        setReuseAddr( self.fileDescriptor )
+
+    public function close( self ) -> Void:
+
+        """
+        Close the socket and release the file descriptor.
+
+        After closing, no further send or receive operations are possible.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.connected:
+            socketClose( self.fileDescriptor )
+            self.connected = False
+
+    public function destroy( self ) -> Void:
+
+        """
+        Destructor that ensures the socket is closed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.close()
+
+public class TcpListener:
+
+    """
+    TCP server socket that binds to a port and accepts incoming connections.
+
+    Wraps the bind-listen-accept sequence into a simple API. Each accepted
+    connection is returned as a connected TcpSocket instance.
+    """
+
+    public I64 fileDescriptor
+    """ The listening socket file descriptor. """
+    public Boolean listening
+    """ Whether the listener is actively bound and listening. """
+
+    public function TcpListener( self, I64 port, I64 backlog ) -> Void:
+
+        """
+        Create a TCP listener bound to the given port.
+
+        Binds to all interfaces (0.0.0.0) and begins listening with the
+        specified connection backlog size. Enables SO_REUSEADDR automatically.
+
+        Parameters:
+            port (I64):
+                The TCP port number to listen on.
+            backlog (I64):
+                Maximum number of pending connections in the queue.
+
+        Raises:
+            SocketError:
+                If binding or listening fails.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.fileDescriptor = tcpListen( port, backlog )
+        self.listening = True
+
+    public function accept( self ) -> TcpSocket:
+
+        """
+        Block until an incoming connection arrives, then return a connected socket.
+
+        Returns:
+            TcpSocket:
+                A new TcpSocket wrapping the accepted connection.
+
+        Raises:
+            SocketError:
+                If the listener is not active or the accept fails.
+
+        Complexity:
+            Time: O(1) (blocks until connection arrives)
+            Space: O(1)
+        """
+
+        if not self.listening:
+            raise new SocketError( "listener is not active", 0, None )
+        Memory<I64> addrBuffer = new Memory<I64>( 4 )
+        I64 addrPtr = memoryToPtr( addrBuffer )
+        Memory<I64> addrLenBuffer = new Memory<I64>( 1 )
+        I64 addrLenPtr = memoryToPtr( addrLenBuffer )
+        writeI32At( addrLenPtr, 0, 16 )
+        I64 clientFd = socketAccept( self.fileDescriptor, addrPtr, addrLenPtr )
+        addrBuffer.free()
+        addrLenBuffer.free()
+        return new TcpSocket( clientFd )
+
+    public function close( self ) -> Void:
+
+        """
+        Stop listening and close the server socket.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.listening:
+            socketClose( self.fileDescriptor )
+            self.listening = False
+
+    public function destroy( self ) -> Void:
+
+        """
+        Destructor that ensures the listener socket is closed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.close()
+
+export {
+    TcpSocket,
+    TcpListener
+}

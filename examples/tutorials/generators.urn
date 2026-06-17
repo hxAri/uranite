@@ -1,0 +1,39 @@
+package main
+
+from uranite.io.console import puts
+
+function counting() -> Generator<I64>:
+    yield 10
+    yield 20
+    yield 30
+
+function range( I64 start, I64 end ) -> Generator<I64>:
+    for I64 i in start...end:
+        yield i
+
+function fibonacci( I64 count ) -> Generator<I64>:
+    I64 a = 0
+    I64 b = 1
+    for I64 i in 0...count:
+        yield a
+        I64 temp = a + b
+        a = b
+        b = temp
+
+public function main() -> I32:
+    puts( "=== Simple yield ===" )
+    for I64 val in counting():
+        puts( val, " " )
+    puts(  )
+
+    puts( "=== Range generator ===" )
+    for I64 val in range( 1, 5 ):
+        puts( val, " " )
+    puts(  )
+
+    puts( "=== Fibonacci generator ===" )
+    for I64 val in fibonacci( 9 ):
+        puts( val, " " )
+    puts(  )
+
+    return 0

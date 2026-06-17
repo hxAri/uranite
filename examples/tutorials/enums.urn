@@ -1,0 +1,89 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#  
+# Enums: declaration, construction, match dispatch.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.enums
+
+from uranite.io.console import puts
+
+# Simple enum
+enum Direction:
+    unit North
+    unit South
+    unit East
+    unit West
+
+# Another enum with Backed
+enum Color backed Integer:
+    unit Blue   1
+    unit Green  2
+    unit Red    3:
+        public override function isRed( self ) -> Boolean:
+            return True
+    public function isRed( self ) -> Boolean:
+        return False
+
+public function direction_name( Direction d ) -> Void:
+    switch d:
+        case Direction.North:
+            puts( "North" )
+        case Direction.South:
+            puts( "South" )
+        case Direction.East:
+            puts( "East" )
+        case Direction.West:
+            puts( "West" )
+
+public function direction_value( Direction d ) -> I32:
+    return match d in \
+        Direction.North => 0, \
+        Direction.South => 1, \
+        Direction.East => 2, \
+        Direction.West => 3, \
+        * => 0 - 1
+
+public function color_hex( Color c ) -> I64:
+    return match c in \
+        Color.Red => 16711680, \
+        Color.Green => 65280, \
+        Color.Blue => 255, \
+        * => 0
+
+public function main() -> I32:
+    Direction north = Direction.North
+    Direction south = Direction.South
+    Direction east = Direction.East
+    Direction west = Direction.West
+
+    puts( "Directions:" )
+    direction_name( north )
+    direction_name( south )
+    direction_name( east )
+    direction_name( west )
+
+    puts( "north value = ", direction_value( north ) )
+    puts( "west value = ", direction_value( west ) )
+
+    Color red = Color.Red
+    Color blue = Color.Blue
+    puts( "red hex = ", color_hex( red ) )
+    puts( "blue hex = ", color_hex( blue ) )
+
+    return 0

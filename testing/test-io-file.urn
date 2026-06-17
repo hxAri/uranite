@@ -1,0 +1,31 @@
+package testing
+
+from uranite.io.file import File, createFile, openFile, readFileString, writeFileString
+from uranite.testing.assertions import {
+    assertEqualStr,
+    assertEqualI64
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO File Tests ===" )
+
+    writeFileString( "/tmp/uranite-test-io-file.txt", "Hello from Uranite IO!" )
+    String content = readFileString( "/tmp/uranite-test-io-file.txt" )
+    assertEqualStr( "Hello from Uranite IO!", content, "read back content" )
+    putsln( "writeFileString/readFileString OK" )
+
+    File f = createFile( "/tmp/uranite-test-io-file2.txt", 420 )
+    f.writeString( "Line1\nLine2\nLine3" )
+    f.close()
+
+    File f2 = openFile( "/tmp/uranite-test-io-file2.txt" )
+    String all = f2.readString()
+    assertEqualStr( "Line1\nLine2\nLine3", all, "file2 content" )
+    I64 sz = f2.getSize()
+    assertEqualI64( 17, sz, "file2 size" )
+    f2.close()
+    putsln( "File read/write OK" )
+
+    putsln( "=== All IO file tests passed ===" )
+    return 0

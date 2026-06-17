@@ -1,0 +1,169 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/http/request.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.http.request
+
+from uranite.string.builder import StringBuilder
+from uranite.io.syscall import stringLen
+
+public class HttpRequest:
+
+    """
+    HTTP request builder with fluent setter API. Constructs an HTTP/1.1
+    request with method, path, headers, and optional body. Call
+    serialize() to produce the raw HTTP message ready to send over
+    a socket.
+    """
+
+    public String method
+    """HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)."""
+    public String path
+    """Request path (e.g. "/api/users")."""
+    public String version
+    """HTTP version string, defaults to "HTTP/1.1"."""
+    public String host
+    """Value of the Host header, or empty to omit."""
+    public String body
+    """Request body content, or empty for bodyless requests."""
+    public String contentType
+    """Value of the Content-Type header, or empty to omit."""
+    public String userAgent
+    """Value of the User-Agent header, defaults to "Uranite/1.0"."""
+    public String accept
+    """Value of the Accept header, defaults to "*/*"."""
+    public String connection
+    """Value of the Connection header, defaults to "close"."""
+    public String extraHeaders
+    """Additional raw headers appended verbatim to the serialized request."""
+
+    public function HttpRequest( self, String method, String path ) -> Void:
+        """
+        Construct a new HTTP request with the given method and path.
+        All other fields are initialized to sensible defaults.
+
+        Parameters:
+            method (String):
+                HTTP method verb.
+            path (String):
+                Request target path.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        self.method = method
+        self.path = path
+        self.version = "HTTP/1.1"
+        self.host = ""
+        self.body = ""
+        self.contentType = ""
+        self.userAgent = "Uranite/1.0"
+        self.accept = "*/*"
+        self.connection = "close"
+        self.extraHeaders = ""
+
+    public function setHost( self, String host ) -> HttpRequest:
+        """Set the Host header. Returns self for chaining."""
+        self.host = host
+        return self
+
+    public function setBody( self, String body ) -> HttpRequest:
+        """Set the request body. Returns self for chaining."""
+        self.body = body
+        return self
+
+    public function setContentType( self, String ct ) -> HttpRequest:
+        """Set the Content-Type header. Returns self for chaining."""
+        self.contentType = ct
+        return self
+
+    public function setUserAgent( self, String ua ) -> HttpRequest:
+        """Set the User-Agent header. Returns self for chaining."""
+        self.userAgent = ua
+        return self
+
+    public function setAccept( self, String acc ) -> HttpRequest:
+        """Set the Accept header. Returns self for chaining."""
+        self.accept = acc
+        return self
+
+    public function setConnection( self, String conn ) -> HttpRequest:
+        """Set the Connection header. Returns self for chaining."""
+        self.connection = conn
+        return self
+
+    public function addRawHeaders( self, String rawBlock ) -> HttpRequest:
+        """Append raw header lines (already formatted as "Name: Value\\r\\n"). Returns self for chaining."""
+        self.extraHeaders = self.extraHeaders + rawBlock
+        return self
+
+    public function serialize( self ) -> String:
+        """
+        Serialize the request into a raw HTTP message string ready
+        for transmission over a TCP socket. Includes request line,
+        headers, and body with appropriate Content-Length.
+
+        Returns:
+            The complete HTTP request as a string.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        StringBuilder sb = new StringBuilder()
+        sb.append( self.method )
+        sb.append( " " )
+        sb.append( self.path )
+        sb.append( " " )
+        sb.append( self.version )
+        sb.append( "\r\n" )
+        I64 hostLen = stringLen( self.host )
+        if hostLen > 0:
+            sb.append( "Host: " )
+            sb.append( self.host )
+            sb.append( "\r\n" )
+        sb.append( "User-Agent: " )
+        sb.append( self.userAgent )
+        sb.append( "\r\n" )
+        sb.append( "Accept: " )
+        sb.append( self.accept )
+        sb.append( "\r\n" )
+        sb.append( "Connection: " )
+        sb.append( self.connection )
+        sb.append( "\r\n" )
+        I64 bodyLen = stringLen( self.body )
+        if bodyLen > 0:
+            I64 ctLen = stringLen( self.contentType )
+            if ctLen > 0:
+                sb.append( "Content-Type: " )
+                sb.append( self.contentType )
+                sb.append( "\r\n" )
+            sb.append( "Content-Length: " )
+            sb.appendI64( bodyLen )
+            sb.append( "\r\n" )
+        I64 extraLen = stringLen( self.extraHeaders )
+        if extraLen > 0:
+            sb.append( self.extraHeaders )
+        sb.append( "\r\n" )
+        if bodyLen > 0:
+            sb.append( self.body )
+        return sb.build()
+
+export {
+    HttpRequest
+}

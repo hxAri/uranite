@@ -1,0 +1,174 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/static-files.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Static file handler: serves files from a directory with MIME type
+# detection based on file extension.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.static-files
+
+from uranite.io.syscall import { sysOpen, sysRead, sysClose, stringToPtr, stringLen, readByteAt, writeByteAt, O_RDONLY }
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString, endsWith
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+
+public function guessMimeType( String path ) -> String:
+    
+    """
+    Determine the MIME type of a file based on its extension.
+    
+    Checks the file path suffix against a set of known extensions and
+    returns the corresponding MIME type. Falls back to
+    "application/octet-stream" for unrecognized extensions.
+    
+    Parameters:
+        path (String):
+            The file path or filename to inspect.
+    
+    Returns:
+        String:
+            The MIME type string for the file's extension.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    if endsWith( path, ".html" ) or endsWith( path, ".htm" ):
+        return "text/html"
+    if endsWith( path, ".css" ):
+        return "text/css"
+    if endsWith( path, ".js" ):
+        return "application/javascript"
+    if endsWith( path, ".json" ):
+        return "application/json"
+    if endsWith( path, ".png" ):
+        return "image/png"
+    if endsWith( path, ".jpg" ) or endsWith( path, ".jpeg" ):
+        return "image/jpeg"
+    if endsWith( path, ".gif" ):
+        return "image/gif"
+    if endsWith( path, ".svg" ):
+        return "image/svg+xml"
+    if endsWith( path, ".ico" ):
+        return "image/x-icon"
+    if endsWith( path, ".txt" ):
+        return "text/plain"
+    if endsWith( path, ".xml" ):
+        return "application/xml"
+    if endsWith( path, ".pdf" ):
+        return "application/pdf"
+    if endsWith( path, ".woff2" ):
+        return "font/woff2"
+    if endsWith( path, ".woff" ):
+        return "font/woff"
+    return "application/octet-stream"
+
+public class StaticFileHandler:
+    
+    """
+    Serves static files from a directory on disk for requests matching a
+    given URL prefix.
+    
+    Maps the portion of the request path after the URL prefix to a file
+    within the root directory, reads the file content, determines the MIME
+    type from the file extension, and populates the response.
+    """
+    
+    public String rootDir
+    """ The filesystem directory from which static files are served. """
+    public String urlPrefix
+    """ The URL path prefix that triggers static file serving. """
+    
+    public function StaticFileHandler( self, String urlPrefix, String rootDir ) -> Void:
+        
+        """
+        Construct a new StaticFileHandler.
+        
+        Parameters:
+            urlPrefix (String):
+                The URL path prefix to match (e.g., "/static").
+            rootDir (String):
+                The filesystem directory containing the static files.
+        """
+        
+        self.urlPrefix = urlPrefix
+        self.rootDir = rootDir
+    
+    public function serve( self, HttpRequest req, HttpResponse res ) -> Boolean:
+        
+        """
+        Attempt to serve a static file for the given request.
+        
+        Strips the URL prefix from the request path, resolves the remaining
+        path against the root directory, reads the file content (up to 64KB),
+        sets the appropriate MIME type, and populates the response body.
+        
+        Parameters:
+            req (HttpRequest):
+                The incoming HTTP request whose path is checked against
+                the URL prefix.
+            res (HttpResponse):
+                The response to populate with file content and MIME type
+                if the file exists.
+        
+        Returns:
+            Boolean:
+                True if the file was found and served successfully,
+                False if the path does not match the prefix or the file
+                could not be opened.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        String reqPath = req.path
+        I64 prefixLen = stringLen( self.urlPrefix )
+        I64 pathLen = stringLen( reqPath )
+        if pathLen <= prefixLen:
+            return False
+        String filePath = self.rootDir + "/" + ptrToString( stringToPtr( reqPath ) + prefixLen )
+        I64 filePathPtr = stringToPtr( filePath )
+        I64 fd = -1
+        I64 openResult = sysOpen( filePathPtr, O_RDONLY, 0 )
+        if openResult < 0:
+            return False
+        fd = openResult
+        I64 buf = alloc( 65536 )
+        I64 totalRead = 0
+        Boolean reading = True
+        while reading:
+            I64 bytesRead = sysRead( fd, buf + totalRead, 65536 - totalRead )
+            if bytesRead <= 0:
+                reading = False
+            else:
+                totalRead = totalRead + bytesRead
+                if totalRead >= 65536:
+                    reading = False
+        sysClose( fd )
+        writeByteAt( buf, totalRead, 0 )
+        String content = ptrToString( buf )
+        String mime = guessMimeType( filePath )
+        res.contentType( mime ).text( content )
+        return True
+
+export {
+    StaticFileHandler,
+    guessMimeType
+}

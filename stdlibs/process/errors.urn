@@ -1,0 +1,238 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-29 14:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Process-related error types for the multiprocessing module.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.errors
+
+from uranite.errors.throwable import Throwable
+from uranite.errors.error import Error
+
+public class ProcessError extends Error:
+    
+    """
+    Base error type for all process-related failures.
+    
+    Serves as the root of the process error hierarchy. All specific process
+    error types extend this class. Can also be raised directly for general
+    process errors that do not fit a more specific category.
+    """
+    
+    public function ProcessError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a new ProcessError with the given diagnostic information.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the error.
+            code (I64):
+                Numeric error code identifying the failure type.
+            previous (Throwable):
+                Optional previous throwable that caused this error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ProcessCreationError extends ProcessError:
+    
+    """
+    Raised when a new process cannot be created.
+    
+    Typical causes include resource exhaustion (stack allocation failure,
+    process ID limit reached) or invalid configuration parameters.
+    """
+    
+    public function ProcessCreationError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a new ProcessCreationError.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the creation failure.
+            code (I64):
+                Numeric error code identifying the failure type.
+            previous (Throwable):
+                Optional previous throwable that caused this error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ProcessCommunicationError extends ProcessError:
+    
+    """
+    Raised when inter-process communication fails.
+    
+    Covers failures in shared memory operations, channel send/receive
+    errors, and pipe I/O failures between processes.
+    """
+    
+    public function ProcessCommunicationError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a new ProcessCommunicationError.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the communication failure.
+            code (I64):
+                Numeric error code identifying the failure type.
+            previous (Throwable):
+                Optional previous throwable that caused this error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ProcessCancellationError extends ProcessError:
+    
+    """
+    Raised when a process or process future is cancelled.
+    
+    Indicates that the operation was intentionally aborted before completion,
+    either by explicit cancellation or by scope teardown.
+    """
+    
+    public function ProcessCancellationError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a new ProcessCancellationError.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the cancellation.
+            code (I64):
+                Numeric error code identifying the failure type.
+            previous (Throwable):
+                Optional previous throwable that caused this error, or None.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ProcessTimeoutError extends ProcessError:
+    
+    """
+    Raised when a process operation exceeds its time limit.
+    
+    Used for timed join operations, timed future waits, and any other
+    process interaction with a deadline that was not met.
+    """
+    
+    public function ProcessTimeoutError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a new ProcessTimeoutError.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the timeout.
+            code (I64):
+                Numeric error code identifying the failure type.
+            previous (Throwable):
+                Optional previous throwable that caused this error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ProcessCrashedError extends ProcessError:
+    
+    """
+    Raised when a process terminates abnormally due to an unhandled error.
+    
+    Indicates that the worker process encountered a fatal condition such as
+    a segmentation fault, unhandled exception, or stack overflow.
+    """
+    
+    public function ProcessCrashedError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a new ProcessCrashedError.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the crash.
+            code (I64):
+                Numeric error code identifying the failure type.
+            previous (Throwable):
+                Optional previous throwable that caused this error, or None.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ProcessPoolError extends ProcessError:
+    
+    """
+    Raised for errors specific to process pool operations.
+    
+    Covers pool-level failures such as invalid worker count configuration,
+    submission to a shut-down pool, or pool resource exhaustion.
+    """
+    
+    public function ProcessPoolError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a new ProcessPoolError.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the pool error.
+            code (I64):
+                Numeric error code identifying the failure type.
+            previous (Throwable):
+                Optional previous throwable that caused this error, or None.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+export {
+    ProcessError,
+    ProcessCreationError,
+    ProcessCommunicationError,
+    ProcessCancellationError,
+    ProcessTimeoutError,
+    ProcessCrashedError,
+    ProcessPoolError
+}

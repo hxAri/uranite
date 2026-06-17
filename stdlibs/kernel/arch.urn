@@ -1,0 +1,194 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/arch.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Unified x86-64 CPU architecture abstraction wrapping low-level register
+# manipulation, descriptor tables (GDT/IDT), paging, and port I/O into a
+# coherent kernel development API.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.kernel.arch
+
+from uranite.os.arch.x86-64.cpu import {
+    Registers, halt, enableInterrupts, disableInterrupts,
+    readCr0, writeCr0, readCr2, readCr3, writeCr3, readCr4, writeCr4,
+    invlpg, readMsr, writeMsr, readRflags, readTsc
+}
+from uranite.os.arch.x86-64.gdt import {
+    GdtEntry, GdtPointer, Gdt, loadGdt, reloadSegments,
+    KERNEL_CODE_SELECTOR, KERNEL_DATA_SELECTOR, userCodeSelector, userDataSelector
+}
+from uranite.os.arch.x86-64.idt import {
+    IdtEntry, IdtPointer, Idt, loadIdt, GateType, InterruptVector, IRQ_BASE
+}
+from uranite.os.arch.x86-64.paging import {
+    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER, PAGE_WRITE_THROUGH,
+    PAGE_CACHE_DISABLE, PAGE_ACCESSED, PAGE_DIRTY, PAGE_HUGE, PAGE_GLOBAL,
+    pageNoExecute, PageTableEntry, PageTable,
+    pml4Index, pdptIndex, pdIndex, ptIndex,
+    PAGE_SIZE, HUGE_PAGE_2MB, HUGE_PAGE_1GB, flushPage, flushTlb
+}
+from uranite.os.arch.x86-64.port import outb, inb, outw, inw, outl, inl, ioWait
+
+public class CpuContext:
+
+    """
+    Unified CPU state manager wrapping x86-64 register and control operations.
+    Provides convenience methods for common CPU management patterns used during
+    kernel initialization and runtime.
+    """
+
+    public Registers registers
+
+    public function CpuContext( self ) -> Void:
+        self.registers = new Registers()
+
+    public function disableInterruptsAndHalt( self ) -> Void:
+
+        """
+        Atomically disable interrupts and halt the CPU. Used for fatal
+        error conditions where no further execution is possible.
+        """
+
+        disableInterrupts()
+        halt()
+
+    public function flushTlbPage( self, I64 virtualAddress ) -> Void:
+
+        """
+        Invalidate the TLB entry for a single virtual address. Use after
+        modifying a single page table entry to ensure the CPU sees the
+        updated mapping.
+        """
+
+        invlpg( virtualAddress )
+
+    public function flushTlbAll( self ) -> Void:
+
+        """
+        Flush the entire TLB by reloading CR3 with its current value.
+        Use after bulk page table modifications.
+        """
+
+        I64 currentCr3 = readCr3()
+        writeCr3( currentCr3 )
+
+    public function getTimestamp( self ) -> I64:
+
+        """
+        Read the CPU timestamp counter (TSC) for high-resolution timing.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        return readTsc()
+
+public class DescriptorTables:
+
+    """
+    Manages GDT and IDT setup for kernel initialization. Provides a
+    single install() call that loads both tables into the CPU.
+    """
+
+    public Gdt gdt
+    public Idt idt
+
+    public function DescriptorTables( self, I64 gdtCapacity, I64 idtCapacity ) -> Void:
+        self.gdt = new Gdt( gdtCapacity )
+        self.idt = new Idt( idtCapacity )
+
+    public function install( self ) -> Void:
+
+        """
+        Load both GDT and IDT into the CPU via LGDT/LIDT instructions.
+        Must be called during kernel boot before enabling interrupts.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        GdtPointer gdtPointer = self.gdt.getPointer()
+        loadGdt( gdtPointer )
+        IdtPointer idtPointer = self.idt.getPointer()
+        loadIdt( idtPointer )
+
+public class PageMapper:
+
+    """
+    High-level page table management wrapping raw paging operations.
+    Provides map/unmap/protect operations over the four-level x86-64
+    page table hierarchy.
+    """
+
+    public PageTable rootTable
+
+    public function PageMapper( self ) -> Void:
+        self.rootTable = new PageTable()
+
+    public function mapPage( self, I64 virtualAddress, I64 physicalAddress, I64 flags ) -> Void:
+
+        """
+        Map a single 4KB page from virtualAddress to physicalAddress with
+        the given flags (PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER etc.).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 pml4Idx = pml4Index( virtualAddress )
+        I64 pdptIdx = pdptIndex( virtualAddress )
+        I64 pdIdx = pdIndex( virtualAddress )
+        I64 ptIdx = ptIndex( virtualAddress )
+        self.rootTable.mapEntry( pml4Idx, pdptIdx, pdIdx, ptIdx, physicalAddress, flags )
+
+    public function unmapPage( self, I64 virtualAddress ) -> Void:
+
+        """
+        Unmap a single 4KB page and invalidate its TLB entry.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 pml4Idx = pml4Index( virtualAddress )
+        I64 pdptIdx = pdptIndex( virtualAddress )
+        I64 pdIdx = pdIndex( virtualAddress )
+        I64 ptIdx = ptIndex( virtualAddress )
+        self.rootTable.unmapEntry( pml4Idx, pdptIdx, pdIdx, ptIdx )
+        invlpg( virtualAddress )
+
+export {
+    CpuContext,
+    DescriptorTables,
+    PageMapper,
+    Registers, halt, enableInterrupts, disableInterrupts,
+    readCr0, writeCr0, readCr2, readCr3, writeCr3, readCr4, writeCr4,
+    invlpg, readMsr, writeMsr, readRflags, readTsc,
+    GdtEntry, GdtPointer, Gdt, loadGdt, reloadSegments,
+    KERNEL_CODE_SELECTOR, KERNEL_DATA_SELECTOR, userCodeSelector, userDataSelector,
+    IdtEntry, IdtPointer, Idt, loadIdt, GateType, InterruptVector, IRQ_BASE,
+    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER, PAGE_WRITE_THROUGH,
+    PAGE_CACHE_DISABLE, PAGE_ACCESSED, PAGE_DIRTY, PAGE_HUGE, PAGE_GLOBAL,
+    pageNoExecute, PageTableEntry, PageTable,
+    pml4Index, pdptIndex, pdIndex, ptIndex,
+    PAGE_SIZE, HUGE_PAGE_2MB, HUGE_PAGE_1GB, flushPage, flushTlb,
+    outb, inb, outw, inw, outl, inl, ioWait
+}

@@ -1,0 +1,239 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/scheduler/scheduler.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides a round-robin preemptive task scheduler with equal time slices and FIFO run queue ordering for cooperative and timer-driven context switching.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.scheduler.scheduler
+
+from uranite.os.task.task import Task, TaskState
+from uranite.os.arch.x86-64.cpu import halt, disableInterrupts, enableInterrupts
+
+public class Scheduler:
+    
+    """
+    Round-robin preemptive task scheduler that distributes CPU time equally among all
+    ready tasks using fixed-length time slices. The run queue is implemented as an
+    intrusive singly-linked list using the Task.next pointer, providing O(1) enqueue
+    and dequeue operations. Tasks are scheduled in FIFO order. When no runnable tasks
+    are available, the scheduler falls back to an idle task that halts the CPU until
+    the next interrupt. Context switches are triggered either by voluntary yield or
+    by the timer interrupt handler when a task's time slice expires.
+    """
+    
+    protect ?Task runQueueHead
+    protect ?Task runQueueTail
+    protect ?Task currentTask
+    protect ?Task idleTask
+    protect I64 taskCount
+    protect I64 nextTaskId
+    
+    public function Scheduler( self ) -> Void:
+        
+        """
+        Constructs a new scheduler with empty run queue, no current task, no idle task,
+        and a task ID counter starting at 1.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.runQueueHead = None
+        self.runQueueTail = None
+        self.currentTask = None
+        self.idleTask = None
+        self.taskCount = 0
+        self.nextTaskId = 1
+    
+    public function setIdleTask( self, Task idle ) -> Void:
+        
+        """
+        Sets the idle task that runs when the run queue is empty. The idle task's entry
+        point should contain a loop that repeatedly halts the CPU (while True: halt())
+        to minimize power consumption while waiting for interrupts. The task is
+        transitioned to the Ready state upon registration.
+        """
+        
+        self.idleTask = idle
+        idle.makeReady()
+    
+    public function enqueue( self, ?Task task ) -> Void:
+        
+        """
+        Adds a task to the end of the run queue, making it eligible for scheduling. The
+        task is transitioned to the Ready state and its next pointer is cleared. If the
+        queue is empty, the task becomes both the head and tail. If the task is None, no
+        action is taken.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if task == None:
+            return
+        task.makeReady()
+        task.clearNext()
+        if self.runQueueTail == None:
+            self.runQueueHead = task
+            self.runQueueTail = task
+        else:
+            self.runQueueTail.setNext( task )
+            self.runQueueTail = task
+        self.taskCount = self.taskCount + 1
+    
+    public function dequeue( self ) -> ?Task:
+        
+        """
+        Removes and returns the task at the front of the run queue. If the queue becomes
+        empty after removal, both head and tail pointers are set to None. Returns None
+        if the queue is already empty.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.runQueueHead == None:
+            return None
+        ?Task task = self.runQueueHead
+        self.runQueueHead = task.getNext()
+        if self.runQueueHead == None:
+            self.runQueueTail = None
+        task.clearNext()
+        self.taskCount = self.taskCount - 1
+        return task
+    
+    public function schedule( self ) -> Void:
+        
+        """
+        Selects the next task to run and performs a context switch. Interrupts are disabled
+        during scheduling to prevent reentrancy from timer interrupts. If the current task
+        is still runnable, it is placed back at the end of the run queue. The next task is
+        dequeued from the front of the run queue, or the idle task is selected if the queue
+        is empty. The selected task is marked as running and set as the current task.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        disableInterrupts()
+        if self.currentTask != None:
+            if self.currentTask.isRunnable() or self.currentTask.getState() == TaskState.Running:
+                self.currentTask.makeReady()
+                self.enqueue( self.currentTask )
+        ?Task next = self.dequeue()
+        if next == None:
+            next = self.idleTask
+        if next != None:
+            next.markRunning()
+            self.currentTask = next
+        enableInterrupts()
+    
+    public function yields( self ) -> Void:
+        
+        """
+        Voluntarily relinquishes the CPU by invoking the scheduler to select the next
+        task. The current task is placed back in the run queue and a context switch is
+        performed.
+        """
+        
+        self.schedule()
+    
+    public function tick( self ) -> Void:
+        
+        """
+        Timer interrupt handler called on each timer tick. Increments the current task's
+        time usage counter and triggers preemptive scheduling if the task's time slice
+        has expired.
+        """
+        
+        if self.currentTask != None:
+            self.currentTask.tick()
+            if self.currentTask.isTimeSliceExpired():
+                self.schedule()
+    
+    public function blockCurrent( self ) -> Void:
+        
+        """
+        Blocks the currently running task by transitioning it to the Blocked state, then
+        invokes the scheduler to select the next runnable task. The caller should set the
+        block reason on the task before calling this method so the appropriate wakeup
+        mechanism can later unblock it.
+        """
+        
+        if self.currentTask != None:
+            self.currentTask.setState( TaskState.Blocked )
+            self.schedule()
+    
+    public function unblock( self, ?Task task ) -> Void:
+        
+        """
+        Unblocks a previously blocked task by transitioning it back to the Ready state
+        and adding it to the end of the run queue, making it eligible for scheduling
+        again. No action is taken if the task is None.
+        """
+        
+        if task == None:
+            return
+        task.unblock()
+        self.enqueue( task )
+    
+    public function allocateTaskId( self ) -> I64:
+        
+        """
+        Generates and returns the next unique task identifier. Task IDs are monotonically
+        increasing integers starting from 1, ensuring each task in the system has a
+        distinct identifier.
+        """
+        
+        I64 id = self.nextTaskId
+        self.nextTaskId = self.nextTaskId + 1
+        return id
+    
+    public function getCurrentTask( self ) -> ?Task:
+        
+        """ Returns the currently running task, or None if no task is executing. """
+        
+        return self.currentTask
+    
+    public function getTaskCount( self ) -> I64:
+        
+        """ Returns the number of tasks currently waiting in the run queue. """
+        
+        return self.taskCount
+    
+    public function isIdle( self ) -> Boolean:
+        
+        """
+        Returns True if the scheduler is currently running the idle task or if no task
+        is running at all, indicating that no user tasks are ready for execution.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.currentTask == None:
+            return True
+        return self.currentTask == self.idleTask
+
+export {
+    Scheduler
+}

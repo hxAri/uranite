@@ -1,0 +1,216 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/security/handle.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides a per-process handle table that maps integer handle IDs to kernel objects with associated capability masks, supporting O(1) allocation and lookup via free-list chaining.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.security.handle
+
+from uranite.memory.memory import Memory
+from uranite.os.memory.object import KernelObject
+from uranite.os.security.capability import Capability
+
+public class HandleEntry:
+    
+    """
+    Represents a single slot in a handle table, pairing a kernel object reference with
+    its capability mask. A None object field indicates a free slot. The nextFree field
+    chains free slots together into an intrusive free list for O(1) slot allocation.
+    """
+    
+    public ?KernelObject object
+    public Capability capability
+    public I64 nextFree
+    
+    public function HandleEntry( self ) -> Void:
+        
+        """
+        Constructs a new empty handle entry with no associated kernel object, an empty
+        capability mask (no permissions), and the free-list pointer set to -1 (end of list).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.object = None
+        self.capability = new Capability( 0 )
+        self.nextFree = -1
+
+public class HandleTable:
+    
+    """
+    Per-process mapping from integer handle IDs to kernel objects with associated
+    capability masks. The table has a fixed capacity and uses free-list chaining for
+    O(1) handle allocation and deallocation. Handle IDs are indices into the table
+    array. When a handle is closed, the kernel object's reference count is decremented
+    and the slot is returned to the free list. Handle duplication supports capability
+    attenuation (reducing permissions) but prevents privilege escalation.
+    """
+    
+    protect Memory<HandleEntry> entries
+    protect I64 capacity
+    protect I64 count
+    protect I64 firstFree
+    
+    public function HandleTable( self, I64 capacity ) -> Void:
+        
+        """
+        Constructs a new handle table with the specified capacity. All slots are
+        initialized as empty HandleEntry objects and chained together into a free
+        list, with each slot pointing to the next and the last slot marking the
+        end of the list with -1.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = capacity
+        self.count = 0
+        self.firstFree = 0
+        self.entries = new Memory<HandleEntry>( capacity )
+        I64 slotIndex = 0
+        while slotIndex < capacity:
+            HandleEntry entry = new HandleEntry()
+            if slotIndex < capacity - 1:
+                entry.nextFree = slotIndex + 1
+            else:
+                entry.nextFree = -1
+            self.entries.set( slotIndex, entry )
+            slotIndex = slotIndex + 1
+    
+    public function allocate( self, KernelObject object, Capability capability ) -> I64:
+        
+        """
+        Allocates a new handle for the given kernel object with the specified capability
+        mask. The kernel object's reference count is incremented to reflect the new handle
+        reference. Returns the handle ID (slot index) on success, or -1 if the handle
+        table is full.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.firstFree < 0:
+            return -1
+        I64 slot = self.firstFree
+        HandleEntry entry = self.entries.get( slot )
+        self.firstFree = entry.nextFree
+        entry.object = object
+        entry.capability = capability
+        entry.nextFree = -1
+        self.entries.set( slot, entry )
+        self.count = self.count + 1
+        object.retain()
+        return slot
+    
+    public function lookup( self, I64 handleId ) -> ?HandleEntry:
+        
+        """
+        Looks up a handle by its ID and returns the associated HandleEntry containing
+        the kernel object reference and capability mask. Returns None if the handle ID
+        is out of bounds or the slot is not allocated.
+        """
+        
+        if handleId < 0 or handleId >= self.capacity:
+            return None
+        HandleEntry entry = self.entries.get( handleId )
+        return entry
+    
+    public function close( self, I64 handleId ) -> Boolean:
+        
+        """
+        Closes a handle, releasing the kernel object reference by decrementing its
+        reference count. The handle slot is cleared and returned to the free list for
+        reuse. Returns True if the kernel object's reference count reached zero,
+        indicating the caller should destroy the object. Returns False if the handle
+        ID is invalid, the slot is empty, or other references to the object remain.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if handleId < 0 or handleId >= self.capacity:
+            return False
+        HandleEntry entry = self.entries.get( handleId )
+        if entry.object == None:
+            return False
+        KernelObject object = entry.object
+        Boolean lastRef = object.release()
+        entry.object = None
+        entry.capability = new Capability( 0 )
+        entry.nextFree = self.firstFree
+        self.entries.set( handleId, entry )
+        self.firstFree = handleId
+        self.count = self.count - 1
+        return lastRef
+    
+    public function duplicate( self, I64 handleId, Capability newCapability ) -> I64:
+        
+        """
+        Duplicates a handle with attenuated (reduced) capabilities. The new capability
+        must be a subset of the original handle's capability to prevent privilege
+        escalation. A new handle is allocated for the same kernel object with the
+        attenuated capability. Returns the new handle ID on success, or -1 if the
+        original handle is invalid, the slot is empty, or the new capability is not
+        a subset of the original.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if handleId < 0 or handleId >= self.capacity:
+            return -1
+        HandleEntry entry = self.entries.get( handleId )
+        if entry.object == None:
+            return -1
+        if not entry.capability.contains( newCapability ):
+            return -1
+        return self.allocate( entry.object, newCapability )
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of currently allocated handles in the table. """
+        
+        return self.count
+    
+    public function getCapacity( self ) -> I64:
+        
+        """ Returns the maximum number of handles this table can hold. """
+        
+        return self.capacity
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases the heap-allocated memory buffer used to store handle entries.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.entries.free()
+
+export {
+    HandleEntry,
+    HandleTable
+}

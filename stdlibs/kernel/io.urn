@@ -1,0 +1,107 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/io.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Kernel block I/O subsystem combining buffer cache, DMA channels, and
+# I/O request queues into a unified storage access layer.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.kernel.io
+
+from uranite.os.io.buffer-cache import {
+    BUFFER_VALID, BUFFER_DIRTY, BUFFER_LOCKED, BufferEntry, BufferCache
+}
+from uranite.os.io.dma import DmaDirection, DmaDescriptor, DmaChannel
+from uranite.os.io.request import RequestType, RequestStatus, IoRequestQueue
+
+public class BlockIoSubsystem:
+
+    """
+    Unified block I/O subsystem combining buffer cache for read caching,
+    DMA channels for direct memory transfers, and request queues for
+    asynchronous I/O scheduling.
+    """
+
+    public BufferCache cache
+    public IoRequestQueue requestQueue
+
+    public function BlockIoSubsystem( self, I64 cacheCapacity, I64 queueCapacity ) -> Void:
+        self.cache = new BufferCache( cacheCapacity )
+        self.requestQueue = new IoRequestQueue( queueCapacity )
+
+    public function lookupCached( self, I64 deviceId, I64 blockNumber ) -> I64:
+
+        """
+        Look up a block in the buffer cache. Returns the cache slot index
+        or -1 if not cached.
+        """
+
+        return self.cache.lookup( deviceId, blockNumber )
+
+    public function submitRead( self, I64 deviceId, I64 blockNumber, I64 bufferAddress, I64 length, I64 tag ) -> I64:
+
+        """
+        Submit an asynchronous read request. Returns the request index
+        for later status checking.
+        """
+
+        return self.requestQueue.submit( RequestType.Read, deviceId, blockNumber, bufferAddress, length, tag )
+
+    public function submitWrite( self, I64 deviceId, I64 blockNumber, I64 bufferAddress, I64 length, I64 tag ) -> I64:
+
+        """
+        Submit an asynchronous write request. Returns the request index
+        for later status checking.
+        """
+
+        return self.requestQueue.submit( RequestType.Write, deviceId, blockNumber, bufferAddress, length, tag )
+
+    public function getDirtyCount( self ) -> I64:
+
+        """ Return the number of dirty buffer cache entries awaiting writeback. """
+
+        return self.cache.getDirtyCount()
+
+    public function getCacheHits( self ) -> I64:
+
+        """ Return the number of cache hits since creation. """
+
+        return self.cache.getHits()
+
+    public function getPendingRequests( self ) -> I64:
+
+        """ Return the number of pending I/O requests. """
+
+        return self.requestQueue.getPending()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all resources held by the block I/O subsystem.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.requestQueue.destroy()
+
+export {
+    BlockIoSubsystem,
+    BUFFER_VALID, BUFFER_DIRTY, BUFFER_LOCKED, BufferEntry, BufferCache,
+    DmaDirection, DmaDescriptor, DmaChannel,
+    RequestType, RequestStatus, IoRequestQueue
+}

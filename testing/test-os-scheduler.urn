@@ -1,0 +1,30 @@
+package testing
+
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import Task
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Scheduler Tests ===" )
+
+    Scheduler sched = new Scheduler()
+    assertEqualI64( 0, sched.getTaskCount(), "taskCount 0" )
+    assertTrue( sched.isIdle(), "idle" )
+
+    ?Task ct = sched.getCurrentTask()
+    assertTrue( ct == None, "no current task" )
+    putsln( "initial state OK" )
+
+    I64 tid1 = sched.allocateTaskId()
+    assertEqualI64( 1, tid1, "tid1" )
+    I64 tid2 = sched.allocateTaskId()
+    assertEqualI64( 2, tid2, "tid2" )
+    I64 tid3 = sched.allocateTaskId()
+    assertEqualI64( 3, tid3, "tid3" )
+    putsln( "allocateTaskId OK" )
+
+    putsln( "=== All scheduler tests passed ===" )
+    return 0

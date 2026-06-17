@@ -1,0 +1,212 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/debug/perf.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Performance counters for kernel metrics tracking. Each counter tracks a current value, minimum, maximum, and sample count for measuring latencies, throughput, cache hit rates, and other kernel performance indicators.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.debug.perf
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public class PerfCounters:
+    
+    """
+    Collection of named performance counters for tracking kernel metrics.
+    Each counter stores a current value along with running minimum, maximum,
+    and sample count statistics. Counters are allocated by index and can be
+    used for tracking latencies, throughput, cache hit rates, and other
+    kernel performance indicators. A spinlock protects counter allocation.
+    """
+    
+    public Memory<I64> values
+    public Memory<I64> mins
+    public Memory<I64> maxs
+    public Memory<I64> sampleCounts
+    public I64 capacity
+    public I64 count
+    public Spinlock lock
+    
+    public function PerfCounters( self, I64 maxCounters ) -> Void:
+        
+        """
+        Construct a performance counter collection with capacity for the
+        specified maximum number of counters. Each counter is initialized
+        with a value of 0, a minimum of I64 max value (9223372036854775807),
+        a maximum of 0, and a sample count of 0.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxCounters
+        self.count = 0
+        self.lock = new Spinlock()
+        self.values = new Memory<I64>( maxCounters )
+        self.mins = new Memory<I64>( maxCounters )
+        self.maxs = new Memory<I64>( maxCounters )
+        self.sampleCounts = new Memory<I64>( maxCounters )
+        I64 slotIndex = 0
+        while slotIndex < maxCounters:
+            self.values.set( slotIndex, 0 )
+            self.mins.set( slotIndex, 9223372036854775807 )
+            self.maxs.set( slotIndex, 0 )
+            self.sampleCounts.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function allocate( self ) -> I64:
+        
+        """
+        Allocate a new performance counter and return its ID (index).
+        Returns -1 if all counter slots are exhausted. The allocation
+        is protected by a spinlock for thread-safe concurrent access.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.count >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 id = self.count
+        self.count = self.count + 1
+        self.lock.unlock()
+        return id
+    
+    public function increment( self, I64 id, I64 delta ) -> Void:
+        
+        """
+        Increment the counter identified by id by the given delta value.
+        Also increments the sample count and updates the minimum and maximum
+        tracked values if the new accumulated value exceeds those bounds.
+        Silently returns if the counter ID is invalid.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if id < 0 or id >= self.count:
+            return
+        I64 val = self.values.get( id ) + delta
+        self.values.set( id, val )
+        self.sampleCounts.set( id, self.sampleCounts.get( id ) + 1 )
+        if val < self.mins.get( id ):
+            self.mins.set( id, val )
+        if val > self.maxs.get( id ):
+            self.maxs.set( id, val )
+    
+    public function record( self, I64 id, I64 value ) -> Void:
+        
+        """
+        Record an absolute sample value for the counter identified by id,
+        replacing its current value. This is intended for latency tracking
+        where each sample is an independent measurement. Updates the sample
+        count and adjusts the minimum and maximum if the value exceeds them.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if id < 0 or id >= self.count:
+            return
+        self.values.set( id, value )
+        self.sampleCounts.set( id, self.sampleCounts.get( id ) + 1 )
+        if value < self.mins.get( id ):
+            self.mins.set( id, value )
+        if value > self.maxs.get( id ):
+            self.maxs.set( id, value )
+    
+    public function reset( self, I64 id ) -> Void:
+        
+        """
+        Reset the counter identified by id to its initial state: value 0,
+        minimum set to I64 max value, maximum set to 0, and sample count
+        cleared. Silently returns if the counter ID is invalid.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if id < 0 or id >= self.count:
+            return
+        self.values.set( id, 0 )
+        self.mins.set( id, 9223372036854775807 )
+        self.maxs.set( id, 0 )
+        self.sampleCounts.set( id, 0 )
+    
+    public function getValue( self, I64 id ) -> I64:
+        
+        """ Return the current value of the counter at the given ID, or 0 if the ID is invalid. """
+        
+        if id < 0 or id >= self.count:
+            return 0
+        return self.values.get( id )
+    
+    public function getMin( self, I64 id ) -> I64:
+        
+        """ Return the minimum recorded value of the counter at the given ID, or 0 if the ID is invalid. """
+        
+        if id < 0 or id >= self.count:
+            return 0
+        return self.mins.get( id )
+    
+    public function getMax( self, I64 id ) -> I64:
+        
+        """ Return the maximum recorded value of the counter at the given ID, or 0 if the ID is invalid. """
+        
+        if id < 0 or id >= self.count:
+            return 0
+        return self.maxs.get( id )
+    
+    public function getSampleCount( self, I64 id ) -> I64:
+        
+        """ Return the number of samples recorded for the counter at the given ID, or 0 if the ID is invalid. """
+        
+        if id < 0 or id >= self.count:
+            return 0
+        return self.sampleCounts.get( id )
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the total number of allocated performance counters. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all Memory arrays used for storing counter data.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.values.free()
+        self.mins.free()
+        self.maxs.free()
+        self.sampleCounts.free()
+
+export {
+    PerfCounters
+}

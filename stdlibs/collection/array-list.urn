@@ -1,0 +1,1503 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/array-list.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides ArrayList, a resizable array-backed list implementation, and its
+# companion ArrayListIterator for sequential element traversal.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.arraylist
+
+from uranite.collection.mutable-sequence import MutableSequence
+from uranite.collection.sequence import Sequence
+from uranite.collection.collection import Collection
+from uranite.iterators.iterator import Iterator
+from uranite.language.boolean import Boolean
+from uranite.language.callable import Callable
+from uranite.language.void import Void
+from uranite.language.string import String
+from uranite.memory.memory import Memory
+from uranite.errors.lookup import IndexError
+from uranite.errors.value import ValueError
+from uranite.errors.state import StateError
+from uranite.collection.pair import Pair
+
+public class ArrayList<E> implements MutableSequence<E>:
+    
+    """
+    Resizable array-backed list with amortized O(1) append.
+    
+    Elements are stored contiguously in a Memory buffer that doubles in capacity
+    when full. Supports indexed access, insertion, removal, sorting, filtering,
+    and functional transformations such as map and forEach.
+    """
+    
+    private Memory<E> data
+    private Int count
+    private Int capacity
+    
+    public function ArrayList( self ) -> Void:
+        
+        """
+        Create an empty list with a default initial capacity of 16 elements.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.capacity = 16
+        self.data = new Memory<E>( self.capacity )
+        self.count = 0
+    
+    public function ArrayList( self, Int initialCapacity ) -> Void:
+        
+        """
+        Create an empty list with the specified initial capacity.
+        
+        Parameters:
+            initialCapacity (Int):
+                The number of element slots to pre-allocate.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(n)
+        """
+        
+        self.capacity = initialCapacity
+        self.data = new Memory<E>( self.capacity )
+        self.count = 0
+    
+    public function append( self, E element ) -> ArrayList<E>:
+        
+        """
+        Append an element to the end of the list and return self for method chaining.
+        
+        Parameters:
+            element (E):
+                The element to append.
+        
+        Returns:
+            ArrayList<E>:
+                This list instance, allowing chained calls.
+        
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1) amortized
+        """
+        
+        self.add( element )
+        return self
+    
+    public function clear( self ) -> Void:
+        
+        """ Remove all elements from the list by resetting the count to zero. """
+        
+        self.count = 0
+    
+    public property copy( self ) -> ArrayList<E>:
+        
+        """
+        Return a shallow copy of this list.
+        
+        Returns:
+            ArrayList<E>:
+                A new list containing the same elements in the same order.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        ArrayList<E> result = new ArrayList<E>( self.count )
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            result.add( self.data.get( elementIndex ) )
+        return result
+
+    public property empty( self ) -> Boolean:
+        
+        """
+        Check whether the list contains no elements.
+        
+        Returns:
+            Boolean:
+                True if the list has zero elements, False otherwise.
+        """
+        
+        return self.count == 0
+    
+    public function equals( self, Object object ) -> Boolean:
+        
+        """
+        Compare this list with another object for element-wise equality.
+        
+        Parameters:
+            object (Object):
+                The object to compare against.
+        
+        Returns:
+            Boolean:
+                True if the other object is an ArrayList of the same length with
+                equal elements at every index, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        if object instanceof ArrayList:
+            ArrayList<E> other = object as ArrayList<E>
+            if self.count != other.count:
+                return False
+            for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+                if self.data.get( elementIndex ) != other.get( elementIndex ):
+                    return False
+            return True
+        return False
+    
+    public function exists( self, E element ) -> Boolean:
+        
+        """
+        Check whether the given element exists in the list via linear scan.
+        
+        Parameters:
+            element (E):
+                The element to search for.
+        
+        Returns:
+            Boolean:
+                True if the element is found, False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if self.data.get( elementIndex ) == element:
+                return True
+        return False
+    
+    public function filter( self, Callable<Boolean,<E>> callback ) -> ArrayList<E>:
+        
+        """
+        Return a new list containing only elements that match the predicate.
+        
+        Parameters:
+            callback (Callable<Boolean,<E>>):
+                A predicate function that returns True for elements to include.
+        
+        Returns:
+            ArrayList<E>:
+                A new list with only the matching elements.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        ArrayList<E> result = new ArrayList<E>()
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if callback( self.data.get( elementIndex ) ):
+                result.add( self.data.get( elementIndex ) )
+        return result
+    
+    public property length( self ) -> Int:
+        
+        """ Return the number of elements currently in the list. """
+        
+        return self.count
+    
+    public function remove( self, E element ) -> Boolean:
+        
+        """
+        Remove the first occurrence of the given element from the list.
+        
+        Parameters:
+            element (E):
+                The element to remove.
+        
+        Returns:
+            Boolean:
+                True if the element was found and removed, False otherwise.
+        """
+        
+        return self.removeElement( element )
+    
+    public function remove( self, Int index ) -> Void:
+        
+        """
+        Remove the element at the given index without returning it.
+        
+        Parameters:
+            index (Int):
+                The zero-based index of the element to remove.
+        """
+        
+        self.removeAt( index )
+    
+    public function hasIndex( self, Int index ) -> Boolean:
+
+        """
+        Check whether the given index is within the valid range of this list.
+
+        Parameters:
+            index (Int):
+                The index to check.
+
+        Returns:
+            Boolean:
+                True if the index is valid (0 <= index < length), False otherwise.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return index >= 0 and index < self.count
+
+    public function contains( self, E element ) -> Boolean:
+
+        """
+        Check whether the given element exists in the list via linear scan.
+
+        Parameters:
+            element (E):
+                The element to search for.
+
+        Returns:
+            Boolean:
+                True if the element is found, False otherwise.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        return self.exists( element )
+    
+    public function get( self, Int index ) -> E:
+
+        """
+        Retrieve the element at the given index.
+
+        Parameters:
+            index (Int):
+                The zero-based index of the element to retrieve.
+
+        Returns:
+            E:
+                The element at the specified index.
+
+        Raises:
+            IndexError:
+                If index is negative or greater than or equal to the list size.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if index < 0 or index >= self.count:
+            raise new IndexError( index, self.count )
+        return self.data.get( index )
+    
+    public function indexOf( self, E element ) -> Int:
+        
+        """
+        Return the index of the first occurrence of the element, or -1 if absent.
+        
+        Parameters:
+            element (E):
+                The element to search for.
+        
+        Returns:
+            Int:
+                The zero-based index, or -1 if the element is not found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if self.data.get( elementIndex ) == element:
+                return elementIndex
+        return -1
+
+    public function lastIndexOf( self, E element ) -> Int:
+        
+        """
+        Return the index of the last occurrence of the element, or -1 if absent.
+        
+        Parameters:
+            element (E):
+                The element to search for.
+        
+        Returns:
+            Int:
+                The zero-based index of the last occurrence, or -1 if not found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int result = -1
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if self.data.get( elementIndex ) == element:
+                result = elementIndex
+        return result
+    
+    public function slice( self, Int start, Int end ) -> ArrayList<E>:
+        
+        """
+        Return a new list containing elements from the start index up to but
+        not including the end index.
+        
+        Parameters:
+            start (Int):
+                The inclusive start index.
+            end (Int):
+                The exclusive end index.
+        
+        Returns:
+            ArrayList<E>:
+                A new list with the sliced elements.
+        
+        Complexity:
+            Time: O(k) where k = end - start
+            Space: O(k)
+        """
+        
+        return self.subSequence( start, end )
+    
+    public function subSequence( self, Int start, Int end ) -> ArrayList<E>:
+
+        """
+        Return a new sub-list between the start and end indices.
+
+        Parameters:
+            start (Int):
+                The inclusive start index.
+            end (Int):
+                The exclusive end index.
+
+        Returns:
+            ArrayList<E>:
+                A new list containing the elements in the specified range.
+
+        Raises:
+            IndexError:
+                If start or end is out of bounds, or start > end.
+
+        Complexity:
+            Time: O(K) where K = end - start
+            Space: O(K) where K = end - start
+        """
+
+        if start < 0 or start > self.count:
+            raise new IndexError( start, self.count )
+        if end < start or end > self.count:
+            raise new IndexError( end, self.count )
+        ArrayList<E> result = new ArrayList<E>( end - start )
+        for Int elementIndex = start; elementIndex < end; elementIndex++:
+            result.add( self.data.get( elementIndex ) )
+        return result
+    
+    public property first( self ) -> E:
+
+        """
+        Return the first element of the list.
+
+        Raises:
+            IndexError:
+                If the list is empty.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.count == 0:
+            raise new IndexError( 0, 0 )
+        return self.data.get( 0 )
+
+    public property last( self ) -> E:
+
+        """
+        Return the last element of the list.
+
+        Raises:
+            IndexError:
+                If the list is empty.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.count == 0:
+            raise new IndexError( 0, 0 )
+        return self.data.get( self.count - 1 )
+    
+    public property reversed( self ) -> ArrayList<E>:
+        
+        """
+        Return a new list with the elements in reverse order.
+        
+        Returns:
+            ArrayList<E>:
+                A new list containing this list's elements reversed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        ArrayList<E> result = new ArrayList<E>( self.count )
+        for Int elementIndex = self.count - 1; elementIndex >= 0; elementIndex--:
+            result.add( self.data.get( elementIndex ) )
+        return result
+    
+    public function sorted( self, Callable<Int,<E,E>> comparator ) -> ArrayList<E>:
+        
+        """
+        Return a new sorted list using the provided comparator function.
+        
+        Parameters:
+            comparator (Callable<Int,<E,E>>):
+                A comparison function returning negative, zero, or positive Int.
+        
+        Returns:
+            ArrayList<E>:
+                A new list with elements sorted according to the comparator.
+        
+        Complexity:
+            Time: O(n^2)
+            Space: O(n)
+        """
+        
+        ArrayList<E> result = self.copy() as ArrayList<E>
+        result.sort()
+        return result
+    
+    public function map( self, Callable<E,<E>> transform ) -> ArrayList<E>:
+        
+        """
+        Return a new list with the transform function applied to each element.
+        
+        Parameters:
+            transform (Callable<E,<E>>):
+                The transformation function to apply to each element.
+        
+        Returns:
+            ArrayList<E>:
+                A new list containing the transformed elements.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        ArrayList<E> result = new ArrayList<E>( self.count )
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            result.add( transform( self.data.get( elementIndex ) ) )
+        return result
+    
+    public function flatMap( self, Callable<ArrayList<E>, <E>> transform ) -> ArrayList<E>:
+
+        """
+        Apply the transform to each element, then flatten the resulting lists
+        into a single list.
+
+        Parameters:
+            transform (Callable<ArrayList<E>, <E>>):
+                Function that maps each element to a list of elements.
+
+        Returns:
+            ArrayList<E>:
+                New list containing all elements from all transformed sublists.
+
+        Complexity:
+            Time: O(n * m) where m is average sublist size
+            Space: O(n * m)
+        """
+
+        ArrayList<E> result = new ArrayList<E>()
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            ArrayList<E> sublist = transform( self.data.get( elementIndex ) )
+            for Int subIndex = 0; subIndex < sublist.length; subIndex++:
+                result.add( sublist.get( subIndex ) )
+        return result
+
+    public function forEach( self, Callable<Void,<E>> action ) -> Void:
+        
+        """
+        Execute an action for each element in the list.
+        
+        Parameters:
+            action (Callable<Void,<E>>):
+                The action to execute with each element.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            action( self.data.get( elementIndex ) )
+    
+    public function zip( self, ArrayList<E> other ) -> ArrayList<E>:
+        
+        """
+        Interleave elements from this list and another list, alternating between
+        them up to the length of the shorter list.
+        
+        Parameters:
+            other (ArrayList<E>):
+                The other list to interleave with.
+        
+        Returns:
+            ArrayList<E>:
+                A new list with interleaved elements.
+        
+        Complexity:
+            Time: O(min(n, m))
+            Space: O(min(n, m))
+        """
+        
+        Int minLength = self.count
+        if other.length < minLength:
+            minLength = other.length
+        ArrayList<E> result = new ArrayList<E>( minLength * 2 )
+        for Int elementIndex = 0; elementIndex < minLength; elementIndex++:
+            result.add( self.data.get( elementIndex ) )
+            result.add( other.get( elementIndex ) )
+        return result
+    
+    public function add( self, E element ) -> Void:
+        
+        """
+        Append an element to the end of the list, growing the internal buffer
+        if the capacity has been reached.
+        
+        Parameters:
+            element (E):
+                The element to add.
+        
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1) amortized
+        """
+        
+        if self.count >= self.capacity:
+            self.grow()
+        self.data.set( self.count, element )
+        self.count = self.count + 1
+    
+    public function addAll( self, ArrayList<E> elements ) -> Void:
+        
+        """
+        Append all elements from another list to the end of this list.
+        
+        Parameters:
+            elements (ArrayList<E>):
+                The list of elements to append.
+        
+        Complexity:
+            Time: O(m) where m is elements.length
+            Space: O(1) amortized
+        """
+        
+        for Int elementIndex = 0; elementIndex < elements.length; elementIndex++:
+            self.add( elements.get( elementIndex ) )
+    
+    public function insert( self, Int index, E element ) -> Void:
+
+        """
+        Insert an element at the given index, shifting all subsequent elements
+        one position to the right.
+
+        Parameters:
+            index (Int):
+                The zero-based index at which to insert. Must be in [0, size].
+            element (E):
+                The element to insert.
+
+        Raises:
+            IndexError:
+                If index is negative or greater than the list size.
+
+        Complexity:
+            Time: O(N) where N is the number of elements after the insertion point
+            Space: O(1) amortized, O(N) on grow
+        """
+
+        if index < 0 or index > self.count:
+            raise new IndexError( index, self.count )
+        if self.count >= self.capacity:
+            self.grow()
+        for Int shiftIndex = self.count; shiftIndex > index; shiftIndex--:
+            self.data.set( shiftIndex, self.data.get( shiftIndex - 1 ) )
+        self.data.set( index, element )
+        self.count = self.count + 1
+    
+    public function set( self, Int index, E element ) -> Void:
+
+        """
+        Replace the element at the given index with a new element.
+
+        Parameters:
+            index (Int):
+                The zero-based index of the element to replace.
+            element (E):
+                The new element to store at the index.
+
+        Raises:
+            IndexError:
+                If index is negative or greater than or equal to the list size.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if index < 0 or index >= self.count:
+            raise new IndexError( index, self.count )
+        self.data.set( index, element )
+    
+    public function removeAt( self, Int index ) -> E:
+
+        """
+        Remove and return the element at the given index, shifting all subsequent
+        elements one position to the left.
+
+        Parameters:
+            index (Int):
+                The zero-based index of the element to remove.
+
+        Returns:
+            E:
+                The removed element.
+
+        Raises:
+            IndexError:
+                If index is negative or greater than or equal to the list size.
+
+        Complexity:
+            Time: O(N) where N is the number of elements after the removal point
+            Space: O(1)
+        """
+
+        if index < 0 or index >= self.count:
+            raise new IndexError( index, self.count )
+        E removed = self.data.get( index )
+        for Int shiftIndex = index; shiftIndex < self.count - 1; shiftIndex++:
+            self.data.set( shiftIndex, self.data.get( shiftIndex + 1 ) )
+        self.count = self.count - 1
+        return removed
+    
+    public function removeFirst( self ) -> E:
+
+        """
+        Remove and return the first element of the list.
+
+        Raises:
+            IndexError:
+                If the list is empty.
+
+        Complexity:
+            Time: O(N) where N is the number of elements (shifts all)
+            Space: O(1)
+        """
+
+        if self.count == 0:
+            raise new IndexError( 0, 0 )
+        return self.removeAt( 0 )
+
+    public function removeLast( self ) -> E:
+
+        """
+        Remove and return the last element of the list.
+
+        Raises:
+            IndexError:
+                If the list is empty.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.count == 0:
+            raise new IndexError( 0, 0 )
+        self.count = self.count - 1
+        return self.data.get( self.count )
+    
+    public function removeElement( self, E element ) -> Boolean:
+        
+        """
+        Remove the first occurrence of the given element from the list.
+        
+        Parameters:
+            element (E):
+                The element to remove.
+        
+        Returns:
+            Boolean:
+                True if the element was found and removed, False otherwise.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        Int index = self.indexOf( element )
+        if index >= 0:
+            self.removeAt( index )
+            return True
+        return False
+    
+    public function sort( self ) -> Void:
+        
+        """
+        Sort elements in-place using insertion sort.
+        
+        Complexity:
+            Time: O(n^2)
+            Space: O(1)
+        """
+        
+        for Int sortIndex = 1; sortIndex < self.count; sortIndex++:
+            E key = self.data.get( sortIndex )
+            Int compareIndex = sortIndex - 1
+            while compareIndex >= 0 and self.data.get( compareIndex ) > key:
+                self.data.set( compareIndex + 1, self.data.get( compareIndex ) )
+                compareIndex = compareIndex - 1
+            self.data.set( compareIndex + 1, key )
+    
+    public function reverse( self ) -> Void:
+        
+        """
+        Reverse the order of elements in-place by swapping from both ends inward.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Int left = 0
+        Int right = self.count - 1
+        while left < right:
+            E temp = self.data.get( left )
+            self.data.set( left, self.data.get( right ) )
+            self.data.set( right, temp )
+            left = left + 1
+            right = right - 1
+    
+    public function swap( self, Int indexA, Int indexB ) -> Void:
+
+        """
+        Swap the elements at two indices.
+
+        Parameters:
+            indexA (Int):
+                The index of the first element.
+            indexB (Int):
+                The index of the second element.
+
+        Raises:
+            IndexError:
+                If either index is negative or greater than or equal to the list size.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if indexA < 0 or indexA >= self.count:
+            raise new IndexError( indexA, self.count )
+        if indexB < 0 or indexB >= self.count:
+            raise new IndexError( indexB, self.count )
+        E temp = self.data.get( indexA )
+        self.data.set( indexA, self.data.get( indexB ) )
+        self.data.set( indexB, temp )
+    
+    public function fill( self, E element ) -> Void:
+        
+        """
+        Set all elements in the list to the given value.
+        
+        Parameters:
+            element (E):
+                The value to fill every slot with.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            self.data.set( elementIndex, element )
+    
+    public function resize( self, Int newSize ) -> Void:
+        
+        """
+        Change the logical size of the list.
+        
+        Parameters:
+            newSize (Int):
+                The new element count.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.count = newSize
+    
+    public property iterator( self ) -> Iterator<E>:
+        
+        """
+        Return an iterator over the elements of this list.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new ArrayListIterator<E>( self )
+    
+    private function grow( self ) -> Void:
+        
+        """
+        Double the internal capacity and copy all elements to the new buffer.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Int newCapacity = self.capacity * 2
+        Memory<E> newData = new Memory<E>( newCapacity )
+        self.data.copyTo( newData, self.count )
+        self.data.free()
+        self.data = newData
+        self.capacity = newCapacity
+    
+    public function toString( self ) -> String:
+        
+        """
+        Return a string representation of the list in the format [elem1, elem2, ...].
+        
+        Returns:
+            String:
+                The formatted string representation.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        String result = "["
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if elementIndex > 0:
+                result = result + ", "
+            result = result + self.data.get( elementIndex )
+        result = result + "]"
+        return result
+
+    public function any( self, Callable<Boolean, <E>> predicate ) -> Boolean:
+
+        """
+        Test whether at least one element satisfies the predicate.
+
+        Short-circuits on the first match found.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for a matching element.
+
+        Returns:
+            Boolean:
+                True if any element satisfies the predicate, false if none do.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if predicate( self.data.get( elementIndex ) ):
+                return True
+        return False
+
+    public function all( self, Callable<Boolean, <E>> predicate ) -> Boolean:
+
+        """
+        Test whether every element satisfies the predicate.
+
+        Short-circuits on the first non-matching element.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for a conforming element.
+
+        Returns:
+            Boolean:
+                True if all elements satisfy the predicate, false otherwise.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if not predicate( self.data.get( elementIndex ) ):
+                return False
+        return True
+
+    public function noneMatch( self, Callable<Boolean, <E>> predicate ) -> Boolean:
+
+        """
+        Test whether no element satisfies the predicate.
+
+        Equivalent to `not self.any( predicate )` but reads more clearly
+        when asserting absence of a condition.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for a matching element.
+
+        Returns:
+            Boolean:
+                True if no element satisfies the predicate.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if predicate( self.data.get( elementIndex ) ):
+                return False
+        return True
+
+    public function count( self, Callable<Boolean, <E>> predicate ) -> Int:
+
+        """
+        Count the number of elements satisfying the predicate.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for elements to count.
+
+        Returns:
+            Int:
+                The number of matching elements.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        Int matchCount = 0
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if predicate( self.data.get( elementIndex ) ):
+                matchCount = matchCount + 1
+        return matchCount
+
+    public function reduce( self, Callable<E, <E, E>> accumulator ) -> E:
+
+        """
+        Reduce all elements to a single value by repeatedly applying
+        the accumulator function left-to-right.
+
+        The first element is used as the initial accumulator value.
+
+        Parameters:
+            accumulator (Callable<E, <E, E>>):
+                Binary function taking (accumulated, current) and returning
+                the new accumulated value.
+
+        Returns:
+            E:
+                The final accumulated result.
+
+        Raises:
+            StateError:
+                If the list is empty (no initial element to seed reduction).
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        if self.count == 0:
+            raise new StateError( "cannot reduce empty list", 0, None )
+        E current = self.data.get( 0 )
+        for Int elementIndex = 1; elementIndex < self.count; elementIndex++:
+            current = accumulator( current, self.data.get( elementIndex ) )
+        return current
+
+    public function find( self, Callable<Boolean, <E>> predicate ) -> ?E:
+
+        """
+        Find the first element satisfying the predicate.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for the desired element.
+
+        Returns:
+            ?E:
+                The first matching element, or None if no match exists.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            E candidate = self.data.get( elementIndex )
+            if predicate( candidate ):
+                return candidate
+        return None
+
+    public function findIndex( self, Callable<Boolean, <E>> predicate ) -> Int:
+
+        """
+        Find the index of the first element satisfying the predicate.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for the desired element.
+
+        Returns:
+            Int:
+                Index of the first match, or -1 if no match exists.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            if predicate( self.data.get( elementIndex ) ):
+                return elementIndex
+        return -1
+
+    public function take( self, Int amount ) -> ArrayList<E>:
+
+        """
+        Return a new list containing at most the first N elements.
+
+        If amount exceeds the list size, all elements are included.
+
+        Parameters:
+            amount (Int):
+                Maximum number of elements to take from the front.
+
+        Returns:
+            ArrayList<E>:
+                New list with up to amount elements.
+
+        Raises:
+            ValueError:
+                If amount is negative.
+
+        Complexity:
+            Time: O(amount)
+            Space: O(amount)
+        """
+
+        if amount < 0:
+            raise new ValueError( "take amount must be non-negative", 0, None )
+        ArrayList<E> result = new ArrayList<E>()
+        Int takeCount = amount
+        if takeCount > self.count:
+            takeCount = self.count
+        for Int elementIndex = 0; elementIndex < takeCount; elementIndex++:
+            result.add( self.data.get( elementIndex ) )
+        return result
+
+    public function drop( self, Int amount ) -> ArrayList<E>:
+
+        """
+        Return a new list with the first N elements removed.
+
+        If amount exceeds the list size, an empty list is returned.
+
+        Parameters:
+            amount (Int):
+                Number of elements to skip from the front.
+
+        Returns:
+            ArrayList<E>:
+                New list without the first amount elements.
+
+        Raises:
+            ValueError:
+                If amount is negative.
+
+        Complexity:
+            Time: O(n - amount)
+            Space: O(n - amount)
+        """
+
+        if amount < 0:
+            raise new ValueError( "drop amount must be non-negative", 0, None )
+        ArrayList<E> result = new ArrayList<E>()
+        Int startIndex = amount
+        if startIndex > self.count:
+            startIndex = self.count
+        for Int elementIndex = startIndex; elementIndex < self.count; elementIndex++:
+            result.add( self.data.get( elementIndex ) )
+        return result
+
+    public function takeWhile( self, Callable<Boolean, <E>> predicate ) -> ArrayList<E>:
+
+        """
+        Return a new list of leading elements that satisfy the predicate.
+
+        Stops at the first element that does not match.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for elements to include.
+
+        Returns:
+            ArrayList<E>:
+                New list of the longest matching prefix.
+
+        Complexity:
+            Time: O(k) where k is the prefix length
+            Space: O(k)
+        """
+
+        ArrayList<E> result = new ArrayList<E>()
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            E candidate = self.data.get( elementIndex )
+            if not predicate( candidate ):
+                return result
+            result.add( candidate )
+        return result
+
+    public function dropWhile( self, Callable<Boolean, <E>> predicate ) -> ArrayList<E>:
+
+        """
+        Return a new list with leading elements removed while the predicate holds.
+
+        Starts including elements from the first non-matching element onward.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                Function that returns true for elements to skip.
+
+        Returns:
+            ArrayList<E>:
+                New list starting from the first non-matching element.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n - k) where k is the dropped prefix length
+        """
+
+        ArrayList<E> result = new ArrayList<E>()
+        Boolean dropping = True
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            E candidate = self.data.get( elementIndex )
+            if dropping and not predicate( candidate ):
+                dropping = False
+            if not dropping:
+                result.add( candidate )
+        return result
+
+    public function distinct( self ) -> ArrayList<E>:
+
+        """
+        Return a new list with duplicate elements removed.
+
+        Preserves the order of first occurrence. Uses linear scan for
+        duplicate detection (suitable for small to medium lists).
+
+        Returns:
+            ArrayList<E>:
+                New list containing only unique elements.
+
+        Complexity:
+            Time: O(n^2)
+            Space: O(n)
+        """
+
+        ArrayList<E> result = new ArrayList<E>()
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            E candidate = self.data.get( elementIndex )
+            Boolean found = False
+            for Int checkIndex = 0; checkIndex < result.length; checkIndex++:
+                if result.get( checkIndex ) == candidate:
+                    found = True
+            if not found:
+                result.add( candidate )
+        return result
+
+    public property size( self ) -> Int:
+
+        """
+        Return the number of elements in the list.
+
+        Alias for the length property to match common collection conventions.
+
+        Returns:
+            Int:
+                The element count.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count
+
+    public property isEmpty( self ) -> Boolean:
+
+        """
+        Test whether the list contains no elements.
+
+        Returns:
+            Boolean:
+                True if the list has zero elements.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count == 0
+
+    public property isNotEmpty( self ) -> Boolean:
+
+        """
+        Test whether the list contains at least one element.
+
+        Returns:
+            Boolean:
+                True if the list has one or more elements.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.count > 0
+
+    public function firstOrNone( self ) -> ?E:
+
+        """
+        Return the first element, or None if the list is empty.
+
+        Returns:
+            ?E:
+                The first element, or None.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.count == 0:
+            return None
+        return self.data.get( 0 )
+
+    public function lastOrNone( self ) -> ?E:
+
+        """
+        Return the last element, or None if the list is empty.
+
+        Returns:
+            ?E:
+                The last element, or None.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.count == 0:
+            return None
+        return self.data.get( self.count - 1 )
+
+    public function chunked( self, Int chunkSize ) -> ArrayList<ArrayList<E>>:
+
+        """
+        Split the list into sublists of the given size. The last chunk may
+        contain fewer elements if the list size is not evenly divisible.
+
+        Parameters:
+            chunkSize (Int):
+                The maximum number of elements per chunk.
+
+        Returns:
+            ArrayList<ArrayList<E>>:
+                A list of chunk sublists.
+
+        Raises:
+            ValueError:
+                If chunkSize is less than or equal to zero.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        if chunkSize <= 0:
+            raise new ValueError( "chunk size must be positive", 0, None )
+        ArrayList<ArrayList<E>> chunks = new ArrayList<ArrayList<E>>()
+        Int chunkStart = 0
+        while chunkStart < self.count:
+            Int chunkEnd = chunkStart + chunkSize
+            if chunkEnd > self.count:
+                chunkEnd = self.count
+            ArrayList<E> chunk = new ArrayList<E>( chunkEnd - chunkStart )
+            for Int elementIndex = chunkStart; elementIndex < chunkEnd; elementIndex++:
+                chunk.add( self.data.get( elementIndex ) )
+            chunks.add( chunk )
+            chunkStart = chunkEnd
+        return chunks
+
+    public function partition( self, Callable<Boolean, <E>> predicate ) -> Pair<ArrayList<E>, ArrayList<E>>:
+
+        """
+        Split the list into two sublists: elements matching the predicate
+        and elements not matching it.
+
+        Parameters:
+            predicate (Callable<Boolean, <E>>):
+                The test function applied to each element.
+
+        Returns:
+            Pair<ArrayList<E>, ArrayList<E>>:
+                A pair where key holds matching elements and value holds
+                non-matching elements.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        ArrayList<E> matching = new ArrayList<E>()
+        ArrayList<E> nonMatching = new ArrayList<E>()
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            E element = self.data.get( elementIndex )
+            if predicate( element ):
+                matching.add( element )
+            else:
+                nonMatching.add( element )
+        return new Pair<ArrayList<E>, ArrayList<E>>( matching, nonMatching )
+
+    public function enumerate( self ) -> ArrayList<Pair<Int, E>>:
+
+        """
+        Pair each element with its zero-based index.
+
+        Returns:
+            ArrayList<Pair<Int, E>>:
+                A list of index-element pairs.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        ArrayList<Pair<Int, E>> result = new ArrayList<Pair<Int, E>>( self.count )
+        for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
+            result.add( new Pair<Int, E>( elementIndex, self.data.get( elementIndex ) ) )
+        return result
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release the heap-allocated data buffer held by this list.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.data.free()
+
+
+public class ArrayListIterator<E> implements Iterator<E>:
+    
+    """
+    Sequential iterator over ArrayList elements.
+    
+    Maintains a position cursor that advances through the list from the
+    first element to the last.
+    """
+    
+    private ArrayList<E> source
+    private Int position
+    
+    public function ArrayListIterator( self, ArrayList<E> source ) -> Void:
+        
+        """
+        Create an iterator starting at the beginning of the given list.
+        
+        Parameters:
+            source (ArrayList<E>):
+                The list to iterate over.
+        """
+        
+        self.source = source
+        self.position = 0
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether more elements remain to be iterated.
+        
+        Returns:
+            Boolean:
+                True if the iterator has not yet reached the end of the list.
+        """
+        
+        return self.position < self.source.length
+    
+    public property next( self ) -> E:
+        
+        """
+        Return the current element and advance the iterator position by one.
+        
+        Returns:
+            E:
+                The element at the current position before advancing.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        E element = self.source.get( self.position )
+        self.position = self.position + 1
+        return element
+
+
+export {
+    ArrayList,
+    ArrayListIterator
+}

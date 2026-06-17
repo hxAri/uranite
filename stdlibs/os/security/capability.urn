@@ -1,0 +1,161 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/security/capability.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides bitmask-based capability tokens for controlling access to kernel objects, implementing unforgeable permission flags that can only be created or modified by the kernel.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.security.capability
+
+enum CapabilityFlag:
+    
+    """
+    Named permission flags for capability-based access control. Each flag maps to a
+    single bit position in the capability bitmask and represents a distinct operation
+    that can be granted or denied on a kernel object. Codegen assigns sequential values
+    (0, 1, 2, ...) used as bit indices.
+    """
+    
+    unit Read
+    unit Write
+    unit Execute
+    unit Create
+    unit Delete
+    unit Grant
+    unit Revoke
+    unit Map
+    unit Signal
+    unit Inspect
+
+public class Capability:
+    
+    """
+    Bitmask-based capability token that controls access to kernel objects. Capabilities
+    are unforgeable: only the kernel can create or modify them. Userspace receives opaque
+    handle IDs that reference capabilities stored in the kernel's handle table. Each bit
+    in the mask corresponds to a CapabilityFlag, enabling fine-grained permission control
+    through set operations (union, intersection, difference).
+    """
+    
+    protect I64 mask
+    
+    public function Capability( self, I64 mask ) -> Void:
+        
+        """
+        Constructs a new capability with the specified permission bitmask. Each set bit
+        in the mask grants the corresponding permission flag defined by CapabilityFlag.
+        """
+        
+        self.mask = mask
+    
+    public function has( self, I64 flagBit ) -> Boolean:
+        
+        """
+        Checks whether this capability includes the specified permission flag. Returns
+        True if the flag bit is set in the capability mask, indicating the permission
+        is granted.
+        """
+        
+        I64 result = self.mask & flagBit
+        return result != 0
+    
+    public function add( self, I64 flagBit ) -> Capability:
+        
+        """
+        Returns a new capability with the specified permission flag added to the existing
+        permission set. The original capability is not modified.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Capability( self.mask | flagBit )
+    
+    public function remove( self, I64 flagBit ) -> Capability:
+        
+        """
+        Returns a new capability with the specified permission flag removed from the
+        existing permission set. The original capability is not modified.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 inverse = ~flagBit
+        return new Capability( self.mask & inverse )
+    
+    public function contains( self, Capability other ) -> Boolean:
+        
+        """
+        Checks whether the other capability is a subset of this capability, meaning all
+        permissions in the other capability are also present in this one. This check
+        prevents privilege escalation when duplicating or attenuating capabilities.
+        """
+        
+        I64 result = self.mask & other.mask
+        return result == other.mask
+    
+    public function merge( self, Capability other ) -> Capability:
+        
+        """
+        Returns a new capability representing the union of this capability and the other
+        capability. The resulting capability has all permissions from both operands.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Capability( self.mask | other.mask )
+    
+    public function intersect( self, Capability other ) -> Capability:
+        
+        """
+        Returns a new capability representing the intersection of this capability and the
+        other capability. The resulting capability only has permissions present in both
+        operands.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new Capability( self.mask & other.mask )
+    
+    public function getMask( self ) -> I64:
+        
+        """ Returns the raw permission bitmask of this capability. """
+        
+        return self.mask
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """
+        Returns True if this capability grants no permissions (mask is zero).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return self.mask == 0
+
+export {
+    CapabilityFlag,
+    Capability
+}

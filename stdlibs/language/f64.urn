@@ -1,0 +1,48 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/f64.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the F64 class, a 64-bit double-precision floating-point number extending Float.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.F64
+
+from uranite.language.float import Float
+
+final class F64 extends Float:
+    
+    """
+    64-bit double-precision floating-point number.
+    Extends Float and provides full double-precision arithmetic.
+    """
+    
+    public function F64( self, F64 value ) -> Void:
+        
+        """ Construct a new F64 from the given double-precision value. """
+        
+        self.value = value
+    
+    public function toF64( self ) -> F64:
+        
+        """ Return the underlying F64 value. """
+        
+        return self.value
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this F64's numeric value. """
+        
+        return self.value as String

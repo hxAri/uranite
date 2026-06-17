@@ -1,0 +1,92 @@
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Extreme Spectral-norm benchmark using raw Memory access and mathematical optimizations.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+from uranite.memory.memory import Memory
+from uranite.language.double import Double
+from uranite.language.int import Int
+
+extern function clock() -> I64;
+extern function sqrt( Double x ) -> Double;
+
+function A( Int i, Int j ) -> Double:
+    Int sum = i + j
+    return 1.0 / ( sum * ( sum + 1 ) / 2 + i + 1 )
+
+function multiplyAv( Int n, Memory<Double> v, Memory<Double> Av ) -> Void:
+    for Int i = 0; i < n; i++:
+        Double sum = 0.0
+        for Int j = 0; j < n; j++:
+            sum = sum + A( i, j ) * v.get( j )
+        Av.set( i, sum )
+
+function multiplyAtv( Int n, Memory<Double> v, Memory<Double> Atv ) -> Void:
+    for Int i = 0; i < n; i++:
+        Double sum = 0.0
+        for Int j = 0; j < n; j++:
+            sum = sum + A( j, i ) * v.get( j )
+        Atv.set( i, sum )
+
+function multiplyAtAv( Int n, Memory<Double> v, Memory<Double> AtAv, Memory<Double> tmp ) -> Void:
+    multiplyAv( n, v, tmp )
+    multiplyAtv( n, tmp, AtAv )
+
+public function main() -> I32:
+    Int n = 5500
+    puts( "=== Uranite Extreme Spectral Norm Benchmark (n={}) ===".format( n ) )
+    
+    Memory<Double> u = new Memory<Double>( n )
+    Memory<Double> v = new Memory<Double>( n )
+    Memory<Double> tmp = new Memory<Double>( n )
+    
+    for Int i = 0; i < n; i++:
+        u.set( i, 1.0 )
+        v.set( i, 0.0 )
+        
+    I64 start = clock()
+    
+    for Int iter = 0; iter < 10; iter++:
+        multiplyAtAv( n, u, v, tmp )
+        multiplyAtAv( n, v, u, tmp )
+        
+    Double vBv = 0.0
+    Double vv = 0.0
+    for Int i = 0; i < n; i++:
+        Double ui = u.get( i )
+        Double vi = v.get( i )
+        vBv = vBv + ui * vi
+        vv = vv + vi * vi
+        
+    Double result = sqrt( vBv / vv )
+    
+    I64 end = clock()
+    Double elapsed = ( end - start ) / 1000000.0
+    
+    puts( "Result: ", result )
+    puts( "Elapsed time: ", elapsed, " seconds" )
+    
+    u.free()
+    v.free()
+    tmp.free()
+    
+    return 0

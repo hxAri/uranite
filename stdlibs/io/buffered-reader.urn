@@ -1,0 +1,262 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/buffered-reader.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Buffered reader wrapping a file descriptor. Reads in chunks for efficiency.
+# Provides single-byte read and readLine for line-oriented processing.
+# Uses raw sysRead to avoid interface dispatch overhead.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.buffered-reader
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    memoryToPtr, readByteAt, writeByteAt, sysRead, sysClose
+}
+
+public class BufferedReader:
+    
+    """
+    Buffered reader that wraps a raw file descriptor and reads data in
+    configurable-size chunks for efficiency. Provides single-byte reads
+    and line-oriented reading with automatic CR/LF handling. Uses raw
+    sysRead syscalls to avoid interface dispatch overhead.
+    """
+    
+    protect I64 fd
+    """The underlying file descriptor to read from."""
+    protect Memory<I64> rawBuffer
+    """Internal buffer for holding a chunk of read-ahead data."""
+    protect I64 rawAddr
+    """Raw pointer address of the internal buffer."""
+    protect I64 bufferCapacity
+    """Maximum number of bytes the internal buffer can hold."""
+    protect I64 bytesInBuffer
+    """Number of valid bytes currently in the buffer."""
+    protect I64 readPosition
+    """Current read offset within the buffer."""
+    protect Boolean closed
+    """Whether this reader has been closed."""
+    protect Boolean eof
+    """Whether the end of the underlying stream has been reached."""
+    protect Boolean ownsFd
+    """Whether this reader owns the file descriptor and should close it on cleanup."""
+    
+    public function BufferedReader( self, I64 fd, I64 bufferSize, Boolean ownsFd ) -> Void:
+        
+        """
+        Construct a new BufferedReader wrapping the given file descriptor.
+        
+        Parameters:
+            fd (I64):
+                The file descriptor to read from.
+            bufferSize (I64):
+                The size in bytes of the internal read-ahead buffer.
+            ownsFd (Boolean):
+                Whether this reader owns the file descriptor. If True, the
+                file descriptor will be closed when this reader is closed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.fd = fd
+        self.bufferCapacity = bufferSize
+        self.rawBuffer = new Memory<I64>( bufferSize )
+        self.rawAddr = memoryToPtr( self.rawBuffer )
+        self.bytesInBuffer = 0
+        self.readPosition = 0
+        self.closed = False
+        self.eof = False
+        self.ownsFd = ownsFd
+    
+    protect function fillBuffer( self ) -> Void:
+        if self.eof:
+            return
+        I64 bytesRead = sysRead( self.fd, self.rawAddr, self.bufferCapacity )
+        self.bytesInBuffer = bytesRead
+        self.readPosition = 0
+        if bytesRead == 0:
+            self.eof = True
+    
+    public function read( self ) -> I64:
+        
+        """
+        Read a single byte from the stream. Returns the byte value as an
+        I64 in the range 0 to 255, or -1 if the end of stream has been reached.
+        Automatically refills the internal buffer when exhausted.
+        
+        Returns:
+            The next byte value, or -1 at end of stream.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.eof:
+            return -1
+        if self.readPosition >= self.bytesInBuffer:
+            self.fillBuffer()
+            if self.eof:
+                return -1
+        I64 byteValue = readByteAt( self.rawAddr, self.readPosition )
+        self.readPosition = self.readPosition + 1
+        return byteValue
+    
+    public function readInto( self, Memory<I64> dest, I64 offset, I64 length ) -> I64:
+        
+        """
+        Read up to the specified number of bytes into a destination Memory buffer.
+        May return fewer bytes than requested if the end of stream is reached.
+        
+        Parameters:
+            dest (Memory<I64>):
+                The destination buffer to read bytes into.
+            offset (I64):
+                The starting offset within the destination buffer.
+            length (I64):
+                The maximum number of bytes to read.
+        
+        Returns:
+            The actual number of bytes read, which may be less than length at
+            end of stream.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 totalRead = 0
+        while totalRead < length:
+            I64 byteValue = self.read()
+            if byteValue == -1:
+                return totalRead
+            dest.set( offset + totalRead, byteValue )
+            totalRead = totalRead + 1
+        return totalRead
+    
+    public function readLine( self ) -> String:
+        
+        """
+        Read a single line of text from the stream, terminated by a newline
+        character (byte value 10). The trailing newline is not included in the
+        returned string. Carriage return characters (byte value 13) immediately
+        before the newline are also stripped. Returns an empty string if the
+        stream is at end of file with no remaining data.
+        
+        The line buffer grows dynamically by doubling its capacity when needed.
+        
+        Returns:
+            The next line of text as a null-terminated String, or empty string
+            at end of stream.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 lineCapacity = 256
+        Memory<I64> lineBuf = new Memory<I64>( lineCapacity )
+        I64 lineAddr = memoryToPtr( lineBuf )
+        I64 lineLen = 0
+        Boolean done = False
+        while done == False:
+            I64 byteValue = self.read()
+            if byteValue == -1:
+                if lineLen == 0:
+                    lineBuf.free()
+                    return ""
+                done = True
+            elif byteValue == 10:
+                done = True
+            else:
+                if lineLen >= lineCapacity - 1:
+                    I64 newCapacity = lineCapacity * 2
+                    Memory<I64> newBuf = new Memory<I64>( newCapacity )
+                    I64 newAddr = memoryToPtr( newBuf )
+                    I64 copyIndex = 0
+                    while copyIndex < lineLen:
+                        I64 copiedByte = readByteAt( lineAddr, copyIndex )
+                        writeByteAt( newAddr, copyIndex, copiedByte )
+                        copyIndex = copyIndex + 1
+                    lineBuf.free()
+                    lineBuf = newBuf
+                    lineAddr = newAddr
+                    lineCapacity = newCapacity
+                writeByteAt( lineAddr, lineLen, byteValue )
+                lineLen = lineLen + 1
+        if lineLen > 0:
+            I64 lastByte = readByteAt( lineAddr, lineLen - 1 )
+            if lastByte == 13:
+                lineLen = lineLen - 1
+        writeByteAt( lineAddr, lineLen, 0 )
+        String result = ""
+        asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" lineAddr ) : clobber()
+        return result
+    
+    public function isEof( self ) -> Boolean:
+        
+        """
+        Check whether the end of the underlying stream has been reached.
+        If the buffer still contains unread data, returns False. Otherwise
+        attempts to refill the buffer to determine end-of-stream status.
+        
+        Returns:
+            True if no more data is available, False otherwise.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.eof:
+            return True
+        if self.readPosition < self.bytesInBuffer:
+            return False
+        self.fillBuffer()
+        return self.eof
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close this reader, freeing the internal buffer. If this reader
+        owns the file descriptor, the descriptor is also closed. Subsequent
+        calls after the first close are no-ops.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.closed == False:
+            self.rawBuffer.free()
+            if self.ownsFd:
+                sysClose( self.fd )
+            self.closed = True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Destructor that delegates to close to ensure resource cleanup.
+        """
+        
+        self.close()
+
+export {
+    BufferedReader
+}

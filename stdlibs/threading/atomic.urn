@@ -1,0 +1,299 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/atomic.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Lock-free atomic integer and boolean types using x86-64 atomic instructions.
+# Uses Memory<I64> for stable heap-allocated storage addressable from inline assembly.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.atomic
+
+from uranite.memory.memory import Memory
+
+public class AtomicI64:
+    
+    """
+    Lock-free atomic 64-bit integer backed by x86-64 atomic instructions.
+    All operations provide sequential consistency through hardware-level
+    atomicity (xchg, lock xadd, lock cmpxchg). Uses heap-allocated
+    Memory<I64> storage for stable addressing from inline assembly.
+    """
+    
+    protect Memory<I64> storage
+    """ Heap-allocated single-slot buffer holding the atomic value. """
+    
+    public function AtomicI64( self, I64 initial ) -> Void:
+        
+        """
+        Construct an atomic integer with the given initial value.
+        
+        Parameters:
+            initial (I64):
+                The initial value to store.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.storage = new Memory<I64>( 1 )
+        self.storage.set( 0, initial )
+    
+    public function load( self ) -> I64:
+        
+        """
+        Atomically read the current value with a memory barrier.
+        
+        Returns:
+            I64:
+                The current value of the atomic integer.
+        """
+        
+        I64 result = 0
+        asm volatile "movq ($1), $0" : output( "=r" result ) : input( "r" self.storage ) : clobber( "memory" )
+        return result
+    
+    public function store( self, I64 value ) -> Void:
+        
+        """
+        Atomically store a new value, using xchg for implicit full barrier.
+        
+        Parameters:
+            value (I64):
+                The value to store.
+        """
+        
+        I64 old = 0
+        asm volatile "xchgq $0, ($2)" : output( "=r" old ) : input( "0" value, "r" self.storage ) : clobber( "memory" )
+    
+    public function fetchAdd( self, I64 delta ) -> I64:
+        
+        """
+        Atomically add a delta to the current value and return the previous
+        value. Uses the lock xadd instruction for hardware atomicity.
+        
+        Parameters:
+            delta (I64):
+                The value to add.
+        
+        Returns:
+            I64:
+                The value held before the addition.
+        """
+        
+        I64 result = 0
+        asm volatile "lock xaddq $0, ($2)" : output( "=r" result ) : input( "0" delta, "r" self.storage ) : clobber( "memory" )
+        return result
+    
+    public function fetchSub( self, I64 delta ) -> I64:
+        
+        """
+        Atomically subtract a delta from the current value and return the
+        previous value. Implemented by negating the delta and calling fetchAdd.
+        
+        Parameters:
+            delta (I64):
+                The value to subtract.
+        
+        Returns:
+            I64:
+                The value held before the subtraction.
+        """
+        
+        I64 neg = 0 - delta
+        return self.fetchAdd( neg )
+    
+    public function compareExchange( self, I64 expected, I64 desired ) -> Boolean:
+        
+        """
+        Atomically compare the current value with expected, and if equal,
+        replace it with desired. Uses the lock cmpxchg instruction.
+        
+        Parameters:
+            expected (I64):
+                The value expected to be currently stored.
+            desired (I64):
+                The value to store if the current value matches expected.
+        
+        Returns:
+            Boolean:
+                True if the exchange was performed (value was equal to expected),
+                False if the current value differed from expected.
+        """
+        
+        I64 result = 0
+        asm volatile "lock cmpxchgq $2, ($1)" : output( "={rax}" result ) : input( "r" self.storage, "r" desired, "{rax}" expected ) : clobber( "memory" )
+        return result == expected
+    
+    public function exchange( self, I64 newValue ) -> I64:
+        
+        """
+        Atomically replace the current value with a new value and return the
+        old value. Uses xchg for implicit full barrier.
+        
+        Parameters:
+            newValue (I64):
+                The value to store.
+        
+        Returns:
+            I64:
+                The value that was replaced.
+        """
+        
+        I64 old = 0
+        asm volatile "xchgq $0, ($2)" : output( "=r" old ) : input( "0" newValue, "r" self.storage ) : clobber( "memory" )
+        return old
+    
+    public function increment( self ) -> I64:
+        
+        """
+        Atomically increment the value by one and return the previous value.
+        
+        Returns:
+            I64:
+                The value held before incrementing.
+        """
+        
+        return self.fetchAdd( 1 )
+    
+    public function decrement( self ) -> I64:
+        
+        """
+        Atomically decrement the value by one and return the previous value.
+        
+        Returns:
+            I64:
+                The value held before decrementing.
+        """
+        
+        return self.fetchSub( 1 )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release the heap-allocated storage backing this atomic integer.
+        The atomic must not be used after this call.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.storage.free()
+
+public class AtomicBoolean:
+    
+    """
+    Lock-free atomic boolean built on top of AtomicI64. Stores True as 1
+    and False as 0. All operations inherit the sequential consistency
+    guarantees of the underlying atomic integer.
+    """
+    
+    protect AtomicI64 inner
+    """ The underlying atomic integer storing 0 (False) or 1 (True). """
+    
+    public function AtomicBoolean( self, Boolean initial ) -> Void:
+        
+        """
+        Construct an atomic boolean with the given initial value.
+        
+        Parameters:
+            initial (Boolean):
+                The initial boolean value to store.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 val = 0
+        if initial:
+            val = 1
+        self.inner = new AtomicI64( val )
+    
+    public function load( self ) -> Boolean:
+        
+        """
+        Atomically read the current boolean value.
+        
+        Returns:
+            Boolean:
+                The current value of the atomic boolean.
+        """
+        
+        return self.inner.load() != 0
+    
+    public function store( self, Boolean value ) -> Void:
+        
+        """
+        Atomically store a new boolean value.
+        
+        Parameters:
+            value (Boolean):
+                The boolean value to store.
+        """
+        
+        I64 val = 0
+        if value:
+            val = 1
+        self.inner.store( val )
+    
+    public function compareExchange( self, Boolean expected, Boolean desired ) -> Boolean:
+        
+        """
+        Atomically compare the current value with expected, and if equal,
+        replace it with desired.
+        
+        Parameters:
+            expected (Boolean):
+                The boolean value expected to be currently stored.
+            desired (Boolean):
+                The boolean value to store if the current value matches expected.
+        
+        Returns:
+            Boolean:
+                True if the exchange was performed, False otherwise.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 exp = 0
+        if expected:
+            exp = 1
+        I64 des = 0
+        if desired:
+            des = 1
+        return self.inner.compareExchange( exp, des )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release the storage backing this atomic boolean.
+        The atomic must not be used after this call.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.inner.destroy()
+
+export {
+    AtomicI64,
+    AtomicBoolean
+}

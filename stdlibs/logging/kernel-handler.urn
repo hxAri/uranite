@@ -1,0 +1,198 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/logging/kernel-handler.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Log handler that writes to the kernel event log ring buffer. Maps
+# high-level log operations to the kernel EventLog's numeric
+# timestamp/level/source/code format.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.logging.kernel-handler
+
+from uranite.os.debug.log import KernelLogLevel, EventLog
+
+public class KernelLogHandler:
+
+    """
+    Log handler that writes entries to the kernel event log ring buffer.
+    Each log call records a timestamp, severity level, source identifier,
+    and event code. Entries below the configured minimum level are dropped.
+    """
+
+    protect EventLog eventLog
+    protect I64 minLevel
+    protect I64 nextTimestamp
+
+    public function KernelLogHandler( self, I64 capacity ) -> Void:
+
+        """
+        Construct a kernel log handler backed by a ring buffer.
+
+        Parameters:
+            capacity (I64):
+                Maximum number of log entries before oldest is overwritten.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.eventLog = new EventLog( capacity )
+        self.minLevel = 0
+        self.nextTimestamp = 1
+
+    public function setMinLevel( self, I64 level ) -> Void:
+
+        """
+        Set minimum severity level. Events below this are dropped.
+
+        Parameters:
+            level (I64):
+                KernelLogLevel backed value (0=Trace through 5=Fatal).
+        """
+
+        self.minLevel = level
+        self.eventLog.setMinLevel( level )
+
+    public function getMinLevel( self ) -> I64:
+
+        """ Return current minimum log level. """
+
+        return self.minLevel
+
+    public function log( self, I64 level, I64 source, I64 code ) -> Boolean:
+
+        """
+        Log an event at the given severity level with a source identifier
+        and event code. Timestamp is auto-incremented monotonically.
+
+        Parameters:
+            level (I64):
+                Severity level (KernelLogLevel backed value).
+            source (I64):
+                Numeric identifier of the subsystem producing the event.
+            code (I64):
+                Application-defined event code.
+
+        Returns:
+            Boolean:
+                True if event was recorded, False if below min level.
+        """
+
+        I64 timestamp = self.nextTimestamp
+        self.nextTimestamp = self.nextTimestamp + 1
+        return self.eventLog.log( timestamp, level, source, code )
+
+    public function logTrace( self, I64 source, I64 code ) -> Boolean:
+
+        """ Log a trace-level event. """
+
+        return self.log( 0, source, code )
+
+    public function logDebug( self, I64 source, I64 code ) -> Boolean:
+
+        """ Log a debug-level event. """
+
+        return self.log( 1, source, code )
+
+    public function logInfo( self, I64 source, I64 code ) -> Boolean:
+
+        """ Log an info-level event. """
+
+        return self.log( 2, source, code )
+
+    public function logWarn( self, I64 source, I64 code ) -> Boolean:
+
+        """ Log a warning-level event. """
+
+        return self.log( 3, source, code )
+
+    public function logError( self, I64 source, I64 code ) -> Boolean:
+
+        """ Log an error-level event. """
+
+        return self.log( 4, source, code )
+
+    public function logFatal( self, I64 source, I64 code ) -> Boolean:
+
+        """ Log a fatal-level event. """
+
+        return self.log( 5, source, code )
+
+    public function getCount( self ) -> I64:
+
+        """ Return number of entries currently stored. """
+
+        return self.eventLog.getCount()
+
+    public function countAtLevel( self, I64 level ) -> I64:
+
+        """
+        Count entries at or above the given severity level.
+
+        Parameters:
+            level (I64):
+                Minimum level to count.
+        """
+
+        return self.eventLog.countAtLevel( level )
+
+    public function getTimestamp( self, I64 index ) -> I64:
+
+        """ Return timestamp of entry at logical index (0 = oldest). """
+
+        return self.eventLog.getTimestamp( index )
+
+    public function getLevel( self, I64 index ) -> I64:
+
+        """ Return severity level of entry at logical index. """
+
+        return self.eventLog.getLevel( index )
+
+    public function getSource( self, I64 index ) -> I64:
+
+        """ Return source identifier of entry at logical index. """
+
+        return self.eventLog.getSource( index )
+
+    public function getCode( self, I64 index ) -> I64:
+
+        """ Return event code of entry at logical index. """
+
+        return self.eventLog.getCode( index )
+
+    public function clear( self ) -> Void:
+
+        """ Clear all log entries. """
+
+        self.eventLog.clear()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Free all resources held by the event log.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.eventLog.destroy()
+
+export {
+    KernelLogHandler,
+    KernelLogLevel, EventLog
+}

@@ -1,0 +1,215 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Loops: while, c-style for, range for-in, string iteration, break, continue.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.loops
+
+from uranite.io.console import puts
+
+
+# While loop
+public function sum_to( I64 n ) -> I64:
+    
+    """
+    Calculates the sum of integers from 1 up to n using a while loop.
+    
+    Parameters:
+        n: The upper limit.
+    
+    Returns:
+        The sum of 1..n.
+    
+    Complexity:
+        Time: O(n)
+    """
+    
+    I64 result = 0
+    I64 i = 1
+    while i <= n:
+        result = result + i
+        i = i + 1
+    return result
+
+# Infinite while with break
+public function count_to( I64 limit ) -> I64:
+    
+    """
+    Counts up to a limit using an infinite loop with a break condition.
+    
+    Parameters:
+        limit: The number to count up to.
+    
+    Returns:
+        The final count.
+    """
+    
+    I64 count = 0
+    while True:
+        count += 1
+        if count >= limit:
+            break
+    return count
+
+# While with continue (sum odd numbers)
+public function sum_odd( I64 n ) -> I64:
+    
+    """
+    Calculates the sum of odd integers from 1 up to n using a while loop and continue.
+    
+    Parameters:
+        n: The upper limit.
+    
+    Returns:
+        The sum of odd integers in 1..n.
+    """
+    
+    I64 result = 0
+    I64 i = 0
+    while i < n:
+        i += 1
+        I64 rem = i - ( i / 2 ) * 2
+        if rem == 0:
+            continue
+        result += i
+    return result
+
+# C-style for loop
+public function c_style_sum() -> I64:
+    
+    """
+    Calculates the sum of 1 to 10 using a C-style for loop.
+    
+    Returns:
+        The sum of 1..10.
+    """
+    
+    I64 total = 0
+    for I64 i = 1; i <= 10; i++:
+        total += i
+    return total
+
+# Range for (exclusive)
+public function range_sum() -> I64:
+    
+    """
+    Calculates the sum of 0 to 9 using an exclusive range for loop.
+    
+    Returns:
+        The sum of 0..9.
+    """
+    
+    I64 total = 0
+    for I64 i in 0..10:
+        total += i
+    return total
+
+# Range for (inclusive)
+public function inclusive_sum() -> I64:
+    
+    """
+    Calculates the sum of 1 to 10 using an inclusive range for loop.
+    
+    Returns:
+        The sum of 1..10.
+    """
+    
+    I64 total = 0
+    for I64 i in 1...10:
+        total += i
+    return total
+
+# String iteration
+public function count_chars( String s ) -> I64:
+    
+    """
+    Counts characters in a string by iterating over it.
+    
+    Parameters:
+        s: The string to count.
+    
+    Returns:
+        The number of characters.
+    """
+    
+    I64 count = 0
+    for Char c in s:
+        count += 1
+    return count
+
+# Nested loops with break
+public function find_first_over( I64 threshold ) -> I64:
+    
+    """
+    Finds the first integer greater than a threshold using a loop with a break.
+    
+    Parameters:
+        threshold: The threshold to exceed.
+    
+    Returns:
+        The first integer found.
+    """
+    
+    I64 i = 0
+    while i < 100:
+        i += 1
+        if i > threshold:
+            break
+    return i
+
+# C-style for with decrement
+public function countdown() -> Void:
+    
+    """ Prints a countdown from 5 to 1 """
+    
+    for I64 i = 5; i > 0; i--:
+        puts( i, " " )
+    puts( "Go!" )
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the loop demonstration.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    puts( "sum_to(10) = ", sum_to( 10 ) )
+    puts( "count_to(5) = ", count_to( 5 ) )
+    puts( "sum_odd(10) = ", sum_odd( 10 ) )
+    puts( "c_style_sum() = ", c_style_sum() )
+    puts( "range_sum(0..10) = ", range_sum() )
+    puts( "inclusive_sum(1...10) = ", inclusive_sum() )
+    puts( "count_chars(\\\"Uranite\\\") = ", count_chars( "Uranite" ) )
+    puts( "find_first_over(10) = ", find_first_over( 10 ) )
+
+    puts( "countdown: " )
+    countdown()
+
+    puts( "string iter: " )
+    for Char c in "Hello":
+        puts( c, " " )
+    puts(  )
+
+    puts( "range iter: " )
+    for I64 i in 0..5:
+        puts( i, " " )
+    puts(  )
+
+    return 0

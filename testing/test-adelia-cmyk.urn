@@ -1,0 +1,44 @@
+package testing
+
+from uranite.adelia.cmyk import CMYK
+from uranite.testing.assertions import {
+    assertEqualF64,
+    assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia CMYK Tests ===" )
+
+    # constructor + fields
+    CMYK color = new CMYK( 0.0, 0.5, 1.0, 0.0 )
+    assertEqualF64( 0.0, color.cyan, 0.0001, "cyan" )
+    assertEqualF64( 0.5, color.magenta, 0.0001, "magenta" )
+    assertEqualF64( 1.0, color.yellow, 0.0001, "yellow" )
+    assertEqualF64( 0.0, color.key, 0.0001, "key" )
+    putsln( "constructor OK" )
+
+    # equals
+    CMYK same = new CMYK( 0.0, 0.5, 1.0, 0.0 )
+    assertTrue( color.equals( same ), "equals same" )
+    CMYK diff = new CMYK( 1.0, 0.0, 0.0, 0.0 )
+    assertFalse( color.equals( diff ), "equals diff" )
+    putsln( "equals OK" )
+
+    # toString
+    String str = color.toString()
+    assertTrue( str != "", "toString not empty" )
+    putsln( "toString OK" )
+
+    # pure black
+    CMYK black = new CMYK( 0.0, 0.0, 0.0, 1.0 )
+    assertEqualF64( 1.0, black.key, 0.0001, "black key" )
+    putsln( "black OK" )
+
+    # no ink (white)
+    CMYK white = new CMYK( 0.0, 0.0, 0.0, 0.0 )
+    assertEqualF64( 0.0, white.key, 0.0001, "white key" )
+    putsln( "white OK" )
+
+    putsln( "=== All CMYK tests passed ===" )
+    return 0

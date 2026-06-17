@@ -1,0 +1,131 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-12 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/functions/strings.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# String utility functions that depend on ArrayList. Separated from
+# builtin.urn to avoid circular dependencies through the error hierarchy.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.functions.strings
+
+from uranite.collection.array-list import ArrayList
+from uranite.functions.builtin import indexOf, substring, length
+
+public function split( String source, String delimiter ) -> ArrayList<String>:
+
+    """
+    Split a string into an ArrayList of substrings separated by the delimiter.
+
+    An empty delimiter splits into individual characters. If the delimiter
+    is not found, a single-element list containing the entire source is returned.
+
+    Parameters:
+        source (String):
+            The string to split.
+        delimiter (String):
+            The separator string.
+
+    Returns:
+        ArrayList<String>:
+            The list of substrings.
+
+    Complexity:
+        Time: O(n * m) where n = source length, m = delimiter length
+    """
+
+    ArrayList<String> parts = new ArrayList<String>()
+    I64 sourceLength = length( source )
+    I64 delimiterLength = length( delimiter )
+    if delimiterLength == 0:
+        I64 charIndex = 0
+        while charIndex < sourceLength:
+            parts.add( substring( source, charIndex, charIndex + 1 ) )
+            charIndex = charIndex + 1
+        return parts
+    I64 searchStart = 0
+    while searchStart <= sourceLength:
+        String remaining = substring( source, searchStart, sourceLength )
+        I64 matchPosition = indexOf( remaining, delimiter )
+        if matchPosition < 0:
+            parts.add( remaining )
+            return parts
+        parts.add( substring( remaining, 0, matchPosition ) )
+        searchStart = searchStart + matchPosition + delimiterLength
+    return parts
+
+public function joinStrings( ArrayList<String> elements, String separator ) -> String:
+
+    """
+    Join all elements in an ArrayList into a single string with the given separator.
+
+    Parameters:
+        elements (ArrayList<String>):
+            The list of strings to join.
+        separator (String):
+            The string placed between each pair of elements.
+
+    Returns:
+        String:
+            The joined result, or empty string if the list is empty.
+
+    Complexity:
+        Time: O(n * k) where n = element count, k = average element length
+    """
+
+    if elements.length == 0:
+        return ""
+    String result = elements.get( 0 )
+    I64 elementIndex = 1
+    while elementIndex < elements.length:
+        result = result + separator + elements.get( elementIndex )
+        elementIndex = elementIndex + 1
+    return result
+
+public function replace( String source, String target, String replacement ) -> String:
+
+    """
+    Replace all occurrences of target with replacement in the source string.
+
+    If target is not found, the original string is returned unchanged.
+    If target is empty, the original string is returned unchanged.
+
+    Parameters:
+        source (String):
+            The original string.
+        target (String):
+            The substring to search for.
+        replacement (String):
+            The string to substitute for each match.
+
+    Returns:
+        String:
+            The string with all occurrences replaced.
+
+    Complexity:
+        Time: O(n * m) where n = source length, m = target length
+    """
+
+    I64 targetLength = length( target )
+    if targetLength == 0:
+        return source
+    ArrayList<String> parts = split( source, target )
+    return joinStrings( parts, replacement )
+
+export {
+    split,
+    joinStrings,
+    replace
+}

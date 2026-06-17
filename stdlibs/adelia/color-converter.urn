@@ -1,0 +1,569 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-11 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/color-converter.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the ColorConverter class containing static pure functions for
+# converting colors between RGB, HSL, HSV, CMYK, and packed hexadecimal
+# representations. All conversion algorithms are mathematically precise
+# implementations of the standard color space transformation formulas.
+# Cross-space convenience methods chain through RGB as the intermediate
+# representation to avoid redundant algorithm implementations.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia.color-converter
+
+from uranite.adelia.cmyk import CMYK
+from uranite.adelia.hsl import HSL
+from uranite.adelia.hsv import HSV
+from uranite.adelia.rgb import RGB
+from uranite.math.math import {
+    abs, 
+    fmod, 
+    round
+}
+
+public final class ColorConverter:
+    
+    """
+    Static utility class providing pure functions for converting colors between
+    different color space representations. All methods are static (no self parameter)
+    and produce no side effects. The supported color spaces are RGB (red-green-blue
+    with 0-255 integer channels), HSL (hue-saturation-lightness with floating-point
+    components), HSV (hue-saturation-value with floating-point components), CMYK
+    (cyan-magenta-yellow-key with 0.0-1.0 ink densities), and packed hexadecimal
+    (24-bit integer with red in bits 16-23, green in bits 8-15, blue in bits 0-7).
+    """
+    
+    public function rgbToHex( self, I32 red, I32 green, I32 blue ) -> I32:
+        
+        """
+        Pack three RGB channel values into a single 24-bit hexadecimal integer
+        with red in the most significant byte, green in the middle byte, and
+        blue in the least significant byte.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            I32:
+                The packed 24-bit hex value such that 0xRRGGBB.
+        """
+        
+        return ( red << 16 ) | ( green << 8 ) | blue
+    
+    public function hexToRgb( self, I32 hex ) -> RGB:
+        
+        """
+        Extract individual red, green, and blue channel values from a packed
+        24-bit hexadecimal color integer.
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value in 0xRRGGBB format.
+        
+        Returns:
+            RGB:
+                An RGB struct with the extracted channel values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I32 r = ( hex >> 16 ) & 255
+        I32 g = ( hex >> 8 ) & 255
+        I32 b = hex & 255
+        
+        return new RGB( r, g, b )
+    
+    public function rgbToHsl( self, I32 red, I32 green, I32 blue ) -> HSL:
+        
+        """
+        Convert an RGB color to the HSL color space using the standard algorithm.
+        The hue is computed from the dominant channel and expressed in degrees
+        (0-360), saturation measures color purity relative to lightness, and
+        lightness is the average of the maximum and minimum channel intensities.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            HSL:
+                The equivalent color in the HSL color space.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 rNorm = red / 255.0
+        F64 gNorm = green / 255.0
+        F64 bNorm = blue / 255.0
+        F64 cMax = self.maxThree( rNorm, gNorm, bNorm )
+        F64 cMin = self.minThree( rNorm, gNorm, bNorm )
+        F64 delta = cMax - cMin
+        F64 lightness = ( cMax + cMin ) / 2.0
+        F64 saturation = 0.0
+        F64 hue = 0.0
+        if delta != 0.0:
+            if lightness <= 0.5:
+                saturation = delta / ( cMax + cMin )
+            else:
+                saturation = delta / ( 2.0 - cMax - cMin )
+            if cMax == rNorm:
+                hue = fmod( ( gNorm - bNorm ) / delta, 6.0 )
+            elif cMax == gNorm:
+                hue = ( ( bNorm - rNorm ) / delta ) + 2.0
+            else:
+                hue = ( ( rNorm - gNorm ) / delta ) + 4.0
+            hue = hue * 60.0
+            if hue < 0.0:
+                hue = hue + 360.0
+        return new HSL( hue, saturation, lightness )
+    
+    public function hslToRgb( self, F64 hue, F64 saturation, F64 lightness ) -> RGB:
+        
+        """
+        Convert an HSL color back to the RGB color space. The algorithm computes
+        chroma from saturation and lightness, determines which 60-degree hue
+        sector the color falls in, and calculates the intermediate RGB values
+        before scaling to the 0-255 integer range.
+        
+        Parameters:
+            hue (F64):
+                The hue angle in degrees from 0.0 to 360.0.
+            saturation (F64):
+                The saturation from 0.0 to 1.0.
+            lightness (F64):
+                The lightness from 0.0 to 1.0.
+        
+        Returns:
+            RGB:
+                The equivalent color in the RGB color space with rounded integer channels.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if saturation == 0.0:
+            F64 gray = round( lightness * 255.0 )
+            return new RGB( gray, gray, gray )
+        F64 c = ( 1.0 - abs( 2.0 * lightness - 1.0 ) ) * saturation
+        F64 x = c * ( 1.0 - abs( fmod( hue / 60.0, 2.0 ) - 1.0 ) )
+        F64 m = lightness - c / 2.0
+        F64 rPrime = 0.0
+        F64 gPrime = 0.0
+        F64 bPrime = 0.0
+        if hue < 60.0:
+            rPrime = c
+            gPrime = x
+            bPrime = 0.0
+        elif hue < 120.0:
+            rPrime = x
+            gPrime = c
+            bPrime = 0.0
+        elif hue < 180.0:
+            rPrime = 0.0
+            gPrime = c
+            bPrime = x
+        elif hue < 240.0:
+            rPrime = 0.0
+            gPrime = x
+            bPrime = c
+        elif hue < 300.0:
+            rPrime = x
+            gPrime = 0.0
+            bPrime = c
+        else:
+            rPrime = c
+            gPrime = 0.0
+            bPrime = x
+        F64 r = round( ( rPrime + m ) * 255.0 )
+        F64 g = round( ( gPrime + m ) * 255.0 )
+        F64 b = round( ( bPrime + m ) * 255.0 )
+        return new RGB( r, g, b )
+    
+    public function rgbToHsv( self, I32 red, I32 green, I32 blue ) -> HSV:
+        
+        """
+        Convert an RGB color to the HSV color space. The hue is computed
+        identically to HSL, but saturation is defined as chroma divided by
+        the maximum channel value (not relative to lightness), and value
+        is simply the maximum channel intensity.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            HSV:
+                The equivalent color in the HSV color space.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 rNorm = red / 255.0
+        F64 gNorm = green / 255.0
+        F64 bNorm = blue / 255.0
+        F64 cMax = self.maxThree( rNorm, gNorm, bNorm )
+        F64 cMin = self.minThree( rNorm, gNorm, bNorm )
+        F64 delta = cMax - cMin
+        F64 value = cMax
+        F64 saturation = 0.0
+        F64 hue = 0.0
+        if cMax != 0.0:
+            saturation = delta / cMax
+        if delta != 0.0:
+            if cMax == rNorm:
+                hue = fmod( ( gNorm - bNorm ) / delta, 6.0 )
+            elif cMax == gNorm:
+                hue = ( ( bNorm - rNorm ) / delta ) + 2.0
+            else:
+                hue = ( ( rNorm - gNorm ) / delta ) + 4.0
+            hue = hue * 60.0
+            if hue < 0.0:
+                hue = hue + 360.0
+        return new HSV( hue, saturation, value )
+    
+    public function hsvToRgb( self, F64 hue, F64 saturation, F64 value ) -> RGB:
+        
+        """
+        Convert an HSV color back to the RGB color space. The algorithm computes
+        chroma from value and saturation, determines the hue sector, and calculates
+        the RGB channel values before scaling to the 0-255 integer range.
+        
+        Parameters:
+            hue (F64):
+                The hue angle in degrees from 0.0 to 360.0.
+            saturation (F64):
+                The saturation from 0.0 to 1.0.
+            value (F64):
+                The value (brightness) from 0.0 to 1.0.
+        
+        Returns:
+            RGB:
+                The equivalent color in the RGB color space with rounded integer channels.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if saturation == 0.0:
+            F64 gray = round( value * 255.0 )
+            return new RGB( gray, gray, gray )
+        F64 c = value * saturation
+        F64 x = c * ( 1.0 - abs( fmod( hue / 60.0, 2.0 ) - 1.0 ) )
+        F64 m = value - c
+        F64 rPrime = 0.0
+        F64 gPrime = 0.0
+        F64 bPrime = 0.0
+        if hue < 60.0:
+            rPrime = c
+            gPrime = x
+            bPrime = 0.0
+        elif hue < 120.0:
+            rPrime = x
+            gPrime = c
+            bPrime = 0.0
+        elif hue < 180.0:
+            rPrime = 0.0
+            gPrime = c
+            bPrime = x
+        elif hue < 240.0:
+            rPrime = 0.0
+            gPrime = x
+            bPrime = c
+        elif hue < 300.0:
+            rPrime = x
+            gPrime = 0.0
+            bPrime = c
+        else:
+            rPrime = c
+            gPrime = 0.0
+            bPrime = x
+        return new RGB(
+            round( ( rPrime + m ) * 255.0 ), 
+            round( ( gPrime + m ) * 255.0 ), 
+            round( ( bPrime + m ) * 255.0 )
+        )
+    
+    public function rgbToCmyk( self, I32 red, I32 green, I32 blue ) -> CMYK:
+        
+        """
+        Convert an RGB color to the CMYK subtractive color space. The key (black)
+        component is derived from the maximum RGB channel, and the remaining CMY
+        values represent how much of each subtractive primary is needed after
+        accounting for the black ink contribution.
+        
+        Parameters:
+            red (I32):
+                The red channel value from 0 to 255.
+            green (I32):
+                The green channel value from 0 to 255.
+            blue (I32):
+                The blue channel value from 0 to 255.
+        
+        Returns:
+            CMYK:
+                The equivalent color in the CMYK color space.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 rNorm = red / 255.0
+        F64 gNorm = green / 255.0
+        F64 bNorm = blue / 255.0
+        F64 k = 1.0 - self.maxThree( rNorm, gNorm, bNorm )
+        if k == 1.0:
+            return new CMYK( 0.0, 0.0, 0.0, 1.0 )
+        F64 c = ( 1.0 - rNorm - k ) / ( 1.0 - k )
+        F64 m = ( 1.0 - gNorm - k ) / ( 1.0 - k )
+        F64 y = ( 1.0 - bNorm - k ) / ( 1.0 - k )
+        
+        return new CMYK( c, m, y, k )
+    
+    public function cmykToRgb( self, F64 cyan, F64 magenta, F64 yellow, F64 key ) -> RGB:
+        
+        """
+        Convert a CMYK color back to the RGB color space. Each RGB channel is
+        computed by applying both the color ink density and the black ink density
+        to the maximum intensity of 255.
+        
+        Parameters:
+            cyan (F64):
+                The cyan ink density from 0.0 to 1.0.
+            magenta (F64):
+                The magenta ink density from 0.0 to 1.0.
+            yellow (F64):
+                The yellow ink density from 0.0 to 1.0.
+            key (F64):
+                The black ink density from 0.0 to 1.0.
+        
+        Returns:
+            RGB:
+                The equivalent color in the RGB color space with rounded integer channels.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return new RGB(
+            round( 255.0 * ( 1.0 - cyan ) * ( 1.0 - key ) ), 
+            round( 255.0 * ( 1.0 - magenta ) * ( 1.0 - key ) ), 
+            round( 255.0 * ( 1.0 - yellow ) * ( 1.0 - key ) )
+        )
+    
+    public function hexToHsl( self, I32 hex ) -> HSL:
+        
+        """
+        Convert a packed hexadecimal color to HSL by first extracting the RGB
+        channels and then applying the RGB-to-HSL conversion.
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value in 0xRRGGBB format.
+        
+        Returns:
+            HSL:
+                The equivalent color in the HSL color space.
+        """
+        
+        return self.rgbToHsl( ( hex >> 16 ) & 255, ( hex >> 8 ) & 255, hex & 255 )
+    
+    public function hslToHex( self, F64 hue, F64 saturation, F64 lightness ) -> I32:
+        
+        """
+        Convert an HSL color to a packed hexadecimal integer by first converting
+        to RGB and then packing the channels.
+        
+        Parameters:
+            hue (F64):
+                The hue angle in degrees from 0.0 to 360.0.
+            saturation (F64):
+                The saturation from 0.0 to 1.0.
+            lightness (F64):
+                The lightness from 0.0 to 1.0.
+        
+        Returns:
+            I32:
+                The packed 24-bit hex color value.
+        """
+        
+        RGB rgb = self.hslToRgb( hue, saturation, lightness )
+        return self.rgbToHex( rgb.red, rgb.green, rgb.blue )
+    
+    public function hexToHsv( self, I32 hex ) -> HSV:
+        
+        """
+        Convert a packed hexadecimal color to HSV by first extracting the RGB
+        channels and then applying the RGB-to-HSV conversion.
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value in 0xRRGGBB format.
+        
+        Returns:
+            HSV:
+                The equivalent color in the HSV color space.
+        """
+        
+        return self.rgbToHsv( ( hex >> 16 ) & 255, ( hex >> 8 ) & 255, hex & 255 )
+    
+    public function hsvToHex( self, F64 hue, F64 saturation, F64 value ) -> I32:
+        
+        """
+        Convert an HSV color to a packed hexadecimal integer by first converting
+        to RGB and then packing the channels.
+        
+        Parameters:
+            hue (F64):
+                The hue angle in degrees from 0.0 to 360.0.
+            saturation (F64):
+                The saturation from 0.0 to 1.0.
+            value (F64):
+                The value (brightness) from 0.0 to 1.0.
+        
+        Returns:
+            I32:
+                The packed 24-bit hex color value.
+        """
+        
+        RGB rgb = self.hsvToRgb( hue, saturation, value )
+        return self.rgbToHex( rgb.red, rgb.green, rgb.blue )
+    
+    public function hexToCmyk( self, I32 hex ) -> CMYK:
+        
+        """
+        Convert a packed hexadecimal color to CMYK by first extracting the RGB
+        channels and then applying the RGB-to-CMYK conversion.
+        
+        Parameters:
+            hex (I32):
+                The packed 24-bit hex color value in 0xRRGGBB format.
+        
+        Returns:
+            CMYK:
+                The equivalent color in the CMYK color space.
+        """
+        
+        return self.rgbToCmyk( ( hex >> 16 ) & 255, ( hex >> 8 ) & 255, hex & 255 )
+    
+    public function cmykToHex( self, F64 cyan, F64 magenta, F64 yellow, F64 key ) -> I32:
+        
+        """
+        Convert a CMYK color to a packed hexadecimal integer by first converting
+        to RGB and then packing the channels.
+        
+        Parameters:
+            cyan (F64):
+                The cyan ink density from 0.0 to 1.0.
+            magenta (F64):
+                The magenta ink density from 0.0 to 1.0.
+            yellow (F64):
+                The yellow ink density from 0.0 to 1.0.
+            key (F64):
+                The black ink density from 0.0 to 1.0.
+        
+        Returns:
+            I32:
+                The packed 24-bit hex color value.
+        """
+        
+        RGB rgb = self.cmykToRgb( cyan, magenta, yellow, key )
+        return self.rgbToHex( rgb.red, rgb.green, rgb.blue )
+    
+    private function minThree( self, F64 a, F64 b, F64 c ) -> F64:
+        
+        """
+        Return the minimum of three floating-point values.
+        
+        Parameters:
+            a (F64):
+                The first value.
+            b (F64):
+                The second value.
+            c (F64):
+                The third value.
+        
+        Returns:
+            F64:
+                The smallest of the three values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 min = a
+        if b < min:
+            min = b
+        if c < min:
+            min = c
+        return min
+    
+    private function maxThree( self, F64 a, F64 b, F64 c ) -> F64:
+        
+        """
+        Return the maximum of three floating-point values.
+        
+        Parameters:
+            a (F64):
+                The first value.
+            b (F64):
+                The second value.
+            c (F64):
+                The third value.
+        
+        Returns:
+            F64:
+                The largest of the three values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        F64 max = a
+        if b > max:
+            max = b
+        if c > max:
+            max = c
+        return max
+
+export {
+    ColorConverter
+}

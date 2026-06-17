@@ -1,0 +1,29 @@
+package testing
+
+from uranite.adelia.color-name-entry import ColorNameEntry
+from uranite.testing.assertions import {
+    assertEqualI64, assertEqualStr, assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Adelia ColorNameEntry Tests ===" )
+
+    ColorNameEntry entry = new ColorNameEntry( "Deep Jungle Green", 19273 )
+    assertEqualStr( "Deep Jungle Green", entry.name, "name" )
+    assertEqualI64( 19273, entry.hex as I64, "hex" )
+    putsln( "constructor OK" )
+
+    # toString
+    String str = entry.toString()
+    assertTrue( str != "", "toString not empty" )
+    putsln( "toString OK" )
+
+    # second entry
+    ColorNameEntry red = new ColorNameEntry( "Red", 16711680 )
+    assertEqualStr( "Red", red.name, "red name" )
+    assertEqualI64( 16711680, red.hex as I64, "red hex" )
+    putsln( "second entry OK" )
+
+    putsln( "=== All ColorNameEntry tests passed ===" )
+    return 0

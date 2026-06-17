@@ -1,0 +1,518 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/thread-pool.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Thread pool with typed parameter passing and return values.
+# PoolTask<R,A> wraps function pointer + arg buffer + result buffer.
+# PoolHandle<R> allows awaiting typed results.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.thread-pool
+
+from uranite.memory.memory import Memory
+from uranite.os.ipc.signal import Event
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import BlockReason
+from uranite.threading.thread import Thread, ThreadRuntime
+from uranite.threading.channel import ChannelInner
+from uranite.threading.join-handle import JoinHandle
+from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.threading.errors import ThreadError
+
+const I64 POOL_TASK_PENDING = 0
+"""State value indicating the pool task has not yet started execution."""
+
+const I64 POOL_TASK_RUNNING = 1
+"""State value indicating the pool task is currently executing."""
+
+const I64 POOL_TASK_COMPLETED = 2
+"""State value indicating the pool task completed successfully."""
+
+const I64 POOL_TASK_FAILED = 3
+"""State value indicating the pool task failed with an error."""
+
+public class PoolTask<R, A>:
+    
+    """
+    Generic task wrapper for thread pool submission. Encapsulates a function
+    pointer, a typed argument buffer, a typed result buffer, and lifecycle
+    state tracking. The worker thread reads the argument, invokes the
+    function, and stores the result or marks the task as failed.
+    """
+    
+    protect I64 functionPtr
+    """Raw address of the function to execute."""
+    
+    protect Memory<A> argBuffer
+    """Single-element buffer holding the typed argument."""
+    
+    protect Memory<R> resultBuffer
+    """Single-element buffer for storing the typed return value."""
+    
+    protect Event completionEvent
+    """Kernel event signaled when the task reaches a terminal state."""
+    
+    protect AtomicI64 state
+    """Atomic state tracking the task's lifecycle phase."""
+    
+    protect AtomicBoolean hasError
+    """Atomic flag indicating whether the task failed with an error."""
+    
+    public function PoolTask( self, I64 functionPtr, A argument ) -> Void:
+        
+        """
+        Create a new pool task wrapping a function and its argument.
+        
+        Parameters:
+            functionPtr (I64):
+                Raw address of the function to execute.
+            argument (A):
+                The typed argument to pass to the function.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.functionPtr = functionPtr
+        self.argBuffer = new Memory<A>( 1 )
+        self.argBuffer.set( 0, argument )
+        self.resultBuffer = new Memory<R>( 1 )
+        self.completionEvent = new Event()
+        self.state = new AtomicI64( POOL_TASK_PENDING )
+        self.hasError = new AtomicBoolean( False )
+    
+    public function getFunctionPtr( self ) -> I64:
+        
+        """
+        Return the raw function pointer address.
+        
+        Returns:
+            I64:
+                The address of the function to execute.
+        """
+        
+        return self.functionPtr
+    
+    public function getArgument( self ) -> A:
+        
+        """
+        Return the typed argument stored in the argument buffer.
+        
+        Returns:
+            A:
+                The argument value to pass to the function.
+        """
+        
+        return self.argBuffer.get( 0 )
+    
+    public function setResult( self, R value ) -> Void:
+        
+        """
+        Store the result value and transition the task to the Completed
+        state. Signals the completion event to wake any blocked waiters.
+        
+        Parameters:
+            value (R):
+                The result value produced by the function.
+        """
+        
+        self.resultBuffer.set( 0, value )
+        self.state.store( POOL_TASK_COMPLETED )
+        self.completionEvent.signal( 1 )
+    
+    public function getResult( self ) -> R:
+        
+        """
+        Return the typed result value. Only meaningful after the task has
+        reached the Completed state.
+        
+        Returns:
+            R:
+                The result value stored by setResult.
+        """
+        
+        return self.resultBuffer.get( 0 )
+    
+    public function markRunning( self ) -> Void:
+        
+        """
+        Transition the task to the Running state, indicating that a worker
+        has begun executing the function.
+        """
+        
+        self.state.store( POOL_TASK_RUNNING )
+    
+    public function markFailed( self ) -> Void:
+        
+        """
+        Mark the task as failed, set the error flag, and signal the
+        completion event to wake any blocked waiters.
+        """
+        
+        self.hasError.store( True )
+        self.state.store( POOL_TASK_FAILED )
+        self.completionEvent.signal( 1 )
+    
+    public function isCompleted( self ) -> Boolean:
+        
+        """
+        Check whether the task has reached a terminal state.
+        
+        Returns:
+            Boolean:
+                True if the task is Completed or Failed.
+        """
+        
+        return self.state.load() >= POOL_TASK_COMPLETED
+    
+    public function hasFailed( self ) -> Boolean:
+        
+        """
+        Check whether the task failed with an error.
+        
+        Returns:
+            Boolean:
+                True if the task was marked as failed.
+        """
+        
+        return self.hasError.load()
+    
+    public function getCompletionEvent( self ) -> Event:
+        
+        """
+        Return the kernel event used for completion notification.
+        
+        Returns:
+            Event:
+                The event that is signaled when the task completes or fails.
+        """
+        
+        return self.completionEvent
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by this task, including argument and
+        result buffers and atomic state variables.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.argBuffer.free()
+        self.resultBuffer.free()
+        self.state.destroy()
+        self.hasError.destroy()
+
+public class PoolHandle<R>:
+    
+    """
+    Handle for awaiting the typed result of a pool task. Provides a
+    one-shot awaitResult method that blocks until the task completes and
+    returns the typed result. Cleans up all task-related buffers after
+    the result is consumed.
+    
+    Each PoolHandle can only be awaited once -- calling awaitResult a
+    second time raises a ThreadError.
+    """
+    
+    protect Memory<R> taskResultBuffer
+    """Reference to the task's result buffer for reading the typed result."""
+    
+    protect Event taskCompletionEvent
+    """Reference to the task's completion event for blocking waits."""
+    
+    protect AtomicI64 taskState
+    """Reference to the task's atomic state for polling completion."""
+    
+    protect AtomicBoolean taskHasError
+    """Reference to the task's error flag."""
+    
+    protect Memory<I64> taskArgBuffer
+    """Reference to the task's argument buffer for cleanup after await."""
+    
+    protect Boolean awaited
+    """Flag tracking whether awaitResult has already been called."""
+    
+    protect Scheduler scheduler
+    """Scheduler used for cooperative blocking during the wait."""
+    
+    public function PoolHandle( self, Memory<R> resultBuffer, Event completionEvent, AtomicI64 state, AtomicBoolean hasError, Memory<I64> argBuffer, Scheduler scheduler ) -> Void:
+        
+        """
+        Create a new pool handle bound to the given task's internal state.
+        
+        Parameters:
+            resultBuffer (Memory<R>):
+                The task's result buffer.
+            completionEvent (Event):
+                The task's completion event.
+            state (AtomicI64):
+                The task's atomic state variable.
+            hasError (AtomicBoolean):
+                The task's error flag.
+            argBuffer (Memory<I64>):
+                The task's argument buffer.
+            scheduler (Scheduler):
+                The scheduler to use for cooperative blocking.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.taskResultBuffer = resultBuffer
+        self.taskCompletionEvent = completionEvent
+        self.taskState = state
+        self.taskHasError = hasError
+        self.taskArgBuffer = argBuffer
+        self.awaited = False
+        self.scheduler = scheduler
+    
+    public function awaitResult( self ) -> R:
+        
+        """
+        Block until the task completes and return the typed result. Cleans
+        up all task-related buffers and atomic variables after retrieving
+        the result. This method can only be called once per handle.
+        
+        Returns:
+            R:
+                The typed result value produced by the pool task.
+        
+        Raises:
+            ThreadError:
+                If this handle has already been awaited, or if the pool
+                task failed during execution.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.awaited:
+            raise new ThreadError( "PoolHandle already awaited", 1, None )
+        self.awaited = True
+        
+        while self.taskState.load() < POOL_TASK_COMPLETED:
+            I64 taskId = 0
+            if self.scheduler.getCurrentTask() != None:
+                taskId = self.scheduler.getCurrentTask().id
+            if taskId > 0:
+                Boolean shouldBlock = self.taskCompletionEvent.registerWait( taskId, 1 )
+                if shouldBlock:
+                    self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
+                    self.scheduler.blockCurrent()
+            else:
+                asm volatile "pause"
+        
+        if self.taskHasError.load():
+            self.taskArgBuffer.free()
+            self.taskResultBuffer.free()
+            self.taskState.destroy()
+            self.taskHasError.destroy()
+            raise new ThreadError( "Pool task failed", 2, None )
+        
+        R result = self.taskResultBuffer.get( 0 )
+        self.taskArgBuffer.free()
+        self.taskResultBuffer.free()
+        self.taskState.destroy()
+        self.taskHasError.destroy()
+        return result
+    
+    public function isReady( self ) -> Boolean:
+        
+        """
+        Check whether the associated task has reached a terminal state
+        without blocking.
+        
+        Returns:
+            Boolean:
+                True if the task is Completed or Failed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.taskState.load() >= POOL_TASK_COMPLETED
+
+public class ThreadPool:
+    
+    """
+    Low-level thread pool that accepts raw task pointers via a shared
+    channel. Workers are pre-spawned threads that continuously receive
+    and execute tasks from the work channel. Tracks active workers and
+    total submissions via atomic counters.
+    
+    For typed task submission with generic result handling, use PoolTask
+    and PoolHandle on top of this pool, or prefer ThreadPoolExecutor for
+    a higher-level API with built-in future support.
+    """
+    
+    protect Memory<Thread> workers
+    """Storage for worker thread instances."""
+    
+    protect Memory<JoinHandle> handles
+    """Storage for worker thread join handles."""
+    
+    protect I64 workerCount
+    """Number of worker threads in the pool."""
+    
+    protect ChannelInner<I64> workChannel
+    """Channel used to send raw task pointers to worker threads."""
+    
+    protect ThreadRuntime runtime
+    """Thread runtime providing scheduler and memory access."""
+    
+    protect AtomicBoolean shutdown
+    """Atomic flag indicating whether the pool has been shut down."""
+    
+    protect AtomicI64 activeWorkers
+    """Atomic counter of currently active worker threads."""
+    
+    protect AtomicI64 totalSubmitted
+    """Atomic counter of total tasks submitted to the pool."""
+    
+    public function ThreadPool( self, I64 numWorkers, I64 queueCapacity, ThreadRuntime runtime ) -> Void:
+        
+        """
+        Create a new thread pool with the specified number of workers and
+        queue capacity. Workers are not started automatically -- they must
+        be configured and started externally.
+        
+        Parameters:
+            numWorkers (I64):
+                Number of worker threads to allocate storage for.
+            queueCapacity (I64):
+                Maximum number of pending tasks the work channel can hold.
+            runtime (ThreadRuntime):
+                The thread runtime providing scheduler and memory management.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.workerCount = numWorkers
+        self.runtime = runtime
+        self.workChannel = new ChannelInner<I64>( queueCapacity, runtime.getScheduler() )
+        self.shutdown = new AtomicBoolean( False )
+        self.activeWorkers = new AtomicI64( 0 )
+        self.totalSubmitted = new AtomicI64( 0 )
+        self.workers = new Memory<Thread>( numWorkers )
+        self.handles = new Memory<JoinHandle>( numWorkers )
+    
+    public function submitTaskPointer( self, I64 taskPointer ) -> Void:
+        
+        """
+        Submit a raw task pointer to the pool's work channel for execution
+        by a worker thread.
+        
+        Parameters:
+            taskPointer (I64):
+                Raw memory address of the task to execute.
+        
+        Raises:
+            ThreadError:
+                If the pool has been shut down.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.shutdown.load():
+            raise new ThreadError( "Pool is shut down", 3, None )
+        self.workChannel.send( taskPointer )
+        self.totalSubmitted.increment()
+    
+    public function shutdownAndWait( self ) -> Void:
+        
+        """
+        Initiate pool shutdown by setting the shutdown flag and closing the
+        work channel. Workers will finish their current tasks and exit when
+        they find the channel closed.
+        """
+        
+        self.shutdown.store( True )
+        self.workChannel.closeReceive()
+    
+    public function getWorkerCount( self ) -> I64:
+        
+        """
+        Return the number of worker threads in the pool.
+        
+        Returns:
+            I64:
+                The worker count configured at construction.
+        """
+        
+        return self.workerCount
+    
+    public function getTotalSubmitted( self ) -> I64:
+        
+        """
+        Return the total number of tasks submitted to the pool.
+        
+        Returns:
+            I64:
+                Cumulative count of submitted tasks.
+        """
+        
+        return self.totalSubmitted.load()
+    
+    public function isShutdown( self ) -> Boolean:
+        
+        """
+        Check whether the pool has been shut down.
+        
+        Returns:
+            Boolean:
+                True if shutdown has been initiated.
+        """
+        
+        return self.shutdown.load()
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Release all resources held by the pool, including worker and handle
+        storage, the work channel, and all atomic counters.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.workers.free()
+        self.handles.free()
+        self.workChannel.destroy()
+        self.shutdown.destroy()
+        self.activeWorkers.destroy()
+        self.totalSubmitted.destroy()
+
+export {
+    PoolTask,
+    PoolHandle,
+    ThreadPool,
+    POOL_TASK_PENDING,
+    POOL_TASK_RUNNING,
+    POOL_TASK_COMPLETED,
+    POOL_TASK_FAILED
+}

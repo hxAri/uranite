@@ -1,0 +1,115 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Memory management: new (heap allocation), delete (deallocation).
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.testing.memory
+
+from uranite.io.console import puts
+
+class Resource:
+    
+    """ A class representing a generic system resource """
+    
+    public I64 id
+    public String name
+
+    public function Resource( self, I64 id, String name ) -> Void:
+        
+        """
+        Initializes a new Resource instance.
+        
+        Parameters:
+            id: The resource ID.
+            name: The resource name.
+        """
+        
+        self.id = id
+        self.name = name
+
+    public function describe( self ) -> Void:
+        
+        """ Prints a description of the resource to the console """
+        
+        puts( "Resource #", self.id, ": ", self.name )
+
+class Counter:
+    
+    """ A simple counter class stored on the heap """
+    
+    public I64 value
+
+    public function Counter( self, I64 initial ) -> Void:
+        
+        """
+        Initializes a new Counter with an initial value.
+        
+        Parameters:
+            initial: The starting value of the counter.
+        """
+        
+        self.value = initial
+
+    public function increment( self ) -> Void:
+        
+        """ Increments the counter value by one """
+        
+        self.value = self.value + 1
+
+    public function get( self ) -> I64:
+        
+        """
+        Retrieves the current counter value.
+        
+        Returns:
+            The current value.
+        """
+        
+        return self.value
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the memory management demonstration.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    # Heap allocation with new
+    Resource r1 = new Resource( 1, "database" )
+    Resource r2 = new Resource( 2, "cache" )
+
+    r1.describe()
+    r2.describe()
+
+    # Use then delete
+    Counter c = new Counter( 0 )
+    c.increment()
+    c.increment()
+    c.increment()
+    puts( "counter = ", c.get() )
+    delete c
+    puts( "counter deleted" )
+
+    # Delete resources
+    delete r1
+    delete r2
+    puts( "resources freed" )
+
+    return 0

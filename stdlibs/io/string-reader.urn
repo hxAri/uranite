@@ -1,0 +1,146 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/string-reader.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# In-memory InputStream backed by a String. Reads bytes from string
+# content without any syscalls.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.string-reader
+
+from uranite.memory.memory import Memory
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt
+from uranite.io.stream import InputStream
+
+public class StringReader implements InputStream:
+    
+    """
+    An in-memory input stream backed by a String. Provides sequential
+    byte-level read access to the string content without any syscalls.
+    Maintains a read position that advances with each read operation
+    and can be reset to re-read from the beginning.
+    """
+    
+    protect String data
+    """The source string being read from."""
+    protect I64 position
+    """The current read position within the string."""
+    protect I64 dataLength
+    """The total length of the source string in bytes."""
+    protect I64 dataPtr
+    """The raw memory address of the source string."""
+    
+    public function StringReader( self, String data ) -> Void:
+        
+        """
+        Construct a StringReader that reads bytes from the given string.
+        The read position starts at the beginning of the string.
+        
+        Parameters:
+            data (String):
+                The string to use as the data source.
+        """
+        
+        self.data = data
+        self.position = 0
+        self.dataPtr = stringToPtr( data )
+        self.dataLength = stringLen( data )
+    
+    public function read( self, Memory<I64> buffer, I64 offset, I64 length ) -> I64:
+        
+        """
+        Read up to length bytes from the string into the buffer starting
+        at the given offset. The number of bytes read may be less than
+        requested if the end of the string is reached. Returns 0 when
+        no bytes remain.
+        
+        Parameters:
+            buffer (Memory<I64>):
+                The destination buffer to read bytes into, with one
+                byte value per slot.
+            offset (I64):
+                The starting index in the buffer to write to.
+            length (I64):
+                The maximum number of bytes to read.
+        
+        Returns:
+            I64:
+                The number of bytes actually read.
+        
+        Complexity:
+            Time: O(n) where n is the number of bytes read.
+        """
+        
+        I64 available = self.dataLength - self.position
+        if available <= 0:
+            return 0
+        I64 toRead = length
+        if toRead > available:
+            toRead = available
+        I64 byteIndex = 0
+        while byteIndex < toRead:
+            I64 byteValue = readByteAt( self.dataPtr, self.position + byteIndex )
+            buffer.set( offset + byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        self.position = self.position + toRead
+        return toRead
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close the reader. This is a no-op since StringReader holds no
+        external resources, but is provided for interface compatibility
+        with InputStream.
+        """
+        
+        return
+    
+    public function getPosition( self ) -> I64:
+        
+        """
+        Return the current read position within the string.
+        
+        Returns:
+            I64:
+                The byte offset of the next read operation.
+        """
+        
+        return self.position
+    
+    public function getLength( self ) -> I64:
+        
+        """
+        Return the total length of the source string in bytes.
+        
+        Returns:
+            I64:
+                The string length.
+        """
+        
+        return self.dataLength
+    
+    public function reset( self ) -> Void:
+        
+        """
+        Reset the read position to the beginning of the string,
+        allowing the content to be re-read from the start.
+        """
+        
+        self.position = 0
+
+export {
+    StringReader
+}

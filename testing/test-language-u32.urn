@@ -1,0 +1,38 @@
+package testing
+
+from uranite.language.u32 import U32
+from uranite.language.uint import UInt
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== U32 Tests ===" )
+
+    U32 a = new U32( 3000000000 )
+    U32 b = new U32( 1000000000 )
+
+    assertEqualI64( 3000000000, a.getValue(), "getValue" )
+    putsln( "getValue OK" )
+
+    # arithmetic
+    UInt sum = a.add( b )
+    assertEqualI64( 4000000000, sum.getValue(), "add" )
+    UInt diff = a.subtract( b )
+    assertEqualI64( 2000000000, diff.getValue(), "subtract" )
+    UInt quot = a.divide( b )
+    assertEqualI64( 3, quot.getValue(), "divide" )
+    UInt mod = a.modulo( b )
+    assertEqualI64( 0, mod.getValue(), "modulo" )
+    putsln( "arithmetic OK" )
+
+    # equals / compareTo
+    U32 c = new U32( 3000000000 )
+    assertTrue( a.equals( c ), "equals" )
+    assertEqualI64( 1, a.compareTo( b ), "compareTo" )
+    putsln( "equals/compareTo OK" )
+
+    putsln( "=== All U32 tests passed ===" )
+    return 0

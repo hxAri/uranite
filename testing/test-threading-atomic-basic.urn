@@ -1,0 +1,21 @@
+package testing
+
+from uranite.threading.atomic import AtomicI64
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+from uranite.sys.process import exit
+
+public function main() -> I32:
+    putsln( "=== Threading Atomic Basic Tests ===" )
+
+    AtomicI64 counter = new AtomicI64( 42 )
+    I64 val = counter.load()
+    assertEqualI64( 42, val, "initial load" )
+    putsln( "load OK" )
+
+    counter.destroy()
+    putsln( "destroy OK" )
+
+    putsln( "=== All atomic basic tests passed ===" )
+    exit( 0 )
+    return 0

@@ -1,0 +1,53 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/hal/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all hardware abstraction layer types and functions from the MMIO and interrupt submodules for convenient access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.hal
+
+from uranite.os.hal.mmio import {
+    mmioRead8,
+    mmioWrite8,
+    mmioRead16,
+    mmioWrite16,
+    mmioRead32,
+    mmioWrite32,
+    mmioRead64,
+    mmioWrite64,
+    memoryFence,
+    storeFence,
+    loadFence
+}
+from uranite.os.hal.interrupt import MAX_IRQ_COUNT, IrqEntry, InterruptTable
+
+export {
+    mmioRead8,
+    mmioWrite8,
+    mmioRead16,
+    mmioWrite16,
+    mmioRead32,
+    mmioWrite32,
+    mmioRead64,
+    mmioWrite64,
+    memoryFence,
+    storeFence,
+    loadFence,
+    MAX_IRQ_COUNT,
+    IrqEntry,
+    InterruptTable
+}

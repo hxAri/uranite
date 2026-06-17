@@ -1,0 +1,54 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/io/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all public symbols from the I/O subsystem submodules including DMA
+# channels, buffer cache, and asynchronous I/O request queues.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.io
+
+from uranite.os.io.dma import {
+    DmaDirection,
+    DmaDescriptor,
+    DmaChannel
+}
+from uranite.os.io.buffer-cache import {
+    BUFFER_VALID,
+    BUFFER_DIRTY,
+    BUFFER_LOCKED,
+    BufferEntry,
+    BufferCache
+}
+from uranite.os.io.request import {
+    RequestType,
+    RequestStatus,
+    IoRequestQueue
+}
+
+export {
+    DmaDirection,
+    DmaDescriptor,
+    DmaChannel,
+    BUFFER_VALID,
+    BUFFER_DIRTY,
+    BUFFER_LOCKED,
+    BufferEntry,
+    BufferCache,
+    RequestType,
+    RequestStatus,
+    IoRequestQueue
+}

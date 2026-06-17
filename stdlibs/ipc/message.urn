@@ -1,0 +1,184 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/ipc/message.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# High-level message-passing IPC channel built on kernel Port
+# primitives. Provides bidirectional communication with typed
+# message payloads over circular ring buffers.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.ipc.message
+
+from uranite.os.ipc.message import Message, Port
+
+public class MessageChannel:
+
+    """
+    Bidirectional message-passing channel built on kernel Port primitives.
+    Each channel owns a single port for queuing messages. Messages are
+    fixed-size with word-based payloads serialized into ring buffer slots.
+    """
+
+    protect Port port
+    protect I64 wordsPerMessage
+
+    public function MessageChannel( self, I64 portId, I64 ownerTaskId, I64 slotCount, I64 wordsPerMessage ) -> Void:
+
+        """
+        Construct a message channel with a kernel port.
+
+        Parameters:
+            portId (I64):
+                Unique identifier for the underlying port.
+            ownerTaskId (I64):
+                Task identifier of the port owner.
+            slotCount (I64):
+                Number of message slots in the ring buffer.
+            wordsPerMessage (I64):
+                Maximum payload words per message (excluding header).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.port = new Port( portId, ownerTaskId, slotCount, wordsPerMessage )
+        self.wordsPerMessage = wordsPerMessage
+
+    public function send( self, I64 senderId, I64 messageType, I64 payload ) -> Boolean:
+
+        """
+        Send a single-word message through this channel.
+
+        Parameters:
+            senderId (I64):
+                Identifier of the sending task.
+            messageType (I64):
+                Application-defined message type tag.
+            payload (I64):
+                Single word payload value.
+
+        Returns:
+            Boolean:
+                True if message was enqueued, False if port is full.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        Message message = new Message( self.wordsPerMessage )
+        message.senderId = senderId
+        message.messageType = messageType
+        message.setWord( 0, payload )
+        Boolean result = self.port.send( message )
+        return result
+
+    public function sendMultiWord( self, I64 senderId, I64 messageType, Message message ) -> Boolean:
+
+        """
+        Send a pre-built multi-word message through this channel.
+        Caller is responsible for populating message fields.
+
+        Parameters:
+            senderId (I64):
+                Identifier of the sending task.
+            messageType (I64):
+                Application-defined message type tag.
+            message (Message):
+                Pre-populated message with payload data.
+
+        Returns:
+            Boolean:
+                True if message was enqueued, False if port is full.
+        """
+
+        message.senderId = senderId
+        message.messageType = messageType
+        return self.port.send( message )
+
+    public function receive( self, Message destination ) -> Boolean:
+
+        """
+        Receive the oldest message from this channel into destination.
+
+        Parameters:
+            destination (Message):
+                Message object to populate with received data.
+
+        Returns:
+            Boolean:
+                True if a message was dequeued, False if port is empty.
+        """
+
+        return self.port.receive( destination )
+
+    public function peek( self, Message destination ) -> Boolean:
+
+        """
+        Read the oldest message without removing it from the queue.
+
+        Parameters:
+            destination (Message):
+                Message object to populate with peeked data.
+
+        Returns:
+            Boolean:
+                True if a message was available, False if port is empty.
+        """
+
+        return self.port.peek( destination )
+
+    public function pending( self ) -> I64:
+
+        """ Return the number of messages currently queued. """
+
+        return self.port.getCount()
+
+    public function isFull( self ) -> Boolean:
+
+        """ Return whether the channel's ring buffer is full. """
+
+        return self.port.isFull()
+
+    public function isEmpty( self ) -> Boolean:
+
+        """ Return whether the channel has no queued messages. """
+
+        return self.port.isEmpty()
+
+    public function getPortId( self ) -> I64:
+
+        """ Return the underlying port identifier. """
+
+        return self.port.getPortId()
+
+    public function destroy( self ) -> Void:
+
+        """
+        Free all resources held by this channel's port.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.port.destroy()
+
+export {
+    MessageChannel,
+    Message, Port
+}

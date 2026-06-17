@@ -1,0 +1,152 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Tests the typeof, instanceof, and subclassof operators and Meta type identity.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+
+class Animal:
+    
+    """ Base class representing an animal """
+    
+    public String name
+    
+    public function Animal( self, String name ) -> Void:
+    
+        """
+        Initializes a new Animal instance.
+        
+        Parameters:
+            name: The name of the animal.
+        """
+        
+        self.name = name
+
+class Dog extends Animal:
+    
+    """ Class representing a dog, extending Animal """
+    
+    public I64 age
+    public function Dog( self, String name, I64 age ) -> Void:
+    
+        """
+        Initializes a new Dog instance.
+        
+        Parameters:
+            name: The name of the dog.
+            age: The age of the dog.
+        """
+        
+        self.name = name
+        self.age = age
+
+class Cat extends Animal:
+    
+    """ Class representing a cat, extending Animal """
+    
+    public function Cat( self, String name ) -> Void:
+        
+        """
+        Initializes a new Cat instance.
+        
+        Parameters:
+            name: The name of the cat.
+        """
+        
+        self.name = name
+
+class GoldenRetriever extends Dog:
+    
+    """ Class representing a Golden Retriever, extending Dog """
+    
+    public function GoldenRetriever( self, String name, I64 age ) -> Void:
+        
+        """
+        Initializes a new GoldenRetriever instance.
+        
+        Parameters:
+            name: The name of the golden retriever.
+            age: The age of the golden retriever.
+        """
+        
+        self.name = name
+        self.age = age
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the typeof and inheritance test.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    Dog dog = new Dog( "Rex", 5 )
+    Cat cat = new Cat( "Whiskers" )
+    GoldenRetriever golden = new GoldenRetriever( "Buddy", 3 )
+
+    # instanceof checks
+    if dog instanceof Dog:
+        puts( "dog instanceof Dog: yes" )
+    if dog instanceof Animal:
+        puts( "dog instanceof Animal: yes" )
+    if golden instanceof Dog:
+        puts( "golden instanceof Dog: yes" )
+    if golden instanceof Animal:
+        puts( "golden instanceof Animal: yes" )
+
+    # subclassof checks
+    if Dog subclassof Animal:
+        puts( "Dog subclassof Animal: yes" )
+    if GoldenRetriever subclassof Dog:
+        puts( "GoldenRetriever subclassof Dog: yes" )
+    if GoldenRetriever subclassof Animal:
+        puts( "GoldenRetriever subclassof Animal: yes" )
+
+    # Negative checks
+    if Cat subclassof Dog:
+        puts( "Cat subclassof Dog: yes (BUG)" )
+    else:
+        puts( "Cat subclassof Dog: no" )
+    if Animal subclassof Dog:
+        puts( "Animal subclassof Dog: yes (BUG)" )
+    else:
+        puts( "Animal subclassof Dog: no" )
+
+    # Meta<T> type identity
+    Meta<String> stringType = String
+    Meta<I64> intType = I64
+    Meta<String> anotherString = String
+
+    if stringType == anotherString:
+        puts( "Meta<String> == Meta<String>: yes" )
+    if stringType != intType:
+        puts( "Meta<String> != Meta<I64>: yes" )
+
+    # Literal method calls
+    String intStr = 42.toString()
+    puts( "42.toString() = ", intStr )
+    String boolStr = True.toString()
+    puts( "True.toString() = ", boolStr )
+    String negStr = ( -7 ).abs().toString()
+    puts( "(-7).abs().toString() = ", negStr )
+
+    puts( "all typeof tests passed" )
+    return 0

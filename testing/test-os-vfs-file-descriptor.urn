@@ -1,0 +1,82 @@
+package testing
+
+from uranite.os.vfs.file-descriptor import {
+    FLAG_READ, FLAG_WRITE, FLAG_APPEND, FLAG_CREATE, FLAG_TRUNCATE,
+    FileDescriptor, FileDescriptorTable
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+from uranite.sys.process import exit
+
+public function main() -> I32:
+    putsln( "=== OS VFS FileDescriptor Tests ===" )
+
+    assertEqualI64( 1, FLAG_READ, "flagRead" )
+    assertEqualI64( 2, FLAG_WRITE, "flagWrite" )
+    assertEqualI64( 4, FLAG_APPEND, "flagAppend" )
+    assertEqualI64( 8, FLAG_CREATE, "flagCreate" )
+    assertEqualI64( 16, FLAG_TRUNCATE, "flagTruncate" )
+    putsln( "flags OK" )
+
+    FileDescriptor fd = new FileDescriptor( 0, 1, 3 )
+    assertEqualI64( 0, fd.getFdNumber(), "fdNumber" )
+    assertEqualI64( 1, fd.getVnodeId(), "vnodeId" )
+    assertEqualI64( 0, fd.getOffset(), "offset 0" )
+    assertTrue( fd.canRead(), "canRead" )
+    assertTrue( fd.canWrite(), "canWrite" )
+    assertFalse( fd.isAppend(), "not append" )
+
+    fd.seek( 100 )
+    assertEqualI64( 100, fd.getOffset(), "seek 100" )
+    fd.advanceOffset( 50 )
+    assertEqualI64( 150, fd.getOffset(), "advance 150" )
+
+    I64 newRef = fd.retain()
+    assertEqualI64( 2, newRef, "retain 2" )
+    assertFalse( fd.release(), "release not last" )
+    assertTrue( fd.release(), "release last" )
+    putsln( "FileDescriptor OK" )
+
+    FileDescriptor fdApp = new FileDescriptor( 1, 2, 5 )
+    assertTrue( fdApp.canRead(), "app canRead" )
+    assertFalse( fdApp.canWrite(), "app not canWrite" )
+    assertTrue( fdApp.isAppend(), "app isAppend" )
+    putsln( "append fd OK" )
+
+    FileDescriptorTable fdt = new FileDescriptorTable( 8 )
+    assertEqualI64( 0, fdt.getOpenCount(), "openCount 0" )
+
+    I64 fd0 = fdt.open( 100, 3 )
+    assertTrue( fd0 >= 0, "open fd0" )
+    assertEqualI64( 1, fdt.getOpenCount(), "openCount 1" )
+    assertTrue( fdt.isOpen( fd0 ), "isOpen" )
+    assertEqualI64( 100, fdt.getVnodeId( fd0 ), "vnodeId 100" )
+    assertTrue( fdt.canRead( fd0 ), "canRead" )
+    assertTrue( fdt.canWrite( fd0 ), "canWrite" )
+    assertEqualI64( 0, fdt.getOffset( fd0 ), "offset 0" )
+
+    fdt.setOffset( fd0, 500 )
+    assertEqualI64( 500, fdt.getOffset( fd0 ), "offset 500" )
+
+    I64 fd1 = fdt.open( 200, 1 )
+    assertTrue( fdt.canRead( fd1 ), "fd1 canRead" )
+    assertFalse( fdt.canWrite( fd1 ), "fd1 not canWrite" )
+    putsln( "table open OK" )
+
+    I64 closedVnode = fdt.close( fd0 )
+    assertEqualI64( 100, closedVnode, "close returns vnode" )
+    assertEqualI64( 1, fdt.getOpenCount(), "openCount after close" )
+    assertFalse( fdt.isOpen( fd0 ), "not open after close" )
+
+    assertEqualI64( -1, fdt.close( -1 ), "close invalid" )
+    assertEqualI64( -1, fdt.close( fd0 ), "close already closed" )
+    putsln( "table close OK" )
+
+    fdt.close( fd1 )
+    fdt.destroy()
+
+    putsln( "=== All file descriptor tests passed ===" )
+    exit( 0 )
+    return 0

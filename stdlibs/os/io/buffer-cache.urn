@@ -1,0 +1,486 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/io/buffer-cache.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides a block-level buffer cache that sits between the virtual filesystem and
+# block device drivers, using hash-based lookup and dirty tracking for write-back policy.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.io.buffer-cache
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public const I64 BUFFER_VALID = 1
+""" Bitmask flag indicating that the buffer contains valid data. """
+
+public const I64 BUFFER_DIRTY = 2
+""" Bitmask flag indicating that the buffer has been modified and needs write-back. """
+
+public const I64 BUFFER_LOCKED = 4
+""" Bitmask flag indicating that the buffer is locked for exclusive access. """
+
+public class BufferEntry:
+    
+    """
+    Represents a single buffer cache entry that maps a device and block number
+    pair to a cached data buffer. Tracks validity, dirty state, lock status,
+    reference count, and last access time for cache eviction decisions.
+    """
+    
+    public I64 deviceId
+    public I64 blockNumber
+    public I64 flags
+    public I64 refCount
+    public I64 lastAccess
+    
+    public function BufferEntry( self ) -> Void:
+        
+        """
+        Construct a new buffer entry with all fields initialized to zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.deviceId = 0
+        self.blockNumber = 0
+        self.flags = 0
+        self.refCount = 0
+        self.lastAccess = 0
+    
+    public function isValid( self ) -> Boolean:
+        
+        """ Return True if this buffer entry contains valid cached data (bit 0 of flags). """
+        
+        return ( self.flags & 1 ) != 0
+    
+    public function isDirty( self ) -> Boolean:
+        
+        """ Return True if this buffer entry has been modified and needs write-back to disk (bit 1 of flags). """
+        
+        return ( self.flags & 2 ) != 0
+    
+    public function isLocked( self ) -> Boolean:
+        
+        """ Return True if this buffer entry is locked for exclusive access (bit 2 of flags). """
+        
+        return ( self.flags & 4 ) != 0
+    
+    public function markDirty( self ) -> Void:
+        
+        """ Set the dirty flag on this buffer entry, indicating it needs write-back. """
+        
+        self.flags = self.flags | 2
+    
+    public function clearDirty( self ) -> Void:
+        
+        """ Clear the dirty flag on this buffer entry after a successful write-back to disk. """
+        
+        self.flags = self.flags & ( ~2 )
+    
+    public function markValid( self ) -> Void:
+        
+        """ Set the valid flag on this buffer entry, indicating it contains usable cached data. """
+        
+        self.flags = self.flags | 1
+    
+    public function retain( self ) -> Void:
+        
+        """ Increment the reference count to indicate that another consumer is using this buffer. """
+        
+        self.refCount = self.refCount + 1
+    
+    public function release( self ) -> Boolean:
+        
+        """
+        Decrement the reference count and return True if the count has reached zero
+        or below, indicating the buffer is no longer in use and eligible for eviction.
+        
+        Returns:
+            Boolean:
+                True if the reference count dropped to zero or below.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.refCount = self.refCount - 1
+        return self.refCount <= 0
+
+public class BufferCache:
+    
+    """
+    Fixed-size cache of disk blocks that accelerates I/O by keeping frequently
+    accessed blocks in memory. Each cache slot is keyed by a (deviceId, blockNumber)
+    pair. When the cache is full, the least-recently-used entry with zero references
+    is evicted. Tracks hit and miss counts for cache performance monitoring.
+    """
+    
+    protect Memory<I64> deviceIds
+    protect Memory<I64> blockNumbers
+    protect Memory<I64> flags
+    protect Memory<I64> refCounts
+    protect Memory<I64> accessTimes
+    protect I64 capacity
+    protect I64 count
+    protect I64 hits
+    protect I64 misses
+    protect I64 accessCounter
+    protect Spinlock lock
+    
+    public function BufferCache( self, I64 maxEntries ) -> Void:
+        
+        """
+        Construct a new buffer cache with the given maximum number of cache slots.
+        All slots are initialized as empty.
+        
+        Parameters:
+            maxEntries (I64):
+                The maximum number of block buffers that can be cached simultaneously.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxEntries
+        self.count = 0
+        self.hits = 0
+        self.misses = 0
+        self.accessCounter = 0
+        self.lock = new Spinlock()
+        self.deviceIds = new Memory<I64>( maxEntries )
+        self.blockNumbers = new Memory<I64>( maxEntries )
+        self.flags = new Memory<I64>( maxEntries )
+        self.refCounts = new Memory<I64>( maxEntries )
+        self.accessTimes = new Memory<I64>( maxEntries )
+        I64 slotIndex = 0
+        while slotIndex < maxEntries:
+            self.deviceIds.set( slotIndex, 0 )
+            self.blockNumbers.set( slotIndex, 0 )
+            self.flags.set( slotIndex, 0 )
+            self.refCounts.set( slotIndex, 0 )
+            self.accessTimes.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function lookup( self, I64 deviceId, I64 blockNumber ) -> I64:
+        
+        """
+        Search the cache for a block identified by its device and block number.
+        On a hit, the access time is updated, the reference count is incremented,
+        and the hit counter is bumped. On a miss, the miss counter is incremented.
+        
+        Parameters:
+            deviceId (I64):
+                The identifier of the block device that owns this block.
+            blockNumber (I64):
+                The block number within the device to look up.
+        
+        Returns:
+            I64:
+                The slot index of the cached block on a hit, or -1 on a miss.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if ( self.flags.get( slotIndex ) & 1 ) != 0:
+                if self.deviceIds.get( slotIndex ) == deviceId and self.blockNumbers.get( slotIndex ) == blockNumber:
+                    self.accessCounter = self.accessCounter + 1
+                    self.accessTimes.set( slotIndex, self.accessCounter )
+                    self.refCounts.set( slotIndex, self.refCounts.get( slotIndex ) + 1 )
+                    self.hits = self.hits + 1
+                    return slotIndex
+            slotIndex = slotIndex + 1
+        self.misses = self.misses + 1
+        return 0 - 1
+    
+    public function insert( self, I64 deviceId, I64 blockNumber ) -> I64:
+        
+        """
+        Insert a block into the cache. If the block is already cached, returns
+        the existing slot. If the cache is full, evicts the least-recently-used
+        entry with zero references. The operation is protected by a spinlock.
+        
+        Parameters:
+            deviceId (I64):
+                The identifier of the block device that owns this block.
+            blockNumber (I64):
+                The block number within the device to insert.
+        
+        Returns:
+            I64:
+                The slot index where the block was inserted or already existed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        I64 existing = self.lookupUnlocked( deviceId, blockNumber )
+        if existing >= 0:
+            self.lock.unlock()
+            return existing
+        I64 slot = self.findFreeSlot()
+        if slot < 0:
+            slot = self.evictLru()
+        self.deviceIds.set( slot, deviceId )
+        self.blockNumbers.set( slot, blockNumber )
+        self.flags.set( slot, 1 )
+        self.refCounts.set( slot, 1 )
+        self.accessCounter = self.accessCounter + 1
+        self.accessTimes.set( slot, self.accessCounter )
+        self.count = self.count + 1
+        self.lock.unlock()
+        return slot
+    
+    public function markDirty( self, I64 slot ) -> Void:
+        
+        """
+        Mark the cache slot as dirty, indicating the cached block has been modified
+        and needs to be written back to the underlying block device.
+        
+        Parameters:
+            slot (I64):
+                The cache slot index to mark as dirty.
+        """
+        
+        if slot >= 0 and slot < self.capacity:
+            self.flags.set( slot, self.flags.get( slot ) | 2 )
+    
+    public function clearDirty( self, I64 slot ) -> Void:
+        
+        """
+        Clear the dirty flag on a cache slot after a successful write-back to disk.
+        
+        Parameters:
+            slot (I64):
+                The cache slot index to clear the dirty flag on.
+        """
+        
+        if slot >= 0 and slot < self.capacity:
+            self.flags.set( slot, self.flags.get( slot ) & ( ~2 ) )
+    
+    public function isDirty( self, I64 slot ) -> Boolean:
+        
+        """
+        Check whether the cache slot is marked as dirty.
+        
+        Parameters:
+            slot (I64):
+                The cache slot index to check.
+        
+        Returns:
+            Boolean:
+                True if the slot is dirty and needs write-back.
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return False
+        return ( self.flags.get( slot ) & 2 ) != 0
+    
+    public function release( self, I64 slot ) -> Void:
+        
+        """
+        Release a reference on a cache slot by decrementing its reference count.
+        
+        Parameters:
+            slot (I64):
+                The cache slot index to release.
+        """
+        
+        if slot >= 0 and slot < self.capacity:
+            I64 rc = self.refCounts.get( slot )
+            if rc > 0:
+                self.refCounts.set( slot, rc - 1 )
+    
+    public function invalidate( self, I64 slot ) -> Void:
+        
+        """
+        Invalidate a cache slot, removing its entry from the cache entirely.
+        Clears all metadata and decrements the cached block count.
+        
+        Parameters:
+            slot (I64):
+                The cache slot index to invalidate.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if slot >= 0 and slot < self.capacity:
+            if ( self.flags.get( slot ) & 1 ) != 0:
+                self.flags.set( slot, 0 )
+                self.deviceIds.set( slot, 0 )
+                self.blockNumbers.set( slot, 0 )
+                self.refCounts.set( slot, 0 )
+                self.count = self.count - 1
+    
+    public function getDirtyCount( self ) -> I64:
+        
+        """
+        Count the number of cache entries that are both valid and dirty, which
+        represents the number of blocks that need to be flushed to disk during
+        a sync operation.
+        
+        Returns:
+            I64:
+                The number of dirty cache entries.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 dirtyCount = 0
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if ( self.flags.get( slotIndex ) & 3 ) == 3:
+                dirtyCount = dirtyCount + 1
+            slotIndex = slotIndex + 1
+        return dirtyCount
+    
+    protect function lookupUnlocked( self, I64 deviceId, I64 blockNumber ) -> I64:
+        
+        """
+        Search the cache for a block without acquiring the spinlock. This is used
+        internally by insert when the lock is already held.
+        
+        Parameters:
+            deviceId (I64):
+                The identifier of the block device that owns this block.
+            blockNumber (I64):
+                The block number within the device to look up.
+        
+        Returns:
+            I64:
+                The slot index of the cached block on a hit, or -1 on a miss.
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if ( self.flags.get( slotIndex ) & 1 ) != 0:
+                if self.deviceIds.get( slotIndex ) == deviceId and self.blockNumbers.get( slotIndex ) == blockNumber:
+                    return slotIndex
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    protect function findFreeSlot( self ) -> I64:
+        
+        """
+        Find the first free (invalid) slot in the cache.
+        
+        Returns:
+            I64:
+                The index of a free slot, or -1 if the cache is full.
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if ( self.flags.get( slotIndex ) & 1 ) == 0:
+                return slotIndex
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    protect function evictLru( self ) -> I64:
+        
+        """
+        Evict the least-recently-used cache entry that has a reference count of
+        zero. Scans all slots to find the entry with the oldest access time and
+        no active references, then frees that slot for reuse.
+        
+        Returns:
+            I64:
+                The slot index of the evicted entry, now available for reuse.
+        """
+        
+        I64 lruSlot = 0
+        I64 lruTime = self.accessTimes.get( 0 )
+        I64 scanIndex = 1
+        while scanIndex < self.capacity:
+            if self.refCounts.get( scanIndex ) == 0 and self.accessTimes.get( scanIndex ) < lruTime:
+                lruSlot = scanIndex
+                lruTime = self.accessTimes.get( scanIndex )
+            scanIndex = scanIndex + 1
+        self.flags.set( lruSlot, 0 )
+        self.count = self.count - 1
+        return lruSlot
+    
+    public function getCount( self ) -> I64:
+        
+        """ Return the current number of valid entries in the cache. """
+        
+        return self.count
+    
+    public function getHits( self ) -> I64:
+        
+        """ Return the total number of cache lookup hits since creation. """
+        
+        return self.hits
+    
+    public function getMisses( self ) -> I64:
+        
+        """ Return the total number of cache lookup misses since creation. """
+        
+        return self.misses
+    
+    public function getHitRate( self ) -> I64:
+        
+        """
+        Calculate and return the cache hit rate as a percentage (0-100).
+        Returns zero if no lookups have been performed.
+        
+        Returns:
+            I64:
+                The hit rate percentage.
+        """
+        
+        I64 total = self.hits + self.misses
+        if total == 0:
+            return 0
+        return ( self.hits * 100 ) / total
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free all memory buffers allocated by this buffer cache.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.deviceIds.free()
+        self.blockNumbers.free()
+        self.flags.free()
+        self.refCounts.free()
+        self.accessTimes.free()
+
+export {
+    BUFFER_VALID,
+    BUFFER_DIRTY,
+    BUFFER_LOCKED,
+    BufferEntry,
+    BufferCache
+}

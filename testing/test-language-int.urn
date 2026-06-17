@@ -1,0 +1,66 @@
+package testing
+
+from uranite.language.int import Int
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue,
+    assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Int Tests ===" )
+
+    Int a = new Int( 42 )
+    Int b = new Int( 10 )
+
+    assertEqualI64( 42, a.getValue(), "getValue" )
+    putsln( "getValue OK" )
+
+    # abs
+    Int absPos = a.abs()
+    assertEqualI64( 42, absPos.getValue(), "abs positive" )
+    Int neg = new Int( -7 )
+    Int absNeg = neg.abs()
+    assertEqualI64( 7, absNeg.getValue(), "abs negative" )
+    putsln( "abs OK" )
+
+    # negate
+    Int negated = a.negate()
+    assertEqualI64( -42, negated.getValue(), "negate" )
+    putsln( "negate OK" )
+
+    # arithmetic
+    Int sum = a.add( b )
+    assertEqualI64( 52, sum.getValue(), "add" )
+    Int diff = a.subtract( b )
+    assertEqualI64( 32, diff.getValue(), "subtract" )
+    Int prod = a.multiply( b )
+    assertEqualI64( 420, prod.getValue(), "multiply" )
+    Int quot = a.divide( b )
+    assertEqualI64( 4, quot.getValue(), "divide" )
+    Int mod = a.modulo( b )
+    assertEqualI64( 2, mod.getValue(), "modulo" )
+    putsln( "arithmetic OK" )
+
+    # equals
+    Int c = new Int( 42 )
+    assertTrue( a.equals( c ), "equals same" )
+    assertFalse( a.equals( b ), "equals diff" )
+    putsln( "equals OK" )
+
+    # compareTo
+    assertEqualI64( -1, b.compareTo( a ), "compareTo less" )
+    assertEqualI64( 0, a.compareTo( c ), "compareTo equal" )
+    assertEqualI64( 1, a.compareTo( b ), "compareTo greater" )
+    putsln( "compareTo OK" )
+
+    # min / max
+    Int minVal = a.min( b )
+    assertEqualI64( 10, minVal.getValue(), "min" )
+    Int maxVal = a.max( b )
+    assertEqualI64( 42, maxVal.getValue(), "max" )
+    putsln( "min/max OK" )
+
+    putsln( "=== All Int tests passed ===" )
+    return 0

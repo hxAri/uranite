@@ -1,0 +1,79 @@
+package testing
+
+from uranite.web.application import Application
+from uranite.web.config import ServerConfig
+from uranite.web.controller import Controller
+from uranite.web.router import Router, MatchResult
+from uranite.web.route import Route
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse, statusCodeText
+from uranite.web.middleware import Middleware
+from uranite.web.cors import CorsMiddleware
+from uranite.web.errors import NotFoundError, BadRequestError, InternalServerError
+from uranite.testing.assertions import {
+    assertEqualI64, assertEqualStr, assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Web Server Tests ===" )
+
+    # ServerConfig
+    ServerConfig cfg = new ServerConfig( 8080, "0.0.0.0" )
+    putsln( "ServerConfig OK" )
+
+    # Route
+    Route r = new Route( "GET", "/users/:id", 0 )
+    putsln( "Route OK" )
+
+    # Router
+    Router router = new Router()
+    putsln( "Router OK" )
+
+    # HttpRequest
+    HttpRequest req = new HttpRequest( "GET", "/users/1", "", "" )
+    putsln( "HttpRequest OK" )
+
+    # HttpResponse
+    HttpResponse res = new HttpResponse()
+    res.status( 200 )
+    res.header( "Content-Type", "text/plain" )
+    res.text( "Hello" )
+    assertEqualI64( 200, res.statusCode, "response status" )
+    assertEqualStr( "Hello", res.body, "response body" )
+    putsln( "HttpResponse OK" )
+
+    # statusCodeText
+    assertEqualStr( "OK", statusCodeText( 200 ), "200 text" )
+    assertEqualStr( "Not Found", statusCodeText( 404 ), "404 text" )
+    assertEqualStr( "Internal Server Error", statusCodeText( 500 ), "500 text" )
+    putsln( "statusCodeText OK" )
+
+    # Controller
+    Controller ctrl = new Controller()
+    putsln( "Controller OK" )
+
+    # Application
+    Application app = new Application()
+    app.config( cfg )
+    app.controller( ctrl )
+    putsln( "Application OK" )
+
+    # Error classes
+    NotFoundError nfe = new NotFoundError( "not found", None )
+    assertEqualStr( "not found", nfe.getMessage(), "nfe msg" )
+    assertEqualI64( 404, nfe.statusCode, "nfe code" )
+    putsln( "NotFoundError OK" )
+
+    BadRequestError bre = new BadRequestError( "bad request", None )
+    assertEqualStr( "bad request", bre.getMessage(), "bre msg" )
+    assertEqualI64( 400, bre.statusCode, "bre code" )
+    putsln( "BadRequestError OK" )
+
+    InternalServerError ise = new InternalServerError( "internal error", None )
+    assertEqualStr( "internal error", ise.getMessage(), "ise msg" )
+    assertEqualI64( 500, ise.statusCode, "ise code" )
+    putsln( "InternalServerError OK" )
+
+    putsln( "=== All web server tests passed ===" )
+    return 0

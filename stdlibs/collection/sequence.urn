@@ -1,0 +1,168 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/sequence.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Sequence interface for ordered collections with index-based element access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.sequence
+
+from uranite.collection.collection import Collection
+from uranite.operators.indexable import Indexable
+from uranite.language.boolean import Boolean
+from uranite.language.callable import Callable
+from uranite.language.void import Void
+
+public interface Sequence<E> extends Collection<E>, Indexable<Int, E>:
+    
+    """
+    Ordered collection with index-based access to elements.
+    
+    A Sequence maintains a defined ordering of its elements, allowing retrieval,
+    searching, slicing, and transformation operations based on positional indices.
+    Inherits get/set/remove/contains from Indexable<Int, E>.
+    """
+    
+    public function indexOf( self, E element ) -> Int:
+        
+        """
+        Return the index of the first occurrence of the given element, or -1 if the element is not present.
+        
+        Parameters:
+            element (E):
+                The element to search for.
+        
+        Returns:
+            Int:
+                The zero-based index of the first occurrence, or -1 if absent.
+        """
+    
+    public function lastIndexOf( self, E element ) -> Int:
+        
+        """
+        Return the index of the last occurrence of the given element, or -1 if the element is not present.
+        
+        Parameters:
+            element (E):
+                The element to search for.
+        
+        Returns:
+            Int:
+                The zero-based index of the last occurrence, or -1 if absent.
+        """
+    
+    public function slice( self, Int start, Int end ) -> Sequence<E>:
+        
+        """
+        Return a new sequence containing elements from the start index up to but not including the end index.
+        
+        Parameters:
+            start (Int):
+                The inclusive start index.
+            end (Int):
+                The exclusive end index.
+        
+        Returns:
+            Sequence<E>:
+                A new sequence containing the specified range of elements.
+        """
+    
+    public function subSequence( self, Int start, Int end ) -> Sequence<E>:
+        
+        """
+        Return a sub-sequence containing elements between the start and end indices.
+        
+        Parameters:
+            start (Int):
+                The inclusive start index.
+            end (Int):
+                The exclusive end index.
+        
+        Returns:
+            Sequence<E>:
+                A new sequence containing the specified range of elements.
+        """
+    
+    public property first( self ) -> E:
+        
+        """ Return the first element of this sequence. """
+    
+    public property last( self ) -> E:
+        
+        """ Return the last element of this sequence. """
+    
+    public property reversed( self ) -> Sequence<E>:
+        
+        """ Return a new sequence with the elements in reverse order. """
+    
+    public function sorted( self, Callable<Int,<E,E>> comparator ) -> Sequence<E>:
+        
+        """
+        Return a new sorted sequence using the provided comparator function.
+        
+        Parameters:
+            comparator (Callable<Int,<E,E>>):
+                A function that takes two elements and returns a negative, zero, or positive
+                Int indicating their relative order.
+        
+        Returns:
+            Sequence<E>:
+                A new sequence with elements sorted according to the comparator.
+        """
+    
+    public function map( self, Callable<E,<E>> transform ) -> Sequence<E>:
+        
+        """
+        Return a new sequence with the given transform function applied to each element.
+        
+        Parameters:
+            transform (Callable<E,<E>>):
+                A function that takes an element and returns a transformed element.
+        
+        Returns:
+            Sequence<E>:
+                A new sequence containing the transformed elements.
+        """
+    
+    public function forEach( self, Callable<Void,<E>> action ) -> Void:
+        
+        """
+        Execute the given action for each element in this sequence.
+        
+        Parameters:
+            action (Callable<Void,<E>>):
+                A function to invoke with each element.
+        """
+    
+    public function zip( self, Sequence<E> other ) -> Sequence<E>:
+        
+        """
+        Interleave elements from this sequence and another sequence into a new sequence.
+        
+        Parameters:
+            other (Sequence<E>):
+                The sequence whose elements will be interleaved with this sequence.
+        
+        Returns:
+            Sequence<E>:
+                A new sequence with elements alternating between this and the other sequence.
+        """
+        
+
+
+export {
+    Sequence
+}

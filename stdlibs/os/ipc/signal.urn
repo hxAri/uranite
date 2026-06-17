@@ -1,0 +1,205 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/ipc/signal.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides a bitmask-based event notification primitive for kernel IPC where each
+# bit represents an independent event channel that tasks can signal, poll, and wait on.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.ipc.signal
+
+from uranite.os.sync.spinlock import Spinlock
+
+public class Event:
+    
+    """
+    Bitmask-based notification primitive for kernel inter-process communication.
+    Each bit in the signaled bitmask represents an independent event channel.
+    Tasks can signal specific bits, poll for signaled bits without blocking,
+    acknowledge and consume signaled bits, or register a wait for the scheduler
+    to check when the task should be unblocked.
+    """
+    
+    protect I64 signaled
+    protect I64 waitingTaskId
+    protect I64 waitMask
+    protect Spinlock lock
+    
+    public function Event( self ) -> Void:
+        
+        """
+        Construct a new event object with no bits signaled and no registered waiter.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.signaled = 0
+        self.waitingTaskId = 0
+        self.waitMask = 0
+        self.lock = new Spinlock()
+    
+    public function signal( self, I64 bits ) -> Boolean:
+        
+        """
+        Signal specific event bits by setting them in the signaled bitmask.
+        If a waiter is registered and the signaled bits satisfy the wait mask,
+        returns True to indicate the waiter should be unblocked.
+        
+        Parameters:
+            bits (I64):
+                The bitmask of event bits to signal.
+        
+        Returns:
+            Boolean:
+                True if a registered waiter was satisfied by the newly signaled bits.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        self.signaled = self.signaled | bits
+        Boolean waiterSatisfied = False
+        if self.waitMask != 0:
+            if ( self.signaled & self.waitMask ) != 0:
+                waiterSatisfied = True
+        self.lock.unlock()
+        return waiterSatisfied
+    
+    public function poll( self, I64 mask ) -> I64:
+        
+        """
+        Check which bits matching the given mask are currently signaled without
+        blocking or consuming them.
+        
+        Parameters:
+            mask (I64):
+                The bitmask of event bits to check.
+        
+        Returns:
+            I64:
+                The subset of bits from the mask that are currently signaled.
+        """
+        
+        return self.signaled & mask
+    
+    public function acknowledge( self, I64 mask ) -> I64:
+        
+        """
+        Consume signaled bits matching the given mask by clearing them from the
+        signaled bitmask and returning which bits were set. This is an atomic
+        test-and-clear operation protected by a spinlock.
+        
+        Parameters:
+            mask (I64):
+                The bitmask of event bits to acknowledge and consume.
+        
+        Returns:
+            I64:
+                The subset of bits from the mask that were signaled before clearing.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        I64 matched = self.signaled & mask
+        self.signaled = self.signaled & ( ~mask )
+        self.lock.unlock()
+        return matched
+    
+    public function registerWait( self, I64 taskId, I64 mask ) -> Boolean:
+        
+        """
+        Register a task to wait for specific event bits. Only one waiter can be
+        registered per event object. The scheduler checks whether the wait
+        condition is satisfied to decide when to unblock the task. If the
+        requested bits are already signaled at registration time, returns False
+        immediately (no blocking needed).
+        
+        Parameters:
+            taskId (I64):
+                The identifier of the task that wants to wait.
+            mask (I64):
+                The bitmask of event bits the task is waiting for.
+        
+        Returns:
+            Boolean:
+                True if the requested bits are already signaled (no blocking needed),
+                False if the wait was registered and the task should block or another
+                waiter is already registered.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.waitingTaskId != 0:
+            self.lock.unlock()
+            return False
+        self.waitingTaskId = taskId
+        self.waitMask = mask
+        if ( self.signaled & mask ) != 0:
+            self.waitingTaskId = 0
+            self.waitMask = 0
+            self.lock.unlock()
+            return True
+        self.lock.unlock()
+        return False
+    
+    public function clearWait( self ) -> Void:
+        
+        """ Clear the wait registration, called when the waiting task is unblocked by the scheduler. """
+        
+        self.lock.lock()
+        self.waitingTaskId = 0
+        self.waitMask = 0
+        self.lock.unlock()
+    
+    public function getWaitingTaskId( self ) -> I64:
+        
+        """ Return the task identifier of the currently registered waiter, or 0 if no task is waiting. """
+        
+        return self.waitingTaskId
+    
+    public function getSignaled( self ) -> I64:
+        
+        """ Return the current signaled bitmask. """
+        
+        return self.signaled
+    
+    public function reset( self ) -> Void:
+        
+        """
+        Clear all signaled event bits, resetting the event to its initial state.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        self.signaled = 0
+        self.lock.unlock()
+
+export {
+    Event
+}

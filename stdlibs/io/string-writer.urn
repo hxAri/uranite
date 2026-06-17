@@ -1,0 +1,249 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/string-writer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# In-memory OutputStream that accumulates bytes and converts to String.
+# Buffer ownership transfers on toString() — don't call destroy() after.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.string-writer
+
+from uranite.memory.memory import Memory
+from uranite.io.stream import OutputStream
+from uranite.io.syscall import {
+    memoryToPtr, readByteAt, writeByteAt, stringToPtr, stringLen
+}
+
+public class StringWriter implements OutputStream:
+    
+    """
+    An in-memory output stream that accumulates written bytes into a
+    dynamically growing buffer and can produce the result as a String.
+    Implements the OutputStream interface. The internal buffer starts
+    at 256 bytes and doubles in capacity when full. After calling
+    toString, the buffer ownership transfers to the returned string
+    and destroy must not be called.
+    """
+    
+    protect Memory<I64> buffer
+    """The underlying byte buffer for accumulating written data."""
+    protect I64 capacity
+    """The current capacity of the buffer in bytes."""
+    protect I64 position
+    """The number of bytes written so far, also the write cursor."""
+    protect I64 bufAddr
+    """The raw memory address of the buffer for byte-level access."""
+    
+    public function StringWriter( self ) -> Void:
+        
+        """
+        Construct a StringWriter with an initial buffer capacity of
+        256 bytes and the write position at zero.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = 256
+        self.buffer = new Memory<I64>( self.capacity / 8 )
+        self.bufAddr = memoryToPtr( self.buffer )
+        self.position = 0
+    
+    protect function grow( self ) -> Void:
+        
+        """
+        Double the buffer capacity and copy all existing content to
+        the new buffer. The old buffer is freed after the copy.
+        
+        Complexity:
+            Time: O(n) where n is the current position.
+        """
+        
+        I64 newCapacity = self.capacity * 2
+        Memory<I64> newBuf = new Memory<I64>( newCapacity / 8 )
+        I64 newAddr = memoryToPtr( newBuf )
+        I64 oldAddr = memoryToPtr( self.buffer )
+        I64 copyIndex = 0
+        while copyIndex < self.position:
+            I64 byteValue = readByteAt( oldAddr, copyIndex )
+            writeByteAt( newAddr, copyIndex, byteValue )
+            copyIndex = copyIndex + 1
+        self.buffer.free()
+        self.buffer = newBuf
+        self.bufAddr = newAddr
+        self.capacity = newCapacity
+    
+    public function write( self, Memory<I64> data, I64 offset, I64 length ) -> I64:
+        
+        """
+        Write length bytes from the data buffer starting at offset into
+        the internal buffer. Grows the buffer as needed to accommodate
+        the data.
+        
+        Parameters:
+            data (Memory<I64>):
+                The source buffer containing bytes to write, with one
+                byte value per slot.
+            offset (I64):
+                The starting index in the source buffer.
+            length (I64):
+                The number of bytes to write.
+        
+        Returns:
+            I64:
+                The number of bytes written, always equal to length.
+        
+        Complexity:
+            Time: O(n) where n is the number of bytes written, amortized
+            over buffer growth.
+        """
+        
+        I64 currentPosition = self.position
+        I64 currentAddress = memoryToPtr( self.buffer )
+        I64 currentCapacity = self.capacity
+        I64 sourcePointer = memoryToPtr( data )
+        I64 writeIndex = 0
+        while writeIndex < length:
+            if currentPosition >= currentCapacity - 1:
+                self.position = currentPosition
+                self.grow()
+                currentAddress = memoryToPtr( self.buffer )
+                currentCapacity = self.capacity
+                currentPosition = self.position
+            I64 slotOffset = ( offset + writeIndex ) * 8
+            I64 byteValue = readI64At( sourcePointer, slotOffset )
+            writeByteAt( currentAddress, currentPosition, byteValue )
+            currentPosition = currentPosition + 1
+            writeIndex = writeIndex + 1
+        self.position = currentPosition
+        self.bufAddr = currentAddress
+        return length
+    
+    public function writeString( self, String text ) -> Void:
+        
+        """
+        Write all bytes from a string into the internal buffer. Grows
+        the buffer as needed.
+        
+        Parameters:
+            text (String):
+                The string whose bytes to append to the buffer.
+        
+        Complexity:
+            Time: O(n) where n is the length of the string, amortized
+            over buffer growth.
+        """
+        
+        I64 textPointer = stringToPtr( text )
+        I64 textLength = stringLen( text )
+        I64 currentPosition = self.position
+        I64 currentAddress = memoryToPtr( self.buffer )
+        I64 currentCapacity = self.capacity
+        I64 charIndex = 0
+        while charIndex < textLength:
+            if currentPosition >= currentCapacity - 1:
+                self.position = currentPosition
+                self.grow()
+                currentAddress = memoryToPtr( self.buffer )
+                currentCapacity = self.capacity
+                currentPosition = self.position
+            I64 byteValue = readByteAt( textPointer, charIndex )
+            writeByteAt( currentAddress, currentPosition, byteValue )
+            currentPosition = currentPosition + 1
+            charIndex = charIndex + 1
+        self.position = currentPosition
+        self.bufAddr = currentAddress
+    
+    public function flush( self ) -> Void:
+        
+        """
+        Flush buffered output. This is a no-op for StringWriter since
+        all writes go directly to the in-memory buffer, but is provided
+        for OutputStream interface compatibility.
+        """
+        
+        return
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close the writer. This is a no-op for StringWriter since there
+        are no external resources to release, but is provided for
+        OutputStream interface compatibility.
+        """
+        
+        return
+    
+    public function toString( self ) -> String:
+        
+        """
+        Convert the accumulated buffer contents to a String by
+        null-terminating the buffer and reinterpreting the address
+        as a string pointer. After calling this method, buffer
+        ownership transfers to the returned string and destroy must
+        not be called.
+        
+        Returns:
+            String:
+                The accumulated bytes as a string.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.bufAddr = memoryToPtr( self.buffer )
+        writeByteAt( self.bufAddr, self.position, 0 )
+        String result = ""
+        asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" self.bufAddr ) : clobber()
+        return result
+    
+    public function getLength( self ) -> I64:
+        
+        """
+        Return the number of bytes written so far.
+        
+        Returns:
+            I64:
+                The current byte count in the buffer.
+        """
+        
+        return self.position
+    
+    public function reset( self ) -> Void:
+        
+        """
+        Reset the write position to zero, effectively discarding all
+        previously written content without freeing the buffer. The
+        buffer capacity is retained.
+        """
+        
+        self.position = 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the underlying memory buffer. Must not be called after
+        toString has been invoked, since buffer ownership transfers
+        to the returned string.
+        """
+        
+        self.buffer.free()
+
+export {
+    StringWriter
+}

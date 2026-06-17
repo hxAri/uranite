@@ -1,0 +1,103 @@
+
+#
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/benchmarks/
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Binary-trees benchmark using Arena<T> pool allocation.
+# Nodes are bump-allocated from a contiguous arena per tree,
+# then bulk-freed via freeAll() — no per-node malloc/free or recursive cleanup.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+from uranite.language.int import Int
+from uranite.language.void import Void
+from uranite.memory.arena import Arena
+
+extern function clock() -> I64;
+
+class Node:
+    
+    public ?Node left
+    public ?Node right
+    public I64 tag
+    
+    public function check( self ) -> I64:
+        if self.left == None:
+            return 1
+        return 1 + self.left.check() + self.right.check()
+
+function bottomUpTree( Int depth, Arena<Node> pool ) -> Node:
+    Node n = pool.alloc()
+    if depth > 0:
+        n.left = bottomUpTree( depth - 1, pool )
+        n.right = bottomUpTree( depth - 1, pool )
+    else:
+        n.left = None
+        n.right = None
+    n.tag = 0
+    return n
+
+function treeSize( Int depth ) -> Int:
+    if depth <= 0:
+        return 1
+    Int sub = treeSize( depth - 1 )
+    return 1 + sub + sub
+
+public function main() -> I32:
+    Int maxDepth = 21
+    Int minDepth = 4
+    
+    puts( "=== Uranite Binary Trees Benchmark (max depth ", maxDepth, ") ===" )
+    puts( "Initializing stretch tree..." )
+    
+    I64 start = clock()
+    
+    Int stretchDepth = maxDepth + 1
+    Int stretchNodes = treeSize( stretchDepth )
+    Arena<Node> stretchPool = new Arena<Node>( stretchNodes )
+    Node stretchTree = bottomUpTree( stretchDepth, stretchPool )
+    puts( "stretch tree of depth ", stretchDepth, "\t check: ", stretchTree.check() )
+    stretchPool.freeAll()
+    stretchPool.destroy()
+    
+    puts( "Initializing long lived tree..." )
+    Int longNodes = treeSize( maxDepth )
+    Arena<Node> longPool = new Arena<Node>( longNodes )
+    Node longLivedTree = bottomUpTree( maxDepth, longPool )
+    
+    for Int depth = minDepth; depth <= maxDepth; depth += 2:
+        Int iterations = 1 << ( maxDepth - depth + minDepth )
+        Int totalCheck = 0
+        Int nodesPerTree = treeSize( depth )
+        for Int i = 0; i < iterations; i++:
+            Arena<Node> pool = new Arena<Node>( nodesPerTree )
+            Node temp = bottomUpTree( depth, pool )
+            totalCheck = totalCheck + temp.check()
+            pool.freeAll()
+            pool.destroy()
+        puts( iterations, "\t trees of depth ", depth, "\t check: ", totalCheck )
+    
+    puts( "long lived tree of depth ", maxDepth, "\t check: ", longLivedTree.check() )
+    longPool.freeAll()
+    longPool.destroy()
+    
+    I64 end = clock()
+    Double elapsed = ( end - start ) / 1000000.0
+    puts( "Total execution finalized." )
+    puts( "Elapsed time: ", elapsed, " seconds" )
+    return 0

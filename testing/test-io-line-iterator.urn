@@ -1,0 +1,22 @@
+package testing
+
+from uranite.io.file import writeFileString
+from uranite.io.line-iterator import LineIterator
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO Line Iterator Tests ===" )
+
+    writeFileString( "/tmp/uranite-test-lines.txt", "alpha\nbeta\ngamma\ndelta\n" )
+    LineIterator iter = new LineIterator( "/tmp/uranite-test-lines.txt" )
+    I64 lineCount = 0
+    while iter.has:
+        String line = iter.next
+        lineCount = lineCount + 1
+    iter.close()
+    assertEqualI64( 4, lineCount, "line count" )
+    putsln( "line iterator OK" )
+
+    putsln( "=== All IO line iterator tests passed ===" )
+    return 0

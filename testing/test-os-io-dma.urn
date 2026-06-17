@@ -1,0 +1,69 @@
+package testing
+
+from uranite.os.io.dma import {
+    DmaDirection, DmaDescriptor, DmaChannel
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS IO DMA Tests ===" )
+
+    assertEqualI64( 1, DmaDirection.ToDevice as I64, "ToDevice" )
+    assertEqualI64( 2, DmaDirection.FromDevice as I64, "FromDevice" )
+    assertEqualI64( 3, DmaDirection.Bidirectional as I64, "Bidirectional" )
+    putsln( "enum OK" )
+
+    DmaDescriptor desc = new DmaDescriptor()
+    assertEqualI64( 0, desc.sourceAddress, "src 0" )
+    assertEqualI64( 0, desc.destAddress, "dst 0" )
+    assertEqualI64( 0, desc.length, "len 0" )
+    assertEqualI64( 0, desc.status, "status 0" )
+    assertFalse( desc.isComplete(), "not complete" )
+    assertFalse( desc.isError(), "not error" )
+
+    desc.configure( 4096, 8192, 512, 1 )
+    assertEqualI64( 4096, desc.sourceAddress, "src" )
+    assertEqualI64( 8192, desc.destAddress, "dst" )
+    assertEqualI64( 512, desc.length, "len" )
+    assertEqualI64( 1, desc.direction, "dir" )
+    assertEqualI64( 0, desc.status, "status pending" )
+
+    desc.markComplete()
+    assertTrue( desc.isComplete(), "complete" )
+    assertFalse( desc.isError(), "not error after complete" )
+
+    desc.markError()
+    assertTrue( desc.isError(), "error" )
+    putsln( "DmaDescriptor OK" )
+
+    DmaChannel channel = new DmaChannel( 0, 4 )
+    assertEqualI64( 0, channel.getChannelId(), "channelId" )
+    assertEqualI64( 0, channel.getPending(), "pending 0" )
+    assertTrue( channel.isEmpty(), "empty" )
+    assertFalse( channel.isFull(), "not full" )
+
+    I64 idx0 = channel.submit( 1000, 2000, 256, 1 )
+    assertTrue( idx0 >= 0, "submit idx0" )
+    assertEqualI64( 1, channel.getPending(), "pending 1" )
+    assertFalse( channel.isEmpty(), "not empty" )
+
+    I64 idx1 = channel.submit( 3000, 4000, 512, 2 )
+    assertTrue( idx1 >= 0, "submit idx1" )
+    assertEqualI64( 2, channel.getPending(), "pending 2" )
+
+    assertFalse( channel.isComplete( idx0 ), "idx0 not complete" )
+    Boolean compOk = channel.complete( idx0 )
+    assertTrue( compOk, "complete idx0" )
+    assertTrue( channel.isComplete( idx0 ), "idx0 complete" )
+
+    I64 drained = channel.drain()
+    assertEqualI64( 1, drained, "drained 1" )
+    putsln( "DmaChannel OK" )
+
+    channel.destroy()
+
+    putsln( "=== All DMA tests passed ===" )
+    return 0

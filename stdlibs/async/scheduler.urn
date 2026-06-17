@@ -1,0 +1,542 @@
+package uranite.async.scheduler
+
+from uranite.async.context import swapContext
+from uranite.async.epoll import {
+    allocateEventBuffer, 
+    epollAdd, 
+    epollCreate, 
+    epollDel,
+    epollEventGetFd, 
+    EPOLLIN, 
+    epollWait
+}
+from uranite.async.errors import AsyncRuntimeError
+from uranite.async.task import {
+    createTask,
+    FIELD_AWAIT_EVENTS, 
+    FIELD_AWAIT_FD, 
+    FIELD_AWAITING_ID,
+    FIELD_CONTEXT_RSP, 
+    FIELD_ENTRY_FN, 
+    FIELD_HAS_ERROR,
+    FIELD_ID, 
+    FIELD_RESULT, 
+    FIELD_STACK_BASE,
+    FIELD_STACK_SIZE, 
+    FIELD_STATE,
+    STATE_COMPLETED, 
+    STATE_CREATED, 
+    STATE_FAILED,
+    STATE_IO_WAITING, 
+    STATE_RUNNING, 
+    STATE_SUSPENDED,
+    taskAllocateStack, 
+    taskInitContext, 
+    taskRspAddr
+}
+from uranite.async.timer import timerfdClose, timerfdCreate, timerfdSettime
+from uranite.io.syscall import memoryToPtr, readI64At, sysClose, writeI64At
+from uranite.memory.memory import Memory
+from uranite.os.syscall.invoke import syscall2
+from uranite.os.syscall.result import SyscallResult
+from uranite.coroutine.scheduler import Scheduler
+
+const I64 MAX_TASKS = 1024
+""" Maximum number of concurrent tasks the scheduler can manage. """
+
+const I64 MAX_EPOLL_EVENTS = 64
+""" Maximum number of epoll events processed per poll cycle. """
+
+const I64 SYS_MUNMAP = 11
+""" Syscall number for munmap on x86-64 Linux. """
+
+public class NativeScheduler implements Scheduler:
+    
+    """
+    Cooperative async task scheduler built on x86-64 context switching and
+    Linux epoll. Manages a fixed-size pool of task slots, each with its own
+    stack and execution context. Tasks run cooperatively by yielding back to
+    the scheduler, which multiplexes I/O readiness via epoll.
+    """
+    
+    public Memory<I64> taskSlots
+    """ Array of raw task struct pointers, indexed by slot position. """
+    
+    public I64 taskCount
+    """ Number of currently active tasks across all slots. """
+    
+    public I64 nextTaskId
+    """ Monotonically increasing counter for assigning unique task identifiers. """
+    
+    public I64 currentTaskIdx
+    """ Slot index of the currently executing task, or -1 if in the scheduler. """
+    
+    public I64 epollFd
+    """ File descriptor for the epoll instance used for I/O multiplexing. """
+    
+    public Memory<I64> mainRspBuf
+    """ Single-slot buffer holding the scheduler's own RSP for context switching. """
+    
+    public Memory<I64> epollEventBuf
+    """ Pre-allocated buffer for receiving epoll events during polling. """
+    
+    public I64 trampolineAddr
+    """ Address of the task trampoline function that bootstraps new tasks. """
+    
+    public Boolean initialized
+    """ Whether init() has been called and the scheduler is ready to run tasks. """
+    
+    public function NativeScheduler( self ) -> Void:
+        
+        """
+        Construct a new scheduler with empty task slots and uninitialized epoll.
+        Call init() before spawning any tasks.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.taskSlots = new Memory<I64>( MAX_TASKS )
+        self.taskCount = 0
+        self.nextTaskId = 1
+        self.currentTaskIdx = -1
+        self.epollFd = -1
+        self.mainRspBuf = new Memory<I64>( 1 )
+        self.epollEventBuf = allocateEventBuffer( MAX_EPOLL_EVENTS )
+        self.trampolineAddr = 0
+        self.initialized = False
+        for I64 slotIndex=0; slotIndex<MAX_TASKS; slotIndex++:
+            self.taskSlots.set( slotIndex, 0 )
+    
+    public function init( self, I64 trampoline ) -> Void:
+        
+        """
+        Initialize the scheduler by creating the epoll instance and registering
+        the task trampoline function. Must be called once before spawning tasks.
+        
+        Parameters:
+            trampoline (I64):
+                Address of the trampoline function that bootstraps task execution.
+        """
+        
+        self.epollFd = epollCreate()
+        self.trampolineAddr = trampoline
+        self.initialized = True
+    
+    public function spawn( self, I64 funcPtr, I64 userData ) -> I64:
+        
+        """
+        Create a new task and allocate its stack and execution context. The task
+        is placed in the first available slot and assigned a unique identifier.
+        
+        Parameters:
+            funcPtr (I64):
+                Address of the function the task will execute.
+            userData (I64):
+                User-defined data associated with the task.
+        
+        Returns:
+            I64:
+                The unique identifier assigned to the newly spawned task.
+        
+        Raises:
+            AsyncRuntimeError:
+                If the maximum task count has been reached or no free slot exists.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        if self.taskCount >= MAX_TASKS:
+            raise new AsyncRuntimeError( "maximum task count reached", 0, None )
+        I64 taskId = self.nextTaskId
+        self.nextTaskId = self.nextTaskId + 1
+        Memory<I64> task = createTask( taskId, funcPtr, userData )
+        taskAllocateStack( task )
+        taskInitContext( task, self.trampolineAddr )
+        I64 taskAddr = memoryToPtr( task )
+        for I64 slotIndex=0; slotIndex<MAX_TASKS; slotIndex++:
+            I64 slotValue = self.taskSlots.get( slotIndex )
+            if slotValue == 0:
+                self.taskSlots.set( slotIndex, taskAddr )
+                self.taskCount = self.taskCount + 1
+                return taskId
+        raise new AsyncRuntimeError( "no free task slot", 0, None )
+    
+    public function findTaskIndex( self, I64 taskId ) -> I64:
+        
+        """
+        Search for a task by its identifier and return its slot index.
+        
+        Parameters:
+            taskId (I64):
+                The unique identifier of the task to locate.
+        
+        Returns:
+            I64:
+                The slot index containing the task, or -1 if not found.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for I64 slotIndex=0; slotIndex<MAX_TASKS; slotIndex++:
+            I64 candidateAddress = self.taskSlots.get( slotIndex )
+            if candidateAddress != 0:
+                I64 candidateId = readI64At( candidateAddress, FIELD_ID * 8 )
+                if candidateId == taskId:
+                    return slotIndex
+        return -1
+    
+    public function awaitTask( self, I64 taskId ) -> I64:
+        
+        """
+        Block the current task until the target task completes or fails.
+        If called from within a task, suspends it and records the dependency.
+        If called from the main context, runs scheduler rounds until the
+        target finishes.
+        
+        Parameters:
+            taskId (I64):
+                Identifier of the task to wait for.
+        
+        Returns:
+            I64:
+                The result value produced by the completed task.
+        
+        Raises:
+            AsyncRuntimeError:
+                If the task is not found or the awaited task terminated with
+                an error.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        I64 targetIdx = self.findTaskIndex( taskId )
+        if targetIdx == -1:
+            raise new AsyncRuntimeError( "task not found", 0, None )
+        I64 targetAddr = self.taskSlots.get( targetIdx )
+        I64 targetState = readI64At( targetAddr, FIELD_STATE * 8 )
+        while targetState != STATE_COMPLETED and targetState != STATE_FAILED:
+            I64 curIdx = self.currentTaskIdx
+            if curIdx >= 0:
+                I64 curAddr = self.taskSlots.get( curIdx )
+                writeI64At( curAddr, FIELD_STATE * 8, STATE_SUSPENDED )
+                writeI64At( curAddr, FIELD_AWAITING_ID * 8, taskId )
+                I64 mainPtr = memoryToPtr( self.mainRspBuf )
+                I64 curRspPtr = curAddr + FIELD_CONTEXT_RSP * 8
+                swapContext( curRspPtr, mainPtr )
+            else:
+                self.runOnce()
+            targetState = readI64At( targetAddr, FIELD_STATE * 8 )
+        I64 hasErr = readI64At( targetAddr, FIELD_HAS_ERROR * 8 )
+        if hasErr != 0:
+            raise new AsyncRuntimeError( "awaited task failed", 0, None )
+        return readI64At( targetAddr, FIELD_RESULT * 8 )
+    
+    public function taskYield( self ) -> Void:
+        
+        """
+        Voluntarily suspend the currently running task and return control to
+        the scheduler. The task will be resumed in a later scheduling round.
+        Has no effect if called from outside a task context.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 curIdx = self.currentTaskIdx
+        if curIdx < 0:
+            return
+        I64 curAddr = self.taskSlots.get( curIdx )
+        writeI64At( curAddr, FIELD_STATE * 8, STATE_SUSPENDED )
+        I64 mainPtr = memoryToPtr( self.mainRspBuf )
+        I64 curRspPtr = curAddr + FIELD_CONTEXT_RSP * 8
+        swapContext( curRspPtr, mainPtr )
+    
+    public function awaitFd( self, I64 fd, I64 events ) -> Void:
+        
+        """
+        Suspend the current task until the specified file descriptor becomes
+        ready for the given events. Registers the fd with epoll and transitions
+        the task to the I/O waiting state.
+        
+        Parameters:
+            fd (I64):
+                The file descriptor to wait on.
+            events (I64):
+                Bitmask of epoll event flags to monitor.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 curIdx = self.currentTaskIdx
+        if curIdx < 0:
+            return
+        I64 curAddr = self.taskSlots.get( curIdx )
+        writeI64At( curAddr, FIELD_STATE * 8, STATE_IO_WAITING )
+        writeI64At( curAddr, FIELD_AWAIT_FD * 8, fd )
+        writeI64At( curAddr, FIELD_AWAIT_EVENTS * 8, events )
+        epollAdd( self.epollFd, fd, events )
+        I64 mainPtr = memoryToPtr( self.mainRspBuf )
+        I64 curRspPtr = curAddr + FIELD_CONTEXT_RSP * 8
+        swapContext( curRspPtr, mainPtr )
+    
+    public function sleep( self, I64 milliseconds ) -> Void:
+        
+        """
+        Suspend the current task for the specified duration using a timerfd.
+        Creates a one-shot timer, waits for it via epoll, then closes the
+        timer file descriptor.
+        
+        Parameters:
+            milliseconds (I64):
+                Duration to sleep in milliseconds.
+        """
+        
+        I64 tfd = timerfdCreate()
+        timerfdSettime( tfd, milliseconds )
+        self.awaitFd( tfd, EPOLLIN )
+        timerfdClose( tfd )
+    
+    public function taskComplete( self, I64 result ) -> Void:
+        
+        """
+        Mark the current task as successfully completed with the given result.
+        Stores the result, transitions the task to completed state, wakes any
+        tasks awaiting this one, and yields back to the scheduler.
+        
+        Parameters:
+            result (I64):
+                The result value to store for this task.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 curIdx = self.currentTaskIdx
+        if curIdx < 0:
+            return
+        I64 curAddr = self.taskSlots.get( curIdx )
+        writeI64At( curAddr, FIELD_RESULT * 8, result )
+        writeI64At( curAddr, FIELD_STATE * 8, STATE_COMPLETED )
+        I64 taskId = readI64At( curAddr, FIELD_ID * 8 )
+        self.wakeWaiters( taskId )
+        I64 mainPtr = memoryToPtr( self.mainRspBuf )
+        I64 curRspPtr = curAddr + FIELD_CONTEXT_RSP * 8
+        swapContext( curRspPtr, mainPtr )
+    
+    public function taskError( self, String message ) -> Void:
+        
+        """
+        Mark the current task as failed. Sets the error flag, transitions
+        the task to the failed state, wakes any tasks awaiting this one,
+        and yields back to the scheduler.
+        
+        Parameters:
+            message (String):
+                Description of the error (stored for diagnostic purposes).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 curIdx = self.currentTaskIdx
+        if curIdx < 0:
+            return
+        I64 curAddr = self.taskSlots.get( curIdx )
+        writeI64At( curAddr, FIELD_HAS_ERROR * 8, 1 )
+        writeI64At( curAddr, FIELD_STATE * 8, STATE_FAILED )
+        I64 taskId = readI64At( curAddr, FIELD_ID * 8 )
+        self.wakeWaiters( taskId )
+        I64 mainPtr = memoryToPtr( self.mainRspBuf )
+        I64 curRspPtr = curAddr + FIELD_CONTEXT_RSP * 8
+        swapContext( curRspPtr, mainPtr )
+    
+    public function wakeWaiters( self, I64 finishedTaskId ) -> Void:
+        
+        """
+        Resume all tasks that are blocked awaiting the specified task.
+        Clears each waiter's awaiting ID and transitions it back to the
+        suspended state so it can be scheduled again.
+        
+        Parameters:
+            finishedTaskId (I64):
+                The identifier of the task that just completed or failed.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for I64 slotIndex=0; slotIndex<MAX_TASKS; slotIndex++:
+            I64 waiterAddress = self.taskSlots.get( slotIndex )
+            if waiterAddress != 0:
+                I64 awaitedId = readI64At( waiterAddress, FIELD_AWAITING_ID * 8 )
+                if awaitedId == finishedTaskId:
+                    writeI64At( waiterAddress, FIELD_AWAITING_ID * 8, -1 )
+                    writeI64At( waiterAddress, FIELD_STATE * 8, STATE_SUSPENDED )
+    
+    public function hasPending( self ) -> Boolean:
+        
+        """
+        Check whether any tasks are still pending, meaning they have not yet
+        reached the completed or failed state.
+        
+        Returns:
+            Boolean:
+                True if at least one task is still created, running, suspended,
+                or waiting on I/O.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for I64 slotIndex=0; slotIndex<MAX_TASKS; slotIndex++:
+            I64 taskAddress = self.taskSlots.get( slotIndex )
+            if taskAddress != 0:
+                I64 taskState = readI64At( taskAddress, FIELD_STATE * 8 )
+                if taskState != STATE_COMPLETED and taskState != STATE_FAILED:
+                    return True
+        return False
+    
+    public function runOnce( self ) -> Void:
+        
+        """
+        Execute a single scheduling round. Scans for the first runnable task
+        (created or suspended), switches to it, and returns after it yields.
+        If no runnable task is found, polls for I/O readiness to unblock
+        waiting tasks.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Boolean foundRunnable = False
+        for I64 slotIndex=0; slotIndex<MAX_TASKS and not foundRunnable; slotIndex++:
+            I64 taskAddress = self.taskSlots.get( slotIndex )
+            if taskAddress != 0:
+                I64 taskState = readI64At( taskAddress, FIELD_STATE * 8 )
+                if taskState == STATE_CREATED or taskState == STATE_SUSPENDED:
+                    self.currentTaskIdx = slotIndex
+                    writeI64At( taskAddress, FIELD_STATE * 8, STATE_RUNNING )
+                    I64 mainRspPointer = memoryToPtr( self.mainRspBuf )
+                    I64 taskRspPointer = taskAddress + FIELD_CONTEXT_RSP * 8
+                    swapContext( mainRspPointer, taskRspPointer )
+                    foundRunnable = True
+        if foundRunnable == False:
+            self.pollIO()
+    
+    public function pollIO( self ) -> Void:
+        
+        """
+        Poll for I/O readiness using epoll and wake any tasks whose awaited
+        file descriptors are ready. Uses a 100ms timeout to avoid busy-waiting.
+        Each ready fd is matched against I/O-waiting tasks, which are transitioned
+        back to the suspended state and removed from epoll.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        Boolean hasWaiting = False
+        for I64 scanIndex=0; scanIndex<MAX_TASKS; scanIndex++:
+            I64 taskAddress = self.taskSlots.get( scanIndex )
+            if taskAddress != 0:
+                I64 taskState = readI64At( taskAddress, FIELD_STATE * 8 )
+                if taskState == STATE_IO_WAITING:
+                    hasWaiting = True
+        if hasWaiting == False:
+            return
+        I64 eventBufferPointer = memoryToPtr( self.epollEventBuf )
+        I64 readyCount = epollWait( self.epollFd, eventBufferPointer, MAX_EPOLL_EVENTS, 100 )
+        for I64 eventIndex=0; eventIndex<readyCount; eventIndex++:
+            I64 readyFileDescriptor = epollEventGetFd( eventBufferPointer, eventIndex )
+            for I64 slotIndex=0; slotIndex<MAX_TASKS; slotIndex++:
+                I64 candidateAddress = self.taskSlots.get( slotIndex )
+                if candidateAddress != 0:
+                    I64 candidateState = readI64At( candidateAddress, FIELD_STATE * 8 )
+                    I64 candidateFd = readI64At( candidateAddress, FIELD_AWAIT_FD * 8 )
+                    if candidateState == STATE_IO_WAITING and candidateFd == readyFileDescriptor:
+                        writeI64At( candidateAddress, FIELD_AWAIT_FD * 8, -1 )
+                        writeI64At( candidateAddress, FIELD_AWAIT_EVENTS * 8, 0 )
+                        writeI64At( candidateAddress, FIELD_STATE * 8, STATE_SUSPENDED )
+                        epollDel( self.epollFd, readyFileDescriptor )
+    
+    public function run( self ) -> Void:
+        
+        """
+        Run the scheduler event loop until all tasks have completed or failed,
+        then perform resource cleanup.
+        """
+        
+        self.runLoop()
+        self.cleanup()
+    
+    public function runLoop( self ) -> Void:
+        
+        """
+        Execute scheduling rounds in a loop until no pending tasks remain.
+        Each iteration calls runOnce() which either runs a task or polls I/O.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        while self.hasPending():
+            self.runOnce()
+    
+    public function cleanup( self ) -> Void:
+        
+        """
+        Release all task resources. Unmaps each task's stack via munmap and
+        clears all task slots. Resets the task count to zero.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        for I64 slotIndex=0; slotIndex<MAX_TASKS; slotIndex++:
+            I64 taskAddress = self.taskSlots.get( slotIndex )
+            if taskAddress != 0:
+                I64 stackBase = readI64At( taskAddress, FIELD_STACK_BASE * 8 )
+                if stackBase != 0:
+                    I64 stackSize = readI64At( taskAddress, FIELD_STACK_SIZE * 8 )
+                    SyscallResult unmapResult = syscall2( SYS_MUNMAP, stackBase, stackSize )
+                self.taskSlots.set( slotIndex, 0 )
+        self.taskCount = 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Fully tear down the scheduler. Cleans up all tasks, closes the epoll
+        file descriptor, and releases all internal memory.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.cleanup()
+        if self.epollFd >= 0:
+            sysClose( self.epollFd )
+            self.epollFd = -1
+
+export {
+    NativeScheduler, MAX_TASKS
+}

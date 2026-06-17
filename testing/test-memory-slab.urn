@@ -1,0 +1,34 @@
+package testing
+
+from uranite.memory.slab import SlabAllocator
+from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Memory Slab Tests ===" )
+
+    SlabAllocator slab = new SlabAllocator( 64, 1 )
+    assertEqualI64( 64, slab.getObjectSize(), "object size 64" )
+    assertEqualI64( 0, slab.getUsed(), "0 used" )
+    assertFalse( slab.isFull(), "not full" )
+    putsln( "SlabAllocator constructed OK" )
+
+    I64 slot0 = slab.allocate()
+    assertTrue( slot0 >= 0, "alloc slot 0" )
+    assertEqualI64( 1, slab.getUsed(), "1 used" )
+    putsln( "first allocate OK" )
+
+    I64 slot1 = slab.allocate()
+    assertTrue( slot1 >= 0, "alloc slot 1" )
+    assertEqualI64( 2, slab.getUsed(), "2 used" )
+    putsln( "second allocate OK" )
+
+    slab.deallocate( slot0 )
+    assertEqualI64( 1, slab.getUsed(), "1 used after dealloc" )
+    putsln( "deallocate OK" )
+
+    slab.destroy()
+    putsln( "destroy OK" )
+
+    putsln( "=== All Memory Slab Tests Passed ===" )
+    return 0

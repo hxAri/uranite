@@ -1,0 +1,39 @@
+package testing
+
+from uranite.operators.equatable import Equatable
+from uranite.testing.assertions import assertTrue, assertFalse
+from uranite.io.console import putsln
+
+public class Point implements Equatable<Point>:
+    public Int x
+    public Int y
+
+    public function Point( self, Int x, Int y ) -> Void:
+        self.x = x
+        self.y = y
+
+    public function equals( self, Point other ) -> Boolean:
+        return self.x == other.x and self.y == other.y
+
+    public function notEquals( self, Point other ) -> Boolean:
+        return not self.equals( other )
+
+public function main() -> I32:
+    putsln( "=== Equatable Tests ===" )
+
+    Point a = new Point( 1, 2 )
+    Point b = new Point( 1, 2 )
+    Point c = new Point( 3, 4 )
+    Point origin = new Point( 0, 0 )
+
+    assertTrue( a.equals( b ), "equals same" )
+    assertFalse( a.equals( c ), "equals diff" )
+    assertTrue( a.notEquals( c ), "notEquals diff" )
+    assertFalse( a.notEquals( b ), "notEquals same" )
+    assertFalse( a.equals( origin ), "equals origin" )
+    assertTrue( a.notEquals( origin ), "notEquals origin" )
+    assertTrue( a.equals( a ), "equals self" )
+    putsln( "equatable OK" )
+
+    putsln( "=== All Equatable tests passed ===" )
+    return 0

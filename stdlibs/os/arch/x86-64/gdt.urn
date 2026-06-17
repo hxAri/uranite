@@ -1,0 +1,301 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/gdt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Global Descriptor Table (GDT) infrastructure for x86-64 long mode,
+# including segment descriptor entries, the GDTR pointer structure, and functions
+# to load the GDT and retrieve standard segment selectors for kernel and user mode.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.x86-64.gdt
+
+from uranite.memory.memory import Memory
+
+public class GdtEntry:
+    
+    """
+    Single 8-byte segment descriptor entry in the Global Descriptor Table.
+    In x86_64 long mode, the base address and segment limit fields are largely
+    ignored because the processor enforces a flat address space with paging.
+    However, the access byte and flags nibble remain significant for defining
+    the privilege level (ring 0 vs ring 3), segment type (code vs data), and
+    execution mode (64-bit long mode vs 32-bit compatibility mode).
+    """
+    
+    public I64 limitLow
+    public I64 baseLow
+    public I64 baseMiddle
+    public I64 access
+    public I64 granularity
+    public I64 baseHigh
+    
+    public function GdtEntry( self, I64 base, I64 limit, I64 access, I64 flags ) -> Void:
+        
+        """
+        Construct a GDT entry by splitting the base address, limit, access byte,
+        and flags into the fragmented bit layout required by the x86 hardware.
+        The base is split across baseLow (bits 0-15), baseMiddle (bits 16-23),
+        and baseHigh (bits 24-31). The limit is split across limitLow (bits 0-15)
+        and the lower nibble of the granularity byte (bits 16-19). The flags
+        occupy the upper nibble of the granularity byte.
+        
+        Parameters:
+            base (I64):
+                The 32-bit segment base address.
+            limit (I64):
+                The 20-bit segment limit value.
+            access (I64):
+                The access byte controlling segment type, DPL, and presence.
+            flags (I64):
+                The 4-bit flags nibble controlling granularity and mode.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.limitLow = limit & 65535
+        self.baseLow = base & 65535
+        self.baseMiddle = ( base >> 16 ) & 255
+        self.access = access
+        self.granularity = ( ( limit >> 16 ) & 15 ) | ( ( flags << 4 ) & 240 )
+        self.baseHigh = ( base >> 24 ) & 255
+
+public class GdtPointer:
+    
+    """
+    Descriptor for the GDTR register, loaded by the lgdt instruction. Contains
+    a 2-byte limit field specifying the GDT size minus one in bytes, and an
+    8-byte linear base address pointing to the start of the GDT in memory.
+    The processor uses this structure to locate and bounds-check all segment
+    descriptor lookups performed during memory access and privilege transitions.
+    """
+    
+    public I64 limit
+    public I64 base
+    
+    public function GdtPointer( self, I64 limit, I64 base ) -> Void:
+        
+        """
+        Construct a GDT pointer with the given size limit and base address.
+        The limit should be set to the total GDT size in bytes minus one,
+        and the base should point to the linear address of the first GDT
+        entry in memory.
+        
+        Parameters:
+            limit (I64):
+                The GDT size in bytes minus one.
+            base (I64):
+                The linear address of the first GDT entry.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.limit = limit
+        self.base = base
+
+public class Gdt:
+    
+    """
+    Global Descriptor Table manager that holds an array of segment descriptors
+    and provides methods to populate a standard x86_64 long-mode GDT layout.
+    The access byte flags control segment properties: Present (0x80), DPL ring
+    level (0x00 for kernel, 0x60 for user), Segment type (0x10 for code/data),
+    Executable (0x08), Read/Write (0x02), and Accessed (0x01). The flags nibble
+    controls granularity (0x8 for 4KB pages) and Long mode (0x2 for 64-bit code).
+    Standard layout places null at selector 0x00, kernel code at 0x08, kernel
+    data at 0x10, user code at 0x18, and user data at 0x20.
+    """
+    
+    protect Memory<GdtEntry> entries
+    protect I64 count
+    
+    public function Gdt( self ) -> Void:
+        
+        """
+        Construct an empty GDT with pre-allocated storage for up to 6 segment
+        descriptor entries. The entry count starts at zero and is incremented
+        as descriptors are added via addEntry or setupFlat.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.entries = new Memory<GdtEntry>( 6 )
+        self.count = 0
+    
+    public function addEntry( self, GdtEntry entry ) -> I64:
+        
+        """
+        Append a segment descriptor entry to the GDT and return its selector
+        value, which is the entry index multiplied by 8 (each descriptor is
+        8 bytes). The selector value is what gets loaded into segment registers
+        (CS, DS, SS, ES) to reference this particular descriptor.
+        
+        Parameters:
+            entry (GdtEntry):
+                The segment descriptor entry to append.
+        
+        Returns:
+            I64:
+                The segment selector value for the newly added entry.
+        """
+        
+        I64 index = self.count
+        self.entries.set( index, entry )
+        self.count = self.count + 1
+        return index * 8
+    
+    public function setupFlat( self ) -> Void:
+        
+        """
+        Initialize standard x86_64 long-mode GDT with five entries: a mandatory
+        null descriptor at selector 0x00, kernel code segment at 0x08 (present,
+        executable, readable, 64-bit long mode), kernel data segment at 0x10
+        (present, writable), user code segment at 0x18 (present, DPL 3, executable,
+        readable, 64-bit long mode), and user data segment at 0x20 (present,
+        DPL 3, writable). All segments use a flat address space with full 4GB
+        limit, though in long mode the base and limit are ignored by the processor
+        for code and data segments.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.addEntry( new GdtEntry( 0, 0, 0, 0 ) )
+        self.addEntry( new GdtEntry( 0, 0xFFFFF, 0x9A, 0xA ) )
+        self.addEntry( new GdtEntry( 0, 0xFFFFF, 0x92, 0xC ) )
+        self.addEntry( new GdtEntry( 0, 0xFFFFF, 0xFA, 0xA ) )
+        self.addEntry( new GdtEntry( 0, 0xFFFFF, 0xF2, 0xC ) )
+    
+    public function getCount( self ) -> I64:
+        
+        """
+        Return the number of segment descriptor entries currently stored
+        in this GDT, which corresponds to the next available slot index.
+        """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the underlying memory allocation used to store the GDT entries.
+        This should only be called when the GDT is no longer loaded into
+        the GDTR, as freeing an active GDT will cause undefined behavior
+        on the next segment register access or privilege transition.
+        """
+        
+        self.entries.free()
+
+public function loadGdt( GdtPointer ptr ) -> Void:
+    
+    """
+    Load the Global Descriptor Table into the GDTR register using the lgdt
+    instruction. The GdtPointer structure provides the base address and size
+    limit of the GDT to the processor. After loading, segment registers must
+    be reloaded to activate the new segment descriptors.
+    
+    Parameters:
+        ptr (GdtPointer):
+            The GDT pointer containing the base address and size limit.
+    """
+    
+    asm volatile "lgdt ($0)" : : input( "r" ptr ) : clobber( "memory" )
+
+public function reloadSegments( I64 codeSelector, I64 dataSelector ) -> Void:
+    
+    """
+    Reload the data segment registers (DS, ES, SS) with the given data selector
+    after a GDT change. This ensures the processor uses the updated segment
+    descriptors from the newly loaded GDT. The code segment register (CS) is
+    typically reloaded via a far jump or far return, which cannot be expressed
+    as a single inline assembly instruction in all cases.
+    
+    Parameters:
+        codeSelector (I64):
+            The GDT selector for the code segment (used for far jump if applicable).
+        dataSelector (I64):
+            The GDT selector for the data segment to load into DS, ES, and SS.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+    
+    asm volatile "mov $0, %ds; mov $0, %es; mov $0, %ss" : : input( "r" dataSelector )
+
+public const I64 KERNEL_CODE_SELECTOR = 8
+"""
+Segment selector for the kernel code segment at GDT index 1 (offset 0x08).
+Used in CS when executing kernel-mode code in ring 0.
+"""
+
+public const I64 KERNEL_DATA_SELECTOR = 16
+"""
+Segment selector for the kernel data segment at GDT index 2 (offset 0x10).
+Loaded into DS, ES, and SS when executing in kernel mode at ring 0.
+"""
+
+public function userCodeSelector() -> I64:
+    
+    """
+    Return the segment selector value for the user code segment, which is at
+    GDT index 3 (offset 0x18) with the low 2 bits set to 3 indicating ring 3
+    privilege level. This selector is loaded into CS when transitioning to
+    user-mode code via sysret or iretq.
+    
+    Returns:
+        I64:
+            The user code segment selector value (27).
+    """
+    
+    return 24 | 3
+
+public function userDataSelector() -> I64:
+    
+    """
+    Return the segment selector value for the user data segment, which is at
+    GDT index 4 (offset 0x20) with the low 2 bits set to 3 indicating ring 3
+    privilege level. This selector is loaded into DS, ES, and SS for user-mode
+    processes.
+    
+    Returns:
+        I64:
+            The user data segment selector value (35).
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return 32 | 3
+
+export {
+    GdtEntry,
+    GdtPointer,
+    Gdt,
+    loadGdt,
+    reloadSegments,
+    KERNEL_CODE_SELECTOR,
+    KERNEL_DATA_SELECTOR,
+    userCodeSelector,
+    userDataSelector
+}

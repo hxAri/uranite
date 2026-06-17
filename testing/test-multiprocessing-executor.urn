@@ -1,0 +1,62 @@
+package testing
+
+from uranite.process.executor import ProcessPoolExecutor, ProcessSubmitter0, ProcessSubmitter1
+from uranite.process.process-future import ProcessFutureBase, ProcessFuture, ProcessFutureState
+from uranite.process.process-future import PFUTURE_PENDING, PFUTURE_FINISHED
+from uranite.process.process import ProcessRuntime
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.time.clock import SystemClock
+from uranite.os.ipc.shared-memory import SharedRegion
+from uranite.memory.memory import Memory
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse, assertGreaterThan
+}
+from uranite.io.console import putsln
+
+function computeSquare( I64 x ) -> I64:
+    return x * x
+
+function computeConstant() -> I64:
+    return 42
+
+public function main() -> I32:
+    putsln( "=== Multiprocessing Executor Tests ===" )
+
+    Scheduler sched = new Scheduler()
+    PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
+    SystemClock clock = new SystemClock( 1000 )
+    ProcessRuntime runtime = new ProcessRuntime( sched, pmm, clock, 256 )
+
+    ProcessPoolExecutor executor = new ProcessPoolExecutor( 4, runtime )
+    assertEqualI64( 4, executor.getWorkerCount(), "worker count" )
+    assertFalse( executor.isShutdown(), "not shutdown" )
+    putsln( "executor OK" )
+
+    # Direct computation test
+    I64 directResult = computeSquare( 7 )
+    assertEqualI64( 49, directResult, "computeSquare(7)" )
+    putsln( "direct compute OK" )
+
+    # FutureBase complete test
+    SharedRegion testRegion = runtime.createSharedRegion( 0, 1 )
+    I64 slotAddr = testRegion.getPhysicalBase()
+    ProcessFutureBase fb = new ProcessFutureBase( sched, testRegion, slotAddr )
+
+    fb.completeRaw( directResult )
+    assertTrue( fb.isDone(), "future done" )
+    assertEqualI64( directResult, fb.getRawResult(), "future result" )
+    putsln( "future complete OK" )
+
+    # Submitters creation
+    I64 constAddr = addressof computeConstant
+    assertGreaterThan( constAddr, 0, "function addr" )
+
+    ProcessSubmitter1<I64, I64> submitter1 = new ProcessSubmitter1<I64, I64>( executor )
+    ProcessSubmitter0<I64> submitter0 = new ProcessSubmitter0<I64>( executor )
+    putsln( "submitters OK" )
+
+    testRegion.release()
+
+    putsln( "=== All executor tests passed ===" )
+    return 0

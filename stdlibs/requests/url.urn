@@ -1,0 +1,209 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-15 00:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/requests/url.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# URL parser for the requests library. Extracts scheme, host, port, and path
+# from HTTP URL strings. Converts dotted-quad IPv4 addresses to packed 32-bit
+# integers for the low-level socket layer. Pure Uranite, zero C runtime.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.requests.url
+
+from uranite.functions.builtin import {
+    indexOf, substring, length, charAt, startsWith, isDigit
+}
+from uranite.convert.convert import stringToInt
+from uranite.requests.errors import InvalidURLError
+
+public class ParsedURL:
+
+    """
+    Holds the parsed components of an HTTP URL: scheme, host, port, path,
+    and the host converted to a packed 32-bit IPv4 address.
+    """
+
+    public String scheme
+    """The URL scheme ("http" or "https")."""
+
+    public String host
+    """The host portion of the URL as a dotted-quad string (e.g., "127.0.0.1")."""
+
+    public I64 port
+    """The TCP port number (default 80 for http, 443 for https)."""
+
+    public String path
+    """The request path including leading slash (e.g., "/api/users")."""
+
+    public I64 ipAddress
+    """The host as a packed 32-bit IPv4 address for the socket layer."""
+
+    public function ParsedURL( self, String scheme, String host, I64 port, String path, I64 ipAddress ) -> Void:
+
+        """
+        Construct a ParsedURL with all components.
+
+        Parameters:
+            scheme (String):
+                The URL scheme.
+            host (String):
+                The host as a dotted-quad string.
+            port (I64):
+                The TCP port number.
+            path (String):
+                The request path.
+            ipAddress (I64):
+                The host as a packed 32-bit IPv4 address.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.scheme = scheme
+        self.host = host
+        self.port = port
+        self.path = path
+        self.ipAddress = ipAddress
+
+public function parseIPv4( String hostString ) -> I64:
+
+    """
+    Convert a dotted-quad IPv4 address string (e.g., "192.168.1.1") to a
+    packed 32-bit integer in network byte order.
+
+    Parses four decimal octets separated by dots and packs them as:
+    (octet0 << 24) | (octet1 << 16) | (octet2 << 8) | octet3.
+
+    Parameters:
+        hostString (String):
+            The dotted-quad IPv4 address string.
+
+    Returns:
+        I64:
+            The packed 32-bit IPv4 address.
+
+    Raises:
+        InvalidURLError: If the string is not a valid IPv4 address.
+
+    Complexity:
+        Time: O(n) where n is string length
+        Space: O(1)
+    """
+
+    I64 hostLength = length( hostString )
+    I64 octetValue = 0
+    I64 octetCount = 0
+    I64 result = 0
+    I64 scanOffset = 0
+
+    while scanOffset <= hostLength:
+        if scanOffset == hostLength or charAt( hostString, scanOffset ) == 46:
+            if octetValue < 0 or octetValue > 255:
+                raise new InvalidURLError( "IPv4 octet out of range: " + hostString, 1, None )
+            result = result * 256 + octetValue
+            octetValue = 0
+            octetCount = octetCount + 1
+        else:
+            I64 digitCode = charAt( hostString, scanOffset )
+            if isDigit( digitCode ) == False:
+                raise new InvalidURLError( "Invalid IPv4 address: " + hostString, 2, None )
+            octetValue = octetValue * 10 + ( digitCode - 48 )
+        scanOffset = scanOffset + 1
+
+    if octetCount != 4:
+        raise new InvalidURLError( "IPv4 address must have 4 octets: " + hostString, 3, None )
+
+    return result
+
+public function parseURL( String url ) -> ParsedURL:
+
+    """
+    Parse an HTTP URL string into its component parts.
+
+    Accepts URLs in the form "http://host:port/path" where the port and
+    path are optional. Defaults to port 80 for http and "/" for path.
+    Only "http" scheme is supported (no TLS).
+
+    Parameters:
+        url (String):
+            The URL string to parse (e.g., "http://127.0.0.1:8080/api").
+
+    Returns:
+        ParsedURL:
+            The parsed URL components.
+
+    Raises:
+        InvalidURLError: If the URL is malformed or uses an unsupported scheme.
+
+    Complexity:
+        Time: O(n) where n is URL length
+        Space: O(1)
+    """
+
+    I64 urlLength = length( url )
+    if urlLength == 0:
+        raise new InvalidURLError( "URL cannot be empty", 10, None )
+
+    String scheme = "http"
+    I64 hostStart = 0
+
+    if startsWith( url, "http://" ):
+        scheme = "http"
+        hostStart = 7
+    elif startsWith( url, "https://" ):
+        scheme = "https"
+        hostStart = 8
+    else:
+        raise new InvalidURLError( "URL must start with http:// or https://", 11, None )
+
+    I64 defaultPort = 80
+    if scheme == "https":
+        defaultPort = 443
+
+    I64 pathStart = indexOf( substring( url, hostStart, urlLength ), "/" )
+    String hostPort = ""
+    String path = "/"
+
+    if pathStart == -1:
+        hostPort = substring( url, hostStart, urlLength )
+    else:
+        pathStart = pathStart + hostStart
+        hostPort = substring( url, hostStart, pathStart )
+        path = substring( url, pathStart, urlLength )
+
+    I64 colonPos = indexOf( hostPort, ":" )
+    String host = ""
+    I64 port = defaultPort
+
+    if colonPos == -1:
+        host = hostPort
+    else:
+        host = substring( hostPort, 0, colonPos )
+        String portString = substring( hostPort, colonPos + 1, length( hostPort ) )
+        port = stringToInt( portString )
+
+    if length( host ) == 0:
+        raise new InvalidURLError( "URL host cannot be empty", 12, None )
+
+    I64 ipAddress = parseIPv4( host )
+
+    return new ParsedURL( scheme, host, port, path, ipAddress )
+
+export {
+    ParsedURL,
+    parseURL,
+    parseIPv4
+}

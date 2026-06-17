@@ -1,0 +1,146 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-30 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/io/line-iterator.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Line-by-line file iterator. Memory-safe for large files — only one
+# chunk (4096 bytes) and current line in memory at any time.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.io.line-iterator
+
+from uranite.iterators.iterator import Iterator
+from uranite.io.buffered-reader import BufferedReader
+from uranite.io.syscall import stringToPtr, stringLen, sysOpen, O_RDONLY
+
+public class LineIterator implements Iterator<String>:
+    
+    """
+    A line-by-line file iterator that implements the Iterator<String>
+    interface. Reads a file using a BufferedReader with a 4096-byte
+    chunk size, yielding one line at a time. Memory-safe for large
+    files since only one chunk and the current line are held in memory
+    at any time.
+    """
+    
+    protect BufferedReader reader
+    """The underlying buffered reader for chunked file access."""
+    protect String currentLine
+    """The most recently read line, waiting to be consumed via next."""
+    protect Boolean hasLine
+    """Whether a line is available for consumption."""
+    protect Boolean closed
+    """Whether the iterator has been closed and resources released."""
+    
+    public function LineIterator( self, String path ) -> Void:
+        
+        """
+        Open the file at the given path and prepare the iterator for
+        line-by-line reading. The file is opened in read-only mode and
+        the first line is pre-fetched via advance.
+        
+        Parameters:
+            path (String):
+                The filesystem path to the file to iterate over.
+        
+        Raises:
+            IOError:
+                If the file cannot be opened.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 pathPtr = stringToPtr( path )
+        I64 fd = sysOpen( pathPtr, O_RDONLY, 0 )
+        self.reader = new BufferedReader( fd, 4096, True )
+        self.currentLine = ""
+        self.hasLine = False
+        self.closed = False
+        self.advance()
+    
+    protect function advance( self ) -> Void:
+        
+        """
+        Read the next line from the buffered reader and store it in
+        currentLine. Sets hasLine to False when the end of file is
+        reached with no remaining data.
+        """
+        
+        if self.reader.isEof():
+            self.hasLine = False
+            return
+        self.currentLine = self.reader.readLine()
+        if self.reader.isEof():
+            I64 linePtr = stringToPtr( self.currentLine )
+            I64 lineLen = stringLen( self.currentLine )
+            if lineLen == 0:
+                self.hasLine = False
+                return
+        self.hasLine = True
+    
+    public property has( self ) -> Boolean:
+        
+        """
+        Check whether the iterator has another line available.
+        
+        Returns:
+            Boolean:
+                True if a line is available via next, False at end of file.
+        """
+        
+        return self.hasLine
+    
+    public property next( self ) -> String:
+        
+        """
+        Return the current line and advance the iterator to the next
+        line. The returned line does not include the trailing newline
+        character.
+        
+        Returns:
+            String:
+                The current line from the file.
+        """
+        
+        String line = self.currentLine
+        self.advance()
+        return line
+    
+    public function close( self ) -> Void:
+        
+        """
+        Close the underlying buffered reader and release file
+        descriptor resources. Safe to call multiple times; subsequent
+        calls after the first are no-ops.
+        """
+        
+        if self.closed == False:
+            self.reader.close()
+            self.closed = True
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Destructor that ensures the underlying file resources are
+        released by delegating to close.
+        """
+        
+        self.close()
+
+export {
+    LineIterator
+}

@@ -1,0 +1,65 @@
+package testing
+
+from uranite.os.io.buffer-cache import {
+    BUFFER_VALID, BUFFER_DIRTY, BUFFER_LOCKED,
+    BufferEntry, BufferCache
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS IO BufferCache Tests ===" )
+
+    assertEqualI64( 1, BUFFER_VALID, "BUFFER_VALID" )
+    assertEqualI64( 2, BUFFER_DIRTY, "BUFFER_DIRTY" )
+    assertEqualI64( 4, BUFFER_LOCKED, "BUFFER_LOCKED" )
+    putsln( "constants OK" )
+
+    BufferEntry entry = new BufferEntry()
+    assertEqualI64( 0, entry.flags, "flags 0" )
+    assertFalse( entry.isValid(), "not valid" )
+    assertFalse( entry.isDirty(), "not dirty" )
+    assertFalse( entry.isLocked(), "not locked" )
+
+    entry.markValid()
+    assertTrue( entry.isValid(), "valid" )
+    assertFalse( entry.isDirty(), "still not dirty" )
+
+    entry.markDirty()
+    assertTrue( entry.isDirty(), "dirty" )
+    assertTrue( entry.isValid(), "still valid" )
+
+    entry.clearDirty()
+    assertFalse( entry.isDirty(), "cleared dirty" )
+    assertTrue( entry.isValid(), "still valid after clear" )
+
+    entry.retain()
+    assertEqualI64( 1, entry.refCount, "refCount 1" )
+    entry.retain()
+    assertEqualI64( 2, entry.refCount, "refCount 2" )
+    assertFalse( entry.release(), "not last ref" )
+    assertTrue( entry.release(), "last ref" )
+    putsln( "BufferEntry OK" )
+
+    BufferCache cache = new BufferCache( 64 )
+    I64 slot = cache.insert( 0, 100 )
+    assertTrue( slot >= 0, "insert slot" )
+
+    I64 found = cache.lookup( 0, 100 )
+    assertEqualI64( slot, found, "lookup match" )
+
+    I64 miss = cache.lookup( 0, 999 )
+    assertEqualI64( -1, miss, "lookup miss" )
+
+    cache.markDirty( slot )
+    assertTrue( cache.isDirty( slot ), "dirty slot" )
+    assertEqualI64( 1, cache.getDirtyCount(), "dirty count 1" )
+
+    cache.release( slot )
+    cache.invalidate( slot )
+    putsln( "BufferCache OK" )
+
+    putsln( "=== All buffer cache tests passed ===" )
+    return 0

@@ -1,0 +1,58 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all public types from the Adelia color library, providing a
+# convenient single import point for the Color class, color space structs
+# (RGB, HSL, HSV, CMYK), conversion utilities, formatters, the named color
+# database, palette containers, and palette generation algorithms.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.adelia
+
+from uranite.adelia.adelia import Adelia
+from uranite.adelia.ansi-formatter import AnsiFormatter
+from uranite.adelia.cmyk import CMYK
+from uranite.adelia.color import Color
+from uranite.adelia.color-converter import ColorConverter
+from uranite.adelia.color-database import ColorDatabase
+from uranite.adelia.color-distance import ColorDistance
+from uranite.adelia.color-name-entry import ColorNameEntry
+from uranite.adelia.color-palette import ColorPalette
+from uranite.adelia.css-formatter import CssFormatter
+from uranite.adelia.hsl import HSL
+from uranite.adelia.hsv import HSV
+from uranite.adelia.palette-generator import PaletteGenerator
+from uranite.adelia.rgb import RGB
+from uranite.adelia.web-safe import WebSafe
+
+export {
+    Adelia,
+    Color,
+    RGB,
+    HSL,
+    HSV,
+    CMYK,
+    ColorConverter,
+    ColorDistance,
+    ColorNameEntry,
+    ColorDatabase,
+    ColorPalette,
+    PaletteGenerator,
+    AnsiFormatter,
+    CssFormatter,
+    WebSafe
+}

@@ -1,0 +1,48 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-28 01:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/immutable-mapping.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the ImmutableMapping interface for read-only key-value containers
+# where all mutation operations return new copies.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.immutablemapping
+
+from uranite.collection.map import Map
+from uranite.language.boolean import Boolean
+
+public interface ImmutableMapping<K, V> extends Map<K, V>:
+    
+    public function get( self, K key ) -> V:
+        
+        """ Retrieve the value associated with the given key. """
+    
+    public function contains( self, K key ) -> Boolean:
+        
+        """ Check whether the given key exists in the mapping. """
+    
+    public function length( self ) -> I64:
+        
+        """ Return the number of entries in the mapping. """
+    
+    public function isEmpty( self ) -> Boolean:
+        
+        """ Check whether the mapping contains no entries. """
+
+
+export {
+    ImmutableMapping
+}

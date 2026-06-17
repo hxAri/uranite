@@ -1,0 +1,229 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-06 02:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/logging/handler.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Log handlers: ConsoleHandler writes to stdout/stderr,
+# FileHandler writes to a file descriptor opened via syscall.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.logging.handler
+
+from uranite.logging.level import LogLevel
+from uranite.logging.formatter import LogFormatter, defaultFormatter
+from uranite.io.writer import STDOUT_FD, STDERR_FD, writeFd, writeNewlineFd
+
+public class ConsoleHandler:
+    
+    """
+    Log handler that writes formatted messages to the console.
+    
+    Messages at ERROR level or above are written to stderr, all others
+    to stdout. Messages below the configured minimum level are silently
+    discarded.
+    """
+    
+    public LogFormatter formatter
+    """ The formatter used to render log records into strings. """
+    public LogLevel minimumLevel
+    """ The minimum log level threshold. Messages below this are discarded. """
+    
+    public function ConsoleHandler( self, LogFormatter formatter, LogLevel minimumLevel ) -> Void:
+        
+        """
+        Create a new ConsoleHandler with the given formatter and minimum level.
+        
+        Parameters:
+            formatter (LogFormatter):
+                The formatter used to render log records.
+            minimumLevel (LogLevel):
+                The minimum log level threshold.
+        """
+        
+        self.formatter = formatter
+        self.minimumLevel = minimumLevel
+    
+    public function handle( self, LogLevel level, String name, String message ) -> Void:
+        
+        """
+        Format and write a log message to the console. ERROR and FATAL
+        messages are written to stderr, all others to stdout.
+        
+        Parameters:
+            level (LogLevel):
+                The severity level of this log message.
+            name (String):
+                The logger name or context string.
+            message (String):
+                The log message text.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if level < self.minimumLevel:
+            return
+        String formatted = self.formatter.format( level, name, message )
+        I64 fileDescriptor = STDOUT_FD
+        if level >= LogLevel.Error:
+            fileDescriptor = STDERR_FD
+        writeFd( fileDescriptor, formatted )
+        writeNewlineFd( fileDescriptor )
+
+public class FileHandler:
+    
+    """
+    Log handler that writes formatted messages to a file descriptor.
+    
+    All messages at or above the configured minimum level are written
+    to the specified file descriptor regardless of severity.
+    """
+    
+    public LogFormatter formatter
+    """ The formatter used to render log records into strings. """
+    public LogLevel minimumLevel
+    """ The minimum log level threshold. Messages below this are discarded. """
+    public I64 fileDescriptor
+    """ The file descriptor to write log output to. """
+    
+    public function FileHandler( self, LogFormatter formatter, LogLevel minimumLevel, I64 fileDescriptor ) -> Void:
+        
+        """
+        Create a new FileHandler with the given formatter, level, and file descriptor.
+        
+        Parameters:
+            formatter (LogFormatter):
+                The formatter used to render log records.
+            minimumLevel (LogLevel):
+                The minimum log level threshold.
+            fileDescriptor (I64):
+                The file descriptor to write log output to.
+        """
+        
+        self.formatter = formatter
+        self.minimumLevel = minimumLevel
+        self.fileDescriptor = fileDescriptor
+    
+    public function handle( self, LogLevel level, String name, String message ) -> Void:
+        
+        """
+        Format and write a log message to the configured file descriptor.
+        
+        Parameters:
+            level (LogLevel):
+                The severity level of this log message.
+            name (String):
+                The logger name or context string.
+            message (String):
+                The log message text.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if level < self.minimumLevel:
+            return
+        String formatted = self.formatter.format( level, name, message )
+        writeFd( self.fileDescriptor, formatted )
+        writeNewlineFd( self.fileDescriptor )
+
+public function consoleHandler() -> ConsoleHandler:
+    
+    """
+    Create a new ConsoleHandler with default formatter and Trace level (all messages).
+    
+    Returns:
+        ConsoleHandler:
+            A new console handler accepting all log levels.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new ConsoleHandler( defaultFormatter(), LogLevel.Trace )
+
+public function consoleHandlerWithLevel( LogLevel level ) -> ConsoleHandler:
+    
+    """
+    Create a new ConsoleHandler with default formatter and the given minimum level.
+    
+    Parameters:
+        level (LogLevel):
+            The minimum log level threshold.
+    
+    Returns:
+        ConsoleHandler:
+            A new console handler filtering by the given level.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new ConsoleHandler( defaultFormatter(), level )
+
+public function fileHandler( I64 fileDescriptor ) -> FileHandler:
+    
+    """
+    Create a new FileHandler with default formatter and Trace level (all messages).
+    
+    Parameters:
+        fileDescriptor (I64):
+            The file descriptor to write log output to.
+    
+    Returns:
+        FileHandler:
+            A new file handler accepting all log levels.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new FileHandler( defaultFormatter(), LogLevel.Trace, fileDescriptor )
+
+public function fileHandlerWithLevel( I64 fileDescriptor, LogLevel level ) -> FileHandler:
+    
+    """
+    Create a new FileHandler with default formatter and the given minimum level.
+    
+    Parameters:
+        fileDescriptor (I64):
+            The file descriptor to write log output to.
+        level (LogLevel):
+            The minimum log level threshold.
+    
+    Returns:
+        FileHandler:
+            A new file handler filtering by the given level.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new FileHandler( defaultFormatter(), level, fileDescriptor )
+
+export {
+    ConsoleHandler,
+    FileHandler,
+    consoleHandler,
+    consoleHandlerWithLevel,
+    fileHandler,
+    fileHandlerWithLevel
+}

@@ -1,0 +1,27 @@
+package testing
+
+from uranite.cli import argv
+from uranite.testing.assertions import assertGreaterThan
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== CLI Argv Tests ===" )
+
+    # argv exists and has at least program name
+    assertGreaterThan( argv.length, 0, "argv.length > 0" )
+    putsln( "argv.length {} OK".format( argv.length ) )
+
+    # argv[0] is program name
+    String programName = argv.get( 0 )
+    putsln( "argv.get(0) {} OK".format( programName ) )
+
+    # print all args
+    I64 i = 0
+    while i < argv.length:
+        String arg = argv.get( i )
+        puts( "{}. {}".format( i, arg ) )
+        i = i + 1
+    putsln( "argv iteration OK" )
+
+    putsln( "=== All CLI argv tests passed ===" )
+    return 0

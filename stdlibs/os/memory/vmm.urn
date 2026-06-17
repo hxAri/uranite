@@ -1,0 +1,259 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/memory/vmm.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Virtual memory manager providing per-process address space management over the x86_64 4-level page table hierarchy (PML4 -> PDPT -> PD -> PT). Supports mapping, unmapping, and translating virtual addresses to physical addresses with configurable page protection flags.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.memory.vmm
+
+from uranite.memory.memory import Memory
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.arch.x86-64.cpu import writeCr3, invlpg
+from uranite.os.arch.x86-64.paging import {
+    PageTable, PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER,
+    pml4Index, pdptIndex, pdIndex, ptIndex
+}
+
+public function protReadOnly() -> I64:
+    
+    """ Return page protection flags for read-only kernel access (Present bit only). """
+    
+    return PAGE_PRESENT
+
+public function protReadWrite() -> I64:
+    
+    """ Return page protection flags for read-write kernel access (Present and Writable bits). """
+    
+    return PAGE_PRESENT | PAGE_WRITABLE
+
+public function protUser() -> I64:
+    
+    """ Return page protection flags for read-write user-space access (Present, Writable, and User bits). """
+    
+    return PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER
+
+public function protUserReadOnly() -> I64:
+    
+    """
+    Return page protection flags for read-only user-space access (Present and User bits).
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return PAGE_PRESENT | PAGE_USER
+
+public class AddressSpace:
+    
+    """
+    Per-process virtual address space that wraps the x86_64 4-level page table
+    hierarchy (PML4 -> PDPT -> PD -> PT). All intermediate page tables are
+    allocated on demand from the Physical Memory Manager. Provides methods to
+    map, unmap, and translate virtual addresses to physical addresses.
+    """
+    
+    protect PageTable pml4
+    protect I64 pml4PhysAddr
+    protect PhysicalMemoryManager pmm
+    
+    public function AddressSpace( self, PhysicalMemoryManager pmm ) -> Void:
+        
+        """
+        Construct a new address space backed by the given Physical Memory Manager.
+        Allocates a PML4 page table and obtains a physical frame for CR3 loading.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.pmm = pmm
+        self.pml4 = new PageTable()
+        self.pml4PhysAddr = pmm.allocFrame()
+    
+    public function mapPage( self, I64 virtAddr, I64 physAddr, I64 flags ) -> Boolean:
+        
+        """
+        Map a single 4KB virtual page to a physical address with the given
+        protection flags. Walks the 4-level page table hierarchy, allocating
+        intermediate page tables from the PMM as needed. Returns True on
+        success, or False if the PMM has run out of free frames and cannot
+        allocate a required intermediate page table.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 p4 = pml4Index( virtAddr )
+        I64 p3 = pdptIndex( virtAddr )
+        I64 p2 = pdIndex( virtAddr )
+        I64 p1 = ptIndex( virtAddr )
+        I64 pdptEntry = self.pml4.getEntry( p4 ).raw
+        if ( pdptEntry & PAGE_PRESENT ) == 0:
+            I64 frame = self.pmm.allocFrame()
+            if frame == 0:
+                return False
+            self.pml4.setEntry( p4, frame | PAGE_PRESENT | PAGE_WRITABLE )
+        I64 pdptAddr = self.pml4.getEntry( p4 ).address()
+        PageTable pdpt = new PageTable()
+        I64 pdEntry = pdpt.getEntry( p3 ).raw
+        if ( pdEntry & PAGE_PRESENT ) == 0:
+            I64 frame = self.pmm.allocFrame()
+            if frame == 0:
+                return False
+            pdpt.setEntry( p3, frame | PAGE_PRESENT | PAGE_WRITABLE )
+        I64 pdAddr = pdpt.getEntry( p3 ).address()
+        PageTable pd = new PageTable()
+        I64 ptEntry = pd.getEntry( p2 ).raw
+        if ( ptEntry & PAGE_PRESENT ) == 0:
+            I64 frame = self.pmm.allocFrame()
+            if frame == 0:
+                return False
+            pd.setEntry( p2, frame | PAGE_PRESENT | PAGE_WRITABLE )
+        PageTable pt = new PageTable()
+        pt.setEntry( p1, physAddr | flags )
+        return True
+    
+    public function unmapPage( self, I64 virtAddr ) -> Void:
+        
+        """
+        Unmap a single 4KB virtual page by clearing its page table entry
+        and flushing the TLB entry for that address using the invlpg instruction.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 p1 = ptIndex( virtAddr )
+        PageTable pt = new PageTable()
+        pt.clearEntry( p1 )
+        invlpg( virtAddr )
+    
+    public function mapRange( self, I64 virtAddr, I64 physAddr, I64 pageCount, I64 flags ) -> Boolean:
+        
+        """
+        Map a contiguous range of 4KB pages from virtual to physical addresses
+        with the given protection flags. Returns True if all pages were mapped
+        successfully, or False if any single page mapping fails due to PMM
+        frame exhaustion.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 pageOffset = 0
+        while pageOffset < pageCount:
+            I64 vaddr = virtAddr + ( pageOffset * 4096 )
+            I64 paddr = physAddr + ( pageOffset * 4096 )
+            Boolean ok = self.mapPage( vaddr, paddr, flags )
+            if not ok:
+                return False
+            pageOffset = pageOffset + 1
+        return True
+    
+    public function unmapRange( self, I64 virtAddr, I64 pageCount ) -> Void:
+        
+        """
+        Unmap a contiguous range of 4KB virtual pages, clearing each page
+        table entry and flushing the corresponding TLB entries.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 pageOffset = 0
+        while pageOffset < pageCount:
+            self.unmapPage( virtAddr + ( pageOffset * 4096 ) )
+            pageOffset = pageOffset + 1
+    
+    public function translate( self, I64 virtAddr ) -> I64:
+        
+        """
+        Translate a virtual address to its corresponding physical address by
+        performing a software page table walk through all four levels of the
+        x86_64 page hierarchy (PML4 -> PDPT -> PD -> PT). Returns the physical
+        address including the page offset, or 0 if the virtual address is not mapped.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        I64 p4 = pml4Index( virtAddr )
+        I64 p3 = pdptIndex( virtAddr )
+        I64 p2 = pdIndex( virtAddr )
+        I64 p1 = ptIndex( virtAddr )
+        I64 entry = self.pml4.getEntry( p4 ).raw
+        if ( entry & PAGE_PRESENT ) == 0:
+            return 0
+        PageTable pdpt = new PageTable()
+        entry = pdpt.getEntry( p3 ).raw
+        if ( entry & PAGE_PRESENT ) == 0:
+            return 0
+        PageTable pd = new PageTable()
+        entry = pd.getEntry( p2 ).raw
+        if ( entry & PAGE_PRESENT ) == 0:
+            return 0
+        PageTable pt = new PageTable()
+        entry = pt.getEntry( p1 ).raw
+        if ( entry & PAGE_PRESENT ) == 0:
+            return 0
+        I64 offset = virtAddr & 4095
+        I64 pageBase = entry & 4503599627366400
+        return pageBase + offset
+    
+    public function isMapped( self, I64 virtAddr ) -> Boolean:
+        
+        """ Check if the given virtual address has a valid page table mapping. """
+        
+        return self.translate( virtAddr ) != 0
+    
+    public function activate( self ) -> Void:
+        
+        """
+        Activate this address space by loading its PML4 physical address into
+        the CR3 register. This flushes the entire TLB, which is an expensive
+        operation and should only be done during address space switches between
+        different processes.
+        """
+        
+        writeCr3( self.pml4PhysAddr )
+    
+    public function getPml4PhysAddr( self ) -> I64:
+        
+        """
+        Return the physical address of this address space's PML4 page table for CR3 loading.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return self.pml4PhysAddr
+
+export {
+    AddressSpace,
+    protReadOnly,
+    protReadWrite,
+    protUser,
+    protUserReadOnly
+}

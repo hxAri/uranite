@@ -1,0 +1,38 @@
+package testing
+
+from uranite.memory.memory import Memory
+from uranite.io.string-reader import StringReader
+from uranite.io.string-writer import StringWriter
+from uranite.testing.assertions import {
+    assertEqualStr,
+    assertEqualI64
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO String Stream Tests ===" )
+
+    StringWriter sw = new StringWriter()
+    Memory<I64> data = new Memory<I64>( 3 )
+    data.set( 0, 65 )
+    data.set( 1, 66 )
+    data.set( 2, 67 )
+    sw.write( data, 0, 3 )
+    sw.writeString( "DEF" )
+    String output = sw.toString()
+    assertEqualStr( "ABCDEF", output, "StringWriter output" )
+    assertEqualI64( 6, sw.getLength(), "StringWriter length" )
+    putsln( "StringWriter OK" )
+
+    StringReader sr = new StringReader( "Hello World" )
+    Memory<I64> readBuf = new Memory<I64>( 5 )
+    I64 n = sr.read( readBuf, 0, 5 )
+    assertEqualI64( 5, n, "StringReader read count" )
+    assertEqualI64( 72, readBuf.get( 0 ), "first byte H=72" )
+    sr.close()
+    readBuf.free()
+    data.free()
+    putsln( "StringReader OK" )
+
+    putsln( "=== All IO string stream tests passed ===" )
+    return 0

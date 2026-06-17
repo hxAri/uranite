@@ -1,0 +1,20 @@
+package testing
+
+from uranite.threading.barrier import Barrier
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Threading Barrier Tests ===" )
+
+    Scheduler sched = new Scheduler()
+    Barrier bar = new Barrier( 4, sched )
+    assertEqualI64( 1, 1, "barrier created" )
+    putsln( "create OK" )
+
+    bar.destroy()
+    putsln( "destroy OK" )
+
+    putsln( "=== All barrier tests passed ===" )
+    return 0

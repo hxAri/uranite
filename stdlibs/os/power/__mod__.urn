@@ -1,0 +1,54 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/power/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all public symbols from the power management submodule including CPU
+# power states, system power states, power event types, and the power manager.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.power
+
+from uranite.os.power.power import {
+    CPU_STATE_ACTIVE,
+    CPU_STATE_HALT,
+    CPU_STATE_STOP_CLOCK,
+    CPU_STATE_DEEP_SLEEP,
+    SYSTEM_RUNNING,
+    SYSTEM_STANDBY,
+    SYSTEM_SUSPEND,
+    SYSTEM_OFF,
+    POWER_EVENT_SUSPEND,
+    POWER_EVENT_RESUME,
+    POWER_EVENT_SHUTDOWN,
+    POWER_EVENT_REBOOT,
+    PowerManager
+}
+
+export {
+    CPU_STATE_ACTIVE,
+    CPU_STATE_HALT,
+    CPU_STATE_STOP_CLOCK,
+    CPU_STATE_DEEP_SLEEP,
+    SYSTEM_RUNNING,
+    SYSTEM_STANDBY,
+    SYSTEM_SUSPEND,
+    SYSTEM_OFF,
+    POWER_EVENT_SUSPEND,
+    POWER_EVENT_RESUME,
+    POWER_EVENT_SHUTDOWN,
+    POWER_EVENT_REBOOT,
+    PowerManager
+}

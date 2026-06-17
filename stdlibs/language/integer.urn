@@ -1,0 +1,48 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/language/integer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Integer class, a general-purpose integer type that maps to I32 on most platforms.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.integer
+
+from uranite.language.int import Int
+
+final class Integer extends Int:
+    
+    """
+    General-purpose integer type, maps to I32 on most platforms.
+    Extends Int and provides a platform-natural integer width for common use cases.
+    """
+    
+    public function Integer( self, I32 value ) -> Void:
+        
+        """ Construct a new Integer from the given I32 value, widening to I64 internally. """
+        
+        self.value = value as I64
+    
+    public function toInteger( self ) -> I32:
+        
+        """ Return this value narrowed back to a 32-bit integer. """
+        
+        return self.value as I32
+    
+    public function toString( self ) -> String:
+        
+        """ Return the string representation of this Integer's numeric value. """
+        
+        return self.value as String

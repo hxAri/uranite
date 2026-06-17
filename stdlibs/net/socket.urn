@@ -1,0 +1,726 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/socket.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Userspace socket operations via raw Linux x86_64 syscalls.
+# Provides socket, bind, listen, accept, connect, send, recv, close,
+# setsockopt, and sockaddr_in construction for IPv4 TCP/UDP.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.socket
+
+from uranite.os.syscall.invoke import {
+    syscall1, syscall2, syscall3, syscall4, syscall5, syscall6
+}
+from uranite.os.syscall.result import SyscallResult
+from uranite.memory.memory import Memory
+from uranite.io.syscall import {
+    memoryToPtr, writeByteAt, writeI16At, writeI32At, writeI64At,
+    readByteAt, readI16At, readI32At, readI64At,
+    stringToPtr, stringLen, SYS_CLOSE
+}
+from uranite.memory.allocator import alloc, dealloc
+from uranite.functions.builtin import ptrToString
+from uranite.net.errors import SocketError, ConnectionError, ConnectionRefusedError, AddressInUseError
+
+const I64 SYS_SOCKET = 41
+"""Linux x86_64 syscall number for socket(2)."""
+
+const I64 SYS_CONNECT = 42
+"""Linux x86_64 syscall number for connect(2)."""
+
+const I64 SYS_ACCEPT = 43
+"""Linux x86_64 syscall number for accept(2)."""
+
+const I64 SYS_SENDTO = 44
+"""Linux x86_64 syscall number for sendto(2)."""
+
+const I64 SYS_RECVFROM = 45
+"""Linux x86_64 syscall number for recvfrom(2)."""
+
+const I64 SYS_BIND = 49
+"""Linux x86_64 syscall number for bind(2)."""
+
+const I64 SYS_LISTEN = 50
+"""Linux x86_64 syscall number for listen(2)."""
+
+const I64 SYS_SETSOCKOPT = 54
+"""Linux x86_64 syscall number for setsockopt(2)."""
+
+const I64 SYS_GETSOCKNAME = 51
+"""Linux x86_64 syscall number for getsockname(2)."""
+
+const I64 SYS_GETPEERNAME = 52
+"""Linux x86_64 syscall number for getpeername(2)."""
+
+const I64 SYS_SHUTDOWN = 48
+"""Linux x86_64 syscall number for shutdown(2)."""
+
+const I64 AF_INET = 2
+"""IPv4 address family constant."""
+
+const I64 AF_INET6 = 10
+"""IPv6 address family constant."""
+
+const I64 SOCK_STREAM = 1
+"""Stream socket type for TCP connections."""
+
+const I64 SOCK_DGRAM = 2
+"""Datagram socket type for UDP communication."""
+
+const I64 SOCK_NONBLOCK = 2048
+"""Flag to create a non-blocking socket."""
+
+const I64 IPPROTO_TCP = 6
+"""Protocol number for TCP."""
+
+const I64 IPPROTO_UDP = 17
+"""Protocol number for UDP."""
+
+const I64 SOL_SOCKET = 1
+"""Socket-level option for setsockopt."""
+
+const I64 SO_REUSEADDR = 2
+"""Socket option to allow address reuse."""
+
+const I64 SO_REUSEPORT = 15
+"""Socket option to allow port reuse across multiple sockets."""
+
+const I64 SO_KEEPALIVE = 9
+"""Socket option to enable TCP keepalive probes."""
+
+const I64 SO_RCVTIMEO = 20
+"""Socket option to set the receive timeout."""
+
+const I64 SO_SNDTIMEO = 21
+"""Socket option to set the send timeout."""
+
+const I64 TCP_NODELAY = 1
+"""TCP option to disable Nagle's algorithm for low-latency sends."""
+
+const I64 SOL_TCP = 6
+"""TCP-level option for setsockopt."""
+
+const I64 SHUT_RD = 0
+"""Shutdown flag to disable further reads on the socket."""
+
+const I64 SHUT_WR = 1
+"""Shutdown flag to disable further writes on the socket."""
+
+const I64 SHUT_RDWR = 2
+"""Shutdown flag to disable both reads and writes on the socket."""
+
+const I64 SOCKADDR_IN_SIZE = 16
+"""Size in bytes of a sockaddr_in structure for IPv4."""
+
+const I64 INADDR_ANY = 0
+"""IPv4 address constant representing all local interfaces (0.0.0.0)."""
+
+const I64 INADDR_LOOPBACK = 2130706433
+"""IPv4 address constant representing the loopback interface (127.0.0.1)."""
+
+const I64 ECONNREFUSED = 111
+"""Linux errno for connection refused by remote host."""
+
+const I64 EADDRINUSE = 98
+"""Linux errno for address already in use."""
+
+const I64 ECONNRESET = 104
+"""Linux errno for connection reset by peer."""
+
+public function htons( I64 port ) -> I64:
+    
+    """
+    Convert a 16-bit port number from host byte order to network byte order
+    (big-endian). Swaps the high and low bytes of the port value.
+    
+    Parameters:
+        port (I64):
+            The port number in host byte order.
+    
+    Returns:
+        The port number in network byte order.
+    """
+    
+    I64 lo = port % 256
+    I64 hi = port / 256
+    return lo * 256 + hi
+
+public function ntohs( I64 netPort ) -> I64:
+    
+    """
+    Convert a 16-bit port number from network byte order (big-endian) to
+    host byte order. This is the inverse of htons and uses the same byte
+    swap operation since the transformation is symmetric.
+    
+    Parameters:
+        netPort (I64):
+            The port number in network byte order.
+    
+    Returns:
+        The port number in host byte order.
+    """
+    
+    return htons( netPort )
+
+public function ipToInt( I64 octet1, I64 octet2, I64 octet3, I64 octet4 ) -> I64:
+
+    """
+    Convert an IPv4 address from four individual octets into a single 32-bit
+    integer in network byte order suitable for use in sockaddr_in structures.
+
+    Parameters:
+        octet1 (I64):
+            The first octet of the IPv4 address.
+        octet2 (I64):
+            The second octet of the IPv4 address.
+        octet3 (I64):
+            The third octet of the IPv4 address.
+        octet4 (I64):
+            The fourth octet of the IPv4 address.
+
+    Returns:
+        The IPv4 address as a 32-bit integer in network byte order.
+    """
+
+    return octet1 * 16777216 + octet2 * 65536 + octet3 * 256 + octet4
+
+public function buildSockaddrIn( I64 port, I64 addr ) -> I64:
+    
+    """
+    Allocate and populate a sockaddr_in structure for IPv4 with the given
+    port and address. The caller is responsible for deallocating the returned
+    buffer with dealloc when it is no longer needed.
+    
+    Parameters:
+        port (I64):
+            The port number in host byte order (will be converted to network byte order).
+        addr (I64):
+            The IPv4 address as a 32-bit integer in network byte order.
+    
+    Returns:
+        A pointer to the allocated sockaddr_in structure.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 buf = alloc( SOCKADDR_IN_SIZE )
+    writeI16At( buf, 0, AF_INET )
+    writeI16At( buf, 2, htons( port ) )
+    writeI32At( buf, 4, addr )
+    writeI64At( buf, 8, 0 )
+    return buf
+
+public function socketCreate( I64 domain, I64 sockType, I64 protocol ) -> I64:
+    
+    """
+    Create a new socket file descriptor via the socket(2) syscall.
+    
+    Parameters:
+        domain (I64):
+            The address family (e.g., AF_INET for IPv4).
+        sockType (I64):
+            The socket type (e.g., SOCK_STREAM for TCP, SOCK_DGRAM for UDP).
+        protocol (I64):
+            The protocol number (typically 0 for default protocol selection).
+    
+    Returns:
+        The file descriptor of the newly created socket.
+    
+    Raises:
+        SocketError: If the socket syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall3( SYS_SOCKET, domain, sockType, protocol )
+    if syscallResult.isError():
+        raise new SocketError( "socket creation failed", syscallResult.errorCode(), None )
+    return syscallResult.value()
+
+public function socketBind( I64 fd, I64 addrPtr, I64 addrLen ) -> Void:
+    
+    """
+    Bind a socket to a local address via the bind(2) syscall.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to bind.
+        addrPtr (I64):
+            A pointer to the sockaddr structure containing the address to bind to.
+        addrLen (I64):
+            The size of the sockaddr structure in bytes.
+    
+    Raises:
+        AddressInUseError: If the address is already in use (EADDRINUSE).
+        SocketError: If the bind syscall fails for any other reason.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall3( SYS_BIND, fd, addrPtr, addrLen )
+    if syscallResult.isError():
+        I64 err = syscallResult.errorCode()
+        if err == EADDRINUSE:
+            raise new AddressInUseError( "address already in use", err, None )
+        raise new SocketError( "bind failed", err, None )
+
+public function socketListen( I64 fd, I64 backlog ) -> Void:
+    
+    """
+    Mark a socket as passive and ready to accept incoming connections via
+    the listen(2) syscall.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to listen on.
+        backlog (I64):
+            The maximum number of pending connections in the listen queue.
+    
+    Raises:
+        SocketError: If the listen syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall2( SYS_LISTEN, fd, backlog )
+    if syscallResult.isError():
+        raise new SocketError( "listen failed", syscallResult.errorCode(), None )
+
+public function socketAccept( I64 fd, I64 addrPtr, I64 addrLenPtr ) -> I64:
+    
+    """
+    Accept an incoming connection on a listening socket via the accept(2)
+    syscall. Returns a new file descriptor for the accepted connection.
+    
+    Parameters:
+        fd (I64):
+            The listening socket file descriptor.
+        addrPtr (I64):
+            A pointer to a sockaddr structure to receive the client address, or 0 to ignore.
+        addrLenPtr (I64):
+            A pointer to an integer containing the size of the address buffer, or 0 to ignore.
+    
+    Returns:
+        The file descriptor of the newly accepted connection.
+    
+    Raises:
+        SocketError: If the accept syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall3( SYS_ACCEPT, fd, addrPtr, addrLenPtr )
+    if syscallResult.isError():
+        raise new SocketError( "accept failed", syscallResult.errorCode(), None )
+    return syscallResult.value()
+
+public function socketConnect( I64 fd, I64 addrPtr, I64 addrLen ) -> Void:
+    
+    """
+    Initiate a connection on a socket to a remote address via the connect(2) syscall.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to connect.
+        addrPtr (I64):
+            A pointer to the sockaddr structure containing the target address.
+        addrLen (I64):
+            The size of the sockaddr structure in bytes.
+    
+    Raises:
+        ConnectionRefusedError: If the remote host refuses the connection (ECONNREFUSED).
+        ConnectionError: If the connect syscall fails for any other reason.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall3( SYS_CONNECT, fd, addrPtr, addrLen )
+    if syscallResult.isError():
+        I64 err = syscallResult.errorCode()
+        if err == ECONNREFUSED:
+            raise new ConnectionRefusedError( "connection refused", err, None )
+        raise new ConnectionError( "connect failed", err, None )
+
+public function socketSend( I64 fd, I64 bufPtr, I64 len, I64 flags ) -> I64:
+    
+    """
+    Send data through a connected socket via the sendto(2) syscall.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to send data on.
+        bufPtr (I64):
+            A pointer to the buffer containing the data to send.
+        len (I64):
+            The number of bytes to send from the buffer.
+        flags (I64):
+            Flags controlling send behavior (typically 0 for default).
+    
+    Returns:
+        The number of bytes successfully sent.
+    
+    Raises:
+        SocketError: If the send syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall6( SYS_SENDTO, fd, bufPtr, len, flags, 0, 0 )
+    if syscallResult.isError():
+        raise new SocketError( "send failed", syscallResult.errorCode(), None )
+    return syscallResult.value()
+
+public function socketRecv( I64 fd, I64 bufPtr, I64 len, I64 flags ) -> I64:
+    
+    """
+    Receive data from a connected socket via the recvfrom(2) syscall.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to receive data from.
+        bufPtr (I64):
+            A pointer to the buffer where received data will be stored.
+        len (I64):
+            The maximum number of bytes to read into the buffer.
+        flags (I64):
+            Flags controlling receive behavior (typically 0 for default).
+    
+    Returns:
+        The number of bytes received, or 0 if the connection has been closed.
+    
+    Raises:
+        SocketError: If the recv syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall6( SYS_RECVFROM, fd, bufPtr, len, flags, 0, 0 )
+    if syscallResult.isError():
+        raise new SocketError( "recv failed", syscallResult.errorCode(), None )
+    return syscallResult.value()
+
+public function socketClose( I64 fd ) -> Void:
+    
+    """
+    Close a socket file descriptor via the close(2) syscall, releasing all
+    associated kernel resources.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to close.
+    
+    Raises:
+        SocketError: If the close syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall1( SYS_CLOSE, fd )
+    if syscallResult.isError():
+        raise new SocketError( "close failed", syscallResult.errorCode(), None )
+
+public function socketSetOpt( I64 fd, I64 level, I64 optName, I64 valPtr, I64 valLen ) -> Void:
+    
+    """
+    Set a socket option via the setsockopt(2) syscall.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to configure.
+        level (I64):
+            The protocol level at which the option resides (e.g., SOL_SOCKET, SOL_TCP).
+        optName (I64):
+            The option name to set (e.g., SO_REUSEADDR, TCP_NODELAY).
+        valPtr (I64):
+            A pointer to the option value buffer.
+        valLen (I64):
+            The size of the option value buffer in bytes.
+    
+    Raises:
+        SocketError: If the setsockopt syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall5( SYS_SETSOCKOPT, fd, level, optName, valPtr, valLen )
+    if syscallResult.isError():
+        raise new SocketError( "setsockopt failed", syscallResult.errorCode(), None )
+
+public function socketShutdown( I64 fd, I64 how ) -> Void:
+    
+    """
+    Shut down part or all of a full-duplex connection on a socket via the
+    shutdown(2) syscall.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to shut down.
+        how (I64):
+            The shutdown mode: SHUT_RD (0) to disable reads, SHUT_WR (1) to
+            disable writes, or SHUT_RDWR (2) to disable both.
+    
+    Raises:
+        SocketError: If the shutdown syscall fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    SyscallResult syscallResult = syscall2( SYS_SHUTDOWN, fd, how )
+    if syscallResult.isError():
+        raise new SocketError( "shutdown failed", syscallResult.errorCode(), None )
+
+public function setReuseAddr( I64 fd ) -> Void:
+    
+    """
+    Enable the SO_REUSEADDR socket option, allowing the socket to bind to
+    an address that is already in the TIME_WAIT state.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to configure.
+    """
+    
+    I64 buf = alloc( 4 )
+    writeI32At( buf, 0, 1 )
+    socketSetOpt( fd, SOL_SOCKET, SO_REUSEADDR, buf, 4 )
+    dealloc( buf )
+
+public function setReusePort( I64 fd ) -> Void:
+    
+    """
+    Enable the SO_REUSEPORT socket option, allowing multiple sockets to
+    bind to the same port for load balancing across processes.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to configure.
+    """
+    
+    I64 buf = alloc( 4 )
+    writeI32At( buf, 0, 1 )
+    socketSetOpt( fd, SOL_SOCKET, SO_REUSEPORT, buf, 4 )
+    dealloc( buf )
+
+public function setTcpNoDelay( I64 fd ) -> Void:
+    
+    """
+    Enable the TCP_NODELAY socket option, disabling Nagle's algorithm to
+    send data immediately without waiting to coalesce small packets.
+    
+    Parameters:
+        fd (I64):
+            The TCP socket file descriptor to configure.
+    """
+    
+    I64 buf = alloc( 4 )
+    writeI32At( buf, 0, 1 )
+    socketSetOpt( fd, SOL_TCP, TCP_NODELAY, buf, 4 )
+    dealloc( buf )
+
+public function sendString( I64 socketDescriptor, String content ) -> I64:
+
+    """
+    Send an entire string through a connected socket, retrying partial
+    sends until all bytes have been transmitted.
+
+    Parameters:
+        socketDescriptor (I64):
+            The socket file descriptor to send data on.
+        content (String):
+            The string to send in its entirety.
+
+    Returns:
+        The total number of bytes sent.
+
+    Raises:
+        SocketError: If any underlying send operation fails.
+    
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    I64 contentPointer = stringToPtr( content )
+    I64 contentLength = stringLen( content )
+    I64 totalSent = 0
+    while totalSent < contentLength:
+        I64 bytesSent = socketSend( socketDescriptor, contentPointer + totalSent, contentLength - totalSent, 0 )
+        totalSent = totalSent + bytesSent
+    return totalSent
+
+public function recvString( I64 fd, I64 maxLen ) -> String:
+    
+    """
+    Receive data from a connected socket and return it as a null-terminated
+    string. If no data is available or the connection is closed, returns an
+    empty string.
+    
+    Parameters:
+        fd (I64):
+            The socket file descriptor to receive data from.
+        maxLen (I64):
+            The maximum number of bytes to receive.
+    
+    Returns:
+        The received data as a string, or an empty string if no data was received.
+    
+    Raises:
+        SocketError: If the underlying recv operation fails.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 receiveBuffer = alloc( maxLen + 1 )
+    I64 bytesReceived = socketRecv( fd, receiveBuffer, maxLen, 0 )
+    if bytesReceived <= 0:
+        writeByteAt( receiveBuffer, 0, 0 )
+        return ptrToString( receiveBuffer )
+    writeByteAt( receiveBuffer, bytesReceived, 0 )
+    return ptrToString( receiveBuffer )
+
+public function createTcpSocket() -> I64:
+    
+    """
+    Create a new TCP socket using IPv4 (AF_INET, SOCK_STREAM).
+    
+    Returns:
+        The file descriptor of the newly created TCP socket.
+    
+    Raises:
+        SocketError: If socket creation fails.
+    """
+    
+    return socketCreate( AF_INET, SOCK_STREAM, 0 )
+
+public function createUdpSocket() -> I64:
+    
+    """
+    Create a new UDP socket using IPv4 (AF_INET, SOCK_DGRAM).
+    
+    Returns:
+        The file descriptor of the newly created UDP socket.
+    
+    Raises:
+        SocketError: If socket creation fails.
+    """
+    
+    return socketCreate( AF_INET, SOCK_DGRAM, 0 )
+
+public function tcpListen( I64 port, I64 backlog ) -> I64:
+    
+    """
+    Create a TCP server socket, enable address reuse, bind it to all
+    interfaces on the given port, and start listening for connections.
+    
+    Parameters:
+        port (I64):
+            The port number to listen on.
+        backlog (I64):
+            The maximum number of pending connections in the listen queue.
+    
+    Returns:
+        The file descriptor of the listening server socket.
+    
+    Raises:
+        SocketError: If any step of socket creation, binding, or listening fails.
+        AddressInUseError: If the port is already in use.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 fd = createTcpSocket()
+    setReuseAddr( fd )
+    I64 addr = buildSockaddrIn( port, INADDR_ANY )
+    socketBind( fd, addr, SOCKADDR_IN_SIZE )
+    socketListen( fd, backlog )
+    dealloc( addr )
+    return fd
+
+public function tcpConnect( I64 ip, I64 port ) -> I64:
+    
+    """
+    Create a TCP socket and connect it to the specified remote address
+    and port.
+    
+    Parameters:
+        ip (I64):
+            The IPv4 address of the remote host as a 32-bit integer in network byte order.
+        port (I64):
+            The port number of the remote host.
+    
+    Returns:
+        The file descriptor of the connected TCP socket.
+    
+    Raises:
+        ConnectionRefusedError: If the remote host refuses the connection.
+        ConnectionError: If the connection fails for any other reason.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 fd = createTcpSocket()
+    I64 addr = buildSockaddrIn( port, ip )
+    socketConnect( fd, addr, SOCKADDR_IN_SIZE )
+    dealloc( addr )
+    return fd
+
+export {
+    SYS_SOCKET, SYS_CONNECT, SYS_ACCEPT, SYS_SENDTO, SYS_RECVFROM,
+    SYS_BIND, SYS_LISTEN, SYS_SETSOCKOPT, SYS_SHUTDOWN, SYS_CLOSE,
+    AF_INET, AF_INET6, SOCK_STREAM, SOCK_DGRAM, SOCK_NONBLOCK,
+    IPPROTO_TCP, IPPROTO_UDP,
+    SOL_SOCKET, SO_REUSEADDR, SO_REUSEPORT, SO_KEEPALIVE,
+    SO_RCVTIMEO, SO_SNDTIMEO, TCP_NODELAY, SOL_TCP,
+    SHUT_RD, SHUT_WR, SHUT_RDWR,
+    SOCKADDR_IN_SIZE, INADDR_ANY, INADDR_LOOPBACK,
+    htons, ntohs, ipToInt, buildSockaddrIn,
+    socketCreate, socketBind, socketListen, socketAccept,
+    socketConnect, socketSend, socketRecv, socketClose,
+    socketSetOpt, socketShutdown,
+    setReuseAddr, setReusePort, setTcpNoDelay,
+    sendString, recvString,
+    createTcpSocket, createUdpSocket,
+    tcpListen, tcpConnect
+}

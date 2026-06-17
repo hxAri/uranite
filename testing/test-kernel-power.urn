@@ -1,0 +1,14 @@
+package testing
+
+from uranite.kernel.power import PowerController
+from uranite.testing.assertions import assertEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Kernel Power Tests ===" )
+
+    PowerController power = new PowerController( 4 )
+    putsln( "PowerController constructed OK" )
+
+    putsln( "=== All Kernel Power Tests Passed ===" )
+    return 0

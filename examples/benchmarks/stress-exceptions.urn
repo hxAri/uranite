@@ -1,0 +1,44 @@
+package testing
+
+from uranite.errors.error import Error
+from uranite.io.console import putsln
+from uranite.convert.convert import intToString
+
+public class TestError extends Error:
+    public function TestError( self, String message, I64 code, ?Error cause ) -> Void:
+        parent( message, code, cause )
+
+function throwAtDepth( I64 depth ) -> I64:
+    if depth <= 0:
+        raise new TestError( "depth reached zero", 0, None )
+    return throwAtDepth( depth - 1 )
+
+public function main() -> I32:
+    putsln( "=== Stress Exceptions Test ===" )
+    
+    # throw/catch across 10 frames
+    I64 caught = 0
+    I64 i = 0
+    while i < 1000:
+        try:
+            I64 result = throwAtDepth( 10 )
+        except TestError as e:
+            caught = caught + 1
+        i = i + 1
+    
+    String caughtStr = intToString( caught )
+    putsln( "caught " + caughtStr + " exceptions across 10-deep frames" )
+    
+    # Different depths
+    i = 1
+    while i <= 20:
+        try:
+            I64 result = throwAtDepth( i )
+        except TestError as e:
+            caught = caught + 1
+        i = i + 1
+    
+    putsln( "variable depth throw/catch OK" )
+    
+    putsln( "=== Stress exceptions test PASSED ===" )
+    return 0

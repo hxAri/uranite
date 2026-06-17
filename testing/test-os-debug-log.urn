@@ -1,0 +1,44 @@
+package testing
+
+from uranite.os.debug.log import KernelLogLevel, EventLog
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Debug Log Tests ===" )
+
+    assertEqualI64( 0, KernelLogLevel.Trace as I64, "Trace" )
+    assertEqualI64( 1, KernelLogLevel.Debug as I64, "Debug" )
+    assertEqualI64( 2, KernelLogLevel.Info as I64, "Info" )
+    assertEqualI64( 3, KernelLogLevel.Warn as I64, "Warn" )
+    assertEqualI64( 4, KernelLogLevel.Error as I64, "Error" )
+    assertEqualI64( 5, KernelLogLevel.Fatal as I64, "Fatal" )
+    putsln( "enum OK" )
+
+    EventLog elog = new EventLog( 8 )
+    assertEqualI64( 8, elog.capacity, "capacity" )
+    assertEqualI64( 0, elog.getCount(), "count 0" )
+
+    Boolean ok1 = elog.log( 1000, 2, 1, 42 )
+    assertTrue( ok1, "log success" )
+    assertEqualI64( 1, elog.getCount(), "count 1" )
+    assertEqualI64( 1000, elog.getTimestamp( 0 ), "ts" )
+    assertEqualI64( 2, elog.getLevel( 0 ), "level" )
+    assertEqualI64( 1, elog.getSource( 0 ), "source" )
+    assertEqualI64( 42, elog.getCode( 0 ), "code" )
+    putsln( "log OK" )
+
+    elog.log( 2000, 3, 2, 43 )
+    elog.log( 3000, 4, 3, 44 )
+    assertEqualI64( 3, elog.getCount(), "count 3" )
+
+    elog.clear()
+    assertEqualI64( 0, elog.getCount(), "count after clear" )
+    putsln( "clear OK" )
+
+    elog.destroy()
+
+    putsln( "=== All debug log tests passed ===" )
+    return 0

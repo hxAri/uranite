@@ -1,0 +1,32 @@
+package testing
+
+from uranite.functions.runtime import {
+    uraniteRWLockCreate, uraniteRWLockReadLock,
+    uraniteRWLockWriteLock, uraniteRWLockUnlock,
+    uraniteRWLockDestroy
+}
+from uranite.testing.assertions import assertGreaterThan
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Threading RWLock Tests ===" )
+
+    I64 rwl = uraniteRWLockCreate()
+    assertGreaterThan( rwl, 0, "rwlock handle" )
+    putsln( "create OK" )
+
+    uraniteRWLockReadLock( rwl )
+    putsln( "read lock OK" )
+    uraniteRWLockUnlock( rwl )
+    putsln( "unlock OK" )
+
+    uraniteRWLockWriteLock( rwl )
+    putsln( "write lock OK" )
+    uraniteRWLockUnlock( rwl )
+    putsln( "unlock OK" )
+
+    uraniteRWLockDestroy( rwl )
+    putsln( "destroy OK" )
+
+    putsln( "=== All rwlock tests passed ===" )
+    return 0

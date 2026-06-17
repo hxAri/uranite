@@ -1,0 +1,168 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-27 19:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/threading/errors.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Thread-related error types for the threading module.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.threading.errors
+
+from uranite.errors.throwable import Throwable
+from uranite.errors.error import Error
+
+public class ThreadError extends Error:
+    
+    """
+    Base error type for all threading-related failures. Covers thread
+    lifecycle errors, synchronization problems, and resource exhaustion
+    within the threading module.
+    """
+    
+    public function ThreadError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a thread error with diagnostic information.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the error.
+            code (I64):
+                Numeric error code for programmatic identification.
+            previous (?Throwable):
+                Optional cause that triggered this error.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ThreadPoisonError extends ThreadError:
+    
+    """
+    Error raised when attempting to acquire a mutex or lock that has been
+    poisoned due to a thread panicking while holding it.
+    """
+    
+    public function ThreadPoisonError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a poison error with diagnostic information.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the poisoning.
+            code (I64):
+                Numeric error code for programmatic identification.
+            previous (?Throwable):
+                Optional cause that triggered the poisoning.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ThreadChannelError extends ThreadError:
+    
+    """
+    Error raised when a channel operation fails, such as sending on a
+    closed channel or receiving from a closed and empty channel.
+    """
+    
+    public function ThreadChannelError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a channel error with diagnostic information.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the channel failure.
+            code (I64):
+                Numeric error code for programmatic identification.
+            previous (?Throwable):
+                Optional cause that triggered the error.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ThreadCancellationError extends ThreadError:
+    
+    """
+    Error raised when an operation is cancelled, such as awaiting a
+    future that was cancelled before completion.
+    """
+    
+    public function ThreadCancellationError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a cancellation error with diagnostic information.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the cancellation.
+            code (I64):
+                Numeric error code for programmatic identification.
+            previous (?Throwable):
+                Optional cause that triggered the cancellation.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+public class ThreadTimeoutError extends ThreadError:
+    
+    """
+    Error raised when an operation exceeds its allowed time limit,
+    such as a timed lock acquisition or a timed channel receive.
+    """
+    
+    public function ThreadTimeoutError( self, String message, I64 code, ?Throwable previous ) -> Void:
+        
+        """
+        Construct a timeout error with diagnostic information.
+        
+        Parameters:
+            message (String):
+                Human-readable description of the timeout.
+            code (I64):
+                Numeric error code for programmatic identification.
+            previous (?Throwable):
+                Optional cause that triggered the timeout.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        parent( message, code, previous )
+
+export {
+    ThreadError,
+    ThreadPoisonError,
+    ThreadChannelError,
+    ThreadCancellationError,
+    ThreadTimeoutError
+}

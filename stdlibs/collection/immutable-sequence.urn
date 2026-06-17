@@ -1,0 +1,65 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/immutable-sequence.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the ImmutableSequence interface, a persistent sequence where all
+# mutation operations return new copies rather than modifying the original.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.immutablesequence
+
+from uranite.collection.sequence import Sequence
+from uranite.language.callable import Callable
+
+public interface ImmutableSequence<E> extends Sequence<E>:
+    
+    """
+    Persistent sequence where all mutation operations return new copies
+    rather than modifying the original, ensuring immutability.
+    """
+    
+    public function with( self, Int index, E element ) -> ImmutableSequence<E>:
+        
+        """ Return a new sequence with the element at the given index replaced. """
+    
+    public function appended( self, E element ) -> ImmutableSequence<E>:
+        
+        """ Return a new sequence with the given element appended to the end. """
+    
+    public function prepended( self, E element ) -> ImmutableSequence<E>:
+        
+        """ Return a new sequence with the given element prepended to the front. """
+    
+    public function concatenated( self, Sequence<E> other ) -> ImmutableSequence<E>:
+        
+        """ Return a new sequence with the other sequence concatenated to the end. """
+    
+    public function filtered( self, Callable<Boolean,<E>> predicate ) -> ImmutableSequence<E>:
+        
+        """ Return a new sequence containing only elements that match the predicate. """
+    
+    public function dropped( self, Int count ) -> ImmutableSequence<E>:
+        
+        """ Return a new sequence with the first count elements removed. """
+    
+    public function taken( self, Int count ) -> ImmutableSequence<E>:
+        
+        """ Return a new sequence containing only the first count elements. """
+
+
+export {
+    ImmutableSequence
+}

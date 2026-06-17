@@ -1,0 +1,299 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/vfs/mount.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides mount point management for the virtual filesystem, binding filesystem instances to directory VNodes and tracking active mounts in a global mount table.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.vfs.mount
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public class MountEntry:
+    
+    """
+    Represents a single mount point that binds a filesystem to a directory in the VFS
+    tree. Each mount maps a VNode ID (the mount point directory) to a filesystem instance
+    identified by its filesystem ID and root inode number. Mount flags control access
+    restrictions such as read-only or no-execute.
+    """
+    
+    public I64 mountId
+    public I64 mountPointVnodeId
+    public I64 filesystemId
+    public I64 rootInode
+    public I64 filesystemType
+    public I64 flags
+    
+    public function MountEntry( self, I64 id, I64 mountVnode, I64 fsId, I64 rootIn, I64 fsType, I64 mountFlags ) -> Void:
+        
+        """
+        Constructs a new mount entry with the specified mount ID, mount point VNode ID,
+        filesystem ID, root inode number, filesystem type, and mount flags.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.mountId = id
+        self.mountPointVnodeId = mountVnode
+        self.filesystemId = fsId
+        self.rootInode = rootIn
+        self.filesystemType = fsType
+        self.flags = mountFlags
+    
+    public function isReadOnly( self ) -> Boolean:
+        
+        """ Returns True if this mount was created with the read-only flag (bit 0). """
+        
+        return ( self.flags & 1 ) != 0
+    
+    public function getMountId( self ) -> I64:
+        
+        """ Returns the unique identifier assigned to this mount point. """
+        
+        return self.mountId
+    
+    public function getFilesystemId( self ) -> I64:
+        
+        """ Returns the filesystem instance identifier associated with this mount. """
+        
+        return self.filesystemId
+    
+    public function getRootInode( self ) -> I64:
+        
+        """
+        Returns the root inode number of the mounted filesystem.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.rootInode
+
+public const I64 MOUNT_READ_ONLY = 1
+""" Mount flag for read-only. No write operations permitted on mounted filesystem. """
+
+public const I64 MOUNT_NO_EXEC = 2
+""" Mount flag for no-execute. Execution of files on mounted filesystem prohibited. """
+
+public const I64 MOUNT_NO_SUID = 4
+""" Mount flag for no-setuid. Set-user-ID and set-group-ID bits are ignored. """
+
+public class MountTable:
+    
+    """
+    Global table that tracks all active filesystem mounts in the system. Each entry maps
+    a VNode ID (mount point directory) to a filesystem instance and its root inode. The
+    table assigns monotonically increasing mount IDs and uses a spinlock for thread-safe
+    concurrent access during mount and unmount operations.
+    """
+    
+    protect Memory<I64> mountIds
+    protect Memory<I64> mountPoints
+    protect Memory<I64> fsIds
+    protect Memory<I64> rootInodes
+    protect Memory<I64> fsTypes
+    protect Memory<I64> mountFlags
+    protect I64 capacity
+    protect I64 count
+    protect I64 nextMountId
+    protect Spinlock lock
+    
+    public function MountTable( self, I64 maxMounts ) -> Void:
+        
+        """
+        Constructs a new mount table with the specified maximum number of mount entries.
+        All slots are initialized to zero and the next mount ID starts at 1.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxMounts
+        self.count = 0
+        self.nextMountId = 1
+        self.lock = new Spinlock()
+        self.mountIds = new Memory<I64>( maxMounts )
+        self.mountPoints = new Memory<I64>( maxMounts )
+        self.fsIds = new Memory<I64>( maxMounts )
+        self.rootInodes = new Memory<I64>( maxMounts )
+        self.fsTypes = new Memory<I64>( maxMounts )
+        self.mountFlags = new Memory<I64>( maxMounts )
+        I64 slotIndex = 0
+        while slotIndex < maxMounts:
+            self.mountIds.set( slotIndex, 0 )
+            self.mountPoints.set( slotIndex, 0 )
+            self.fsIds.set( slotIndex, 0 )
+            self.rootInodes.set( slotIndex, 0 )
+            self.fsTypes.set( slotIndex, 0 )
+            self.mountFlags.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function mount( self, I64 mountPointVnode, I64 fsId, I64 rootInode, I64 fsType, I64 flags ) -> I64:
+        
+        """
+        Mounts a filesystem at the specified VNode directory. A unique mount ID is
+        assigned and the filesystem ID, root inode, type, and flags are recorded.
+        Returns the mount ID on success, or -1 if the mount table is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.count >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.mountIds.get( slotIndex ) == 0:
+                I64 id = self.nextMountId
+                self.nextMountId = self.nextMountId + 1
+                self.mountIds.set( slotIndex, id )
+                self.mountPoints.set( slotIndex, mountPointVnode )
+                self.fsIds.set( slotIndex, fsId )
+                self.rootInodes.set( slotIndex, rootInode )
+                self.fsTypes.set( slotIndex, fsType )
+                self.mountFlags.set( slotIndex, flags )
+                self.count = self.count + 1
+                self.lock.unlock()
+                return id
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return 0 - 1
+    
+    public function unmount( self, I64 mountId ) -> Boolean:
+        
+        """
+        Unmounts the filesystem with the given mount ID by clearing its slot in the
+        table. Returns True if the mount was found and removed, or False if no mount
+        with the given ID exists.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.mountIds.get( slotIndex ) == mountId:
+                self.mountIds.set( slotIndex, 0 )
+                self.mountPoints.set( slotIndex, 0 )
+                self.fsIds.set( slotIndex, 0 )
+                self.rootInodes.set( slotIndex, 0 )
+                self.fsTypes.set( slotIndex, 0 )
+                self.mountFlags.set( slotIndex, 0 )
+                self.count = self.count - 1
+                self.lock.unlock()
+                return True
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return False
+    
+    public function findByMountPoint( self, I64 vnodeId ) -> I64:
+        
+        """
+        Searches for a filesystem mounted at the specified VNode ID. Returns the
+        filesystem ID if a mount exists at this VNode, or -1 if the VNode is not
+        a mount point.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.mountIds.get( slotIndex ) != 0 and self.mountPoints.get( slotIndex ) == vnodeId:
+                return self.fsIds.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function getRootInode( self, I64 vnodeId ) -> I64:
+        
+        """
+        Returns the root inode number of the filesystem mounted at the specified VNode
+        ID. Returns -1 if no filesystem is mounted at this VNode.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.mountIds.get( slotIndex ) != 0 and self.mountPoints.get( slotIndex ) == vnodeId:
+                return self.rootInodes.get( slotIndex )
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function isMountPoint( self, I64 vnodeId ) -> Boolean:
+        
+        """
+        Checks whether the specified VNode ID is currently used as a mount point for
+        any filesystem. Returns True if a mount exists at this VNode, or False otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.mountIds.get( slotIndex ) != 0 and self.mountPoints.get( slotIndex ) == vnodeId:
+                return True
+            slotIndex = slotIndex + 1
+        return False
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of currently active mounts in the mount table. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the mount table, including
+        the mount ID, mount point, filesystem ID, root inode, filesystem type, and
+        mount flags arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.mountIds.free()
+        self.mountPoints.free()
+        self.fsIds.free()
+        self.rootInodes.free()
+        self.fsTypes.free()
+        self.mountFlags.free()
+
+export {
+    MountEntry,
+    MountTable,
+    MOUNT_READ_ONLY,
+    MOUNT_NO_EXEC,
+    MOUNT_NO_SUID
+}

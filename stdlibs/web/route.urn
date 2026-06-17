@@ -1,0 +1,154 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-05 18:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/web/route.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Route definition: HTTP method + URL pattern with path parameter
+# extraction (:param segments).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.web.route
+
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt
+from uranite.functions.builtin import equals, substring
+
+const I64 MAX_SEGMENTS = 16
+""" Maximum number of URL path segments a single route pattern can contain. """
+
+public class Route:
+    
+    """
+    Defines an HTTP route binding an HTTP method and URL pattern to a handler.
+    
+    URL patterns support path parameter segments prefixed with a colon
+    (e.g., "/users/:id/posts/:postId"). The pattern is parsed into segments
+    at construction time, with each segment flagged as either a literal
+    match or a parameter extraction point.
+    """
+    
+    public String method
+    """ The HTTP method this route matches (e.g., "GET", "POST"). """
+    public String pattern
+    """ The URL pattern string (e.g., "/users/:id"). """
+    public I64 handlerAddr
+    """ The memory address of the handler function for this route. """
+    public I64 segmentCount
+    """ The number of parsed URL segments in the pattern. """
+    public Memory<I64> segmentPtrs
+    """ Pointers to the string content of each parsed URL segment. """
+    public Memory<I64> isParam
+    """ Flags indicating whether each segment is a parameter (1) or literal (0). """
+    
+    public function Route( self, String method, String pattern, I64 handlerAddr ) -> Void:
+        
+        """
+        Construct a new Route and parse the URL pattern into segments.
+        
+        Segments prefixed with ':' (ASCII 58) are marked as path parameters.
+        The pattern is split on '/' (ASCII 47) delimiters.
+        
+        Parameters:
+            method (String):
+                The HTTP method to match (e.g., "GET", "POST").
+            pattern (String):
+                The URL pattern with optional :param segments.
+            handlerAddr (I64):
+                The memory address of the handler function.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.method = method
+        self.pattern = pattern
+        self.handlerAddr = handlerAddr
+        self.segmentCount = 0
+        self.segmentPtrs = new Memory<I64>( MAX_SEGMENTS )
+        self.isParam = new Memory<I64>( MAX_SEGMENTS )
+        self.parsePattern()
+    
+    public function parsePattern( self ) -> Void:
+        
+        """
+        Parse the URL pattern into individual segments.
+        
+        Splits the pattern on '/' delimiters and classifies each segment
+        as either a literal (isParam=0) or a named parameter (isParam=1)
+        based on whether it starts with ':' (ASCII 58).
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 pPtr = stringToPtr( self.pattern )
+        I64 pLen = stringLen( self.pattern )
+        I64 scanOffset = 0
+        if pLen > 0 and readByteAt( pPtr, 0 ) == 47:
+            scanOffset = 1
+        I64 segStart = scanOffset
+        while scanOffset <= pLen:
+            Boolean atEnd = scanOffset == pLen
+            Boolean atSlash = False
+            if atEnd == False:
+                atSlash = readByteAt( pPtr, scanOffset ) == 47
+            if atEnd or atSlash:
+                if scanOffset > segStart:
+                    String seg = substring( self.pattern, segStart, scanOffset )
+                    I64 segPtr = stringToPtr( seg )
+                    self.segmentPtrs.set( self.segmentCount, segPtr )
+                    I64 firstCh = readByteAt( segPtr, 0 )
+                    if firstCh == 58:
+                        self.isParam.set( self.segmentCount, 1 )
+                    else:
+                        self.isParam.set( self.segmentCount, 0 )
+                    self.segmentCount = self.segmentCount + 1
+                segStart = scanOffset + 1
+            scanOffset = scanOffset + 1
+    
+    public function matchesMethod( self, String method ) -> Boolean:
+        
+        """
+        Check whether this route matches the given HTTP method.
+        
+        Parameters:
+            method (String):
+                The HTTP method to compare against (case-sensitive).
+        
+        Returns:
+            Boolean:
+                True if the route's method matches the given method.
+        """
+        
+        return equals( self.method, method )
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release heap-allocated segment and parameter flag buffers.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.segmentPtrs.free()
+        self.isParam.free()
+
+export {
+    Route,
+    MAX_SEGMENTS
+}

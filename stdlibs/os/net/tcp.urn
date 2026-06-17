@@ -1,0 +1,424 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/tcp.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides TCP Layer 4 connection-oriented reliable transport protocol support, including segment header representation, connection state management, and a connection tracking table.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.net.tcp
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public const I64 TCP_FIN = 1
+""" TCP FIN flag bitmask. Sender finished sending data, wishes to close connection. """
+
+public const I64 TCP_SYN = 2
+""" TCP SYN flag bitmask. Used during three-way handshake to synchronize sequence numbers. """
+
+public const I64 TCP_RST = 4
+""" TCP RST flag bitmask. Forcibly resets a connection or aborts an existing one. """
+
+public const I64 TCP_PSH = 8
+""" TCP PSH flag bitmask. Requests immediate delivery of buffered data to application. """
+
+public const I64 TCP_ACK = 16
+""" TCP ACK flag bitmask. Acknowledgment number field is valid. Set on all post-SYN segments. """
+
+public const I64 TCP_URG = 32
+""" TCP URG flag bitmask. Urgent pointer field is significant, out-of-band data present. """
+
+public enum TcpState backed I64:
+    
+    """
+    Enumerates the TCP connection states as defined in RFC 793. These states model
+    the full TCP connection lifecycle from the initial closed state through the
+    three-way handshake (SYN, SYN-ACK, ACK), established data transfer, and the
+    four-way teardown (FIN, ACK, FIN, ACK) including the TIME_WAIT state.
+    """
+    
+    unit Closed 0
+    unit CloseWait 7
+    unit Closing 8
+    unit Established 4
+    unit FinWait1 5
+    unit FinWait2 6
+    unit LastAck 9
+    unit Listen 1
+    unit SynReceived 3
+    unit SynSent 2
+    unit TimeWait 10
+
+public const I64 TCP_HEADER_SIZE = 20
+""" Minimum TCP segment header size in bytes. Data offset 5 (5 x 4 = 20) with no options. """
+
+public class TcpHeader:
+    
+    """
+    Represents a TCP segment header as defined in RFC 793. The minimum header size is
+    20 bytes and includes source port, destination port, 32-bit sequence number, 32-bit
+    acknowledgment number, data offset (header length in 32-bit words), control flags
+    (URG, ACK, PSH, RST, SYN, FIN), window size for flow control, checksum, and urgent
+    pointer.
+    """
+    
+    public I64 srcPort
+    public I64 dstPort
+    public I64 sequenceNumber
+    public I64 ackNumber
+    public I64 dataOffset
+    public I64 flags
+    public I64 windowSize
+    public I64 checksum
+    public I64 urgentPointer
+    
+    public function TcpHeader( self ) -> Void:
+        
+        """
+        Constructs a new TCP header with default values: data offset of 5 (20 bytes,
+        no options), maximum window size of 65535 bytes, and all other fields set to zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.srcPort = 0
+        self.dstPort = 0
+        self.sequenceNumber = 0
+        self.ackNumber = 0
+        self.dataOffset = 5
+        self.flags = 0
+        self.windowSize = 65535
+        self.checksum = 0
+        self.urgentPointer = 0
+    
+    public function isSyn( self ) -> Boolean:
+        
+        """ Returns True if the SYN flag (bit 1) is set in this segment's flags. """
+        
+        return ( self.flags & 2 ) != 0
+    
+    public function isAck( self ) -> Boolean:
+        
+        """ Returns True if the ACK flag (bit 4) is set in this segment's flags. """
+        
+        return ( self.flags & 16 ) != 0
+    
+    public function isFin( self ) -> Boolean:
+        
+        """ Returns True if the FIN flag (bit 0) is set in this segment's flags. """
+        
+        return ( self.flags & 1 ) != 0
+    
+    public function isRst( self ) -> Boolean:
+        
+        """ Returns True if the RST flag (bit 2) is set in this segment's flags. """
+        
+        return ( self.flags & 4 ) != 0
+    
+    public function isPsh( self ) -> Boolean:
+        
+        """ Returns True if the PSH flag (bit 3) is set in this segment's flags. """
+        
+        return ( self.flags & 8 ) != 0
+    
+    public function isSynAck( self ) -> Boolean:
+        
+        """
+        Returns True if both the SYN and ACK flags are set in this segment's flags.
+        A SYN-ACK segment is the second step of the TCP three-way handshake, sent by
+        the server in response to the client's initial SYN.
+        """
+        
+        return ( self.flags & 18 ) == 18
+    
+    public function setFlag( self, I64 flag ) -> Void:
+        
+        """
+        Sets the specified flag bit in the segment's flags field using a bitwise OR
+        operation. Multiple flags can be set by calling this method repeatedly.
+        """
+        
+        self.flags = self.flags | flag
+    
+    public function clearFlags( self ) -> Void:
+        
+        """
+        Clears all control flags in this TCP header by resetting the flags field to zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.flags = 0
+
+public class TcpConnectionTable:
+    
+    """
+    Tracks active TCP connections in the kernel networking stack. Each connection is
+    identified by its 4-tuple of local address, local port, remote address, and remote
+    port. The table stores per-connection state including the TCP state machine state,
+    sequence and acknowledgment numbers, and receive window size. A spinlock protects
+    concurrent access from interrupt handlers and kernel threads.
+    """
+    
+    public Memory<I64> localAddrs
+    public Memory<I64> localPorts
+    public Memory<I64> remoteAddrs
+    public Memory<I64> remotePorts
+    public Memory<I64> states
+    public Memory<I64> seqNumbers
+    public Memory<I64> ackNumbers
+    public Memory<I64> windows
+    public I64 capacity
+    public I64 count
+    public Spinlock lock
+    
+    public function TcpConnectionTable( self, I64 maxConnections ) -> Void:
+        
+        """
+        Constructs a new TCP connection table with the specified maximum number of
+        simultaneous connections. All slots are initialized to the closed state (0)
+        with zeroed address and port fields.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxConnections
+        self.count = 0
+        self.lock = new Spinlock()
+        self.localAddrs = new Memory<I64>( maxConnections )
+        self.localPorts = new Memory<I64>( maxConnections )
+        self.remoteAddrs = new Memory<I64>( maxConnections )
+        self.remotePorts = new Memory<I64>( maxConnections )
+        self.states = new Memory<I64>( maxConnections )
+        self.seqNumbers = new Memory<I64>( maxConnections )
+        self.ackNumbers = new Memory<I64>( maxConnections )
+        self.windows = new Memory<I64>( maxConnections )
+        I64 slotIndex = 0
+        while slotIndex < maxConnections:
+            self.states.set( slotIndex, 0 )
+            self.localAddrs.set( slotIndex, 0 )
+            self.localPorts.set( slotIndex, 0 )
+            self.remoteAddrs.set( slotIndex, 0 )
+            self.remotePorts.set( slotIndex, 0 )
+            self.seqNumbers.set( slotIndex, 0 )
+            self.ackNumbers.set( slotIndex, 0 )
+            self.windows.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function create( self, I64 localAddr, I64 localPort, I64 remoteAddr, I64 remotePort, I64 state ) -> I64:
+        
+        """
+        Creates a new connection entry in the table with the specified 4-tuple (local
+        address, local port, remote address, remote port) and initial TCP state. The
+        window size is initialized to 65535 bytes. Returns the slot index on success,
+        or -1 if the table is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.lock.lock()
+        if self.count >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.states.get( slotIndex ) == 0:
+                self.localAddrs.set( slotIndex, localAddr )
+                self.localPorts.set( slotIndex, localPort )
+                self.remoteAddrs.set( slotIndex, remoteAddr )
+                self.remotePorts.set( slotIndex, remotePort )
+                self.states.set( slotIndex, state )
+                self.seqNumbers.set( slotIndex, 0 )
+                self.ackNumbers.set( slotIndex, 0 )
+                self.windows.set( slotIndex, 65535 )
+                self.count = self.count + 1
+                self.lock.unlock()
+                return slotIndex
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return 0 - 1
+    
+    public function find( self, I64 localAddr, I64 localPort, I64 remoteAddr, I64 remotePort ) -> I64:
+        
+        """
+        Searches for a connection matching the given 4-tuple of local address, local port,
+        remote address, and remote port. Only active connections (state not equal to 0) are
+        considered. Returns the slot index if found, or -1 if no matching connection exists.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.states.get( slotIndex ) != 0:
+                if self.localAddrs.get( slotIndex ) == localAddr and self.localPorts.get( slotIndex ) == localPort:
+                    if self.remoteAddrs.get( slotIndex ) == remoteAddr and self.remotePorts.get( slotIndex ) == remotePort:
+                        return slotIndex
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function findListener( self, I64 localPort ) -> I64:
+        
+        """
+        Searches for a listening socket (state 1 = Listen) bound to the specified local
+        port. This is used during incoming connection handling to find the server socket
+        that should accept the connection. Returns the slot index if found, or -1 otherwise.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.states.get( slotIndex ) == 1 and self.localPorts.get( slotIndex ) == localPort:
+                return slotIndex
+            slotIndex = slotIndex + 1
+        return 0 - 1
+    
+    public function getState( self, I64 slot ) -> I64:
+        
+        """
+        Returns the TCP state of the connection at the specified slot index. Returns 0
+        (Closed) if the slot index is out of bounds.
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return 0 - 1
+        return self.states.get( slot )
+    
+    public function setState( self, I64 slot, I64 state ) -> Void:
+        
+        """
+        Sets the TCP state of the connection at the specified slot index. The state value
+        corresponds to TcpState enum values. No action is taken if the slot is out of bounds.
+        """
+        
+        if slot >= 0 and slot < self.capacity:
+            self.states.set( slot, state )
+    
+    public function updateSeq( self, I64 slot, I64 seq, I64 ack ) -> Void:
+        
+        """
+        Updates the sequence number and acknowledgment number for the connection at the
+        specified slot index. These values track the TCP byte stream positions for both
+        directions of the connection. No action is taken if the slot is out of bounds.
+        """
+        
+        if slot >= 0 and slot < self.capacity:
+            self.seqNumbers.set( slot, seq )
+            self.ackNumbers.set( slot, ack )
+    
+    public function close( self, I64 slot ) -> Boolean:
+        
+        """
+        Closes the connection at the specified slot index by resetting its state to Closed
+        and clearing all associated address, port, and sequence number fields. The slot is
+        freed for reuse. Returns True if the connection was successfully closed, or False
+        if the slot is out of bounds or already closed.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return False
+        if self.states.get( slot ) == 0:
+            return False
+        self.lock.lock()
+        self.states.set( slot, 0 )
+        self.localAddrs.set( slot, 0 )
+        self.localPorts.set( slot, 0 )
+        self.remoteAddrs.set( slot, 0 )
+        self.remotePorts.set( slot, 0 )
+        self.seqNumbers.set( slot, 0 )
+        self.ackNumbers.set( slot, 0 )
+        self.count = self.count - 1
+        self.lock.unlock()
+        return True
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of active connections currently tracked in the table. """
+        
+        return self.count
+    
+    public function getSeqNumber( self, I64 slot ) -> I64:
+        
+        """
+        Returns the current sequence number for the connection at the specified slot index.
+        Returns 0 if the slot is out of bounds.
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return 0
+        return self.seqNumbers.get( slot )
+    
+    public function getAckNumber( self, I64 slot ) -> I64:
+        
+        """
+        Returns the current acknowledgment number for the connection at the specified slot
+        index. Returns 0 if the slot is out of bounds.
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return 0
+        return self.ackNumbers.get( slot )
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the TCP connection table,
+        including address, port, state, sequence number, acknowledgment number, and
+        window size arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.localAddrs.free()
+        self.localPorts.free()
+        self.remoteAddrs.free()
+        self.remotePorts.free()
+        self.states.free()
+        self.seqNumbers.free()
+        self.ackNumbers.free()
+        self.windows.free()
+
+export {
+    TCP_FIN,
+    TCP_SYN,
+    TCP_RST,
+    TCP_PSH,
+    TCP_ACK,
+    TCP_URG,
+    TcpState,
+    TCP_HEADER_SIZE,
+    TcpHeader,
+    TcpConnectionTable
+}

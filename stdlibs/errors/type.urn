@@ -1,0 +1,71 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-12 03:30
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/errors/type.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# TypeError for runtime type mismatch conditions where an operation
+# encounters an unexpected type that cannot be coerced or processed.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.type
+
+from uranite.errors.error import Error
+
+public class TypeError extends Error:
+
+    """
+    Raised when an operation encounters a value of an unexpected type
+    at runtime.
+
+    Stores the expected and actual type names for diagnostic messages.
+    The error message is automatically formatted from these values.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    public String expectedType
+    """ The type name that was expected by the operation. """
+    public String actualType
+    """ The type name that was actually encountered. """
+
+    public function TypeError( self, String expectedType, String actualType ) -> Void:
+
+        """
+        Construct a TypeError from the expected and actual type names.
+
+        The error message is automatically formatted as:
+        "expected type '<expected>' but got '<actual>'"
+
+        Parameters:
+            expectedType (String):
+                The type name the operation expected.
+            actualType (String):
+                The type name that was actually received.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.expectedType = expectedType
+        self.actualType = actualType
+        String errorMessage = "expected type '" + expectedType + "' but got '" + actualType + "'"
+        parent( errorMessage, 0, None )
+
+export {
+    TypeError
+}

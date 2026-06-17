@@ -1,0 +1,60 @@
+package testing
+
+from uranite.os.driver.driver import {
+    DriverState, DriverDescriptor, DriverRegistry
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Driver Tests ===" )
+
+    assertEqualI64( 0, DriverState.Unloaded as I64, "Unloaded" )
+    assertEqualI64( 1, DriverState.Probing as I64, "Probing" )
+    assertEqualI64( 2, DriverState.Initialized as I64, "Initialized" )
+    assertEqualI64( 3, DriverState.Attached as I64, "Attached" )
+    assertEqualI64( 4, DriverState.Failed as I64, "Failed" )
+    assertEqualI64( 5, DriverState.Detached as I64, "Detached" )
+    putsln( "enum OK" )
+
+    DriverDescriptor desc = new DriverDescriptor()
+    assertEqualI64( 0, desc.driverId, "driverId 0" )
+    assertEqualI64( 0, desc.state, "state 0" )
+    assertTrue( desc.isAvailable(), "available" )
+    assertFalse( desc.isBound(), "not bound" )
+    assertTrue( desc.matches( 0, 0, 0 ), "matches wildcard" )
+    assertTrue( desc.matches( 0x8086, 0x1234, 0x02 ), "matches any" )
+    putsln( "DriverDescriptor OK" )
+
+    DriverRegistry reg = new DriverRegistry( 16 )
+    assertEqualI64( 0, reg.getCount(), "count 0" )
+
+    Boolean ok = reg.registerDriver( 1, 0x8086, 0, 0 )
+    assertTrue( ok, "registerDriver" )
+    assertEqualI64( 1, reg.getCount(), "count 1" )
+    putsln( "register OK" )
+
+    I64 found = reg.findDriverForDevice( 0x8086, 0x1234, 0x02 )
+    assertEqualI64( 1, found, "findDriver" )
+
+    I64 notFound = reg.findDriverForDevice( 0x1234, 0x5678, 0x01 )
+    assertEqualI64( -1, notFound, "findDriver miss" )
+    putsln( "find OK" )
+
+    reg.bindDriver( 1, 0, 2, 0 )
+    assertEqualI64( 3, reg.getDriverState( 1 ), "bound state" )
+
+    reg.unbindDriver( 1 )
+    assertEqualI64( 5, reg.getDriverState( 1 ), "unbound state" )
+    putsln( "bind/unbind OK" )
+
+    reg.unregisterDriver( 1 )
+    assertEqualI64( 0, reg.getCount(), "count after unregister" )
+    putsln( "unregister OK" )
+
+    reg.destroy()
+
+    putsln( "=== All driver tests passed ===" )
+    return 0

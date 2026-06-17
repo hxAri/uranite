@@ -1,0 +1,181 @@
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/examples/
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Demonstrates match expressions and switch statements for control flow.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package main
+
+from uranite.io.console import puts
+
+# Match expression — inline value selection
+function grade( I64 score ) -> String:
+    
+    """
+    Determines the grade label based on a numerical score using a match expression.
+    
+    Parameters:
+        score: The numerical score.
+    
+    Returns:
+        A string representing the grade.
+    """
+    
+    return match score in 100 => "perfect", 90 => "A", 80 => "B", 70 => "C", * => "F"
+
+function fizzbuzz( I64 n ) -> String:
+    
+    """
+    Standard FizzBuzz logic implementation.
+    
+    Parameters:
+        n: The number to evaluate.
+    
+    Returns:
+        "Fizz", "Buzz", "FizzBuzz", or "number".
+    """
+    
+    I64 mod3 = n % 3
+    I64 mod5 = n % 5
+    if mod3 == 0:
+        if mod5 == 0:
+            return "FizzBuzz"
+        return "Fizz"
+    if mod5 == 0:
+        return "Buzz"
+    return "number"
+
+# Switch statement — multi-branch control flow
+function dayName( I64 day ) -> String:
+    
+    """
+    Maps a day number to its corresponding name using a switch statement.
+    
+    Parameters:
+        day: The day number (0-6).
+    
+    Returns:
+        The name of the day or "Invalid".
+    """
+    
+    switch day:
+        case 0:
+            return "Sunday"
+        case 1:
+            return "Monday"
+        case 2:
+            return "Tuesday"
+        case 3:
+            return "Wednesday"
+        case 4:
+            return "Thursday"
+        case 5:
+            return "Friday"
+        case 6:
+            return "Saturday"
+        case *:
+            return "Invalid"
+    return "Unknown"
+
+function classify( I64 n ) -> String:
+    
+    """
+    Classifies a number as zero, one, positive, or negative.
+    
+    Parameters:
+        n: The number to classify.
+    
+    Returns:
+        A string classification.
+    """
+    
+    switch n:
+        case 0:
+            return "zero"
+        case 1:
+            return "one"
+        case *:
+            if n > 0:
+                return "positive"
+            return "negative"
+    return "?"
+
+# Switch with break (fallthrough prevention)
+function season( I64 month ) -> Void:
+    
+    """
+    Prints the season corresponding to a month number.
+    
+    Parameters:
+        month: The month number (1-12).
+    """
+    
+    switch month:
+        case 3:
+            puts( "Spring" )
+            break
+        case 6:
+            puts( "Summer" )
+            break
+        case 9:
+            puts( "Autumn" )
+            break
+        case 12:
+            puts( "Winter" )
+            break
+        case *:
+            puts( "Other month" )
+            break
+
+public function main() -> I32:
+    
+    """
+    The main entry point for the match and switch demonstration.
+    
+    Returns:
+        I32 exit code.
+    """
+    
+    # Match expression tests
+    puts( "grade(100) = ", grade( 100 ) )
+    puts( "grade(90) = ", grade( 90 ) )
+    puts( "grade(80) = ", grade( 80 ) )
+    puts( "grade(50) = ", grade( 50 ) )
+
+    # Match in variable assignment
+    I64 x = 42
+    String label = match x in 0 => "zero", 42 => "answer", * => "other"
+    puts( "match 42 = ", label )
+
+    # Switch tests
+    puts( "day(0) = ", dayName( 0 ) )
+    puts( "day(3) = ", dayName( 3 ) )
+    puts( "day(6) = ", dayName( 6 ) )
+    puts( "day(9) = ", dayName( 9 ) )
+
+    puts( "classify(0) = ", classify( 0 ) )
+    puts( "classify(1) = ", classify( 1 ) )
+    puts( "classify(5) = ", classify( 5 ) )
+
+    # Switch with break
+    season( 3 )
+    season( 6 )
+    season( 12 )
+    season( 7 )
+
+    puts( "all match/switch tests passed" )
+    return 0

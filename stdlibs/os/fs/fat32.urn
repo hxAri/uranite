@@ -1,0 +1,293 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/fs/fat32.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# FAT32 filesystem driver skeleton with in-memory representations of the BIOS Parameter Block, directory entries, and a FileSystem interface implementation for VFS integration.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.fs.fat32
+
+from uranite.memory.memory import Memory
+from uranite.os.vfs.filesystem import FileSystem
+
+public class Fat32Info:
+    
+    """
+    In-memory representation of FAT32 BIOS Parameter Block (BPB) fields needed
+    to navigate the FAT32 filesystem. Stores sector and cluster geometry, reserved
+    sector count, FAT table count and size, root directory cluster, and the
+    computed data region start sector.
+    """
+    
+    public I64 bytesPerSector
+    public I64 sectorsPerCluster
+    public I64 reservedSectors
+    public I64 numberOfFats
+    public I64 sectorsPerFat
+    public I64 rootCluster
+    public I64 totalSectors
+    public I64 dataStartSector
+    
+    public function Fat32Info( self ) -> Void:
+        
+        """
+        Construct a FAT32 info structure with standard default values:
+        512 bytes per sector, 8 sectors per cluster, 32 reserved sectors,
+        2 FAT copies, and root directory starting at cluster 2.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.bytesPerSector = 512
+        self.sectorsPerCluster = 8
+        self.reservedSectors = 32
+        self.numberOfFats = 2
+        self.sectorsPerFat = 0
+        self.rootCluster = 2
+        self.totalSectors = 0
+        self.dataStartSector = 0
+    
+    public function clusterToSector( self, I64 cluster ) -> I64:
+        
+        """
+        Convert a FAT32 cluster number to the corresponding sector number
+        on disk. Cluster numbering starts at 2 (clusters 0 and 1 are reserved),
+        so the computation subtracts 2 before multiplying by sectors per cluster.
+        """
+        
+        return self.dataStartSector + ( cluster - 2 ) * self.sectorsPerCluster
+    
+    public function getBytesPerCluster( self ) -> I64:
+        
+        """
+        Return the number of bytes per cluster (bytes per sector times sectors per cluster).
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return self.bytesPerSector * self.sectorsPerCluster
+
+public class Fat32DirEntry:
+    
+    """
+    In-memory representation of a FAT32 directory entry. The on-disk format is
+    32 bytes; this class expands it into accessible fields including the 8.3
+    filename stored as integer values, file attributes, starting cluster number,
+    and file size.
+    """
+    
+    public Memory<I64> name
+    public I64 nameLength
+    public I64 attributes
+    public I64 firstCluster
+    public I64 fileSize
+    
+    public function Fat32DirEntry( self ) -> Void:
+        
+        """
+        Construct a FAT32 directory entry with an 11-character name buffer
+        (8.3 format) and all fields initialized to zero.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.name = new Memory<I64>( 11 )
+        self.nameLength = 0
+        self.attributes = 0
+        self.firstCluster = 0
+        self.fileSize = 0
+    
+    public function isDirectory( self ) -> Boolean:
+        
+        """ Return whether this entry is a directory (attribute bit 4 set). """
+        
+        return ( self.attributes & 16 ) != 0
+    
+    public function isReadOnly( self ) -> Boolean:
+        
+        """ Return whether this entry is marked read-only (attribute bit 0 set). """
+        
+        return ( self.attributes & 1 ) != 0
+    
+    public function isHidden( self ) -> Boolean:
+        
+        """ Return whether this entry is hidden (attribute bit 1 set). """
+        
+        return ( self.attributes & 2 ) != 0
+    
+    public function isSystem( self ) -> Boolean:
+        
+        """ Return whether this entry is a system file (attribute bit 2 set). """
+        
+        return ( self.attributes & 4 ) != 0
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Free the name buffer memory.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.name.free()
+
+public class Fat32FileSystem implements FileSystem:
+    
+    """
+    FAT32 filesystem driver skeleton implementing the FileSystem interface
+    for integration with the Virtual File System layer. Provides stub
+    implementations for read, write, lookup, create, remove, and sync
+    operations that will be completed with actual FAT32 disk I/O logic.
+    """
+    
+    protect Fat32Info info
+    protect I64 deviceId
+    protect I64 filesystemId
+    
+    public function Fat32FileSystem( self, I64 devId, I64 fsId ) -> Void:
+        
+        """
+        Construct a FAT32 filesystem driver bound to the specified device
+        and filesystem IDs. Initializes the BPB info with default values.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.info = new Fat32Info()
+        self.deviceId = devId
+        self.filesystemId = fsId
+    
+    public function read( self, I64 inodeNumber, Memory<I8> buffer, I64 offset, I64 length ) -> I64:
+        
+        """
+        Read data from the file identified by inode number into the buffer
+        starting at the given offset for the specified length. Returns the
+        number of bytes read. Currently returns 0 as a stub implementation.
+        """
+        
+        return 0
+    
+    public function write( self, I64 inodeNumber, Memory<I8> buffer, I64 offset, I64 length ) -> I64:
+        
+        """
+        Write data from the buffer to the file identified by inode number
+        starting at the given offset for the specified length. Returns the
+        number of bytes written. Currently returns 0 as a stub implementation.
+        """
+        
+        return 0
+    
+    public function lookup( self, I64 directoryInode, Memory<I8> name, I64 nameLength ) -> I64:
+        
+        """
+        Look up a file or directory by name within the directory identified
+        by its inode number. Returns the inode number of the found entry,
+        or -1 if not found. Currently returns -1 as a stub implementation.
+        """
+        
+        return 0 - 1
+    
+    public function create( self, I64 directoryInode, Memory<I8> name, I64 nameLength, I64 nodeType ) -> I64:
+        
+        """
+        Create a new file or directory entry with the given name and type
+        within the directory identified by its inode number. Returns the
+        inode number of the created entry, or -1 on failure. Currently
+        returns -1 as a stub implementation.
+        """
+        
+        return 0 - 1
+    
+    public function remove( self, I64 directoryInode, Memory<I8> name, I64 nameLength ) -> Boolean:
+        
+        """
+        Remove a file or directory entry by name from the directory identified
+        by its inode number. Returns True on success, False on failure.
+        Currently returns False as a stub implementation.
+        """
+        
+        return False
+    
+    public function getSize( self, I64 inodeNumber ) -> I64:
+        
+        """
+        Return the size in bytes of the file identified by inode number.
+        Currently returns 0 as a stub implementation.
+        """
+        
+        return 0
+    
+    public function getType( self, I64 inodeNumber ) -> I64:
+        
+        """
+        Return the type of the node identified by inode number (regular file,
+        directory, etc.). Currently returns 1 as a stub implementation.
+        """
+        
+        return 1
+    
+    public function getPermissions( self, I64 inodeNumber ) -> I64:
+        
+        """
+        Return the permission bits of the node identified by inode number.
+        Currently returns 448 (octal 0700, owner read/write/execute) as a
+        stub implementation.
+        """
+        
+        return 448
+    
+    public function sync( self ) -> Void:
+        
+        """
+        Flush all pending writes and metadata changes to the underlying
+        storage device. Currently a no-op stub implementation.
+        """
+        
+        pass
+    
+    public function getDeviceId( self ) -> I64:
+        
+        """ Return the device ID this filesystem is mounted on. """
+        
+        return self.deviceId
+    
+    public function getRootCluster( self ) -> I64:
+        
+        """
+        Return the cluster number of the root directory.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        return self.info.rootCluster
+
+export {
+    Fat32Info,
+    Fat32DirEntry,
+    Fat32FileSystem
+}

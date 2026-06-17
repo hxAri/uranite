@@ -1,0 +1,109 @@
+package testing
+
+from uranite.datetime.datetime import {
+    DateTime, now, utc, fromTimestamp,
+    isLeapYear, daysInMonth, daysInYear, nowMonotonic
+}
+from uranite.datetime.duration import Duration, fromSeconds, fromMinutes, fromHours, fromDays
+from uranite.datetime.timezone import Timezone, utcTimezone, jstTimezone
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertTrue,
+    assertFalse,
+    assertGreaterThan
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== DateTime Tests ===" )
+
+    # isLeapYear
+    assertTrue( isLeapYear( 2000 ), "2000 leap" )
+    assertFalse( isLeapYear( 1900 ), "1900 not leap" )
+    assertTrue( isLeapYear( 2024 ), "2024 leap" )
+    assertFalse( isLeapYear( 2023 ), "2023 not leap" )
+    putsln( "isLeapYear OK" )
+
+    # daysInMonth
+    assertEqualI64( 31, daysInMonth( 2024, 1 ), "jan days" )
+    assertEqualI64( 29, daysInMonth( 2024, 2 ), "feb leap days" )
+    assertEqualI64( 28, daysInMonth( 2023, 2 ), "feb normal days" )
+    assertEqualI64( 30, daysInMonth( 2024, 4 ), "apr days" )
+    putsln( "daysInMonth OK" )
+
+    # daysInYear
+    assertEqualI64( 366, daysInYear( 2024 ), "2024 days" )
+    assertEqualI64( 365, daysInYear( 2023 ), "2023 days" )
+    putsln( "daysInYear OK" )
+
+    # utc constructor + toTimestamp + fromTimestamp
+    DateTime dt1 = utc( 2026, 6, 6, 12, 30, 45 )
+    I64 ts = dt1.toTimestamp()
+    assertGreaterThan( ts, 0, "timestamp positive" )
+    DateTime dt2 = fromTimestamp( ts, 0, 0 )
+    putsln( "toTimestamp/fromTimestamp OK" )
+
+    # dayOfWeek (1970-01-01 = Thursday = 4)
+    DateTime epoch = utc( 1970, 1, 1, 0, 0, 0 )
+    assertEqualI64( 4, epoch.dayOfWeek(), "epoch is Thursday" )
+    putsln( "dayOfWeek OK" )
+
+    # dayOfYear (Jan 15 = day 15)
+    DateTime jan15 = utc( 2024, 1, 15, 0, 0, 0 )
+    assertEqualI64( 15, jan15.dayOfYear(), "Jan 15 dayOfYear" )
+    putsln( "dayOfYear OK" )
+
+    # Duration
+    Duration d1 = fromSeconds( 90 )
+    assertEqualI64( 90, d1.totalSeconds(), "90s totalSeconds" )
+    assertEqualI64( 90000, d1.totalMillis(), "90s totalMillis" )
+
+    Duration d2 = fromMinutes( 5 )
+    assertEqualI64( 300, d2.totalSeconds(), "5min totalSeconds" )
+
+    Duration d3 = fromHours( 2 )
+    assertEqualI64( 7200, d3.totalSeconds(), "2hr totalSeconds" )
+
+    Duration d4 = fromDays( 1 )
+    assertEqualI64( 86400, d4.totalSeconds(), "1day totalSeconds" )
+    putsln( "Duration OK" )
+
+    # Duration arithmetic
+    Duration d5 = d2.add( d3 )
+    assertEqualI64( 7500, d5.totalSeconds(), "5min+2hr" )
+    Duration d6 = d3.subtract( d2 )
+    assertEqualI64( 6900, d6.totalSeconds(), "2hr-5min" )
+    putsln( "Duration arithmetic OK" )
+
+    # DateTime add/subtract duration
+    DateTime dt4 = utc( 2026, 6, 6, 12, 0, 0 )
+    Duration oneHour = fromHours( 1 )
+    DateTime dt5 = dt4.addDuration( oneHour )
+    DateTime dt6 = dt4.subtractDuration( oneHour )
+    assertTrue( dt6.isBefore( dt4 ), "subtracted isBefore" )
+    assertTrue( dt5.isAfter( dt4 ), "added isAfter" )
+    assertTrue( dt4.isEqual( dt4 ), "self isEqual" )
+    putsln( "DateTime comparison OK" )
+
+    # diffSeconds
+    I64 diff = dt5.diffSeconds( dt6 )
+    assertEqualI64( 7200, diff, "diffSeconds 2hr" )
+    putsln( "diffSeconds OK" )
+
+    # now + nowMonotonic
+    DateTime current = now()
+    assertGreaterThan( current.toTimestamp(), 0, "now timestamp positive" )
+    I64 mono = nowMonotonic()
+    assertGreaterThan( mono, 0, "nowMonotonic positive" )
+    putsln( "now/nowMonotonic OK" )
+
+    # Timezone
+    Timezone tz = utcTimezone()
+    assertEqualI64( 0, tz.offsetHours(), "UTC offset 0" )
+    Timezone jst = jstTimezone()
+    assertEqualI64( 9, jst.offsetHours(), "JST offset 9" )
+    DateTime converted = jst.convertFrom( dt4 )
+    putsln( "Timezone OK" )
+
+    putsln( "=== All DateTime tests passed ===" )
+    return 0

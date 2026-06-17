@@ -1,0 +1,73 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/collection/map.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Defines the Map interface, a key-value associative container that maps keys
+# of type K to values of type V, extending the Collection interface.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.collection.map
+
+from uranite.collection.collection import Collection
+from uranite.collection.set import Set
+from uranite.collection.sequence import Sequence
+from uranite.collection.pair import Pair
+from uranite.operators.indexable import Indexable
+from uranite.language.boolean import Boolean
+from uranite.language.void import Void
+from uranite.language.callable import Callable
+
+public interface Map<K, V> extends Collection<V>, Indexable<K, V>:
+    
+    """
+    Key-value associative container mapping keys of type K to values of type V.
+    
+    Extends Collection and Indexable to provide key-based lookup, containment
+    checks, and views over keys, values, and entries.
+    """
+    
+    public function getOrDefault( K key, V defaultValue ) -> V:
+        
+        """ Retrieve the value for the given key, or return the default value if absent. """
+    
+    public function containsKey( K key ) -> Boolean:
+        
+        """ Check whether the given key exists in the map. """
+    
+    public function containsValue( V value ) -> Boolean:
+        
+        """ Check whether the given value exists in the map. """
+    
+    public property keys() -> Set<K>:
+        
+        """ Return a set containing all keys in the map. """
+    
+    public property values() -> Sequence<V>:
+        
+        """ Return a sequence containing all values in the map. """
+    
+    public property entries() -> Set<Pair<K, V>>:
+        
+        """ Return a set of all key-value pairs in the map. """
+    
+    public function forEach( Callable<Void,<K,V>> action ) -> Void:
+        
+        """ Execute the given action for each key-value pair in the map. """
+
+
+export {
+    Map
+}

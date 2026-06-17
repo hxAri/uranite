@@ -1,0 +1,78 @@
+package testing
+
+from uranite.os.power.power import {
+    CPU_STATE_ACTIVE, CPU_STATE_HALT, CPU_STATE_STOP_CLOCK, CPU_STATE_DEEP_SLEEP,
+    SYSTEM_RUNNING, SYSTEM_STANDBY, SYSTEM_SUSPEND, SYSTEM_OFF,
+    POWER_EVENT_SUSPEND, POWER_EVENT_RESUME, POWER_EVENT_SHUTDOWN, POWER_EVENT_REBOOT,
+    PowerManager
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS Power Tests ===" )
+
+    assertEqualI64( 0, CPU_STATE_ACTIVE, "cpuActive" )
+    assertEqualI64( 1, CPU_STATE_HALT, "cpuHalt" )
+    assertEqualI64( 2, CPU_STATE_STOP_CLOCK, "cpuStopClock" )
+    assertEqualI64( 3, CPU_STATE_DEEP_SLEEP, "cpuDeepSleep" )
+    assertEqualI64( 0, SYSTEM_RUNNING, "sysRunning" )
+    assertEqualI64( 1, SYSTEM_STANDBY, "sysStandby" )
+    assertEqualI64( 3, SYSTEM_SUSPEND, "sysSuspend" )
+    assertEqualI64( 5, SYSTEM_OFF, "sysOff" )
+    assertEqualI64( 1, POWER_EVENT_SUSPEND, "evSuspend" )
+    assertEqualI64( 2, POWER_EVENT_RESUME, "evResume" )
+    assertEqualI64( 3, POWER_EVENT_SHUTDOWN, "evShutdown" )
+    assertEqualI64( 4, POWER_EVENT_REBOOT, "evReboot" )
+    putsln( "constants OK" )
+
+    PowerManager pm = new PowerManager( 8 )
+    assertEqualI64( 0, pm.systemState, "init sysState" )
+    assertEqualI64( 0, pm.cpuState, "init cpuState" )
+    assertEqualI64( 0, pm.getSystemState(), "getSystemState" )
+    assertEqualI64( 0, pm.getCpuState(), "getCpuState" )
+    assertEqualI64( 0, pm.getCallbackCount(), "callbacks 0" )
+
+    I64 slot0 = pm.registerCallback( 1, 100 )
+    assertTrue( slot0 >= 0, "register suspend cb" )
+    assertEqualI64( 1, pm.getCallbackCount(), "callbacks 1" )
+
+    I64 slot1 = pm.registerCallback( 3, 200 )
+    assertTrue( slot1 >= 0, "register shutdown cb" )
+    assertEqualI64( 2, pm.getCallbackCount(), "callbacks 2" )
+
+    assertEqualI64( 1, pm.countCallbacksForEvent( 1 ), "count suspend" )
+    assertEqualI64( 1, pm.countCallbacksForEvent( 3 ), "count shutdown" )
+    assertEqualI64( 0, pm.countCallbacksForEvent( 2 ), "count resume" )
+    putsln( "callbacks OK" )
+
+    Boolean unregOk = pm.unregisterCallback( slot0 )
+    assertTrue( unregOk, "unregister" )
+    assertEqualI64( 1, pm.getCallbackCount(), "callbacks after unreg" )
+    assertFalse( pm.unregisterCallback( -1 ), "unregister invalid" )
+    putsln( "unregister OK" )
+
+    Boolean suspOk = pm.suspend()
+    assertTrue( suspOk, "suspend" )
+    assertEqualI64( 3, pm.getSystemState(), "state suspended" )
+    assertFalse( pm.suspend(), "suspend again fails" )
+
+    Boolean resOk = pm.resume()
+    assertTrue( resOk, "resume" )
+    assertEqualI64( 0, pm.getSystemState(), "state running" )
+    assertEqualI64( 0, pm.getCpuState(), "cpu active" )
+    assertFalse( pm.resume(), "resume not suspended" )
+    putsln( "suspend/resume OK" )
+
+    Boolean shutOk = pm.shutdown()
+    assertTrue( shutOk, "shutdown" )
+    assertEqualI64( 5, pm.getSystemState(), "state off" )
+    assertFalse( pm.shutdown(), "shutdown again fails" )
+    putsln( "shutdown OK" )
+
+    pm.destroy()
+
+    putsln( "=== All power tests passed ===" )
+    return 0

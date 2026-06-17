@@ -1,0 +1,250 @@
+package uranite.async.task
+
+from uranite.async.context import makeContext
+from uranite.async.errors import AsyncRuntimeError
+from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.memory.memory import Memory
+from uranite.os.syscall.invoke import syscall2, syscall6
+from uranite.os.syscall.result import SyscallResult
+
+const I64 SYS_MMAP = 9
+""" Syscall number for mmap on x86-64 Linux. """
+
+const I64 SYS_MUNMAP = 11
+""" Syscall number for munmap on x86-64 Linux. """
+
+const I64 PROT_RW = 3
+""" Memory protection flags for read+write access (PROT_READ | PROT_WRITE). """
+
+const I64 MAP_PRIVATE_ANON = 34
+""" Mapping flags for private anonymous memory (MAP_PRIVATE | MAP_ANONYMOUS). """
+
+const I64 DEFAULT_STACK_SIZE = 65536
+""" Default stack size in bytes (64 KiB) allocated for each task. """
+
+const I64 STATE_CREATED = 0
+""" Task has been created but not yet started. """
+
+const I64 STATE_RUNNING = 1
+""" Task is currently executing on the CPU. """
+
+const I64 STATE_SUSPENDED = 2
+""" Task voluntarily yielded or is waiting for another task. """
+
+const I64 STATE_IO_WAITING = 3
+""" Task is blocked waiting for I/O readiness via epoll. """
+
+const I64 STATE_COMPLETED = 4
+""" Task has finished execution successfully. """
+
+const I64 STATE_FAILED = 5
+""" Task terminated due to an error. """
+
+const I64 FIELD_ID = 0
+""" Offset index for the task's unique identifier. """
+
+const I64 FIELD_STATE = 1
+""" Offset index for the task's current state. """
+
+const I64 FIELD_ENTRY_FN = 2
+""" Offset index for the task's entry function address. """
+
+const I64 FIELD_USER_DATA = 3
+""" Offset index for user-defined data associated with the task. """
+
+const I64 FIELD_STACK_BASE = 4
+""" Offset index for the base address of the task's stack. """
+
+const I64 FIELD_STACK_SIZE = 5
+""" Offset index for the size of the task's stack in bytes. """
+
+const I64 FIELD_CONTEXT_RSP = 6
+""" Offset index for the saved RSP value used in context switching. """
+
+const I64 FIELD_RESULT = 7
+""" Offset index for the task's return value after completion. """
+
+const I64 FIELD_HAS_ERROR = 8
+""" Offset index for the error flag (nonzero if the task failed). """
+
+const I64 FIELD_AWAITING_ID = 9
+""" Offset index for the ID of the task this task is waiting on. """
+
+const I64 FIELD_AWAIT_FD = 10
+""" Offset index for the file descriptor this task is waiting on. """
+
+const I64 FIELD_AWAIT_EVENTS = 11
+""" Offset index for the epoll event mask this task is waiting for. """
+
+const I64 TASK_FIELD_COUNT = 12
+""" Total number of I64 fields in the flat task structure. """
+
+public function createTask( I64 id, I64 entryFn, I64 userData ) -> Memory<I64>:
+    
+    """
+    Allocate and initialize a new task structure as a flat Memory<I64> array.
+    All fields are set to their initial values with the task in the created
+    state.
+    
+    Parameters:
+        id (I64):
+            Unique identifier to assign to the task.
+        entryFn (I64):
+            Address of the function the task will execute.
+        userData (I64):
+            User-defined data associated with the task.
+    
+    Returns:
+        Memory<I64>:
+            The initialized task structure with TASK_FIELD_COUNT slots.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    Memory<I64> task = new Memory<I64>( TASK_FIELD_COUNT )
+    task.set( FIELD_ID, id )
+    task.set( FIELD_STATE, STATE_CREATED )
+    task.set( FIELD_ENTRY_FN, entryFn )
+    task.set( FIELD_USER_DATA, userData )
+    task.set( FIELD_STACK_BASE, 0 )
+    task.set( FIELD_STACK_SIZE, DEFAULT_STACK_SIZE )
+    task.set( FIELD_CONTEXT_RSP, 0 )
+    task.set( FIELD_RESULT, 0 )
+    task.set( FIELD_HAS_ERROR, 0 )
+    task.set( FIELD_AWAITING_ID, -1 )
+    task.set( FIELD_AWAIT_FD, -1 )
+    task.set( FIELD_AWAIT_EVENTS, 0 )
+    return task
+
+public function taskAllocateStack( Memory<I64> task ) -> Void:
+    
+    """
+    Allocate a private anonymous memory region for the task's execution stack
+    using the mmap syscall. The stack base address is stored in the task struct.
+    
+    Parameters:
+        task (Memory<I64>):
+            The task structure to allocate a stack for.
+    
+    Raises:
+        AsyncRuntimeError:
+            If the mmap syscall fails to allocate stack memory.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 size = task.get( FIELD_STACK_SIZE )
+    SyscallResult syscallResult = syscall6( SYS_MMAP, 0, size, PROT_RW, MAP_PRIVATE_ANON, -1, 0 )
+    if syscallResult.isError():
+        raise new AsyncRuntimeError( "mmap stack allocation failed", 0, None )
+    task.set( FIELD_STACK_BASE, syscallResult.value() )
+
+public function taskInitContext( Memory<I64> task, I64 trampolineFn ) -> Void:
+    
+    """
+    Prepare the task's execution context by constructing an initial register
+    frame on its stack. The context will start execution at the trampoline
+    function when first resumed.
+    
+    Parameters:
+        task (Memory<I64>):
+            The task structure whose context to initialize. Must have its
+            stack already allocated via taskAllocateStack.
+        trampolineFn (I64):
+            Address of the trampoline function that bootstraps task execution.
+    """
+    
+    I64 stackBase = task.get( FIELD_STACK_BASE )
+    I64 stackSize = task.get( FIELD_STACK_SIZE )
+    I64 rsp = makeContext( stackBase, stackSize, trampolineFn )
+    task.set( FIELD_CONTEXT_RSP, rsp )
+
+public function taskFreeStack( Memory<I64> task ) -> Void:
+    
+    """
+    Release the task's stack memory back to the kernel via munmap. Resets
+    the stack base to zero. Safe to call even if the stack was never allocated.
+    
+    Parameters:
+        task (Memory<I64>):
+            The task structure whose stack to free.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 stackBase = task.get( FIELD_STACK_BASE )
+    if stackBase != 0:
+        I64 stackSize = task.get( FIELD_STACK_SIZE )
+        syscall2( SYS_MUNMAP, stackBase, stackSize )
+        task.set( FIELD_STACK_BASE, 0 )
+
+public function taskIsFinished( Memory<I64> task ) -> Boolean:
+    
+    """
+    Check whether a task has reached a terminal state (completed or failed).
+    
+    Parameters:
+        task (Memory<I64>):
+            The task structure to check.
+    
+    Returns:
+        Boolean:
+            True if the task is completed or failed, False otherwise.
+    """
+    
+    I64 state = task.get( FIELD_STATE )
+    return state == STATE_COMPLETED or state == STATE_FAILED
+
+public function taskDestroy( Memory<I64> task ) -> Void:
+    
+    """
+    Fully destroy a task by freeing its stack and releasing the task structure
+    memory. The task must not be referenced after this call.
+    
+    Parameters:
+        task (Memory<I64>):
+            The task structure to destroy.
+    """
+    
+    taskFreeStack( task )
+    task.free()
+
+public function taskRspAddr( Memory<I64> task ) -> I64:
+    
+    """
+    Compute the raw memory address of the task's CONTEXT_RSP field, suitable
+    for passing directly to swapContext.
+    
+    Parameters:
+        task (Memory<I64>):
+            The task structure whose RSP address to compute.
+    
+    Returns:
+        I64:
+            The memory address of the FIELD_CONTEXT_RSP slot in the task.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    I64 basePtr = memoryToPtr( task )
+    return basePtr + FIELD_CONTEXT_RSP * 8
+
+export {
+    createTask, taskAllocateStack, taskInitContext,
+    taskFreeStack, taskIsFinished, taskDestroy, taskRspAddr,
+    FIELD_ID, FIELD_STATE, FIELD_ENTRY_FN, FIELD_USER_DATA,
+    FIELD_STACK_BASE, FIELD_STACK_SIZE, FIELD_CONTEXT_RSP,
+    FIELD_RESULT, FIELD_HAS_ERROR, FIELD_AWAITING_ID,
+    FIELD_AWAIT_FD, FIELD_AWAIT_EVENTS, TASK_FIELD_COUNT,
+    STATE_CREATED, STATE_RUNNING, STATE_SUSPENDED,
+    STATE_IO_WAITING, STATE_COMPLETED, STATE_FAILED,
+    DEFAULT_STACK_SIZE
+}

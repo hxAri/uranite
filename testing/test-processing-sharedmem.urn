@@ -1,0 +1,35 @@
+package testing
+
+from uranite.functions.runtime import {
+    uraniteSharedMemoryCreate, uraniteSharedMemoryPtr,
+    uraniteSharedMemorySize, uraniteSharedMemoryClose,
+    uraniteSharedMemoryUnlink
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertGreaterThan
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Processing SharedMemory Tests ===" )
+
+    I64 shm = uraniteSharedMemoryCreate( "/uranite_test_shm", 4096 )
+    assertGreaterThan( shm, 0, "shm handle" )
+    putsln( "create OK" )
+
+    I64 size = uraniteSharedMemorySize( shm )
+    assertEqualI64( 4096, size, "shm size 4096" )
+    putsln( "size OK" )
+
+    I64 ptr = uraniteSharedMemoryPtr( shm )
+    assertGreaterThan( ptr, 0, "shm ptr not null" )
+    putsln( "ptr OK" )
+
+    uraniteSharedMemoryClose( shm )
+    putsln( "close OK" )
+
+    uraniteSharedMemoryUnlink( "/uranite_test_shm" )
+    putsln( "unlink OK" )
+
+    putsln( "=== All shared memory tests passed ===" )
+    return 0

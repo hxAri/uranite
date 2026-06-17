@@ -1,0 +1,117 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-11 12:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/power.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# System power state management: suspend, resume, shutdown, reboot.
+# Wraps the kernel PowerManager with a simplified control interface.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.kernel.power
+
+from uranite.os.power.power import {
+    CPU_STATE_ACTIVE, CPU_STATE_HALT, CPU_STATE_STOP_CLOCK, CPU_STATE_DEEP_SLEEP,
+    SYSTEM_RUNNING, SYSTEM_STANDBY, SYSTEM_SUSPEND, SYSTEM_OFF,
+    POWER_EVENT_SUSPEND, POWER_EVENT_RESUME, POWER_EVENT_SHUTDOWN, POWER_EVENT_REBOOT,
+    PowerManager
+}
+
+public class PowerController:
+
+    """
+    System power state management providing suspend, resume, shutdown, and
+    reboot operations with callback registration for power state transitions.
+    """
+
+    public PowerManager manager
+
+    public function PowerController( self, I64 maxCallbacks ) -> Void:
+        self.manager = new PowerManager( maxCallbacks )
+
+    public function requestShutdown( self ) -> Boolean:
+
+        """ Initiate system shutdown. Returns True if shutdown sequence started. """
+
+        return self.manager.shutdown()
+
+    public function requestReboot( self ) -> Void:
+
+        """ Initiate system reboot. Does not return on success. """
+
+        self.manager.reboot()
+
+    public function suspend( self ) -> Boolean:
+
+        """ Suspend the system. Returns True when resumed successfully. """
+
+        return self.manager.suspend()
+
+    public function resume( self ) -> Boolean:
+
+        """ Resume the system from suspended state. """
+
+        return self.manager.resume()
+
+    public function haltCpu( self ) -> Void:
+
+        """ Halt the CPU until the next interrupt. """
+
+        self.manager.cpuHalt()
+
+    public function getSystemState( self ) -> I64:
+
+        """ Return the current system power state. """
+
+        return self.manager.getSystemState()
+
+    public function getCpuState( self ) -> I64:
+
+        """ Return the current CPU power state. """
+
+        return self.manager.getCpuState()
+
+    public function registerCallback( self, I64 event, I64 callbackId ) -> I64:
+
+        """
+        Register a callback for a power event (POWER_EVENT_SUSPEND, POWER_EVENT_RESUME,
+        POWER_EVENT_SHUTDOWN, POWER_EVENT_REBOOT). Returns the callback slot index.
+        """
+
+        return self.manager.registerCallback( event, callbackId )
+
+    public function unregisterCallback( self, I64 slot ) -> Boolean:
+
+        """ Unregister a previously registered power callback. """
+
+        return self.manager.unregisterCallback( slot )
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all resources held by the power controller.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.manager.destroy()
+
+export {
+    PowerController, PowerManager,
+    CPU_STATE_ACTIVE, CPU_STATE_HALT, CPU_STATE_STOP_CLOCK, CPU_STATE_DEEP_SLEEP,
+    SYSTEM_RUNNING, SYSTEM_STANDBY, SYSTEM_SUSPEND, SYSTEM_OFF,
+    POWER_EVENT_SUSPEND, POWER_EVENT_RESUME, POWER_EVENT_SHUTDOWN, POWER_EVENT_REBOOT
+}

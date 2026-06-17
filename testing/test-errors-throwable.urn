@@ -1,0 +1,46 @@
+package testing
+
+from uranite.errors.error import Error
+from uranite.errors.exception import Exception
+from uranite.errors.throwable import Throwable
+from uranite.testing.assertions import {
+    assertEqualI64,
+    assertEqualStr,
+    assertTrue
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Throwable Tests ===" )
+
+    # Error as Throwable
+    Error err = new Error( "fatal", 1, None )
+    assertEqualI64( 1, err.getCode(), "Error getCode" )
+    assertEqualStr( "fatal", err.getMessage(), "Error getMessage" )
+    assertEqualStr( "", err.getFile(), "Error getFile" )
+    assertEqualI64( 0, err.getLine(), "Error getLine" )
+    assertEqualStr( "fatal", err.toString(), "Error toString" )
+    ?Throwable errPrev = err.getPrevious()
+    assertTrue( errPrev == None, "Error getPrevious is None" )
+    putsln( "Error as Throwable OK" )
+
+    # Exception as Throwable
+    Exception ex = new Exception( "recoverable", 2, None )
+    assertEqualI64( 2, ex.getCode(), "Exception getCode" )
+    assertEqualStr( "recoverable", ex.getMessage(), "Exception getMessage" )
+    assertEqualStr( "", ex.getFile(), "Exception getFile" )
+    assertEqualI64( 0, ex.getLine(), "Exception getLine" )
+    assertEqualStr( "recoverable", ex.toString(), "Exception toString" )
+    ?Throwable exPrev = ex.getPrevious()
+    assertTrue( exPrev == None, "Exception getPrevious is None" )
+    putsln( "Exception as Throwable OK" )
+
+    # chained: Error wrapping Exception
+    Exception inner = new Exception( "inner", 10, None )
+    Error outer = new Error( "outer", 20, inner )
+    ?Throwable chain = outer.getPrevious()
+    assertTrue( chain != None, "chain getPrevious not None" )
+    putsln( "chained Throwable OK" )
+
+    putsln( "=== All throwable tests passed ===" )
+    return 0

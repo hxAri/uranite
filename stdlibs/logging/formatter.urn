@@ -1,0 +1,348 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-06 02:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/logging/formatter.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Log message formatter with pattern-based formatting.
+# Supports placeholders: {datetime}, {utcoffset}, {timestamp}, {level},
+# {level5}, {level7}, {username}, {pid}, {thread}, {program}, {program16},
+# {name}, {name40}, {message}.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.logging.formatter
+
+from uranite.logging.level import LogLevel
+from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
+from uranite.memory.allocator import alloc
+from uranite.functions.builtin import ptrToString
+from uranite.string.format import padRight, padZero, formatUtcOffset, appendTo
+from uranite.datetime.datetime import now, DateTime
+from uranite.convert.convert import intToString
+from uranite.sys.process import getpid, getUsername
+
+public const String DEFAULT_PATTERN = "{datetime}{utcoffset}   {level7}   {username}  P{pid}:T{thread}    --- [{program16}] {name40} : {message}"
+""" Default log format pattern matching the custom logger output style. """
+
+public const String SIMPLE_PATTERN = "{level} - {message}"
+""" Minimal log format pattern with only level and message. """
+
+public const String DETAILED_PATTERN = "[{timestamp}] [{level}] [{name}] {message}"
+""" Bracketed log format pattern with timestamp, level, name, and message. """
+
+public const String CLASSIC_PATTERN = "{timestamp} [{thread}] {level5} {name} -- {message}"
+""" Classic log format pattern similar to Log4j/Logback default. """
+
+public const String SLF4J_PATTERN = "{timestamp} [{thread}] {level5} {name} -- {message}"
+""" SLF4J-style log format pattern with thread, padded level, and name. """
+
+function matchPlaceholder( I64 patternPointer, I64 position, I64 patternLength, String placeholder ) -> Boolean:
+    
+    """
+    Check whether a placeholder string matches at the given position
+    in the pattern buffer.
+    
+    Parameters:
+        patternPointer (I64):
+            The memory address of the pattern string bytes.
+        position (I64):
+            The current byte offset to check from.
+        patternLength (I64):
+            The total byte length of the pattern string.
+        placeholder (String):
+            The placeholder string to match (e.g., "{level}").
+    
+    Returns:
+        Boolean:
+            True if the placeholder matches at position, False otherwise.
+    
+    Complexity:
+        Time: O(m) where m is the byte length of placeholder.
+    """
+    
+    I64 placeholderPointer = stringToPtr( placeholder )
+    I64 placeholderLength = stringLen( placeholder )
+    if position + placeholderLength > patternLength:
+        return False
+    I64 index = 0
+    while index < placeholderLength:
+        if readByteAt( patternPointer, position + index ) != readByteAt( placeholderPointer, index ):
+            return False
+        index = index + 1
+    return True
+
+public class LogFormatter:
+    
+    """
+    Pattern-based log message formatter with configurable placeholders.
+    
+    Resolves placeholder tokens in a pattern string with runtime values
+    such as timestamps, log levels, process IDs, and usernames. The pattern
+    is set at construction time and evaluated on each call to format().
+    
+    Supported placeholders: {datetime}, {utcoffset}, {timestamp}, {thread},
+    {level}, {level5}, {level7}, {username}, {pid}, {program}, {program16},
+    {name}, {name40}, {message}.
+    """
+    
+    public String pattern
+    """ The format pattern string containing placeholders. """
+    public String username
+    """ The OS username resolved at construction time via /etc/passwd. """
+    public String program
+    """ The program identifier shown in log output. """
+    public I64 utcOffsetSeconds
+    """ The UTC offset in seconds used for timestamp formatting. """
+    
+    public function LogFormatter( self, String pattern ) -> Void:
+        
+        """
+        Create a new LogFormatter with the given pattern string.
+        
+        Parameters:
+            pattern (String):
+                Format pattern with placeholders like {datetime}, {level}, {message}.
+        """
+        
+        self.pattern = pattern
+        self.username = getUsername()
+        self.program = "Uranite"
+        self.utcOffsetSeconds = 0
+    
+    public function setUsername( self, String username ) -> Void:
+        
+        """
+        Override the OS username shown in formatted output.
+        
+        Parameters:
+            username (String):
+                The username string to display.
+        """
+        
+        self.username = username
+    
+    public function setProgram( self, String program ) -> Void:
+        
+        """
+        Set the program identifier shown in formatted output.
+        
+        Parameters:
+            program (String):
+                The program name.
+        """
+        
+        self.program = program
+    
+    public function setUtcOffset( self, I64 offsetSeconds ) -> Void:
+        
+        """
+        Set the UTC offset used for timestamp formatting.
+        
+        Parameters:
+            offsetSeconds (I64):
+                The UTC offset in seconds (e.g., 25200 for +07:00).
+        """
+        
+        self.utcOffsetSeconds = offsetSeconds
+    
+    public function format( self, LogLevel level, String name, String message ) -> String:
+        
+        """
+        Format a log record into a complete log line string by resolving
+        all placeholders in self.pattern with runtime values.
+        
+        Parameters:
+            level (LogLevel):
+                The log level enum value.
+            name (String):
+                The logger name or context string.
+            message (String):
+                The log message text.
+        
+        Returns:
+            String:
+                The fully formatted log line string.
+        
+        Complexity:
+            Time: O(n) where n is the pattern length.
+            Space: O(n) for the output buffer allocation.
+        """
+        
+        DateTime dateTime = now()
+        I64 milliseconds = dateTime.nanosecond / 1000000
+        String timestamp = padZero( dateTime.year, 4 ) + "-" + padZero( dateTime.month, 2 ) + "-" + padZero( dateTime.day, 2 ) + " " + padZero( dateTime.hour, 2 ) + ":" + padZero( dateTime.minute, 2 ) + ":" + padZero( dateTime.second, 2 ) + "." + padZero( milliseconds, 3 )
+        String isoDatetime = padZero( dateTime.year, 4 ) + "-" + padZero( dateTime.month, 2 ) + "-" + padZero( dateTime.day, 2 ) + "T" + padZero( dateTime.hour, 2 ) + ":" + padZero( dateTime.minute, 2 ) + ":" + padZero( dateTime.second, 2 )
+        String utcOffsetString = formatUtcOffset( self.utcOffsetSeconds )
+        String levelString = level.name
+        String levelPadded5 = padRight( levelString, 5 )
+        String levelPadded7 = padRight( levelString, 7 )
+        String threadName = "0"
+        I64 processId = getpid()
+        String processIdString = intToString( processId )
+        String programPadded16 = padRight( self.program, 16 )
+        String namePadded40 = padRight( name, 40 )
+        I64 patternPointer = stringToPtr( self.pattern )
+        I64 patternLength = stringLen( self.pattern )
+        I64 buffer = alloc( patternLength + stringLen( timestamp ) + stringLen( levelString ) + stringLen( name ) + stringLen( message ) + stringLen( self.username ) + stringLen( processIdString ) + 256 )
+        I64 position = 0
+        I64 index = 0
+        while index < patternLength:
+            I64 character = readByteAt( patternPointer, index )
+            if character == 123:
+                if matchPlaceholder( patternPointer, index, patternLength, "{datetime}" ):
+                    position = appendTo( buffer, position, isoDatetime )
+                    index = index + 10
+                elif matchPlaceholder( patternPointer, index, patternLength, "{utcoffset}" ):
+                    position = appendTo( buffer, position, utcOffsetString )
+                    index = index + 11
+                elif matchPlaceholder( patternPointer, index, patternLength, "{timestamp}" ):
+                    position = appendTo( buffer, position, timestamp )
+                    index = index + 11
+                elif matchPlaceholder( patternPointer, index, patternLength, "{thread}" ):
+                    position = appendTo( buffer, position, threadName )
+                    index = index + 8
+                elif matchPlaceholder( patternPointer, index, patternLength, "{level7}" ):
+                    position = appendTo( buffer, position, levelPadded7 )
+                    index = index + 8
+                elif matchPlaceholder( patternPointer, index, patternLength, "{level5}" ):
+                    position = appendTo( buffer, position, levelPadded5 )
+                    index = index + 8
+                elif matchPlaceholder( patternPointer, index, patternLength, "{level}" ):
+                    position = appendTo( buffer, position, levelString )
+                    index = index + 7
+                elif matchPlaceholder( patternPointer, index, patternLength, "{username}" ):
+                    position = appendTo( buffer, position, self.username )
+                    index = index + 10
+                elif matchPlaceholder( patternPointer, index, patternLength, "{pid}" ):
+                    position = appendTo( buffer, position, processIdString )
+                    index = index + 5
+                elif matchPlaceholder( patternPointer, index, patternLength, "{program16}" ):
+                    position = appendTo( buffer, position, programPadded16 )
+                    index = index + 11
+                elif matchPlaceholder( patternPointer, index, patternLength, "{program}" ):
+                    position = appendTo( buffer, position, self.program )
+                    index = index + 9
+                elif matchPlaceholder( patternPointer, index, patternLength, "{name40}" ):
+                    position = appendTo( buffer, position, namePadded40 )
+                    index = index + 8
+                elif matchPlaceholder( patternPointer, index, patternLength, "{name}" ):
+                    position = appendTo( buffer, position, name )
+                    index = index + 6
+                elif matchPlaceholder( patternPointer, index, patternLength, "{message}" ):
+                    position = appendTo( buffer, position, message )
+                    index = index + 9
+                else:
+                    writeByteAt( buffer, position, character )
+                    position = position + 1
+                    index = index + 1
+            else:
+                writeByteAt( buffer, position, character )
+                position = position + 1
+                index = index + 1
+        writeByteAt( buffer, position, 0 )
+        return ptrToString( buffer )
+
+public function defaultFormatter() -> LogFormatter:
+    
+    """
+    Create a new LogFormatter with the default pattern.
+    
+    Returns:
+        LogFormatter:
+            A new formatter using DEFAULT_PATTERN.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new LogFormatter( DEFAULT_PATTERN )
+
+public function simpleFormatter() -> LogFormatter:
+    
+    """
+    Create a new LogFormatter with the simple pattern.
+    
+    Returns:
+        LogFormatter:
+            A new formatter using SIMPLE_PATTERN.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new LogFormatter( SIMPLE_PATTERN )
+
+public function detailedFormatter() -> LogFormatter:
+    
+    """
+    Create a new LogFormatter with the detailed pattern.
+    
+    Returns:
+        LogFormatter:
+            A new formatter using DETAILED_PATTERN.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new LogFormatter( DETAILED_PATTERN )
+
+public function classicFormatter() -> LogFormatter:
+    
+    """
+    Create a new LogFormatter with the classic pattern.
+    
+    Returns:
+        LogFormatter:
+            A new formatter using CLASSIC_PATTERN.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new LogFormatter( CLASSIC_PATTERN )
+
+public function slf4jFormatter() -> LogFormatter:
+    
+    """
+    Create a new LogFormatter with the SLF4J-style pattern.
+    
+    Returns:
+        LogFormatter:
+            A new formatter using SLF4J_PATTERN.
+    
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+    
+    return new LogFormatter( SLF4J_PATTERN )
+
+export {
+    LogFormatter,
+    defaultFormatter,
+    simpleFormatter,
+    detailedFormatter,
+    classicFormatter,
+    slf4jFormatter,
+    DEFAULT_PATTERN,
+    SIMPLE_PATTERN,
+    DETAILED_PATTERN,
+    CLASSIC_PATTERN,
+    SLF4J_PATTERN
+}

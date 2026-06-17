@@ -1,0 +1,161 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-29 14:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/scope.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Structured concurrency scope. ScopedProcess collects spawned processes
+# and joins all on scope exit, ensuring no process outlives its scope.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.process.scope
+
+from uranite.memory.memory import Memory
+from uranite.process.process import Process, ProcessRuntime, DEFAULT_PROCESS_STACK_PAGES, DEFAULT_PROCESS_PRIORITY
+from uranite.process.process-handle import ProcessHandle
+from uranite.process.errors import ProcessError
+
+const I64 MAX_SCOPED_PROCESSES = 256
+""" Maximum number of processes that can be spawned within a single scope. """
+
+public class ScopedProcess:
+    
+    """
+    Structured concurrency scope that ensures no spawned process outlives it.
+    
+    Collects all processes spawned within the scope and provides a joinAll
+    method that blocks until every process has completed, cleaning up all
+    resources. If any process crashes during joinAll, a ProcessError is
+    raised after all remaining processes have been joined.
+    """
+    
+    protect Memory<ProcessHandle> handles
+    """ Array of handles for processes spawned within this scope. """
+    protect I64 count
+    """ Number of processes currently tracked by this scope. """
+    protect I64 capacity
+    """ Maximum number of processes this scope can hold. """
+    protect ProcessRuntime runtime
+    """ The runtime used to create and manage scoped processes. """
+    
+    public function ScopedProcess( self, ProcessRuntime runtime ) -> Void:
+        
+        """
+        Construct a new process scope backed by the given runtime.
+        
+        Allocates storage for up to MAX_SCOPED_PROCESSES handles.
+        
+        Parameters:
+            runtime (ProcessRuntime):
+                The runtime providing kernel subsystem access for
+                process creation and scheduling.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.handles = new Memory<ProcessHandle>( MAX_SCOPED_PROCESSES )
+        self.count = 0
+        self.capacity = MAX_SCOPED_PROCESSES
+        self.runtime = runtime
+    
+    public function spawn( self, I64 entryAddr ) -> I64:
+        
+        """
+        Spawn a new process within this scope.
+        
+        Creates a process with default stack size and priority, starts it
+        at the given entry address, and registers a handle for later join.
+        The process receives its process ID as the first argument (rdi).
+        
+        Parameters:
+            entryAddr (I64):
+                The address of the function to execute as the process
+                entry point.
+        
+        Returns:
+            I64:
+                The unique process ID of the newly spawned process.
+        
+        Raises:
+            ProcessError:
+                If the scope has reached its maximum process capacity.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if self.count >= self.capacity:
+            raise new ProcessError( "Scope process limit reached", 4, None )
+        
+        I64 processId = self.runtime.allocateProcessId()
+        Process process = new Process( self.runtime, processId, DEFAULT_PROCESS_STACK_PAGES, DEFAULT_PROCESS_PRIORITY )
+        process.start( entryAddr )
+        
+        ProcessHandle handle = new ProcessHandle( process, self.runtime )
+        self.handles.set( self.count, handle )
+        self.count = self.count + 1
+        
+        return processId
+    
+    public function joinAll( self ) -> Void:
+        
+        """
+        Block until all spawned processes have completed and clean up resources.
+        
+        Joins every process in the scope in order of creation. If any process
+        crashes, the remaining processes are still joined before raising a
+        ProcessError. The handle array is freed regardless of outcome.
+        
+        Raises:
+            ProcessError:
+                If one or more scoped processes crashed during execution.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        Boolean anyCrashed = False
+        I64 processIndex = 0
+        while processIndex < self.count:
+            ProcessHandle handle = self.handles.get( processIndex )
+            try:
+                handle.join()
+            except as e:
+                anyCrashed = True
+            processIndex = processIndex + 1
+        
+        self.handles.free()
+        
+        if anyCrashed:
+            raise new ProcessError( "One or more scoped processes crashed", 5, None )
+    
+    public function getProcessCount( self ) -> I64:
+        
+        """
+        Return the number of processes currently tracked by this scope.
+        
+        Returns:
+            I64:
+                The count of spawned processes.
+        """
+        
+        return self.count
+
+export {
+    ScopedProcess
+}

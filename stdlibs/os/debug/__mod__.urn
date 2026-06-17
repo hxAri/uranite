@@ -1,0 +1,59 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/debug/__mod__.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Re-exports all debug types and functions from the panic, log, and perf submodules for convenient access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.debug
+
+from uranite.os.debug.panic import {
+    panicGeneral,
+    panicDoubleFault,
+    panicOutOfMemory,
+    panicStackOverflow,
+    panicNullDeref,
+    panicAssertFailed,
+    PanicContext
+}
+from uranite.os.debug.log import {
+    logTrace,
+    logDebug,
+    logInfo,
+    logWarn,
+    logError,
+    logFatal,
+    EventLog
+}
+from uranite.os.debug.perf import PerfCounters
+
+export {
+    panicGeneral,
+    panicDoubleFault,
+    panicOutOfMemory,
+    panicStackOverflow,
+    panicNullDeref,
+    panicAssertFailed,
+    PanicContext,
+    logTrace,
+    logDebug,
+    logInfo,
+    logWarn,
+    logError,
+    logFatal,
+    EventLog,
+    PerfCounters
+}

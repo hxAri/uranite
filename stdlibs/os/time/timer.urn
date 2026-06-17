@@ -1,0 +1,302 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/os/time/timer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides kernel software timer facilities supporting one-shot and periodic timers with a timer wheel data structure for efficient expiration checking and callback dispatch.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.time.timer
+
+from uranite.memory.memory import Memory
+from uranite.os.sync.spinlock import Spinlock
+
+public const I64 TIMER_ONE_SHOT = 1
+""" Timer mode for one-shot. Fires once at deadline tick, then transitions to expired. """
+
+public const I64 TIMER_PERIODIC = 2
+""" Timer mode for periodic. Reschedules by adding interval after each fire. """
+
+public const I64 TIMER_INACTIVE = 0
+""" Timer state for inactive. Slot available for reuse, skipped during expiration checks. """
+
+public const I64 TIMER_ACTIVE = 1
+""" Timer state for active. Has valid deadline, fires when tick reaches or exceeds it. """
+
+public const I64 TIMER_EXPIRED = 2
+""" Timer state for expired one-shot. Fired and awaiting drain (slot reclaim). """
+
+public class TimerEntry:
+    
+    """
+    Represents a single timer entry with its identifier, deadline tick, repeat interval,
+    operating mode (one-shot or periodic), current state (inactive, active, or expired),
+    and associated callback identifier for dispatch when the timer fires.
+    """
+    
+    public I64 id
+    public I64 deadline
+    public I64 interval
+    public I64 mode
+    public I64 state
+    public I64 callbackId
+    
+    public function TimerEntry( self ) -> Void:
+        
+        """
+        Constructs a new timer entry with all fields initialized to zero, representing
+        an inactive timer slot.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        self.id = 0
+        self.deadline = 0
+        self.interval = 0
+        self.mode = 0
+        self.state = 0
+        self.callbackId = 0
+
+public class TimerWheel:
+    
+    """
+    Timer wheel data structure that manages one-shot and periodic software timers. Each
+    slot holds a timer with a deadline tick, interval (for periodic timers), mode, state,
+    and callback identifier. The scheduler or interrupt handler calls fire() on each tick
+    to check for and process expired timers. One-shot timers transition to the expired
+    state upon firing, while periodic timers automatically reschedule by advancing their
+    deadline. A spinlock protects concurrent access during timer scheduling and cancellation.
+    """
+    
+    public Memory<I64> deadlines
+    public Memory<I64> intervals
+    public Memory<I64> modes
+    public Memory<I64> states
+    public Memory<I64> callbackIds
+    public I64 capacity
+    public I64 count
+    public I64 nextId
+    public Spinlock lock
+    
+    public function TimerWheel( self, I64 maxTimers ) -> Void:
+        
+        """
+        Constructs a new timer wheel with the specified maximum number of timer slots.
+        All slots are initialized to the inactive state with zeroed fields. The next
+        timer ID starts at 1.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+        
+        self.capacity = maxTimers
+        self.count = 0
+        self.nextId = 1
+        self.lock = new Spinlock()
+        self.deadlines = new Memory<I64>( maxTimers )
+        self.intervals = new Memory<I64>( maxTimers )
+        self.modes = new Memory<I64>( maxTimers )
+        self.states = new Memory<I64>( maxTimers )
+        self.callbackIds = new Memory<I64>( maxTimers )
+        I64 slotIndex = 0
+        while slotIndex < maxTimers:
+            self.states.set( slotIndex, 0 )
+            self.deadlines.set( slotIndex, 0 )
+            self.intervals.set( slotIndex, 0 )
+            self.modes.set( slotIndex, 0 )
+            self.callbackIds.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+    
+    public function scheduleOneShot( self, I64 deadline, I64 callbackId ) -> I64:
+        
+        """
+        Schedules a one-shot timer that fires once when the system tick count reaches
+        the specified deadline. Returns the timer ID on success, or -1 if the timer
+        wheel is full.
+        """
+        
+        return self.schedule( deadline, 0, 1, callbackId )
+    
+    public function schedulePeriodic( self, I64 deadline, I64 interval, I64 callbackId ) -> I64:
+        
+        """
+        Schedules a periodic timer that first fires at the specified deadline tick and
+        then repeats at the given interval. Returns the timer ID on success, or -1 if
+        the timer wheel is full.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        return self.schedule( deadline, interval, 2, callbackId )
+    
+    protect function schedule( self, I64 deadline, I64 interval, I64 mode, I64 callbackId ) -> I64:
+        
+        """
+        Internal method that allocates a timer slot and configures it with the specified
+        deadline, interval, mode (one-shot or periodic), and callback identifier. Returns
+        the timer ID on success, or -1 if no free slots are available.
+        """
+        
+        self.lock.lock()
+        if self.count >= self.capacity:
+            self.lock.unlock()
+            return 0 - 1
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.states.get( slotIndex ) == 0:
+                I64 id = self.nextId
+                self.nextId = self.nextId + 1
+                self.deadlines.set( slotIndex, deadline )
+                self.intervals.set( slotIndex, interval )
+                self.modes.set( slotIndex, mode )
+                self.states.set( slotIndex, 1 )
+                self.callbackIds.set( slotIndex, callbackId )
+                self.count = self.count + 1
+                self.lock.unlock()
+                return id
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return 0 - 1
+    
+    public function fire( self, I64 currentTick ) -> I64:
+        
+        """
+        Checks all active timers against the current tick count and fires any whose
+        deadline has been reached. Periodic timers are automatically rescheduled by
+        advancing their deadline by their interval. One-shot timers transition to the
+        expired state (2). Returns the number of timers that fired during this call.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 fired = 0
+        I64 slotIndex = 0
+        while slotIndex < self.capacity:
+            if self.states.get( slotIndex ) == 1:
+                if self.deadlines.get( slotIndex ) <= currentTick:
+                    if self.modes.get( slotIndex ) == 2:
+                        self.deadlines.set( slotIndex, currentTick + self.intervals.get( slotIndex ) )
+                    else:
+                        self.states.set( slotIndex, 2 )
+                    fired = fired + 1
+            slotIndex = slotIndex + 1
+        return fired
+    
+    public function cancel( self, I64 slot ) -> Boolean:
+        
+        """
+        Cancels an active timer at the specified slot index, setting its state to inactive
+        and freeing the slot for reuse. Returns True if the timer was successfully
+        cancelled, or False if the slot is out of bounds or already inactive.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return False
+        if self.states.get( slot ) == 0:
+            return False
+        self.lock.lock()
+        self.states.set( slot, 0 )
+        self.count = self.count - 1
+        self.lock.unlock()
+        return True
+    
+    public function getCallbackId( self, I64 slot ) -> I64:
+        
+        """
+        Returns the callback identifier associated with the timer at the specified slot
+        index. Returns 0 if the slot is out of bounds.
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return 0
+        return self.callbackIds.get( slot )
+    
+    public function getState( self, I64 slot ) -> I64:
+        
+        """
+        Returns the current state of the timer at the specified slot index (0 = inactive,
+        1 = active, 2 = expired). Returns 0 if the slot is out of bounds.
+        """
+        
+        if slot < 0 or slot >= self.capacity:
+            return 0
+        return self.states.get( slot )
+    
+    public function drain( self ) -> I64:
+        
+        """
+        Reclaims all expired one-shot timer slots by setting their state back to inactive,
+        freeing them for reuse. Returns the number of timer slots that were drained.
+        
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+        
+        I64 drained = 0
+        I64 slotIndex = 0
+        self.lock.lock()
+        while slotIndex < self.capacity:
+            if self.states.get( slotIndex ) == 2:
+                self.states.set( slotIndex, 0 )
+                self.count = self.count - 1
+                drained = drained + 1
+            slotIndex = slotIndex + 1
+        self.lock.unlock()
+        return drained
+    
+    public function getCount( self ) -> I64:
+        
+        """ Returns the number of active and expired timers currently in the timer wheel. """
+        
+        return self.count
+    
+    public function destroy( self ) -> Void:
+        
+        """
+        Releases all heap-allocated memory buffers used by the timer wheel, including
+        the deadlines, intervals, modes, states, and callback ID arrays.
+        
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+        
+        self.deadlines.free()
+        self.intervals.free()
+        self.modes.free()
+        self.states.free()
+        self.callbackIds.free()
+
+export {
+    TIMER_ONE_SHOT,
+    TIMER_PERIODIC,
+    TIMER_INACTIVE,
+    TIMER_ACTIVE,
+    TIMER_EXPIRED,
+    TimerEntry,
+    TimerWheel
+}

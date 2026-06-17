@@ -1,0 +1,134 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-12 03:30
+# @update 2026-06-17 20:03
+# @github https://github.com/uranite-lang/uranite/stdlibs/errors/state.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# State-related errors: StateError for invalid object state,
+# CapacityError for exhausted container capacity, and
+# NotImplementedError for unoverridden abstract stubs.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.state
+
+from uranite.errors.error import Error
+
+public class StateError extends Error:
+
+    """
+    Raised when an operation is invalid for the current state of an object.
+
+    Examples: calling next() on an exhausted iterator, reading from a
+    closed file, sending on a shutdown channel.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    public function StateError( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct a StateError with a descriptive message.
+
+        Parameters:
+            message (String):
+                Human-readable description of the invalid state.
+            code (I64):
+                Numeric error code (0 for generic state errors).
+            cause (?Error):
+                Optional chained error, or None.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        parent( message, code, cause )
+
+public class CapacityError extends StateError:
+
+    """
+    Raised when a container or allocator has reached its maximum capacity
+    and cannot accept additional elements.
+
+    Examples: arena allocator exhausted, fixed-size buffer full,
+    thread pool at worker limit.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    public function CapacityError( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct a CapacityError with a descriptive message.
+
+        Parameters:
+            message (String):
+                Human-readable description of the capacity exhaustion.
+            code (I64):
+                Numeric error code (0 for generic capacity errors).
+            cause (?Error):
+                Optional chained error, or None.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        parent( message, code, cause )
+
+public class NotImplementedError extends Error:
+
+    """
+    Raised when an abstract method stub has not been overridden by a
+    concrete subclass, or when a feature is intentionally left
+    unimplemented as a placeholder.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    public String methodName
+    """ The name of the method that was called but is not implemented. """
+
+    public function NotImplementedError( self, String methodName ) -> Void:
+
+        """
+        Construct a NotImplementedError from the unimplemented method name.
+
+        The error message is automatically formatted as:
+        "method not implemented: '<methodName>'"
+
+        Parameters:
+            methodName (String):
+                The name of the method that lacks an implementation.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.methodName = methodName
+        String errorMessage = "method not implemented: '" + methodName + "'"
+        parent( errorMessage, 0, None )
+
+export {
+    StateError,
+    CapacityError,
+    NotImplementedError
+}

@@ -1,0 +1,82 @@
+package testing
+
+from uranite.os.vfs.vnode import {
+    PERM_READ, PERM_WRITE, PERM_EXECUTE,
+    PERM_OWNER_READ, PERM_OWNER_WRITE, PERM_OWNER_EXECUTE,
+    VNode, VNodeCache
+}
+from uranite.testing.assertions import {
+    assertEqualI64, assertTrue, assertFalse
+}
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== OS VFS VNode Tests ===" )
+
+    assertEqualI64( 4, PERM_READ, "permRead" )
+    assertEqualI64( 2, PERM_WRITE, "permWrite" )
+    assertEqualI64( 1, PERM_EXECUTE, "permExecute" )
+    assertEqualI64( 256, PERM_OWNER_READ, "permOwnerRead" )
+    assertEqualI64( 128, PERM_OWNER_WRITE, "permOwnerWrite" )
+    assertEqualI64( 64, PERM_OWNER_EXECUTE, "permOwnerExecute" )
+    putsln( "permissions OK" )
+
+    VNode vn = new VNode( 1, 1, 10, 100 )
+    assertEqualI64( 1, vn.getVnodeId(), "vnodeId" )
+    assertEqualI64( 10, vn.getFilesystemId(), "fsId" )
+    assertEqualI64( 100, vn.getInodeNumber(), "inode" )
+    assertTrue( vn.isFile(), "isFile" )
+    assertFalse( vn.isDirectory(), "not dir" )
+    assertFalse( vn.isSymlink(), "not symlink" )
+
+    vn.setPermissions( 448 )
+    assertTrue( vn.canOwnerRead(), "canOwnerRead" )
+    assertTrue( vn.canOwnerWrite(), "canOwnerWrite" )
+    assertTrue( vn.canOwnerExecute(), "canOwnerExecute" )
+
+    vn.setSize( 4096 )
+    assertEqualI64( 4096, vn.size, "size" )
+
+    vn.setOwner( 1000, 1000 )
+    assertEqualI64( 1000, vn.ownerUid, "uid" )
+    assertEqualI64( 1000, vn.ownerGid, "gid" )
+    putsln( "VNode OK" )
+
+    I64 newRef = vn.retain()
+    assertEqualI64( 2, newRef, "retain 2" )
+    assertFalse( vn.release(), "release not last" )
+    assertTrue( vn.release(), "release last" )
+    putsln( "refcount OK" )
+
+    VNode dir = new VNode( 2, 2, 10, 200 )
+    assertFalse( dir.isFile(), "dir not file" )
+    assertTrue( dir.isDirectory(), "dir isDir" )
+
+    VNode sym = new VNode( 3, 3, 10, 300 )
+    assertTrue( sym.isSymlink(), "sym isSymlink" )
+    putsln( "types OK" )
+
+    VNodeCache cache = new VNodeCache( 4 )
+    assertEqualI64( 0, cache.getCount(), "cache count 0" )
+
+    assertTrue( cache.insert( 1, 111 ), "insert 1" )
+    assertEqualI64( 1, cache.getCount(), "count 1" )
+    assertTrue( cache.insert( 2, 222 ), "insert 2" )
+
+    assertEqualI64( 111, cache.lookup( 1 ), "lookup 1" )
+    assertEqualI64( -1, cache.lookup( 99 ), "lookup miss" )
+
+    assertTrue( cache.remove( 1 ), "remove 1" )
+    assertEqualI64( 1, cache.getCount(), "count after remove" )
+    assertFalse( cache.remove( 99 ), "remove miss" )
+
+    cache.insert( 3, 333 )
+    cache.insert( 4, 444 )
+    cache.insert( 5, 555 )
+    assertFalse( cache.insert( 6, 666 ), "insert when full" )
+    putsln( "VNodeCache OK" )
+
+    cache.destroy()
+
+    putsln( "=== All VNode tests passed ===" )
+    return 0
