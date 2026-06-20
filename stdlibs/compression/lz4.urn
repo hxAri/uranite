@@ -1,0 +1,553 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/compression/lz4.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# LZ4 block format compression and decompression. Implements the LZ4
+# block specification: sequences of literals and match copies with
+# token-based length encoding. Also implements the old Kafka LZ4 format
+# (pre-KIP-57 with broken xxhash content checksum).
+#
+# Each sequence consists of a token byte (high nibble = literal length,
+# low nibble = match length - 4), optional extra length bytes (runs of
+# 255), literal data, and a 2-byte little-endian match offset.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.compression.lz4
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.encoding.binary import copyBytes
+
+const I64 LZ4_HASH_BITS = 16
+const I64 LZ4_HASH_TABLE_SIZE = 65536
+const I64 LZ4_MIN_MATCH = 4
+const I64 LZ4_LAST_LITERALS = 5
+const I64 LZ4_MF_LIMIT = 12
+const I64 LZ4_MAX_INPUT_SIZE = 2113929216
+
+const I64 LZ4_FRAME_MAGIC = 407708164
+const I64 LZ4_FRAME_VERSION = 1
+const I64 LZ4_BLOCK_MAX_64KB = 4
+const I64 LZ4_BLOCK_MAX_256KB = 5
+const I64 LZ4_BLOCK_MAX_1MB = 6
+const I64 LZ4_BLOCK_MAX_4MB = 7
+
+public function lz4HashPosition( I64 sourceAddress, I64 position ) -> I64:
+
+    """
+    Hash 4 bytes at position for hash table lookup.
+
+    Parameters:
+        sourceAddress (I64):
+            Base address.
+        position (I64):
+            Byte offset.
+
+    Returns:
+        I64:
+            Hash table index.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 byte0 = readByteAt( sourceAddress, position )
+    I64 byte1 = readByteAt( sourceAddress, position + 1 )
+    I64 byte2 = readByteAt( sourceAddress, position + 2 )
+    I64 byte3 = readByteAt( sourceAddress, position + 3 )
+    I64 value = byte0 | ( byte1 << 8 ) | ( byte2 << 16 ) | ( byte3 << 24 )
+
+    I64 hashed = ( value * 2654435761 ) & 4294967295
+    return ( hashed >> ( 32 - LZ4_HASH_BITS ) ) & ( LZ4_HASH_TABLE_SIZE - 1 )
+
+public function lz4WriteLength( I64 destAddress, I64 destOffset, I64 length ) -> I64:
+
+    """
+    Write an LZ4 extra length encoding (runs of 255 then remainder).
+
+    Parameters:
+        destAddress (I64):
+            Destination buffer.
+        destOffset (I64):
+            Write offset.
+        length (I64):
+            Length to encode.
+
+    Returns:
+        I64:
+            Bytes written.
+
+    Complexity:
+        Time: O(n/255)
+        Space: O(1)
+    """
+
+    I64 remaining = length
+    I64 bytesWritten = 0
+
+    while remaining >= 255:
+        writeByteAt( destAddress, destOffset + bytesWritten, 255 )
+        bytesWritten = bytesWritten + 1
+        remaining = remaining - 255
+
+    writeByteAt( destAddress, destOffset + bytesWritten, remaining & 255 )
+    bytesWritten = bytesWritten + 1
+    return bytesWritten
+
+public function lz4MaxCompressedSize( I64 inputLength ) -> I64:
+
+    """
+    Worst-case compressed size for LZ4 block format.
+
+    Parameters:
+        inputLength (I64):
+            Uncompressed input length.
+
+    Returns:
+        I64:
+            Maximum compressed size.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return inputLength + inputLength / 255 + 16
+
+public function lz4CompressBlock( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Compress a single block using LZ4 block format.
+
+    Parameters:
+        inputAddress (I64):
+            Address of uncompressed input.
+        inputLength (I64):
+            Length of input data.
+        outputAddress (I64):
+            Address of output buffer.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Compressed block size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is inputLength
+        Space: O(HASH_TABLE_SIZE) for hash table
+    """
+
+    if inputLength == 0:
+        return 0
+
+    if inputLength > LZ4_MAX_INPUT_SIZE:
+        return -1
+
+    I64 hashTableAddress = alloc( LZ4_HASH_TABLE_SIZE * 4 )
+    I64 clearIdx = 0
+    while clearIdx < LZ4_HASH_TABLE_SIZE:
+        I64 clearSlot = hashTableAddress + clearIdx * 4
+        writeByteAt( clearSlot, 0, 0 )
+        writeByteAt( clearSlot, 1, 0 )
+        writeByteAt( clearSlot, 2, 0 )
+        writeByteAt( clearSlot, 3, 0 )
+        clearIdx = clearIdx + 1
+
+    I64 inputEnd = inputLength
+    I64 matchFindLimit = inputEnd - LZ4_MF_LIMIT
+    I64 lastLiteralLimit = inputEnd - LZ4_LAST_LITERALS
+
+    I64 inputPosition = 0
+    I64 outputOffset = 0
+    I64 anchor = 0
+
+    if inputLength < LZ4_MF_LIMIT:
+        I64 literalLength = inputLength
+        I64 token = 0
+        if literalLength >= 15:
+            token = 15 << 4
+            writeByteAt( outputAddress, outputOffset, token )
+            outputOffset = outputOffset + 1
+            outputOffset = outputOffset + lz4WriteLength( outputAddress, outputOffset, literalLength - 15 )
+        else:
+            token = literalLength << 4
+            writeByteAt( outputAddress, outputOffset, token )
+            outputOffset = outputOffset + 1
+        copyBytes( inputAddress, 0, outputAddress, outputOffset, literalLength )
+        outputOffset = outputOffset + literalLength
+        dealloc( hashTableAddress )
+        return outputOffset
+
+    inputPosition = 1
+    I64 forwardPosition = inputPosition
+
+    I64 compressionDone = 0
+    while compressionDone == 0:
+        I64 matchFound = 0
+        I64 matchPosition = 0
+        forwardPosition = inputPosition
+
+        I64 step = 1
+        I64 searchAttempts = 0
+
+        while matchFound == 0 and forwardPosition < matchFindLimit:
+            inputPosition = forwardPosition
+            forwardPosition = inputPosition + step
+            step = step + 1
+
+            if forwardPosition > matchFindLimit:
+                compressionDone = 1
+                matchFound = 0
+                forwardPosition = matchFindLimit
+                inputPosition = forwardPosition
+                break
+
+            I64 hashIdx = lz4HashPosition( inputAddress, inputPosition )
+            I64 hashSlot = hashTableAddress + hashIdx * 4
+            matchPosition = readByteAt( hashSlot, 0 ) | ( readByteAt( hashSlot, 1 ) << 8 ) | ( readByteAt( hashSlot, 2 ) << 16 ) | ( readByteAt( hashSlot, 3 ) << 24 )
+
+            writeByteAt( hashSlot, 0, inputPosition & 255 )
+            writeByteAt( hashSlot, 1, ( inputPosition >> 8 ) & 255 )
+            writeByteAt( hashSlot, 2, ( inputPosition >> 16 ) & 255 )
+            writeByteAt( hashSlot, 3, ( inputPosition >> 24 ) & 255 )
+
+            if matchPosition >= anchor and inputPosition - matchPosition < 65536:
+                I64 matchByte0 = readByteAt( inputAddress, matchPosition )
+                I64 matchByte1 = readByteAt( inputAddress, matchPosition + 1 )
+                I64 matchByte2 = readByteAt( inputAddress, matchPosition + 2 )
+                I64 matchByte3 = readByteAt( inputAddress, matchPosition + 3 )
+                I64 inputByte0 = readByteAt( inputAddress, inputPosition )
+                I64 inputByte1 = readByteAt( inputAddress, inputPosition + 1 )
+                I64 inputByte2 = readByteAt( inputAddress, inputPosition + 2 )
+                I64 inputByte3 = readByteAt( inputAddress, inputPosition + 3 )
+
+                if matchByte0 == inputByte0 and matchByte1 == inputByte1 and matchByte2 == inputByte2 and matchByte3 == inputByte3:
+                    matchFound = 1
+                    step = 1
+
+        if compressionDone == 1 and matchFound == 0:
+            break
+
+        if matchFound == 0:
+            break
+
+        I64 literalLength = inputPosition - anchor
+
+        I64 matchLength = LZ4_MIN_MATCH
+        I64 matchLimit = inputEnd - LZ4_LAST_LITERALS
+        while inputPosition + matchLength < matchLimit and readByteAt( inputAddress, matchPosition + matchLength ) == readByteAt( inputAddress, inputPosition + matchLength ):
+            matchLength = matchLength + 1
+
+        I64 tokenOffset = outputOffset
+        outputOffset = outputOffset + 1
+
+        I64 litToken = 0
+        if literalLength >= 15:
+            litToken = 15
+            I64 extraLitLen = literalLength - 15
+            writeByteAt( outputAddress, tokenOffset, ( litToken << 4 ) & 255 )
+            outputOffset = outputOffset + lz4WriteLength( outputAddress, outputOffset, extraLitLen )
+        else:
+            litToken = literalLength
+
+        if literalLength > 0:
+            copyBytes( inputAddress, anchor, outputAddress, outputOffset, literalLength )
+            outputOffset = outputOffset + literalLength
+
+        I64 backOffset = inputPosition - matchPosition
+        writeByteAt( outputAddress, outputOffset, backOffset & 255 )
+        writeByteAt( outputAddress, outputOffset + 1, ( backOffset >> 8 ) & 255 )
+        outputOffset = outputOffset + 2
+
+        I64 matchExtra = matchLength - LZ4_MIN_MATCH
+        I64 matchToken = 0
+        if matchExtra >= 15:
+            matchToken = 15
+            writeByteAt( outputAddress, tokenOffset, ( ( litToken << 4 ) | matchToken ) & 255 )
+            outputOffset = outputOffset + lz4WriteLength( outputAddress, outputOffset, matchExtra - 15 )
+        else:
+            matchToken = matchExtra
+            writeByteAt( outputAddress, tokenOffset, ( ( litToken << 4 ) | matchToken ) & 255 )
+
+        anchor = inputPosition + matchLength
+        inputPosition = anchor
+
+        if inputPosition >= matchFindLimit:
+            compressionDone = 1
+
+    I64 lastLiterals = inputEnd - anchor
+    if lastLiterals > 0:
+        I64 lastToken = 0
+        if lastLiterals >= 15:
+            lastToken = 15 << 4
+            writeByteAt( outputAddress, outputOffset, lastToken )
+            outputOffset = outputOffset + 1
+            outputOffset = outputOffset + lz4WriteLength( outputAddress, outputOffset, lastLiterals - 15 )
+        else:
+            lastToken = lastLiterals << 4
+            writeByteAt( outputAddress, outputOffset, lastToken )
+            outputOffset = outputOffset + 1
+        copyBytes( inputAddress, anchor, outputAddress, outputOffset, lastLiterals )
+        outputOffset = outputOffset + lastLiterals
+
+    dealloc( hashTableAddress )
+    return outputOffset
+
+public function lz4DecompressBlock( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Decompress a single LZ4 block.
+
+    Parameters:
+        inputAddress (I64):
+            Address of compressed block.
+        inputLength (I64):
+            Length of compressed data.
+        outputAddress (I64):
+            Address of output buffer.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Decompressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is decompressed size
+        Space: O(1) beyond output buffer
+    """
+
+    I64 inputOffset = 0
+    I64 outputOffset = 0
+
+    while inputOffset < inputLength:
+        I64 token = readByteAt( inputAddress, inputOffset )
+        inputOffset = inputOffset + 1
+
+        I64 literalLength = ( token >> 4 ) & 15
+        if literalLength == 15:
+            I64 extraByte = 255
+            while extraByte == 255 and inputOffset < inputLength:
+                extraByte = readByteAt( inputAddress, inputOffset )
+                inputOffset = inputOffset + 1
+                literalLength = literalLength + extraByte
+
+        if literalLength > 0:
+            if outputOffset + literalLength > outputCapacity:
+                return -1
+            copyBytes( inputAddress, inputOffset, outputAddress, outputOffset, literalLength )
+            inputOffset = inputOffset + literalLength
+            outputOffset = outputOffset + literalLength
+
+        if inputOffset >= inputLength:
+            break
+
+        I64 matchOffset = readByteAt( inputAddress, inputOffset ) | ( readByteAt( inputAddress, inputOffset + 1 ) << 8 )
+        inputOffset = inputOffset + 2
+
+        if matchOffset == 0:
+            return -1
+
+        I64 matchLength = ( token & 15 ) + LZ4_MIN_MATCH
+        if ( token & 15 ) == 15:
+            I64 extraMatchByte = 255
+            while extraMatchByte == 255 and inputOffset < inputLength:
+                extraMatchByte = readByteAt( inputAddress, inputOffset )
+                inputOffset = inputOffset + 1
+                matchLength = matchLength + extraMatchByte
+
+        I64 matchSource = outputOffset - matchOffset
+        if matchSource < 0:
+            return -1
+        if outputOffset + matchLength > outputCapacity:
+            return -1
+
+        I64 copyIdx = 0
+        while copyIdx < matchLength:
+            I64 sourceByte = readByteAt( outputAddress, matchSource + copyIdx )
+            writeByteAt( outputAddress, outputOffset + copyIdx, sourceByte )
+            copyIdx = copyIdx + 1
+        outputOffset = outputOffset + matchLength
+
+    return outputOffset
+
+public function lz4FrameCompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Compress data with LZ4 frame format header. Writes magic number,
+    frame descriptor, block(s), and end mark.
+
+    Parameters:
+        inputAddress (I64):
+            Input data address.
+        inputLength (I64):
+            Input data length.
+        outputAddress (I64):
+            Output buffer address.
+        outputCapacity (I64):
+            Output buffer capacity.
+
+    Returns:
+        I64:
+            Total frame size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is inputLength
+        Space: O(block buffer)
+    """
+
+    I64 outputOffset = 0
+
+    writeByteAt( outputAddress, 0, LZ4_FRAME_MAGIC & 255 )
+    writeByteAt( outputAddress, 1, ( LZ4_FRAME_MAGIC >> 8 ) & 255 )
+    writeByteAt( outputAddress, 2, ( LZ4_FRAME_MAGIC >> 16 ) & 255 )
+    writeByteAt( outputAddress, 3, ( LZ4_FRAME_MAGIC >> 24 ) & 255 )
+    outputOffset = 4
+
+    I64 flagByte = ( LZ4_FRAME_VERSION << 6 ) | ( 0 << 5 ) | ( 0 << 3 ) | ( 0 << 2 )
+    writeByteAt( outputAddress, outputOffset, flagByte & 255 )
+    outputOffset = outputOffset + 1
+
+    I64 bdByte = LZ4_BLOCK_MAX_4MB << 4
+    writeByteAt( outputAddress, outputOffset, bdByte & 255 )
+    outputOffset = outputOffset + 1
+
+    I64 headerChecksum = ( flagByte ^ bdByte ) & 255
+    I64 xxhashSimple = ( headerChecksum * 2654435761 ) & 4294967295
+    writeByteAt( outputAddress, outputOffset, ( xxhashSimple >> 8 ) & 255 )
+    outputOffset = outputOffset + 1
+
+    I64 blockBufferCapacity = lz4MaxCompressedSize( inputLength )
+    I64 blockBufferAddress = alloc( blockBufferCapacity )
+
+    I64 compressedBlockSize = lz4CompressBlock( inputAddress, inputLength, blockBufferAddress, blockBufferCapacity )
+    if compressedBlockSize < 0:
+        dealloc( blockBufferAddress )
+        return -1
+
+    if compressedBlockSize >= inputLength:
+        I64 uncompressedFlag = inputLength | 2147483648
+        writeByteAt( outputAddress, outputOffset, uncompressedFlag & 255 )
+        writeByteAt( outputAddress, outputOffset + 1, ( uncompressedFlag >> 8 ) & 255 )
+        writeByteAt( outputAddress, outputOffset + 2, ( uncompressedFlag >> 16 ) & 255 )
+        writeByteAt( outputAddress, outputOffset + 3, ( uncompressedFlag >> 24 ) & 255 )
+        outputOffset = outputOffset + 4
+        copyBytes( inputAddress, 0, outputAddress, outputOffset, inputLength )
+        outputOffset = outputOffset + inputLength
+    else:
+        writeByteAt( outputAddress, outputOffset, compressedBlockSize & 255 )
+        writeByteAt( outputAddress, outputOffset + 1, ( compressedBlockSize >> 8 ) & 255 )
+        writeByteAt( outputAddress, outputOffset + 2, ( compressedBlockSize >> 16 ) & 255 )
+        writeByteAt( outputAddress, outputOffset + 3, ( compressedBlockSize >> 24 ) & 255 )
+        outputOffset = outputOffset + 4
+        copyBytes( blockBufferAddress, 0, outputAddress, outputOffset, compressedBlockSize )
+        outputOffset = outputOffset + compressedBlockSize
+
+    dealloc( blockBufferAddress )
+
+    writeByteAt( outputAddress, outputOffset, 0 )
+    writeByteAt( outputAddress, outputOffset + 1, 0 )
+    writeByteAt( outputAddress, outputOffset + 2, 0 )
+    writeByteAt( outputAddress, outputOffset + 3, 0 )
+    outputOffset = outputOffset + 4
+
+    return outputOffset
+
+public function lz4FrameDecompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Decompress LZ4 frame format data. Reads magic, descriptor,
+    block(s), and end mark.
+
+    Parameters:
+        inputAddress (I64):
+            Compressed input address.
+        inputLength (I64):
+            Compressed input length.
+        outputAddress (I64):
+            Output buffer address.
+        outputCapacity (I64):
+            Output buffer capacity.
+
+    Returns:
+        I64:
+            Total decompressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is decompressed size
+        Space: O(1) beyond output buffer
+    """
+
+    if inputLength < 11:
+        return lz4DecompressBlock( inputAddress, inputLength, outputAddress, outputCapacity )
+
+    I64 magic = readByteAt( inputAddress, 0 ) | ( readByteAt( inputAddress, 1 ) << 8 ) | ( readByteAt( inputAddress, 2 ) << 16 ) | ( readByteAt( inputAddress, 3 ) << 24 )
+    if magic != LZ4_FRAME_MAGIC:
+        return lz4DecompressBlock( inputAddress, inputLength, outputAddress, outputCapacity )
+
+    I64 inputOffset = 4
+
+    I64 flagByte = readByteAt( inputAddress, inputOffset )
+    inputOffset = inputOffset + 1
+
+    I64 bdByte = readByteAt( inputAddress, inputOffset )
+    inputOffset = inputOffset + 1
+
+    I64 hasContentSize = ( flagByte >> 3 ) & 1
+    if hasContentSize == 1:
+        inputOffset = inputOffset + 8
+
+    inputOffset = inputOffset + 1
+
+    I64 outputOffset = 0
+
+    I64 frameDone = 0
+    while frameDone == 0 and inputOffset + 4 <= inputLength:
+        I64 blockSize = readByteAt( inputAddress, inputOffset ) | ( readByteAt( inputAddress, inputOffset + 1 ) << 8 ) | ( readByteAt( inputAddress, inputOffset + 2 ) << 16 ) | ( readByteAt( inputAddress, inputOffset + 3 ) << 24 )
+        inputOffset = inputOffset + 4
+
+        if blockSize == 0:
+            frameDone = 1
+            break
+
+        I64 isUncompressed = ( blockSize >> 31 ) & 1
+        I64 actualBlockSize = blockSize & 2147483647
+
+        if actualBlockSize <= 0 or inputOffset + actualBlockSize > inputLength:
+            return -1
+
+        if isUncompressed == 1:
+            if outputOffset + actualBlockSize > outputCapacity:
+                return -1
+            copyBytes( inputAddress, inputOffset, outputAddress, outputOffset, actualBlockSize )
+            outputOffset = outputOffset + actualBlockSize
+        else:
+            I64 decompressedSize = lz4DecompressBlock( inputAddress + inputOffset, actualBlockSize, outputAddress + outputOffset, outputCapacity - outputOffset )
+            if decompressedSize < 0:
+                return -1
+            outputOffset = outputOffset + decompressedSize
+
+        inputOffset = inputOffset + actualBlockSize
+
+    return outputOffset
+
+export {
+    lz4CompressBlock, lz4DecompressBlock,
+    lz4FrameCompress, lz4FrameDecompress,
+    lz4MaxCompressedSize
+}

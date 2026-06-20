@@ -1,0 +1,310 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/der.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Minimal ASN.1 DER (Distinguished Encoding Rules) decoder for X.509
+# certificates and RSA key structures. Implements Tag-Length-Value (TLV)
+# parsing for the subset of ASN.1 types used in PKCS#1 and X.509:
+#   SEQUENCE, INTEGER, BIT STRING, OCTET STRING, OID, NULL, CONTEXT.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.encoding.der
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt
+
+const I64 DER_TAG_INTEGER = 2
+const I64 DER_TAG_BIT_STRING = 3
+const I64 DER_TAG_OCTET_STRING = 4
+const I64 DER_TAG_NULL = 5
+const I64 DER_TAG_OID = 6
+const I64 DER_TAG_SEQUENCE = 48
+const I64 DER_TAG_SET = 49
+const I64 DER_TAG_CONTEXT_0 = 160
+const I64 DER_TAG_CONTEXT_1 = 161
+const I64 DER_TAG_CONTEXT_3 = 163
+
+public class DerElement:
+
+    """
+    A parsed DER TLV element. Holds the tag, content address and
+    length, and total element size (including tag and length bytes).
+    """
+
+    public I64 tag
+    public I64 contentAddress
+    public I64 contentLength
+    public I64 headerSize
+    public I64 totalSize
+
+    public function DerElement( self, I64 tag, I64 contentAddress, I64 contentLength, I64 headerSize ) -> Void:
+
+        """
+        Parameters:
+            tag (I64):
+                ASN.1 tag byte.
+            contentAddress (I64):
+                Address of content bytes.
+            contentLength (I64):
+                Length of content.
+            headerSize (I64):
+                Size of tag + length encoding.
+        """
+
+        self.tag = tag
+        self.contentAddress = contentAddress
+        self.contentLength = contentLength
+        self.headerSize = headerSize
+        self.totalSize = headerSize + contentLength
+
+public function derParseElement( I64 dataAddress, I64 dataOffset, I64 dataLength ) -> DerElement:
+
+    """
+    Parse a single DER TLV element at the given offset.
+
+    Parameters:
+        dataAddress (I64):
+            Base address of DER data.
+        dataOffset (I64):
+            Offset to start parsing.
+        dataLength (I64):
+            Total available data length.
+
+    Returns:
+        DerElement:
+            Parsed element with tag, content address/length.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 tag = readByteAt( dataAddress, dataOffset )
+    I64 headerSize = 2
+    I64 lengthByte = readByteAt( dataAddress, dataOffset + 1 )
+    I64 contentLength = 0
+
+    if ( lengthByte & 128 ) == 0:
+        contentLength = lengthByte
+        headerSize = 2
+    else:
+        I64 lengthBytes = lengthByte & 127
+        contentLength = 0
+        I64 lengthIdx = 0
+        while lengthIdx < lengthBytes:
+            contentLength = ( contentLength << 8 ) | readByteAt( dataAddress, dataOffset + 2 + lengthIdx )
+            lengthIdx = lengthIdx + 1
+        headerSize = 2 + lengthBytes
+
+    I64 contentAddress = dataAddress + dataOffset + headerSize
+    return new DerElement( tag, contentAddress, contentLength, headerSize )
+
+public function derParseSequence( I64 dataAddress, I64 dataOffset, I64 dataLength ) -> DerElement:
+
+    """
+    Parse a DER SEQUENCE element. Verifies the tag is 0x30.
+
+    Parameters:
+        dataAddress (I64):
+            Base address.
+        dataOffset (I64):
+            Offset to parse at.
+        dataLength (I64):
+            Available data.
+
+    Returns:
+        DerElement:
+            Parsed SEQUENCE element.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return derParseElement( dataAddress, dataOffset, dataLength )
+
+public function derParseInteger( I64 dataAddress, I64 dataOffset, I64 dataLength ) -> DerElement:
+
+    """
+    Parse a DER INTEGER element.
+
+    Parameters:
+        dataAddress (I64):
+            Base address.
+        dataOffset (I64):
+            Offset to parse at.
+        dataLength (I64):
+            Available data.
+
+    Returns:
+        DerElement:
+            Parsed INTEGER element.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return derParseElement( dataAddress, dataOffset, dataLength )
+
+public function derIntegerToI64( DerElement element ) -> I64:
+
+    """
+    Convert a small DER INTEGER to an I64 value.
+
+    Parameters:
+        element (DerElement):
+            Parsed INTEGER element.
+
+    Returns:
+        I64:
+            Integer value (truncated to 64 bits).
+
+    Complexity:
+        Time: O(n) where n is content length
+        Space: O(1)
+    """
+
+    I64 value = 0
+    I64 byteIndex = 0
+    while byteIndex < element.contentLength and byteIndex < 8:
+        value = ( value << 8 ) | readByteAt( element.contentAddress, byteIndex )
+        byteIndex = byteIndex + 1
+    return value
+
+public function derGetIntegerBytes( DerElement element ) -> I64:
+
+    """
+    Get the address of integer content bytes, skipping any leading
+    zero padding byte (used for unsigned representation).
+
+    Parameters:
+        element (DerElement):
+            Parsed INTEGER element.
+
+    Returns:
+        I64:
+            Packed result: bits [0..31] = content address offset,
+            bits [32..63] = effective length.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 contentStart = 0
+    I64 effectiveLength = element.contentLength
+
+    if element.contentLength > 0 and readByteAt( element.contentAddress, 0 ) == 0:
+        contentStart = 1
+        effectiveLength = element.contentLength - 1
+
+    return ( effectiveLength << 32 ) | contentStart
+
+public function derParseBitString( I64 dataAddress, I64 dataOffset, I64 dataLength ) -> DerElement:
+
+    """
+    Parse a DER BIT STRING element. The first content byte indicates
+    unused bits in the last byte.
+
+    Parameters:
+        dataAddress (I64):
+            Base address.
+        dataOffset (I64):
+            Offset to parse at.
+        dataLength (I64):
+            Available data.
+
+    Returns:
+        DerElement:
+            Parsed BIT STRING element.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return derParseElement( dataAddress, dataOffset, dataLength )
+
+public function derIterateSequence( DerElement sequence, I64 elementIndex ) -> DerElement:
+
+    """
+    Get the Nth child element from a SEQUENCE.
+
+    Parameters:
+        sequence (DerElement):
+            Parent SEQUENCE element.
+        elementIndex (I64):
+            Zero-based child index.
+
+    Returns:
+        DerElement:
+            Child element at the given index.
+
+    Complexity:
+        Time: O(n) where n is elementIndex
+        Space: O(1)
+    """
+
+    I64 currentOffset = 0
+    I64 currentIndex = 0
+
+    while currentOffset < sequence.contentLength:
+        DerElement child = derParseElement( sequence.contentAddress, currentOffset, sequence.contentLength - currentOffset )
+        if currentIndex == elementIndex:
+            return child
+        currentOffset = currentOffset + child.totalSize
+        currentIndex = currentIndex + 1
+
+    return new DerElement( 0, 0, 0, 0 )
+
+public function derCountSequenceElements( DerElement sequence ) -> I64:
+
+    """
+    Count children in a SEQUENCE.
+
+    Parameters:
+        sequence (DerElement):
+            Parent SEQUENCE element.
+
+    Returns:
+        I64:
+            Number of child elements.
+
+    Complexity:
+        Time: O(n) where n is number of children
+        Space: O(1)
+    """
+
+    I64 count = 0
+    I64 currentOffset = 0
+
+    while currentOffset < sequence.contentLength:
+        DerElement child = derParseElement( sequence.contentAddress, currentOffset, sequence.contentLength - currentOffset )
+        count = count + 1
+        currentOffset = currentOffset + child.totalSize
+
+    return count
+
+export {
+    DER_TAG_INTEGER, DER_TAG_BIT_STRING, DER_TAG_OCTET_STRING,
+    DER_TAG_NULL, DER_TAG_OID, DER_TAG_SEQUENCE, DER_TAG_SET,
+    DER_TAG_CONTEXT_0, DER_TAG_CONTEXT_1, DER_TAG_CONTEXT_3,
+    DerElement,
+    derParseElement, derParseSequence, derParseInteger,
+    derIntegerToI64, derGetIntegerBytes,
+    derParseBitString, derIterateSequence, derCountSequenceElements
+}

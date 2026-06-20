@@ -1,0 +1,1096 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/compression/gzip.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Gzip compression and decompression per RFC 1952 (gzip) and RFC 1951
+# (DEFLATE). Implements:
+#   - DEFLATE decompression (inflate): stored, fixed Huffman, dynamic
+#     Huffman blocks with full code length decoding.
+#   - DEFLATE compression (deflate): LZ77 with lazy matching, fixed
+#     Huffman encoding (no dynamic tree construction for simplicity —
+#     produces valid but slightly larger output).
+#   - Gzip framing: 10-byte header, CRC-32, ISIZE trailer.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.compression.gzip
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.encoding.binary import copyBytes
+from uranite.encoding.crc32 import crc32
+
+const I64 GZIP_MAGIC_1 = 31
+const I64 GZIP_MAGIC_2 = 139
+const I64 GZIP_METHOD_DEFLATE = 8
+const I64 GZIP_HEADER_SIZE = 10
+const I64 GZIP_TRAILER_SIZE = 8
+
+const I64 DEFLATE_MAX_BITS = 15
+const I64 DEFLATE_MAX_LIT_CODES = 286
+const I64 DEFLATE_MAX_DIST_CODES = 30
+const I64 DEFLATE_MAX_CODES = 316
+const I64 DEFLATE_CODE_LENGTH_ORDER_COUNT = 19
+const I64 DEFLATE_WINDOW_SIZE = 32768
+const I64 DEFLATE_HASH_BITS = 15
+const I64 DEFLATE_HASH_SIZE = 32768
+const I64 DEFLATE_MIN_MATCH = 3
+const I64 DEFLATE_MAX_MATCH = 258
+
+const I64 CODE_LENGTH_ORDER_ADDRESS = 0
+
+public class BitReader:
+
+    """
+    Reads individual bits from a byte stream, LSB first within
+    each byte. Maintains a bit buffer for efficient multi-bit reads.
+    """
+
+    public I64 sourceAddress
+    public I64 sourceLength
+    public I64 bytePosition
+    public I64 bitBuffer
+    public I64 bitsAvailable
+
+    public function BitReader( self, I64 sourceAddress, I64 sourceLength ) -> Void:
+
+        """
+        Parameters:
+            sourceAddress (I64):
+                Address of compressed data.
+            sourceLength (I64):
+                Length of compressed data.
+        """
+
+        self.sourceAddress = sourceAddress
+        self.sourceLength = sourceLength
+        self.bytePosition = 0
+        self.bitBuffer = 0
+        self.bitsAvailable = 0
+
+    public function readBits( self, I64 bitCount ) -> I64:
+
+        """
+        Read up to 25 bits from the stream.
+
+        Parameters:
+            bitCount (I64):
+                Number of bits to read (1-25).
+
+        Returns:
+            I64:
+                Value read, or -1 on EOF.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        while self.bitsAvailable < bitCount:
+            if self.bytePosition >= self.sourceLength:
+                return -1
+            I64 nextByte = readByteAt( self.sourceAddress, self.bytePosition )
+            self.bytePosition = self.bytePosition + 1
+            self.bitBuffer = self.bitBuffer | ( nextByte << self.bitsAvailable )
+            self.bitsAvailable = self.bitsAvailable + 8
+
+        I64 mask = ( 1 << bitCount ) - 1
+        I64 value = self.bitBuffer & mask
+        self.bitBuffer = self.bitBuffer >> bitCount
+        self.bitsAvailable = self.bitsAvailable - bitCount
+        return value
+
+    public function alignToByte( self ) -> Void:
+
+        """
+        Discard remaining bits in the current byte.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 discard = self.bitsAvailable & 7
+        if discard > 0:
+            self.bitBuffer = self.bitBuffer >> discard
+            self.bitsAvailable = self.bitsAvailable - discard
+
+public class BitWriter:
+
+    """
+    Writes individual bits to a byte stream, LSB first within
+    each byte.
+    """
+
+    public I64 destAddress
+    public I64 destCapacity
+    public I64 bytePosition
+    public I64 bitBuffer
+    public I64 bitsUsed
+
+    public function BitWriter( self, I64 destAddress, I64 destCapacity ) -> Void:
+
+        """
+        Parameters:
+            destAddress (I64):
+                Output buffer address.
+            destCapacity (I64):
+                Output buffer capacity.
+        """
+
+        self.destAddress = destAddress
+        self.destCapacity = destCapacity
+        self.bytePosition = 0
+        self.bitBuffer = 0
+        self.bitsUsed = 0
+
+    public function writeBits( self, I64 value, I64 bitCount ) -> Void:
+
+        """
+        Write up to 25 bits to the stream.
+
+        Parameters:
+            value (I64):
+                Value to write.
+            bitCount (I64):
+                Number of bits (1-25).
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.bitBuffer = self.bitBuffer | ( value << self.bitsUsed )
+        self.bitsUsed = self.bitsUsed + bitCount
+
+        while self.bitsUsed >= 8:
+            if self.bytePosition < self.destCapacity:
+                writeByteAt( self.destAddress, self.bytePosition, self.bitBuffer & 255 )
+                self.bytePosition = self.bytePosition + 1
+            self.bitBuffer = self.bitBuffer >> 8
+            self.bitsUsed = self.bitsUsed - 8
+
+    public function flush( self ) -> Void:
+
+        """
+        Flush remaining bits as a final byte.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.bitsUsed > 0 and self.bytePosition < self.destCapacity:
+            writeByteAt( self.destAddress, self.bytePosition, self.bitBuffer & 255 )
+            self.bytePosition = self.bytePosition + 1
+            self.bitBuffer = 0
+            self.bitsUsed = 0
+
+public class HuffmanTable:
+
+    """
+    Huffman code table for DEFLATE decoding. Stores code counts per
+    bit length and symbol values for fast decoding.
+    """
+
+    public I64 countsAddress
+    public I64 symbolsAddress
+    public I64 maxSymbols
+
+    public function HuffmanTable( self, I64 maxSymbols ) -> Void:
+
+        """
+        Parameters:
+            maxSymbols (I64):
+                Maximum number of symbols.
+        """
+
+        self.maxSymbols = maxSymbols
+        self.countsAddress = alloc( ( DEFLATE_MAX_BITS + 1 ) * 8 )
+        self.symbolsAddress = alloc( maxSymbols * 4 )
+
+        I64 clearIdx = 0
+        while clearIdx <= DEFLATE_MAX_BITS:
+            I64 slot = self.countsAddress + clearIdx * 8
+            asm volatile "movq $1, ($0)" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
+            clearIdx = clearIdx + 1
+
+    public function build( self, I64 lengthsAddress, I64 symbolCount ) -> Boolean:
+
+        """
+        Build the Huffman table from an array of code lengths.
+
+        Parameters:
+            lengthsAddress (I64):
+                Address of I32 code lengths per symbol.
+            symbolCount (I64):
+                Number of symbols.
+
+        Returns:
+            Boolean:
+                True if table was built successfully.
+
+        Complexity:
+            Time: O(s) where s is symbolCount
+            Space: O(1)
+        """
+
+        I64 clearIdx = 0
+        while clearIdx <= DEFLATE_MAX_BITS:
+            I64 slot = self.countsAddress + clearIdx * 8
+            asm volatile "movq $1, ($0)" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
+            clearIdx = clearIdx + 1
+
+        I64 symbolIdx = 0
+        while symbolIdx < symbolCount:
+            I64 lengthSlot = lengthsAddress + symbolIdx * 4
+            I64 codeLength = 0
+            I64 byte0 = readByteAt( lengthSlot, 0 )
+            I64 byte1 = readByteAt( lengthSlot, 1 )
+            codeLength = byte0 | ( byte1 << 8 )
+
+            if codeLength > 0 and codeLength <= DEFLATE_MAX_BITS:
+                I64 countSlot = self.countsAddress + codeLength * 8
+                I64 currentCount = 0
+                asm volatile "movq ($1), $0" : output( "=r" currentCount ) : input( "r" countSlot ) : clobber()
+                currentCount = currentCount + 1
+                asm volatile "movq $1, ($0)" : output() : input( "r" countSlot, "r" currentCount ) : clobber( "memory" )
+            symbolIdx = symbolIdx + 1
+
+        I64 offsetsAddress = alloc( ( DEFLATE_MAX_BITS + 1 ) * 8 )
+        I64 totalOffset = 0
+        I64 bitLen = 1
+        while bitLen <= DEFLATE_MAX_BITS:
+            I64 offsetSlot = offsetsAddress + bitLen * 8
+            asm volatile "movq $1, ($0)" : output() : input( "r" offsetSlot, "r" totalOffset ) : clobber( "memory" )
+            I64 countSlot = self.countsAddress + bitLen * 8
+            I64 bitCount = 0
+            asm volatile "movq ($1), $0" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
+            totalOffset = totalOffset + bitCount
+            bitLen = bitLen + 1
+
+        symbolIdx = 0
+        while symbolIdx < symbolCount:
+            I64 lengthSlot = lengthsAddress + symbolIdx * 4
+            I64 codeLength = readByteAt( lengthSlot, 0 ) | ( readByteAt( lengthSlot, 1 ) << 8 )
+
+            if codeLength > 0:
+                I64 offsetSlot = offsetsAddress + codeLength * 8
+                I64 symOffset = 0
+                asm volatile "movq ($1), $0" : output( "=r" symOffset ) : input( "r" offsetSlot ) : clobber()
+                I64 symSlot = self.symbolsAddress + symOffset * 4
+                writeByteAt( symSlot, 0, symbolIdx & 255 )
+                writeByteAt( symSlot, 1, ( symbolIdx >> 8 ) & 255 )
+                symOffset = symOffset + 1
+                asm volatile "movq $1, ($0)" : output() : input( "r" offsetSlot, "r" symOffset ) : clobber( "memory" )
+            symbolIdx = symbolIdx + 1
+
+        dealloc( offsetsAddress )
+        return True
+
+    public function decode( self, BitReader reader ) -> I64:
+
+        """
+        Decode one symbol from the bit stream using this table.
+
+        Parameters:
+            reader (BitReader):
+                Bit reader positioned at the code.
+
+        Returns:
+            I64:
+                Decoded symbol value, or -1 on error.
+
+        Complexity:
+            Time: O(code length), max DEFLATE_MAX_BITS
+            Space: O(1)
+        """
+
+        I64 code = 0
+        I64 first = 0
+        I64 index = 0
+        I64 bitLen = 1
+
+        while bitLen <= DEFLATE_MAX_BITS:
+            I64 bit = reader.readBits( 1 )
+            if bit < 0:
+                return -1
+            code = code | ( bit << ( bitLen - 1 ) )
+
+            I64 countSlot = self.countsAddress + bitLen * 8
+            I64 bitCount = 0
+            asm volatile "movq ($1), $0" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
+
+            I64 reversedCode = 0
+            I64 reverseIdx = 0
+            I64 tempCode = code
+            while reverseIdx < bitLen:
+                reversedCode = ( reversedCode << 1 ) | ( tempCode & 1 )
+                tempCode = tempCode >> 1
+                reverseIdx = reverseIdx + 1
+
+            if reversedCode - first < bitCount:
+                I64 symIdx = index + reversedCode - first
+                I64 symSlot = self.symbolsAddress + symIdx * 4
+                I64 symbol = readByteAt( symSlot, 0 ) | ( readByteAt( symSlot, 1 ) << 8 )
+                return symbol
+
+            index = index + bitCount
+            first = ( first + bitCount ) << 1
+            bitLen = bitLen + 1
+
+        return -1
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release table storage.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.countsAddress != 0:
+            dealloc( self.countsAddress )
+            self.countsAddress = 0
+        if self.symbolsAddress != 0:
+            dealloc( self.symbolsAddress )
+            self.symbolsAddress = 0
+
+public function buildFixedLitLenTable( HuffmanTable table ) -> Void:
+
+    """
+    Build the fixed literal/length Huffman table per RFC 1951 3.2.6.
+
+    Parameters:
+        table (HuffmanTable):
+            Table to populate.
+
+    Complexity:
+        Time: O(288)
+        Space: O(288)
+    """
+
+    I64 lengthsAddress = alloc( 288 * 4 )
+    I64 symIdx = 0
+
+    while symIdx < 144:
+        writeByteAt( lengthsAddress + symIdx * 4, 0, 8 )
+        writeByteAt( lengthsAddress + symIdx * 4, 1, 0 )
+        symIdx = symIdx + 1
+
+    while symIdx < 256:
+        writeByteAt( lengthsAddress + symIdx * 4, 0, 9 )
+        writeByteAt( lengthsAddress + symIdx * 4, 1, 0 )
+        symIdx = symIdx + 1
+
+    while symIdx < 280:
+        writeByteAt( lengthsAddress + symIdx * 4, 0, 7 )
+        writeByteAt( lengthsAddress + symIdx * 4, 1, 0 )
+        symIdx = symIdx + 1
+
+    while symIdx < 288:
+        writeByteAt( lengthsAddress + symIdx * 4, 0, 8 )
+        writeByteAt( lengthsAddress + symIdx * 4, 1, 0 )
+        symIdx = symIdx + 1
+
+    table.build( lengthsAddress, 288 )
+    dealloc( lengthsAddress )
+
+public function buildFixedDistTable( HuffmanTable table ) -> Void:
+
+    """
+    Build the fixed distance Huffman table per RFC 1951 3.2.6.
+
+    Parameters:
+        table (HuffmanTable):
+            Table to populate.
+
+    Complexity:
+        Time: O(32)
+        Space: O(32)
+    """
+
+    I64 lengthsAddress = alloc( 32 * 4 )
+    I64 symIdx = 0
+    while symIdx < 32:
+        writeByteAt( lengthsAddress + symIdx * 4, 0, 5 )
+        writeByteAt( lengthsAddress + symIdx * 4, 1, 0 )
+        symIdx = symIdx + 1
+    table.build( lengthsAddress, 32 )
+    dealloc( lengthsAddress )
+
+public function getLengthBase( I64 symbol ) -> I64:
+
+    """
+    Get base length for length symbol (257-285).
+
+    Parameters:
+        symbol (I64):
+            Length symbol code.
+
+    Returns:
+        I64:
+            Base length value.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if symbol <= 264:
+        return symbol - 257 + 3
+    if symbol == 285:
+        return 258
+
+    I64 group = ( symbol - 265 ) / 4
+    I64 offset = ( symbol - 265 ) % 4
+    I64 baseLength = 11
+
+    I64 groupIdx = 0
+    while groupIdx < group:
+        baseLength = baseLength + 4 * ( 1 << ( groupIdx + 1 ) )
+        groupIdx = groupIdx + 1
+
+    baseLength = baseLength + offset * ( 1 << ( group + 1 ) )
+    return baseLength
+
+public function getLengthExtraBits( I64 symbol ) -> I64:
+
+    """
+    Get number of extra bits for length symbol.
+
+    Parameters:
+        symbol (I64):
+            Length symbol code (257-285).
+
+    Returns:
+        I64:
+            Number of extra bits.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if symbol <= 264:
+        return 0
+    if symbol == 285:
+        return 0
+    return ( symbol - 265 ) / 4 + 1
+
+public function getDistBase( I64 symbol ) -> I64:
+
+    """
+    Get base distance for distance symbol (0-29).
+
+    Parameters:
+        symbol (I64):
+            Distance symbol code.
+
+    Returns:
+        I64:
+            Base distance value.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if symbol <= 1:
+        return symbol + 1
+    I64 group = ( symbol - 2 ) / 2
+    I64 offset = ( symbol - 2 ) % 2
+    I64 baseDist = 3
+
+    I64 groupIdx = 0
+    while groupIdx < group:
+        baseDist = baseDist + 2 * ( 1 << ( groupIdx + 1 ) )
+        groupIdx = groupIdx + 1
+
+    baseDist = baseDist + offset * ( 1 << ( group + 1 ) )
+    return baseDist
+
+public function getDistExtraBits( I64 symbol ) -> I64:
+
+    """
+    Get number of extra bits for distance symbol.
+
+    Parameters:
+        symbol (I64):
+            Distance symbol code (0-29).
+
+    Returns:
+        I64:
+            Number of extra bits.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if symbol <= 1:
+        return 0
+    return ( symbol - 2 ) / 2 + 1
+
+public function inflate( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Decompress DEFLATE-compressed data (RFC 1951).
+
+    Parameters:
+        inputAddress (I64):
+            Address of compressed data.
+        inputLength (I64):
+            Length of compressed data.
+        outputAddress (I64):
+            Address of output buffer.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Decompressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is decompressed size
+        Space: O(Huffman tables)
+    """
+
+    BitReader reader = new BitReader( inputAddress, inputLength )
+    I64 outputOffset = 0
+    I64 lastBlock = 0
+
+    while lastBlock == 0:
+        lastBlock = reader.readBits( 1 )
+        I64 blockType = reader.readBits( 2 )
+
+        if blockType == 0:
+            reader.alignToByte()
+            I64 storedLen = reader.readBits( 16 )
+            I64 storedNlen = reader.readBits( 16 )
+
+            I64 copyIdx = 0
+            while copyIdx < storedLen:
+                I64 dataByte = reader.readBits( 8 )
+                if outputOffset < outputCapacity:
+                    writeByteAt( outputAddress, outputOffset, dataByte )
+                outputOffset = outputOffset + 1
+                copyIdx = copyIdx + 1
+
+        else:
+            if blockType == 1:
+                HuffmanTable litTable = new HuffmanTable( 288 )
+                HuffmanTable distTable = new HuffmanTable( 32 )
+                buildFixedLitLenTable( litTable )
+                buildFixedDistTable( distTable )
+
+                I64 blockDone = 0
+                while blockDone == 0:
+                    I64 symbol = litTable.decode( reader )
+                    if symbol < 0:
+                        litTable.destroy()
+                        distTable.destroy()
+                        return -1
+
+                    if symbol < 256:
+                        if outputOffset < outputCapacity:
+                            writeByteAt( outputAddress, outputOffset, symbol )
+                        outputOffset = outputOffset + 1
+                    else:
+                        if symbol == 256:
+                            blockDone = 1
+                        else:
+                            I64 extraBits = getLengthExtraBits( symbol )
+                            I64 matchLength = getLengthBase( symbol )
+                            if extraBits > 0:
+                                matchLength = matchLength + reader.readBits( extraBits )
+
+                            I64 distSymbol = distTable.decode( reader )
+                            I64 distExtra = getDistExtraBits( distSymbol )
+                            I64 matchDist = getDistBase( distSymbol )
+                            if distExtra > 0:
+                                matchDist = matchDist + reader.readBits( distExtra )
+
+                            I64 matchSource = outputOffset - matchDist
+                            I64 matchIdx = 0
+                            while matchIdx < matchLength:
+                                if outputOffset < outputCapacity:
+                                    I64 sourceByte = readByteAt( outputAddress, matchSource + matchIdx )
+                                    writeByteAt( outputAddress, outputOffset, sourceByte )
+                                outputOffset = outputOffset + 1
+                                matchIdx = matchIdx + 1
+
+                litTable.destroy()
+                distTable.destroy()
+
+            else:
+                if blockType == 2:
+                    I64 hlit = reader.readBits( 5 ) + 257
+                    I64 hdist = reader.readBits( 5 ) + 1
+                    I64 hclen = reader.readBits( 4 ) + 4
+
+                    I64 codeLengthOrderAddress = alloc( 19 * 4 )
+                    I64 clClearIdx = 0
+                    while clClearIdx < 19:
+                        writeByteAt( codeLengthOrderAddress + clClearIdx * 4, 0, 0 )
+                        writeByteAt( codeLengthOrderAddress + clClearIdx * 4, 1, 0 )
+                        clClearIdx = clClearIdx + 1
+
+                    I64 clOrderArray = alloc( 19 * 4 )
+                    writeByteAt( clOrderArray, 0, 16 )
+                    writeByteAt( clOrderArray + 4, 0, 17 )
+                    writeByteAt( clOrderArray + 8, 0, 18 )
+                    writeByteAt( clOrderArray + 12, 0, 0 )
+                    writeByteAt( clOrderArray + 16, 0, 8 )
+                    writeByteAt( clOrderArray + 20, 0, 7 )
+                    writeByteAt( clOrderArray + 24, 0, 9 )
+                    writeByteAt( clOrderArray + 28, 0, 6 )
+                    writeByteAt( clOrderArray + 32, 0, 10 )
+                    writeByteAt( clOrderArray + 36, 0, 5 )
+                    writeByteAt( clOrderArray + 40, 0, 11 )
+                    writeByteAt( clOrderArray + 44, 0, 4 )
+                    writeByteAt( clOrderArray + 48, 0, 12 )
+                    writeByteAt( clOrderArray + 52, 0, 3 )
+                    writeByteAt( clOrderArray + 56, 0, 13 )
+                    writeByteAt( clOrderArray + 60, 0, 2 )
+                    writeByteAt( clOrderArray + 64, 0, 14 )
+                    writeByteAt( clOrderArray + 68, 0, 1 )
+                    writeByteAt( clOrderArray + 72, 0, 15 )
+
+                    I64 clIdx = 0
+                    while clIdx < hclen:
+                        I64 orderIdx = readByteAt( clOrderArray + clIdx * 4, 0 )
+                        I64 clBits = reader.readBits( 3 )
+                        writeByteAt( codeLengthOrderAddress + orderIdx * 4, 0, clBits & 255 )
+                        writeByteAt( codeLengthOrderAddress + orderIdx * 4, 1, 0 )
+                        clIdx = clIdx + 1
+                    dealloc( clOrderArray )
+
+                    HuffmanTable clTable = new HuffmanTable( 19 )
+                    clTable.build( codeLengthOrderAddress, 19 )
+                    dealloc( codeLengthOrderAddress )
+
+                    I64 totalCodes = hlit + hdist
+                    I64 allLengthsAddress = alloc( totalCodes * 4 )
+                    I64 allClearIdx = 0
+                    while allClearIdx < totalCodes:
+                        writeByteAt( allLengthsAddress + allClearIdx * 4, 0, 0 )
+                        writeByteAt( allLengthsAddress + allClearIdx * 4, 1, 0 )
+                        allClearIdx = allClearIdx + 1
+
+                    I64 codeIdx = 0
+                    while codeIdx < totalCodes:
+                        I64 clSymbol = clTable.decode( reader )
+                        if clSymbol < 16:
+                            writeByteAt( allLengthsAddress + codeIdx * 4, 0, clSymbol & 255 )
+                            codeIdx = codeIdx + 1
+                        else:
+                            if clSymbol == 16:
+                                I64 repeatCount = 3 + reader.readBits( 2 )
+                                I64 prevLen = 0
+                                if codeIdx > 0:
+                                    prevLen = readByteAt( allLengthsAddress + ( codeIdx - 1 ) * 4, 0 )
+                                I64 repeatIdx = 0
+                                while repeatIdx < repeatCount and codeIdx < totalCodes:
+                                    writeByteAt( allLengthsAddress + codeIdx * 4, 0, prevLen & 255 )
+                                    codeIdx = codeIdx + 1
+                                    repeatIdx = repeatIdx + 1
+                            else:
+                                if clSymbol == 17:
+                                    I64 zeroCount = 3 + reader.readBits( 3 )
+                                    I64 zeroIdx = 0
+                                    while zeroIdx < zeroCount and codeIdx < totalCodes:
+                                        writeByteAt( allLengthsAddress + codeIdx * 4, 0, 0 )
+                                        codeIdx = codeIdx + 1
+                                        zeroIdx = zeroIdx + 1
+                                else:
+                                    I64 longZeroCount = 11 + reader.readBits( 7 )
+                                    I64 longIdx = 0
+                                    while longIdx < longZeroCount and codeIdx < totalCodes:
+                                        writeByteAt( allLengthsAddress + codeIdx * 4, 0, 0 )
+                                        codeIdx = codeIdx + 1
+                                        longIdx = longIdx + 1
+
+                    clTable.destroy()
+
+                    HuffmanTable dynLitTable = new HuffmanTable( hlit )
+                    dynLitTable.build( allLengthsAddress, hlit )
+
+                    HuffmanTable dynDistTable = new HuffmanTable( hdist )
+                    dynDistTable.build( allLengthsAddress + hlit * 4, hdist )
+                    dealloc( allLengthsAddress )
+
+                    I64 dynBlockDone = 0
+                    while dynBlockDone == 0:
+                        I64 dynSymbol = dynLitTable.decode( reader )
+                        if dynSymbol < 0:
+                            dynLitTable.destroy()
+                            dynDistTable.destroy()
+                            return -1
+
+                        if dynSymbol < 256:
+                            if outputOffset < outputCapacity:
+                                writeByteAt( outputAddress, outputOffset, dynSymbol )
+                            outputOffset = outputOffset + 1
+                        else:
+                            if dynSymbol == 256:
+                                dynBlockDone = 1
+                            else:
+                                I64 dynExtraBits = getLengthExtraBits( dynSymbol )
+                                I64 dynMatchLength = getLengthBase( dynSymbol )
+                                if dynExtraBits > 0:
+                                    dynMatchLength = dynMatchLength + reader.readBits( dynExtraBits )
+
+                                I64 dynDistSymbol = dynDistTable.decode( reader )
+                                I64 dynDistExtra = getDistExtraBits( dynDistSymbol )
+                                I64 dynMatchDist = getDistBase( dynDistSymbol )
+                                if dynDistExtra > 0:
+                                    dynMatchDist = dynMatchDist + reader.readBits( dynDistExtra )
+
+                                I64 dynMatchSource = outputOffset - dynMatchDist
+                                I64 dynMatchIdx = 0
+                                while dynMatchIdx < dynMatchLength:
+                                    if outputOffset < outputCapacity:
+                                        I64 dynSourceByte = readByteAt( outputAddress, dynMatchSource + dynMatchIdx )
+                                        writeByteAt( outputAddress, outputOffset, dynSourceByte )
+                                    outputOffset = outputOffset + 1
+                                    dynMatchIdx = dynMatchIdx + 1
+
+                    dynLitTable.destroy()
+                    dynDistTable.destroy()
+                else:
+                    return -1
+
+    return outputOffset
+
+public function deflateFixed( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Compress data using DEFLATE with fixed Huffman codes and LZ77
+    matching. Emits a single final block.
+
+    Parameters:
+        inputAddress (I64):
+            Input data address.
+        inputLength (I64):
+            Input data length.
+        outputAddress (I64):
+            Output buffer address.
+        outputCapacity (I64):
+            Output buffer capacity.
+
+    Returns:
+        I64:
+            Compressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is inputLength
+        Space: O(HASH_TABLE_SIZE) for hash table
+    """
+
+    BitWriter writer = new BitWriter( outputAddress, outputCapacity )
+
+    writer.writeBits( 1, 1 )
+    writer.writeBits( 1, 2 )
+
+    I64 hashTableAddress = alloc( DEFLATE_HASH_SIZE * 4 )
+    I64 clearIdx = 0
+    while clearIdx < DEFLATE_HASH_SIZE:
+        I64 clearSlot = hashTableAddress + clearIdx * 4
+        writeByteAt( clearSlot, 0, 255 )
+        writeByteAt( clearSlot, 1, 255 )
+        writeByteAt( clearSlot, 2, 255 )
+        writeByteAt( clearSlot, 3, 255 )
+        clearIdx = clearIdx + 1
+
+    I64 inputPosition = 0
+
+    while inputPosition < inputLength:
+        I64 matchLength = 0
+        I64 matchDist = 0
+
+        if inputPosition + DEFLATE_MIN_MATCH <= inputLength:
+            I64 hashByte0 = readByteAt( inputAddress, inputPosition )
+            I64 hashByte1 = readByteAt( inputAddress, inputPosition + 1 )
+            I64 hashByte2 = readByteAt( inputAddress, inputPosition + 2 )
+            I64 hashValue = ( ( hashByte0 << 10 ) ^ ( hashByte1 << 5 ) ^ hashByte2 ) & ( DEFLATE_HASH_SIZE - 1 )
+
+            I64 hashSlot = hashTableAddress + hashValue * 4
+            I64 candidate = readByteAt( hashSlot, 0 ) | ( readByteAt( hashSlot, 1 ) << 8 ) | ( readByteAt( hashSlot, 2 ) << 16 ) | ( readByteAt( hashSlot, 3 ) << 24 )
+
+            writeByteAt( hashSlot, 0, inputPosition & 255 )
+            writeByteAt( hashSlot, 1, ( inputPosition >> 8 ) & 255 )
+            writeByteAt( hashSlot, 2, ( inputPosition >> 16 ) & 255 )
+            writeByteAt( hashSlot, 3, ( inputPosition >> 24 ) & 255 )
+
+            if candidate != -1 and candidate < inputPosition and inputPosition - candidate < DEFLATE_WINDOW_SIZE:
+                I64 probeLength = 0
+                I64 probeLimit = inputLength - inputPosition
+                if probeLimit > DEFLATE_MAX_MATCH:
+                    probeLimit = DEFLATE_MAX_MATCH
+                while probeLength < probeLimit and readByteAt( inputAddress, candidate + probeLength ) == readByteAt( inputAddress, inputPosition + probeLength ):
+                    probeLength = probeLength + 1
+
+                if probeLength >= DEFLATE_MIN_MATCH:
+                    matchLength = probeLength
+                    matchDist = inputPosition - candidate
+
+        if matchLength >= DEFLATE_MIN_MATCH:
+            I64 lenSymbol = 0
+            I64 lenExtra = 0
+            I64 lenExtraBits = 0
+
+            if matchLength <= 10:
+                lenSymbol = 257 + matchLength - 3
+                lenExtra = 0
+                lenExtraBits = 0
+            else:
+                lenSymbol = 257
+                I64 testLen = matchLength
+                I64 foundSymbol = 0
+                I64 searchSym = 257
+                while searchSym <= 285 and foundSymbol == 0:
+                    I64 symBase = getLengthBase( searchSym )
+                    I64 symBits = getLengthExtraBits( searchSym )
+                    I64 symMax = symBase + ( 1 << symBits ) - 1
+                    if testLen >= symBase and testLen <= symMax:
+                        lenSymbol = searchSym
+                        lenExtraBits = symBits
+                        lenExtra = testLen - symBase
+                        foundSymbol = 1
+                    searchSym = searchSym + 1
+
+            if lenSymbol <= 279:
+                I64 fixedCode = lenSymbol - 256
+                I64 reversedLen = 0
+                I64 tempLen = fixedCode
+                I64 revIdx = 0
+                while revIdx < 7:
+                    reversedLen = ( reversedLen << 1 ) | ( tempLen & 1 )
+                    tempLen = tempLen >> 1
+                    revIdx = revIdx + 1
+                writer.writeBits( reversedLen, 7 )
+            else:
+                I64 fixedCode = lenSymbol - 280 + 192
+                I64 reversedLen = 0
+                I64 tempLen = fixedCode
+                I64 revIdx = 0
+                while revIdx < 8:
+                    reversedLen = ( reversedLen << 1 ) | ( tempLen & 1 )
+                    tempLen = tempLen >> 1
+                    revIdx = revIdx + 1
+                writer.writeBits( reversedLen, 8 )
+
+            if lenExtraBits > 0:
+                writer.writeBits( lenExtra, lenExtraBits )
+
+            I64 distSymbol = 0
+            I64 distExtra = 0
+            I64 distExtraBits = 0
+            I64 foundDist = 0
+            I64 searchDist = 0
+            while searchDist < 30 and foundDist == 0:
+                I64 distBase = getDistBase( searchDist )
+                I64 distBits = getDistExtraBits( searchDist )
+                I64 distMax = distBase + ( 1 << distBits ) - 1
+                if matchDist >= distBase and matchDist <= distMax:
+                    distSymbol = searchDist
+                    distExtraBits = distBits
+                    distExtra = matchDist - distBase
+                    foundDist = 1
+                searchDist = searchDist + 1
+
+            I64 reversedDist = 0
+            I64 tempDist = distSymbol
+            I64 distRevIdx = 0
+            while distRevIdx < 5:
+                reversedDist = ( reversedDist << 1 ) | ( tempDist & 1 )
+                tempDist = tempDist >> 1
+                distRevIdx = distRevIdx + 1
+            writer.writeBits( reversedDist, 5 )
+
+            if distExtraBits > 0:
+                writer.writeBits( distExtra, distExtraBits )
+
+            inputPosition = inputPosition + matchLength
+        else:
+            I64 literal = readByteAt( inputAddress, inputPosition )
+            if literal <= 143:
+                I64 fixedLit = literal + 48
+                I64 reversedLit = 0
+                I64 tempLit = fixedLit
+                I64 litRevIdx = 0
+                while litRevIdx < 8:
+                    reversedLit = ( reversedLit << 1 ) | ( tempLit & 1 )
+                    tempLit = tempLit >> 1
+                    litRevIdx = litRevIdx + 1
+                writer.writeBits( reversedLit, 8 )
+            else:
+                I64 fixedLit = literal - 144 + 400
+                I64 reversedLit = 0
+                I64 tempLit = fixedLit
+                I64 litRevIdx = 0
+                while litRevIdx < 9:
+                    reversedLit = ( reversedLit << 1 ) | ( tempLit & 1 )
+                    tempLit = tempLit >> 1
+                    litRevIdx = litRevIdx + 1
+                writer.writeBits( reversedLit, 9 )
+            inputPosition = inputPosition + 1
+
+    writer.writeBits( 0, 7 )
+    writer.flush()
+
+    dealloc( hashTableAddress )
+    return writer.bytePosition
+
+public function gzipCompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Compress data with gzip framing (RFC 1952).
+
+    Parameters:
+        inputAddress (I64):
+            Input data address.
+        inputLength (I64):
+            Input data length.
+        outputAddress (I64):
+            Output buffer address.
+        outputCapacity (I64):
+            Output buffer capacity.
+
+    Returns:
+        I64:
+            Total gzip output size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is inputLength
+        Space: O(n) for deflate buffer
+    """
+
+    if outputCapacity < GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE + 8:
+        return -1
+
+    writeByteAt( outputAddress, 0, GZIP_MAGIC_1 )
+    writeByteAt( outputAddress, 1, GZIP_MAGIC_2 )
+    writeByteAt( outputAddress, 2, GZIP_METHOD_DEFLATE )
+    writeByteAt( outputAddress, 3, 0 )
+    writeByteAt( outputAddress, 4, 0 )
+    writeByteAt( outputAddress, 5, 0 )
+    writeByteAt( outputAddress, 6, 0 )
+    writeByteAt( outputAddress, 7, 0 )
+    writeByteAt( outputAddress, 8, 0 )
+    writeByteAt( outputAddress, 9, 3 )
+
+    I64 deflateCapacity = outputCapacity - GZIP_HEADER_SIZE - GZIP_TRAILER_SIZE
+    I64 deflatedSize = deflateFixed( inputAddress, inputLength, outputAddress + GZIP_HEADER_SIZE, deflateCapacity )
+    if deflatedSize < 0:
+        return -1
+
+    I64 trailerOffset = GZIP_HEADER_SIZE + deflatedSize
+    I64 crcValue = crc32( inputAddress, inputLength )
+
+    writeByteAt( outputAddress, trailerOffset, crcValue & 255 )
+    writeByteAt( outputAddress, trailerOffset + 1, ( crcValue >> 8 ) & 255 )
+    writeByteAt( outputAddress, trailerOffset + 2, ( crcValue >> 16 ) & 255 )
+    writeByteAt( outputAddress, trailerOffset + 3, ( crcValue >> 24 ) & 255 )
+
+    I64 sizeValue = inputLength & 4294967295
+    writeByteAt( outputAddress, trailerOffset + 4, sizeValue & 255 )
+    writeByteAt( outputAddress, trailerOffset + 5, ( sizeValue >> 8 ) & 255 )
+    writeByteAt( outputAddress, trailerOffset + 6, ( sizeValue >> 16 ) & 255 )
+    writeByteAt( outputAddress, trailerOffset + 7, ( sizeValue >> 24 ) & 255 )
+
+    return trailerOffset + 8
+
+public function gzipDecompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Decompress gzip-formatted data (RFC 1952).
+
+    Parameters:
+        inputAddress (I64):
+            Compressed gzip data address.
+        inputLength (I64):
+            Length of compressed data.
+        outputAddress (I64):
+            Output buffer address.
+        outputCapacity (I64):
+            Output buffer capacity.
+
+    Returns:
+        I64:
+            Decompressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is decompressed size
+        Space: O(Huffman tables)
+    """
+
+    if inputLength < GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE:
+        return -1
+
+    I64 magic1 = readByteAt( inputAddress, 0 )
+    I64 magic2 = readByteAt( inputAddress, 1 )
+    if magic1 != GZIP_MAGIC_1 or magic2 != GZIP_MAGIC_2:
+        return -1
+
+    I64 method = readByteAt( inputAddress, 2 )
+    if method != GZIP_METHOD_DEFLATE:
+        return -1
+
+    I64 flags = readByteAt( inputAddress, 3 )
+    I64 headerOffset = GZIP_HEADER_SIZE
+
+    if ( flags & 4 ) != 0:
+        I64 extraLen = readByteAt( inputAddress, headerOffset ) | ( readByteAt( inputAddress, headerOffset + 1 ) << 8 )
+        headerOffset = headerOffset + 2 + extraLen
+
+    if ( flags & 8 ) != 0:
+        while headerOffset < inputLength and readByteAt( inputAddress, headerOffset ) != 0:
+            headerOffset = headerOffset + 1
+        headerOffset = headerOffset + 1
+
+    if ( flags & 16 ) != 0:
+        while headerOffset < inputLength and readByteAt( inputAddress, headerOffset ) != 0:
+            headerOffset = headerOffset + 1
+        headerOffset = headerOffset + 1
+
+    if ( flags & 2 ) != 0:
+        headerOffset = headerOffset + 2
+
+    I64 deflateLength = inputLength - headerOffset - GZIP_TRAILER_SIZE
+    if deflateLength <= 0:
+        return -1
+
+    I64 decompressedSize = inflate( inputAddress + headerOffset, deflateLength, outputAddress, outputCapacity )
+    if decompressedSize < 0:
+        return -1
+
+    I64 trailerOffset = headerOffset + deflateLength
+    I64 expectedCrc = readByteAt( inputAddress, trailerOffset ) | ( readByteAt( inputAddress, trailerOffset + 1 ) << 8 ) | ( readByteAt( inputAddress, trailerOffset + 2 ) << 16 ) | ( readByteAt( inputAddress, trailerOffset + 3 ) << 24 )
+
+    I64 actualCrc = crc32( outputAddress, decompressedSize )
+    if ( actualCrc & 4294967295 ) != ( expectedCrc & 4294967295 ):
+        return -1
+
+    return decompressedSize
+
+export {
+    inflate, deflateFixed,
+    gzipCompress, gzipDecompress,
+    BitReader, BitWriter, HuffmanTable
+}

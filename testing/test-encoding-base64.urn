@@ -1,0 +1,88 @@
+package testing
+
+from uranite.encoding.base64 import {
+    initializeBase64Tables, base64Encode, base64Decode,
+    base64EncodedLength, base64DecodedLength
+}
+from uranite.encoding.binary import writeI8, readI8
+from uranite.memory.allocator import alloc, dealloc
+from uranite.testing.assertions import assertEqualI64, assertTrue
+from uranite.io.console import putsln
+from uranite.io.syscall import stringToPtr, stringLen
+
+public function main() -> I32:
+    putsln( "=== Encoding Base64 Tests ===" )
+
+    initializeBase64Tables()
+
+    I64 encodedLength = base64EncodedLength( 0 )
+    assertEqualI64( 0, encodedLength, "empty encoded length" )
+
+    encodedLength = base64EncodedLength( 1 )
+    assertEqualI64( 4, encodedLength, "1 byte encoded length" )
+
+    encodedLength = base64EncodedLength( 2 )
+    assertEqualI64( 4, encodedLength, "2 bytes encoded length" )
+
+    encodedLength = base64EncodedLength( 3 )
+    assertEqualI64( 4, encodedLength, "3 bytes encoded length" )
+
+    encodedLength = base64EncodedLength( 4 )
+    assertEqualI64( 8, encodedLength, "4 bytes encoded length" )
+    putsln( "encoded length OK" )
+
+    I64 inputBuffer = alloc( 16 )
+    I64 encodeOutput = alloc( 32 )
+    I64 decodeOutput = alloc( 16 )
+
+    writeI8( inputBuffer, 0, 0x4D )
+    writeI8( inputBuffer, 1, 0x61 )
+    writeI8( inputBuffer, 2, 0x6E )
+    I64 actualEncodedLength = base64Encode( inputBuffer, 3, encodeOutput )
+    assertEqualI64( 4, actualEncodedLength, "Man encoded length 4" )
+
+    assertEqualI64( 0x54, readI8( encodeOutput, 0 ), "Man base64 byte 0 = T" )
+    assertEqualI64( 0x57, readI8( encodeOutput, 1 ), "Man base64 byte 1 = W" )
+    assertEqualI64( 0x46, readI8( encodeOutput, 2 ), "Man base64 byte 2 = F" )
+    assertEqualI64( 0x75, readI8( encodeOutput, 3 ), "Man base64 byte 3 = u" )
+    putsln( "encode Man -> TWFu OK" )
+
+    I64 decodedLength = base64Decode( encodeOutput, 4, decodeOutput )
+    assertEqualI64( 3, decodedLength, "decode TWFu length 3" )
+    assertEqualI64( 0x4D, readI8( decodeOutput, 0 ), "decode byte 0 = M" )
+    assertEqualI64( 0x61, readI8( decodeOutput, 1 ), "decode byte 1 = a" )
+    assertEqualI64( 0x6E, readI8( decodeOutput, 2 ), "decode byte 2 = n" )
+    putsln( "decode TWFu -> Man OK" )
+
+    writeI8( inputBuffer, 0, 0x4D )
+    actualEncodedLength = base64Encode( inputBuffer, 1, encodeOutput )
+    assertEqualI64( 4, actualEncodedLength, "single byte encoded length" )
+    decodedLength = base64Decode( encodeOutput, 4, decodeOutput )
+    assertEqualI64( 1, decodedLength, "single byte round-trip length" )
+    assertEqualI64( 0x4D, readI8( decodeOutput, 0 ), "single byte round-trip value" )
+    putsln( "single byte round-trip OK" )
+
+    I64 byteIndex = 0
+    while byteIndex < 8:
+        writeI8( inputBuffer, byteIndex, byteIndex * 31 + 17 )
+        byteIndex = byteIndex + 1
+    actualEncodedLength = base64Encode( inputBuffer, 8, encodeOutput )
+    assertTrue( actualEncodedLength > 0, "8 byte encode positive" )
+    decodedLength = base64Decode( encodeOutput, actualEncodedLength, decodeOutput )
+    assertEqualI64( 8, decodedLength, "8 byte round-trip length" )
+    byteIndex = 0
+    while byteIndex < 8:
+        I64 expectedByte = byteIndex * 31 + 17
+        I64 signedExpected = expectedByte % 256
+        if signedExpected >= 128:
+            signedExpected = signedExpected - 256
+        assertEqualI64( signedExpected, readI8( decodeOutput, byteIndex ), "8 byte round-trip" )
+        byteIndex = byteIndex + 1
+    putsln( "multi-byte round-trip OK" )
+
+    dealloc( inputBuffer )
+    dealloc( encodeOutput )
+    dealloc( decodeOutput )
+
+    putsln( "=== All Encoding Base64 Tests Passed ===" )
+    return 0

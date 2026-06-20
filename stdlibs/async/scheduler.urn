@@ -124,31 +124,52 @@ public class NativeScheduler implements Scheduler:
         self.trampolineAddr = trampoline
         self.initialized = True
     
+    public function spawn( self, I64 funcPtr ) -> I64:
+
+        """
+        Create a new task from a function pointer with no user data.
+        Satisfies the Scheduler interface contract.
+
+        Parameters:
+            funcPtr (I64):
+                Address of the function the task will execute.
+
+        Returns:
+            I64:
+                The unique identifier assigned to the newly spawned task.
+
+        Raises:
+            AsyncRuntimeError:
+                If the maximum task count has been reached or no free slot exists.
+        """
+
+        return self.spawn( funcPtr, 0 )
+
     public function spawn( self, I64 funcPtr, I64 userData ) -> I64:
-        
+
         """
         Create a new task and allocate its stack and execution context. The task
         is placed in the first available slot and assigned a unique identifier.
-        
+
         Parameters:
             funcPtr (I64):
                 Address of the function the task will execute.
             userData (I64):
                 User-defined data associated with the task.
-        
+
         Returns:
             I64:
                 The unique identifier assigned to the newly spawned task.
-        
+
         Raises:
             AsyncRuntimeError:
                 If the maximum task count has been reached or no free slot exists.
-        
+
         Complexity:
             Time: O(n)
             Space: O(n)
         """
-        
+
         if self.taskCount >= MAX_TASKS:
             raise new AsyncRuntimeError( "maximum task count reached", 0, None )
         I64 taskId = self.nextTaskId

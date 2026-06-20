@@ -1,0 +1,560 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/binary.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Big-endian binary serialization and deserialization for network protocol
+# wire formats. Provides read and write functions for 8/16/32/64-bit integers
+# in big-endian byte order, plus zig-zag encoded variable-length integers
+# (VarInt) as used by the Kafka wire protocol and Protocol Buffers.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.encoding.binary
+
+from uranite.io.syscall import readByteAt, writeByteAt
+
+public function readI8( I64 bufferAddress, I64 offset ) -> I64:
+
+    """
+    Read a single signed byte from the buffer at the given offset and
+    sign-extend it to I64.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+
+    Returns:
+        I64:
+            The signed byte value sign-extended to 64 bits (-128 to 127).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 raw = readByteAt( bufferAddress, offset )
+    if raw >= 128:
+        return raw - 256
+    return raw
+
+public function writeI8( I64 bufferAddress, I64 offset, I64 value ) -> Void:
+
+    """
+    Write the low byte of value to the buffer at the given offset.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+        value (I64):
+            The value whose low 8 bits will be written.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    writeByteAt( bufferAddress, offset, value & 255 )
+
+public function readI16Be( I64 bufferAddress, I64 offset ) -> I64:
+
+    """
+    Read a signed 16-bit big-endian integer from the buffer at the given
+    offset and sign-extend it to I64.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+
+    Returns:
+        I64:
+            The signed 16-bit value sign-extended to 64 bits.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 highByte = readByteAt( bufferAddress, offset )
+    I64 lowByte = readByteAt( bufferAddress, offset + 1 )
+    I64 raw = ( highByte << 8 ) | lowByte
+    if raw >= 32768:
+        return raw - 65536
+    return raw
+
+public function writeI16Be( I64 bufferAddress, I64 offset, I64 value ) -> Void:
+
+    """
+    Write a 16-bit integer in big-endian byte order to the buffer at the
+    given offset.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+        value (I64):
+            The value whose low 16 bits will be written in big-endian order.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 masked = value & 65535
+    writeByteAt( bufferAddress, offset, ( masked >> 8 ) & 255 )
+    writeByteAt( bufferAddress, offset + 1, masked & 255 )
+
+public function readI32Be( I64 bufferAddress, I64 offset ) -> I64:
+
+    """
+    Read a signed 32-bit big-endian integer from the buffer at the given
+    offset and sign-extend it to I64.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+
+    Returns:
+        I64:
+            The signed 32-bit value sign-extended to 64 bits.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 byte3 = readByteAt( bufferAddress, offset )
+    I64 byte2 = readByteAt( bufferAddress, offset + 1 )
+    I64 byte1 = readByteAt( bufferAddress, offset + 2 )
+    I64 byte0 = readByteAt( bufferAddress, offset + 3 )
+    I64 raw = ( byte3 << 24 ) | ( byte2 << 16 ) | ( byte1 << 8 ) | byte0
+    if raw >= 2147483648:
+        return raw - 4294967296
+    return raw
+
+public function writeI32Be( I64 bufferAddress, I64 offset, I64 value ) -> Void:
+
+    """
+    Write a 32-bit integer in big-endian byte order to the buffer at the
+    given offset.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+        value (I64):
+            The value whose low 32 bits will be written in big-endian order.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 masked = value & 4294967295
+    writeByteAt( bufferAddress, offset, ( masked >> 24 ) & 255 )
+    writeByteAt( bufferAddress, offset + 1, ( masked >> 16 ) & 255 )
+    writeByteAt( bufferAddress, offset + 2, ( masked >> 8 ) & 255 )
+    writeByteAt( bufferAddress, offset + 3, masked & 255 )
+
+public function readI64Be( I64 bufferAddress, I64 offset ) -> I64:
+
+    """
+    Read a 64-bit big-endian integer from the buffer at the given offset.
+    The value is returned as a signed I64 with no additional conversion
+    since I64 is already the native 64-bit signed type.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+
+    Returns:
+        I64:
+            The 64-bit value read in big-endian order.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 byte7 = readByteAt( bufferAddress, offset )
+    I64 byte6 = readByteAt( bufferAddress, offset + 1 )
+    I64 byte5 = readByteAt( bufferAddress, offset + 2 )
+    I64 byte4 = readByteAt( bufferAddress, offset + 3 )
+    I64 byte3 = readByteAt( bufferAddress, offset + 4 )
+    I64 byte2 = readByteAt( bufferAddress, offset + 5 )
+    I64 byte1 = readByteAt( bufferAddress, offset + 6 )
+    I64 byte0 = readByteAt( bufferAddress, offset + 7 )
+    I64 result = ( byte7 << 56 ) | ( byte6 << 48 ) | ( byte5 << 40 ) | ( byte4 << 32 ) | ( byte3 << 24 ) | ( byte2 << 16 ) | ( byte1 << 8 ) | byte0
+    return result
+
+public function writeI64Be( I64 bufferAddress, I64 offset, I64 value ) -> Void:
+
+    """
+    Write a 64-bit integer in big-endian byte order to the buffer at the
+    given offset.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset into the buffer.
+        value (I64):
+            The 64-bit value to write in big-endian order.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    writeByteAt( bufferAddress, offset, ( value >> 56 ) & 255 )
+    writeByteAt( bufferAddress, offset + 1, ( value >> 48 ) & 255 )
+    writeByteAt( bufferAddress, offset + 2, ( value >> 40 ) & 255 )
+    writeByteAt( bufferAddress, offset + 3, ( value >> 32 ) & 255 )
+    writeByteAt( bufferAddress, offset + 4, ( value >> 24 ) & 255 )
+    writeByteAt( bufferAddress, offset + 5, ( value >> 16 ) & 255 )
+    writeByteAt( bufferAddress, offset + 6, ( value >> 8 ) & 255 )
+    writeByteAt( bufferAddress, offset + 7, value & 255 )
+
+public function readVarI32( I64 bufferAddress, I64 offset ) -> I64:
+
+    """
+    Read a zig-zag encoded variable-length 32-bit integer from the buffer.
+    Returns the decoded signed value packed with the number of bytes consumed:
+    the low 32 bits contain the decoded value, the high 32 bits contain the
+    byte count. Extract with: value = result & 0xFFFFFFFF (sign-extend if
+    bit 31 set), bytesRead = result >> 32.
+
+    Zig-zag encoding maps signed integers to unsigned via (n << 1) ^ (n >> 31)
+    so small-magnitude values (positive or negative) use fewer bytes.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset to start reading from.
+
+    Returns:
+        I64:
+            Packed result: low 32 bits = decoded signed value,
+            bits 32-63 = number of bytes consumed.
+
+    Complexity:
+        Time: O(1) amortized (max 5 bytes for 32-bit varint)
+        Space: O(1)
+    """
+
+    I64 unsignedResult = 0
+    I64 shiftAmount = 0
+    I64 bytesConsumed = 0
+    I64 currentByte = 128
+    while ( currentByte & 128 ) != 0:
+        currentByte = readByteAt( bufferAddress, offset + bytesConsumed )
+        unsignedResult = unsignedResult | ( ( currentByte & 127 ) << shiftAmount )
+        shiftAmount = shiftAmount + 7
+        bytesConsumed = bytesConsumed + 1
+    I64 signedResult = ( unsignedResult >> 1 ) ^ ( 0 - ( unsignedResult & 1 ) )
+    I64 maskedResult = signedResult & 4294967295
+    if maskedResult >= 2147483648:
+        maskedResult = maskedResult - 4294967296
+    return ( bytesConsumed << 32 ) | ( maskedResult & 4294967295 )
+
+public function writeVarI32( I64 bufferAddress, I64 offset, I64 value ) -> I64:
+
+    """
+    Write a signed 32-bit integer as a zig-zag encoded variable-length
+    integer to the buffer at the given offset. Returns the number of bytes
+    written.
+
+    Zig-zag encoding: unsigned = (value << 1) ^ (value >> 31).
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset to start writing at.
+        value (I64):
+            The signed 32-bit value to encode.
+
+    Returns:
+        I64:
+            The number of bytes written (1-5).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 maskedValue = value & 4294967295
+    I64 zigzag = ( maskedValue << 1 ) ^ ( maskedValue >> 31 )
+    zigzag = zigzag & 4294967295
+    I64 bytesWritten = 0
+    while zigzag >= 128:
+        writeByteAt( bufferAddress, offset + bytesWritten, ( zigzag & 127 ) | 128 )
+        zigzag = zigzag >> 7
+        bytesWritten = bytesWritten + 1
+    writeByteAt( bufferAddress, offset + bytesWritten, zigzag & 127 )
+    bytesWritten = bytesWritten + 1
+    return bytesWritten
+
+public function readVarI64( I64 bufferAddress, I64 offset ) -> I64:
+
+    """
+    Read a zig-zag encoded variable-length 64-bit integer from the buffer.
+    Returns the decoded signed value. Since VarI64 can consume up to 10 bytes
+    and the full 64-bit range is needed for the value, the byte count is not
+    packed into the return value. Use readVarI64WithLength for the packed
+    variant.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset to start reading from.
+
+    Returns:
+        I64:
+            The decoded signed 64-bit value.
+
+    Complexity:
+        Time: O(1) amortized (max 10 bytes for 64-bit varint)
+        Space: O(1)
+    """
+
+    I64 unsignedResult = 0
+    I64 shiftAmount = 0
+    I64 bytesConsumed = 0
+    I64 currentByte = 128
+    while ( currentByte & 128 ) != 0:
+        currentByte = readByteAt( bufferAddress, offset + bytesConsumed )
+        unsignedResult = unsignedResult | ( ( currentByte & 127 ) << shiftAmount )
+        shiftAmount = shiftAmount + 7
+        bytesConsumed = bytesConsumed + 1
+    I64 signedResult = ( unsignedResult >> 1 ) ^ ( 0 - ( unsignedResult & 1 ) )
+    return signedResult
+
+public function readVarI64WithLength( I64 bufferAddress, I64 offset, I64 lengthOutputAddress ) -> I64:
+
+    """
+    Read a zig-zag encoded variable-length 64-bit integer from the buffer,
+    storing the number of bytes consumed at lengthOutputAddress.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset to start reading from.
+        lengthOutputAddress (I64):
+            Address where the byte count consumed will be written as I64.
+
+    Returns:
+        I64:
+            The decoded signed 64-bit value.
+
+    Complexity:
+        Time: O(1) amortized (max 10 bytes)
+        Space: O(1)
+    """
+
+    I64 unsignedResult = 0
+    I64 shiftAmount = 0
+    I64 bytesConsumed = 0
+    I64 currentByte = 128
+    while ( currentByte & 128 ) != 0:
+        currentByte = readByteAt( bufferAddress, offset + bytesConsumed )
+        unsignedResult = unsignedResult | ( ( currentByte & 127 ) << shiftAmount )
+        shiftAmount = shiftAmount + 7
+        bytesConsumed = bytesConsumed + 1
+    I64 effectiveAddress = lengthOutputAddress
+    asm volatile "movq $1, ($0)" : : input( "r" effectiveAddress, "r" bytesConsumed ) : clobber( "memory" )
+    I64 signedResult = ( unsignedResult >> 1 ) ^ ( 0 - ( unsignedResult & 1 ) )
+    return signedResult
+
+public function writeVarI64( I64 bufferAddress, I64 offset, I64 value ) -> I64:
+
+    """
+    Write a signed 64-bit integer as a zig-zag encoded variable-length
+    integer to the buffer at the given offset. Returns the number of bytes
+    written.
+
+    Zig-zag encoding: unsigned = (value << 1) ^ (value >> 63).
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset to start writing at.
+        value (I64):
+            The signed 64-bit value to encode.
+
+    Returns:
+        I64:
+            The number of bytes written (1-10).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 zigzag = ( value << 1 ) ^ ( value >> 63 )
+    I64 bytesWritten = 0
+    I64 remaining = zigzag
+    if remaining < 0:
+        I64 loopCount = 0
+        while loopCount < 9:
+            writeByteAt( bufferAddress, offset + bytesWritten, ( remaining & 127 ) | 128 )
+            remaining = ( remaining >> 7 ) & 144115188075855871
+            bytesWritten = bytesWritten + 1
+            loopCount = loopCount + 1
+        writeByteAt( bufferAddress, offset + bytesWritten, remaining & 127 )
+        bytesWritten = bytesWritten + 1
+    else:
+        while remaining >= 128:
+            writeByteAt( bufferAddress, offset + bytesWritten, ( remaining & 127 ) | 128 )
+            remaining = remaining >> 7
+            bytesWritten = bytesWritten + 1
+        writeByteAt( bufferAddress, offset + bytesWritten, remaining & 127 )
+        bytesWritten = bytesWritten + 1
+    return bytesWritten
+
+public function readUnsignedVarI32( I64 bufferAddress, I64 offset ) -> I64:
+
+    """
+    Read an unsigned variable-length 32-bit integer (no zig-zag encoding)
+    from the buffer. Used by Kafka compact protocol for string/array lengths.
+    Returns the value packed with byte count: low 32 bits = value,
+    high 32 bits = bytes consumed.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset to start reading from.
+
+    Returns:
+        I64:
+            Packed result: low 32 bits = unsigned value,
+            bits 32-63 = bytes consumed.
+
+    Complexity:
+        Time: O(1) amortized (max 5 bytes)
+        Space: O(1)
+    """
+
+    I64 result = 0
+    I64 shiftAmount = 0
+    I64 bytesConsumed = 0
+    I64 currentByte = 128
+    while ( currentByte & 128 ) != 0:
+        currentByte = readByteAt( bufferAddress, offset + bytesConsumed )
+        result = result | ( ( currentByte & 127 ) << shiftAmount )
+        shiftAmount = shiftAmount + 7
+        bytesConsumed = bytesConsumed + 1
+    return ( bytesConsumed << 32 ) | ( result & 4294967295 )
+
+public function writeUnsignedVarI32( I64 bufferAddress, I64 offset, I64 value ) -> I64:
+
+    """
+    Write an unsigned 32-bit integer as a variable-length integer (no
+    zig-zag encoding) to the buffer. Used by Kafka compact protocol for
+    string/array lengths. Returns the number of bytes written.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the buffer.
+        offset (I64):
+            Byte offset to start writing at.
+        value (I64):
+            The unsigned 32-bit value to encode.
+
+    Returns:
+        I64:
+            The number of bytes written (1-5).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 remaining = value & 4294967295
+    I64 bytesWritten = 0
+    while remaining >= 128:
+        writeByteAt( bufferAddress, offset + bytesWritten, ( remaining & 127 ) | 128 )
+        remaining = remaining >> 7
+        bytesWritten = bytesWritten + 1
+    writeByteAt( bufferAddress, offset + bytesWritten, remaining & 127 )
+    bytesWritten = bytesWritten + 1
+    return bytesWritten
+
+public function copyBytes( I64 sourceAddress, I64 sourceOffset, I64 destinationAddress, I64 destinationOffset, I64 byteCount ) -> Void:
+
+    """
+    Copy byteCount bytes from source buffer to destination buffer. Handles
+    overlapping regions correctly when source is before destination by
+    copying backward.
+
+    Parameters:
+        sourceAddress (I64):
+            Base address of the source buffer.
+        sourceOffset (I64):
+            Byte offset in the source buffer.
+        destinationAddress (I64):
+            Base address of the destination buffer.
+        destinationOffset (I64):
+            Byte offset in the destination buffer.
+        byteCount (I64):
+            Number of bytes to copy.
+
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    I64 sourceStart = sourceAddress + sourceOffset
+    I64 destinationStart = destinationAddress + destinationOffset
+    if sourceStart < destinationStart:
+        I64 reverseIndex = byteCount - 1
+        while reverseIndex >= 0:
+            I64 byteValue = readByteAt( sourceAddress, sourceOffset + reverseIndex )
+            writeByteAt( destinationAddress, destinationOffset + reverseIndex, byteValue )
+            reverseIndex = reverseIndex - 1
+    else:
+        I64 forwardIndex = 0
+        while forwardIndex < byteCount:
+            I64 byteValue = readByteAt( sourceAddress, sourceOffset + forwardIndex )
+            writeByteAt( destinationAddress, destinationOffset + forwardIndex, byteValue )
+            forwardIndex = forwardIndex + 1
+
+export {
+    readI8, writeI8,
+    readI16Be, writeI16Be,
+    readI32Be, writeI32Be,
+    readI64Be, writeI64Be,
+    readVarI32, writeVarI32,
+    readVarI64, writeVarI64,
+    readVarI64WithLength,
+    readUnsignedVarI32, writeUnsignedVarI32,
+    copyBytes
+}

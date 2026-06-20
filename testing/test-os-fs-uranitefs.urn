@@ -1,7 +1,7 @@
 package testing
 
 from uranite.os.fs.uranitefs import {
-    AetherFsSuperblock, AetherFsInode, AetherFileSystem
+    UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
 }
 from uranite.testing.assertions import {
     assertEqualI64, assertTrue, assertFalse
@@ -9,9 +9,9 @@ from uranite.testing.assertions import {
 from uranite.io.console import putsln
 
 public function main() -> I32:
-    putsln( "=== OS FS AetherFS Tests ===" )
+    putsln( "=== OS FS UraniteFS Tests ===" )
 
-    AetherFsSuperblock sb = new AetherFsSuperblock()
+    UraniteFsSuperblock sb = new UraniteFsSuperblock()
     assertEqualI64( 1095062081, sb.magic, "magic" )
     assertEqualI64( 1, sb.version, "version" )
     assertEqualI64( 4096, sb.blockSize, "blockSize" )
@@ -20,7 +20,7 @@ public function main() -> I32:
     assertTrue( sb.isValid(), "isValid" )
     putsln( "superblock OK" )
 
-    AetherFsInode inode = new AetherFsInode()
+    UraniteFsInode inode = new UraniteFsInode()
     assertEqualI64( 0, inode.mode, "mode 0" )
     assertEqualI64( 1, inode.linkCount, "linkCount 1" )
     assertFalse( inode.isDirectory(), "not dir" )
@@ -28,10 +28,10 @@ public function main() -> I32:
     assertFalse( inode.hasCapability(), "no cap" )
     putsln( "inode OK" )
 
-    AetherFileSystem fs = new AetherFileSystem( 5, 1 )
+    UraniteFileSystem fs = new UraniteFileSystem( 5, 1 )
     assertEqualI64( 5, fs.getDeviceId(), "deviceId" )
     assertTrue( fs.isValid(), "fs valid" )
     putsln( "filesystem OK" )
 
-    putsln( "=== All AetherFS tests passed ===" )
+    putsln( "=== All UraniteFS tests passed ===" )
     return 0

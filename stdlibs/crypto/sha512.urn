@@ -1,0 +1,407 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/sha512.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# SHA-512 cryptographic hash function per FIPS 180-4. Produces a 64-byte
+# (512-bit) message digest. Uses 64-bit word operations natively matching
+# Uranite's I64 type. Used by HMAC-SHA-512 for Kafka SCRAM-SHA-512 SASL.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.crypto.sha512
+
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
+from uranite.encoding.binary import readI64Be, writeI64Be
+
+const I64 SHA512_BLOCK_SIZE = 128
+"""SHA-512 processes data in 128-byte (1024-bit) blocks."""
+
+const I64 SHA512_DIGEST_SIZE = 64
+"""SHA-512 produces a 64-byte (512-bit) digest."""
+
+public class Sha512:
+
+    """
+    SHA-512 hash computation state. Supports incremental hashing via
+    update() calls followed by a final digest() call.
+    """
+
+    protect I64 stateAddress
+    protect I64 blockAddress
+    protect I64 blockLength
+    protect I64 totalBytesLow
+    protect I64 totalBytesHigh
+    protect I64 roundConstantsAddress
+
+    public function Sha512( self ) -> Void:
+
+        """
+        Construct a new SHA-512 hasher with initial hash values per
+        FIPS 180-4 section 5.3.5 and precomputed round constants.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1) (832 bytes allocated: 64 state + 128 block + 640 constants)
+        """
+
+        self.stateAddress = alloc( 64 )
+        self.blockAddress = alloc( SHA512_BLOCK_SIZE )
+        self.blockLength = 0
+        self.totalBytesLow = 0
+        self.totalBytesHigh = 0
+        self.roundConstantsAddress = alloc( 640 )
+        self.initializeState()
+        self.initializeRoundConstants()
+
+    protect function initializeState( self ) -> Void:
+
+        """
+        Set the eight 64-bit state words to the SHA-512 initial hash values.
+        """
+
+        writeI64Be( self.stateAddress, 0, 7640891576956012808 )
+        writeI64Be( self.stateAddress, 8, -4942790177534073029 )
+        writeI64Be( self.stateAddress, 16, 4354685564936845355 )
+        writeI64Be( self.stateAddress, 24, -6534734903238641935 )
+        writeI64Be( self.stateAddress, 32, 5840696475078001361 )
+        writeI64Be( self.stateAddress, 40, -7276294671716946913 )
+        writeI64Be( self.stateAddress, 48, 2270897969802886507 )
+        writeI64Be( self.stateAddress, 56, 6620516959819538809 )
+
+    protect function initializeRoundConstants( self ) -> Void:
+
+        """
+        Store the 80 SHA-512 round constants (first 64 bits of the fractional
+        parts of the cube roots of the first 80 primes).
+        """
+
+        I64 rcAddress = self.roundConstantsAddress
+        writeI64Be( rcAddress, 0, 4794697086780616226 )
+        writeI64Be( rcAddress, 8, 8158064640168781261 )
+        writeI64Be( rcAddress, 16, -5349999486874862801 )
+        writeI64Be( rcAddress, 24, -1606136188198331460 )
+        writeI64Be( rcAddress, 32, 4131703408338449720 )
+        writeI64Be( rcAddress, 40, 6480981068601479193 )
+        writeI64Be( rcAddress, 48, -7908458776815382629 )
+        writeI64Be( rcAddress, 56, -6116909921290321640 )
+        writeI64Be( rcAddress, 64, -2880145864133508542 )
+        writeI64Be( rcAddress, 72, 1334009975649890238 )
+        writeI64Be( rcAddress, 80, 2608012711638119052 )
+        writeI64Be( rcAddress, 88, 6128411473006802146 )
+        writeI64Be( rcAddress, 96, 8268148722764581231 )
+        writeI64Be( rcAddress, 104, -9160688886553864527 )
+        writeI64Be( rcAddress, 112, -7215885187991268811 )
+        writeI64Be( rcAddress, 120, -4495734319001033068 )
+        writeI64Be( rcAddress, 128, -1973867731355612462 )
+        writeI64Be( rcAddress, 136, -1171420211273849373 )
+        writeI64Be( rcAddress, 144, 1135362057144423861 )
+        writeI64Be( rcAddress, 152, 2597628984639134821 )
+        writeI64Be( rcAddress, 160, 3308224258029322869 )
+        writeI64Be( rcAddress, 168, 5365058923640841347 )
+        writeI64Be( rcAddress, 176, 6679025012923562964 )
+        writeI64Be( rcAddress, 184, 8573033837759648693 )
+        writeI64Be( rcAddress, 192, -7476448914759557205 )
+        writeI64Be( rcAddress, 200, -6327057829258317296 )
+        writeI64Be( rcAddress, 208, -5763719355590565569 )
+        writeI64Be( rcAddress, 216, -4658551843659510044 )
+        writeI64Be( rcAddress, 224, -4116276920077217854 )
+        writeI64Be( rcAddress, 232, -3051310485924567259 )
+        writeI64Be( rcAddress, 240, 489312712824947311 )
+        writeI64Be( rcAddress, 248, 1452737877330783856 )
+        writeI64Be( rcAddress, 256, 2861767655752347644 )
+        writeI64Be( rcAddress, 264, 3322285676063803686 )
+        writeI64Be( rcAddress, 272, 5560940570517711597 )
+        writeI64Be( rcAddress, 280, 5996557281743188959 )
+        writeI64Be( rcAddress, 288, 7280758554555802590 )
+        writeI64Be( rcAddress, 296, 8532644243296465576 )
+        writeI64Be( rcAddress, 304, -9096487096722542874 )
+        writeI64Be( rcAddress, 312, -7894198246740708037 )
+        writeI64Be( rcAddress, 320, -6719396339535248540 )
+        writeI64Be( rcAddress, 328, -6333637450476146687 )
+        writeI64Be( rcAddress, 336, -4446306890439682159 )
+        writeI64Be( rcAddress, 344, -4076793802049405392 )
+        writeI64Be( rcAddress, 352, -3345356375505022440 )
+        writeI64Be( rcAddress, 360, -2983346525034927856 )
+        writeI64Be( rcAddress, 368, -860691631967231958 )
+        writeI64Be( rcAddress, 376, 1182934255886127544 )
+        writeI64Be( rcAddress, 384, 1847814050463011016 )
+        writeI64Be( rcAddress, 392, 2177327727835720531 )
+        writeI64Be( rcAddress, 400, 2830643537854262169 )
+        writeI64Be( rcAddress, 408, 3796741975233480872 )
+        writeI64Be( rcAddress, 416, 4115178125766777443 )
+        writeI64Be( rcAddress, 424, 5681478168544905931 )
+        writeI64Be( rcAddress, 432, 6601373596472566643 )
+        writeI64Be( rcAddress, 440, 7507060721942968483 )
+        writeI64Be( rcAddress, 448, 8399075790359081724 )
+        writeI64Be( rcAddress, 456, 8693463985226723168 )
+        writeI64Be( rcAddress, 464, -8878714635349349518 )
+        writeI64Be( rcAddress, 472, -8302665154208450068 )
+        writeI64Be( rcAddress, 480, -8016688836872298968 )
+        writeI64Be( rcAddress, 488, -6606660893046293015 )
+        writeI64Be( rcAddress, 496, -4685533653050689259 )
+        writeI64Be( rcAddress, 504, -4147400797238176981 )
+        writeI64Be( rcAddress, 512, -3880063495543823972 )
+        writeI64Be( rcAddress, 520, -3348786107499101689 )
+        writeI64Be( rcAddress, 528, -1523767162380948706 )
+        writeI64Be( rcAddress, 536, -757361751448694408 )
+        writeI64Be( rcAddress, 544, 500013540394364858 )
+        writeI64Be( rcAddress, 552, 748580250866718886 )
+        writeI64Be( rcAddress, 560, 1242879168328830382 )
+        writeI64Be( rcAddress, 568, 1977374033974150939 )
+        writeI64Be( rcAddress, 576, 2944078676154940804 )
+        writeI64Be( rcAddress, 584, 3659926193048069267 )
+        writeI64Be( rcAddress, 592, 4368137639120453308 )
+        writeI64Be( rcAddress, 600, 4836135668995329356 )
+        writeI64Be( rcAddress, 608, 5532061633213252278 )
+        writeI64Be( rcAddress, 616, 6448918945643986474 )
+        writeI64Be( rcAddress, 624, 6902733635092675308 )
+        writeI64Be( rcAddress, 632, 7801388544844847127 )
+
+    protect function rightRotate64( self, I64 value, I64 amount ) -> I64:
+
+        """
+        Perform a 64-bit right rotation using unsigned shift semantics.
+
+        Parameters:
+            value (I64):
+                The 64-bit value to rotate.
+            amount (I64):
+                Number of bit positions to rotate right.
+
+        Returns:
+            I64:
+                The rotated 64-bit value.
+        """
+
+        I64 rightShifted = 0
+        asm volatile "shrq %cl, $0" : output( "=r" rightShifted ) : input( "0" value, "{rcx}" amount ) : clobber()
+        I64 leftShifted = value << ( 64 - amount )
+        return rightShifted | leftShifted
+
+    protect function logicalRightShift64( self, I64 value, I64 amount ) -> I64:
+
+        """
+        Perform an unsigned (logical) right shift on a 64-bit value.
+
+        Parameters:
+            value (I64):
+                The 64-bit value to shift.
+            amount (I64):
+                Number of bit positions to shift right.
+
+        Returns:
+            I64:
+                The shifted value with zero-filled high bits.
+        """
+
+        I64 result = 0
+        asm volatile "shrq %cl, $0" : output( "=r" result ) : input( "0" value, "{rcx}" amount ) : clobber()
+        return result
+
+    protect function processBlock( self ) -> Void:
+
+        """
+        Process a single 128-byte block through the SHA-512 compression
+        function with 80 rounds.
+
+        Complexity:
+            Time: O(1) (80 rounds, constant)
+            Space: O(1) (640 bytes for message schedule)
+        """
+
+        I64 scheduleAddress = alloc( 640 )
+        I64 scheduleIndex = 0
+        while scheduleIndex < 16:
+            I64 word = readI64Be( self.blockAddress, scheduleIndex * 8 )
+            writeI64Be( scheduleAddress, scheduleIndex * 8, word )
+            scheduleIndex = scheduleIndex + 1
+        while scheduleIndex < 80:
+            I64 w15 = readI64Be( scheduleAddress, ( scheduleIndex - 15 ) * 8 )
+            I64 w2 = readI64Be( scheduleAddress, ( scheduleIndex - 2 ) * 8 )
+            I64 w16 = readI64Be( scheduleAddress, ( scheduleIndex - 16 ) * 8 )
+            I64 w7 = readI64Be( scheduleAddress, ( scheduleIndex - 7 ) * 8 )
+            I64 sigma0 = self.rightRotate64( w15, 1 ) ^ self.rightRotate64( w15, 8 ) ^ self.logicalRightShift64( w15, 7 )
+            I64 sigma1 = self.rightRotate64( w2, 19 ) ^ self.rightRotate64( w2, 61 ) ^ self.logicalRightShift64( w2, 6 )
+            I64 newWord = w16 + sigma0 + w7 + sigma1
+            writeI64Be( scheduleAddress, scheduleIndex * 8, newWord )
+            scheduleIndex = scheduleIndex + 1
+        I64 workA = readI64Be( self.stateAddress, 0 )
+        I64 workB = readI64Be( self.stateAddress, 8 )
+        I64 workC = readI64Be( self.stateAddress, 16 )
+        I64 workD = readI64Be( self.stateAddress, 24 )
+        I64 workE = readI64Be( self.stateAddress, 32 )
+        I64 workF = readI64Be( self.stateAddress, 40 )
+        I64 workG = readI64Be( self.stateAddress, 48 )
+        I64 workH = readI64Be( self.stateAddress, 56 )
+        I64 roundIndex = 0
+        while roundIndex < 80:
+            I64 bigSigma1 = self.rightRotate64( workE, 14 ) ^ self.rightRotate64( workE, 18 ) ^ self.rightRotate64( workE, 41 )
+            I64 choice = ( workE & workF ) ^ ( ( workE ^ -1 ) & workG )
+            I64 roundConstant = readI64Be( self.roundConstantsAddress, roundIndex * 8 )
+            I64 scheduleWord = readI64Be( scheduleAddress, roundIndex * 8 )
+            I64 temp1 = workH + bigSigma1 + choice + roundConstant + scheduleWord
+            I64 bigSigma0 = self.rightRotate64( workA, 28 ) ^ self.rightRotate64( workA, 34 ) ^ self.rightRotate64( workA, 39 )
+            I64 majority = ( workA & workB ) ^ ( workA & workC ) ^ ( workB & workC )
+            I64 temp2 = bigSigma0 + majority
+            workH = workG
+            workG = workF
+            workF = workE
+            workE = workD + temp1
+            workD = workC
+            workC = workB
+            workB = workA
+            workA = temp1 + temp2
+            roundIndex = roundIndex + 1
+        writeI64Be( self.stateAddress, 0, readI64Be( self.stateAddress, 0 ) + workA )
+        writeI64Be( self.stateAddress, 8, readI64Be( self.stateAddress, 8 ) + workB )
+        writeI64Be( self.stateAddress, 16, readI64Be( self.stateAddress, 16 ) + workC )
+        writeI64Be( self.stateAddress, 24, readI64Be( self.stateAddress, 24 ) + workD )
+        writeI64Be( self.stateAddress, 32, readI64Be( self.stateAddress, 32 ) + workE )
+        writeI64Be( self.stateAddress, 40, readI64Be( self.stateAddress, 40 ) + workF )
+        writeI64Be( self.stateAddress, 48, readI64Be( self.stateAddress, 48 ) + workG )
+        writeI64Be( self.stateAddress, 56, readI64Be( self.stateAddress, 56 ) + workH )
+        dealloc( scheduleAddress )
+
+    public function update( self, I64 dataAddress, I64 dataLength ) -> Void:
+
+        """
+        Feed data into the hash computation incrementally.
+
+        Parameters:
+            dataAddress (I64):
+                Base address of the input data.
+            dataLength (I64):
+                Number of bytes to process.
+
+        Complexity:
+            Time: O(n) where n is dataLength
+            Space: O(1)
+        """
+
+        I64 inputIndex = 0
+        while inputIndex < dataLength:
+            I64 spaceInBlock = SHA512_BLOCK_SIZE - self.blockLength
+            I64 bytesToCopy = dataLength - inputIndex
+            if bytesToCopy > spaceInBlock:
+                bytesToCopy = spaceInBlock
+            I64 copyIndex = 0
+            while copyIndex < bytesToCopy:
+                I64 byteValue = readByteAt( dataAddress, inputIndex + copyIndex )
+                writeByteAt( self.blockAddress, self.blockLength + copyIndex, byteValue )
+                copyIndex = copyIndex + 1
+            self.blockLength = self.blockLength + bytesToCopy
+            inputIndex = inputIndex + bytesToCopy
+            self.totalBytesLow = self.totalBytesLow + bytesToCopy
+            if self.blockLength == SHA512_BLOCK_SIZE:
+                self.processBlock()
+                self.blockLength = 0
+
+    public function digest( self, I64 outputAddress ) -> Void:
+
+        """
+        Finalize the hash and write the 64-byte digest. Applies FIPS 180-4
+        padding: 1-bit, zeros to 112 bytes mod 128, then 128-bit length.
+
+        Parameters:
+            outputAddress (I64):
+                Address to write the 64-byte digest.
+
+        Complexity:
+            Time: O(1) (at most 2 block compressions)
+            Space: O(1)
+        """
+
+        I64 totalBitsLow = self.totalBytesLow << 3
+        I64 totalBitsHigh = self.logicalRightShift64( self.totalBytesLow, 61 )
+        writeByteAt( self.blockAddress, self.blockLength, 128 )
+        self.blockLength = self.blockLength + 1
+        if self.blockLength > 112:
+            while self.blockLength < SHA512_BLOCK_SIZE:
+                writeByteAt( self.blockAddress, self.blockLength, 0 )
+                self.blockLength = self.blockLength + 1
+            self.processBlock()
+            self.blockLength = 0
+        while self.blockLength < 112:
+            writeByteAt( self.blockAddress, self.blockLength, 0 )
+            self.blockLength = self.blockLength + 1
+        writeI64Be( self.blockAddress, 112, totalBitsHigh )
+        writeI64Be( self.blockAddress, 120, totalBitsLow )
+        self.processBlock()
+        I64 stateIndex = 0
+        while stateIndex < 8:
+            I64 word = readI64Be( self.stateAddress, stateIndex * 8 )
+            writeI64Be( outputAddress, stateIndex * 8, word )
+            stateIndex = stateIndex + 1
+
+    public function reset( self ) -> Void:
+
+        """
+        Reset the hasher to initial state for reuse.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.initializeState()
+        self.blockLength = 0
+        self.totalBytesLow = 0
+        self.totalBytesHigh = 0
+
+    public function destroy( self ) -> Void:
+
+        """
+        Free all memory allocated by this hasher.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        dealloc( self.stateAddress )
+        dealloc( self.blockAddress )
+        dealloc( self.roundConstantsAddress )
+
+public function sha512( I64 dataAddress, I64 dataLength, I64 outputAddress ) -> Void:
+
+    """
+    Compute the SHA-512 hash of dataLength bytes and write the 64-byte
+    digest to outputAddress.
+
+    Parameters:
+        dataAddress (I64):
+            Base address of the input data.
+        dataLength (I64):
+            Number of bytes to hash.
+        outputAddress (I64):
+            Address to write the 64-byte digest.
+
+    Complexity:
+        Time: O(n) where n is dataLength
+        Space: O(1)
+    """
+
+    Sha512 hasher = new Sha512()
+    hasher.update( dataAddress, dataLength )
+    hasher.digest( outputAddress )
+    hasher.destroy()
+
+export {
+    SHA512_BLOCK_SIZE,
+    SHA512_DIGEST_SIZE,
+    Sha512,
+    sha512
+}

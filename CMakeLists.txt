@@ -63,16 +63,21 @@ add_definitions( -D_URANITE_LANGUAGE_DESCRIPTION_="${PROJECT_DESCRIPTION}" )
 add_definitions( -D_URANITE_LANGUAGE_VERSION_="${PROJECT_VERSION}" )
 add_definitions( -D_URANITE_GIT_HASH_="${_URANITE_GIT_HASH_}" )
 
-# Default modules directory path (for installed builds)
+# Default modules directory path
+# In development builds, use the source tree's stdlibs directory so the
+# compiler can find modules without --modules-path regardless of CWD.
+# For installed/packaged builds, override URANITE_MODULES_INSTALL_DIR.
 if( NOT DEFINED URANITE_MODULES_INSTALL_DIR )
-    set( URANITE_MODULES_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBDIR}/uranite/stdlibs" )
+    set( URANITE_MODULES_INSTALL_DIR "${CMAKE_SOURCE_DIR}/stdlibs" )
 endif()
 
 add_definitions( -D_URANITE_MODULES_DIR_="${URANITE_MODULES_INSTALL_DIR}" )
 
-# Default C runtime directory path (for installed builds)
+# Default C runtime directory path
+# In development builds, use the build tree's runtime directory.
+# For installed/packaged builds, override URANITE_C_RUNTIME_INSTALL_DIR.
 if( NOT DEFINED URANITE_C_RUNTIME_INSTALL_DIR )
-    set( URANITE_C_RUNTIME_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBDIR}/uranite/runtime" )
+    set( URANITE_C_RUNTIME_INSTALL_DIR "${CMAKE_BINARY_DIR}/runtime" )
 endif()
 
 add_definitions( -D_URANITE_C_RUNTIME_DIR_="${URANITE_C_RUNTIME_INSTALL_DIR}" )
@@ -125,9 +130,9 @@ add_executable( uranite-tests ${URANITE_SOURCES_LIBRARY} ${LSP_SOURCES_LIB} ${UR
 file( GLOB_RECURSE LSP_SOURCES "${CMAKE_SOURCE_DIR}/src/uranite-lsp/*.cpp" )
 if( LSP_SOURCES )
     add_executable( uranite-lsp ${LSP_SOURCES} ${URANITE_SOURCES_LIBRARY} )
-    target_include_directories( uranite-lsp PRIVATE src src/uranite src/uranite-lsp )
+    target_include_directories( uranite-lsp PRIVATE src src/uranite src/uranite-lsp third_party/tree-sitter/lib/include grammar/tree-sitter-uranite/src )
     target_compile_options( uranite-lsp PRIVATE ${LLVM_CXXFLAGS_LIST} -Wall -Wextra -Wno-unused-parameter -Werror=return-type -O2 -fexceptions -g -DNDEBUG )
-    target_link_libraries( uranite-lsp PRIVATE argparse::argparse fmt::fmt spdlog::spdlog ${LLVM_LIBS} pthread )
+    target_link_libraries( uranite-lsp PRIVATE argparse::argparse fmt::fmt spdlog::spdlog ${LLVM_LIBS} pthread tree-sitter-runtime tree-sitter-uranite )
     target_link_options( uranite-lsp PRIVATE ${LLVM_LDFLAGS} )
 endif()
 
@@ -165,6 +170,28 @@ if( PKG_SOURCES )
     target_link_options( uranite-pkg PRIVATE ${LLVM_LDFLAGS} )
 endif()
 
+# Tree-sitter Runtime (vendored C library for incremental parsing)
+add_library( tree-sitter-runtime STATIC
+    third_party/tree-sitter/lib/src/lib.c
+)
+set_target_properties( tree-sitter-runtime PROPERTIES C_STANDARD 11 )
+target_include_directories( tree-sitter-runtime PUBLIC
+    third_party/tree-sitter/lib/include
+    third_party/tree-sitter/lib/src
+)
+
+# Tree-sitter Uranite Grammar (generated parser + external scanner)
+add_library( tree-sitter-uranite STATIC
+    grammar/tree-sitter-uranite/src/parser.c
+    grammar/tree-sitter-uranite/src/scanner.c
+)
+set_target_properties( tree-sitter-uranite PROPERTIES C_STANDARD 11 )
+target_include_directories( tree-sitter-uranite PUBLIC
+    third_party/tree-sitter/lib/include
+    third_party/tree-sitter/lib/src
+    grammar/tree-sitter-uranite/src
+)
+
 # FFI Runtime (C library for dynamic library loading)
 add_library( uranite-ffi-runtime STATIC src/uranite-crt/ffi-runtime.c )
 target_link_libraries( uranite-ffi-runtime PRIVATE dl )
@@ -183,7 +210,7 @@ add_dependencies(
 
 # Include Directories (scoped to target)
 target_include_directories( uranite PRIVATE src src/uranite )
-target_include_directories( uranite-tests PRIVATE src src/uranite src/uranite-lsp )
+target_include_directories( uranite-tests PRIVATE src src/uranite src/uranite-lsp third_party/tree-sitter/lib/include grammar/tree-sitter-uranite/src )
 
 # Compiler Flags (from llvm-config + additional)
 target_compile_options( uranite PRIVATE ${LLVM_CXXFLAGS_LIST} -Wall -Wextra -Wno-unused-parameter -Werror=return-type -O2 -fexceptions -g -DNDEBUG )
@@ -191,7 +218,7 @@ target_compile_options( uranite-tests PRIVATE ${LLVM_CXXFLAGS_LIST} -Wall -Wextr
 
 # Link Dependencies
 target_link_libraries( uranite PRIVATE argparse::argparse fmt::fmt spdlog::spdlog ${LLVM_LIBS} )
-target_link_libraries( uranite-tests PRIVATE fmt::fmt GTest::GTest GTest::Main spdlog::spdlog ${LLVM_LIBS} pthread )
+target_link_libraries( uranite-tests PRIVATE fmt::fmt GTest::GTest GTest::Main spdlog::spdlog ${LLVM_LIBS} pthread tree-sitter-runtime tree-sitter-uranite )
 
 # Linker Flags (e.g. -L...)
 target_link_options( uranite PRIVATE ${LLVM_LDFLAGS} )

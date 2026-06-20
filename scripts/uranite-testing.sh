@@ -71,10 +71,10 @@ function main() {
 			pathname="${pathname::-1}"
 		fi
 		if [[ -d "${basepath}/${pathname}" ]]; then
-			echo -e "${basepath/${basepath}\//}/${pathname}: testing"
+			puts "${basepath/${basepath}\//}/${pathname}: testing"
 			for filename in "${basepath}/${pathname}"/*.urn; do
 				if [[ -d "$filename" ]]; then
-					echo -e "$filename/${basepath}\//: skipped because is not in the scope"
+					puts "$filename/${basepath}\//: skipped because is not in the scope"
 					continue
 				fi
 				cd "$basepath" || continue
@@ -138,50 +138,50 @@ function main() {
 			fi
 			if [[ ! "$filename" =~ \.urn$ ]] || [[ -d "$filename" ]]; then
 				if [[ "$filename" =~ \.ll$ ]]; then
-					echo -e "${filename/${basepath}\//}: removing intermediate code file"
+					puts "${filename/${basepath}\//}: removing intermediate code file"
 				elif [[ "$filename" =~ \.(ae|c|cpp|h|hpp|sh)$ ]]; then
 					continue
 				else
-					echo -e "${filename/${basepath}\//}: removing binary executable file"
+					puts "${filename/${basepath}\//}: removing binary executable file"
 				fi
 				rm "$filename"
 			fi
 		done
 	done
 	clear
-	echo -e "$temporary: removing temporary file"
+	puts "$temporary: removing temporary file"
 	rm "$temporary"
 	clear
-	echo -e "=========================================="
-	echo -e "$compiled: successfully compiled .urn codes"
+	puts "=========================================="
+	puts "$compiled: successfully compiled .urn codes"
 	if [[ ${#faileds[@]} -ge 1 ]]; then
-		echo -e "=========================================="
-		echo -e "${#faileds[@]}: files has been error occurred"
-		echo -e "=========================================="
+		puts "=========================================="
+		puts "${#faileds[@]}: files has been error occurred"
+		puts "=========================================="
 		for i in "${!faileds[@]}"; do
-			echo -e "${faileds[$i]/${basepath}\//}"
+			puts "${faileds[$i]/${basepath}\//}"
 			if [[ -z "${foutputs[$i]}" ]]; then
-				echo -e "(No output generated)"
+				puts "(No output generated)"
 			else
-				echo -e "${foutputs[$i]/${basepath}\//}"
+				puts "${foutputs[$i]/${basepath}\//}"
 			fi
-			echo -e "=========================================="
+			puts "=========================================="
 		done
 	fi
 	if [[ ${#warnings[@]} -ge 1 ]]; then
 		if [[ ${#faileds[@]} -le 0 ]]; then
-			echo -e "=========================================="
+			puts "=========================================="
 		fi
-		echo -e "${#warnings[@]}: files has been warning occurred"
-		echo -e "=========================================="
+		puts "${#warnings[@]}: files has been warning occurred"
+		puts "=========================================="
 		for i in "${!warnings[@]}"; do
-			echo -e "${warnings[$i]/${basepath}\//}"
+			puts "${warnings[$i]/${basepath}\//}"
 			if [[ -z "${woutputs[$i]}" ]]; then
-				echo -e "(No output generated)"
+				puts "(No output generated)"
 			else
-				echo -e "${woutputs[$i]/${basepath}\//}"
+				puts "${woutputs[$i]/${basepath}\//}"
 			fi
-			echo -e "=========================================="
+			puts "=========================================="
 		done
 	fi
 }

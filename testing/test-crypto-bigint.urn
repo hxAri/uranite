@@ -1,0 +1,84 @@
+package testing
+
+from uranite.crypto.bigint import {
+    BigInt, bigintFromI64, bigintFromBytes, bigintToBytes,
+    bigintAdd, bigintSubtract, bigintMultiply, bigintModExp
+}
+from uranite.encoding.binary import writeI8, readI8
+from uranite.memory.allocator import alloc, dealloc
+from uranite.testing.assertions import assertEqualI64, assertNotEqualI64, assertTrue
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Crypto BigInt Tests ===" )
+
+    BigInt zero = bigintFromI64( 0, 4 )
+    I64 zeroOutput = alloc( 8 )
+    I64 zeroLen = bigintToBytes( zero, zeroOutput, 8 )
+    assertTrue( zeroLen >= 0, "zero converts to bytes" )
+    putsln( "zero OK" )
+
+    BigInt one = bigintFromI64( 1, 4 )
+    BigInt two = bigintFromI64( 2, 4 )
+
+    BigInt sum = bigintFromI64( 0, 4 )
+    bigintAdd( one, two, sum )
+    I64 sumOutput = alloc( 8 )
+    I64 sumLen = bigintToBytes( sum, sumOutput, 8 )
+    assertTrue( sumLen > 0, "1+2 produces bytes" )
+    I64 lastSumByte = readI8( sumOutput, sumLen - 1 )
+    assertEqualI64( 3, lastSumByte, "1+2=3 last byte" )
+    putsln( "add OK" )
+
+    BigInt five = bigintFromI64( 5, 4 )
+    BigInt three = bigintFromI64( 3, 4 )
+    BigInt difference = bigintFromI64( 0, 4 )
+    bigintSubtract( five, three, difference )
+    I64 diffOutput = alloc( 8 )
+    I64 diffLen = bigintToBytes( difference, diffOutput, 8 )
+    I64 lastDiffByte = readI8( diffOutput, diffLen - 1 )
+    assertEqualI64( 2, lastDiffByte, "5-3=2 last byte" )
+    putsln( "subtract OK" )
+
+    BigInt four = bigintFromI64( 4, 4 )
+    BigInt product = bigintFromI64( 0, 8 )
+    bigintMultiply( three, four, product )
+    I64 prodOutput = alloc( 8 )
+    I64 prodLen = bigintToBytes( product, prodOutput, 8 )
+    I64 lastProdByte = readI8( prodOutput, prodLen - 1 )
+    assertEqualI64( 12, lastProdByte, "3*4=12 last byte" )
+    putsln( "multiply OK" )
+
+    # modexp: 2^10 mod 1000 = 1024 mod 1000 = 24
+    BigInt base = bigintFromI64( 2, 4 )
+    BigInt exponent = bigintFromI64( 10, 4 )
+    BigInt modulus = bigintFromI64( 1000, 4 )
+    BigInt modExpResult = bigintModExp( base, exponent, modulus )
+    I64 modExpOutput = alloc( 8 )
+    I64 modExpLen = bigintToBytes( modExpResult, modExpOutput, 8 )
+    I64 lastModExpByte = readI8( modExpOutput, modExpLen - 1 )
+    assertEqualI64( 24, lastModExpByte, "2^10 mod 1000 = 24" )
+    putsln( "modexp OK" )
+
+    # from bytes round-trip
+    I64 bytesInput = alloc( 2 )
+    writeI8( bytesInput, 0, 0x01 )
+    writeI8( bytesInput, 1, 0x00 )
+    BigInt fromBytes = bigintFromBytes( bytesInput, 2, 4 )
+    I64 roundTripOutput = alloc( 4 )
+    I64 roundTripLen = bigintToBytes( fromBytes, roundTripOutput, 4 )
+    assertTrue( roundTripLen >= 2, "0x0100 needs at least 2 bytes" )
+    assertEqualI64( 0x01, readI8( roundTripOutput, roundTripLen - 2 ), "0x0100 high byte" )
+    assertEqualI64( 0x00, readI8( roundTripOutput, roundTripLen - 1 ), "0x0100 low byte" )
+    putsln( "from/to bytes round-trip OK" )
+
+    dealloc( zeroOutput )
+    dealloc( sumOutput )
+    dealloc( diffOutput )
+    dealloc( prodOutput )
+    dealloc( modExpOutput )
+    dealloc( bytesInput )
+    dealloc( roundTripOutput )
+
+    putsln( "=== All Crypto BigInt Tests Passed ===" )
+    return 0

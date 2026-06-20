@@ -22,6 +22,7 @@
 package uranite.crypto.random
 
 from uranite.os.crypto.rng import Csprng
+from uranite.io.syscall import writeByteAt
 
 public class SecureRandom:
 
@@ -91,7 +92,49 @@ public class SecureRandom:
 
         return self.generator.isInitialized()
 
+public function randomBytes( I64 bufferAddress, I64 byteCount ) -> Void:
+
+    """
+    Fill a buffer with cryptographically secure random bytes using
+    hardware-seeded xoshiro256** CSPRNG. Each generated 64-bit value
+    provides 8 bytes; partial final values are written byte-by-byte.
+
+    Parameters:
+        bufferAddress (I64):
+            Destination buffer address to fill with random data.
+        byteCount (I64):
+            Number of random bytes to write.
+
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    Csprng generator = new Csprng()
+    generator.seedFromHardware()
+
+    I64 writeOffset = 0
+    while writeOffset + 8 <= byteCount:
+        I64 randomValue = generator.next()
+        writeByteAt( bufferAddress, writeOffset, randomValue & 255 )
+        writeByteAt( bufferAddress, writeOffset + 1, ( randomValue >> 8 ) & 255 )
+        writeByteAt( bufferAddress, writeOffset + 2, ( randomValue >> 16 ) & 255 )
+        writeByteAt( bufferAddress, writeOffset + 3, ( randomValue >> 24 ) & 255 )
+        writeByteAt( bufferAddress, writeOffset + 4, ( randomValue >> 32 ) & 255 )
+        writeByteAt( bufferAddress, writeOffset + 5, ( randomValue >> 40 ) & 255 )
+        writeByteAt( bufferAddress, writeOffset + 6, ( randomValue >> 48 ) & 255 )
+        writeByteAt( bufferAddress, writeOffset + 7, ( randomValue >> 56 ) & 255 )
+        writeOffset = writeOffset + 8
+
+    if writeOffset < byteCount:
+        I64 tailValue = generator.next()
+        while writeOffset < byteCount:
+            writeByteAt( bufferAddress, writeOffset, tailValue & 255 )
+            tailValue = tailValue >> 8
+            writeOffset = writeOffset + 1
+
 export {
     SecureRandom,
-    Csprng
+    Csprng,
+    randomBytes
 }

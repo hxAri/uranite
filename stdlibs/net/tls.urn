@@ -1,0 +1,1829 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/net/tls.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# TLS 1.2 client implementation (RFC 5246) with AES-128-GCM cipher suite
+# (TLS_RSA_WITH_AES_128_GCM_SHA256, 0x009C) and RSA key exchange.
+#
+# Provides TlsSocket wrapping a raw TCP file descriptor with:
+#   - Full TLS 1.2 handshake (ClientHello → Finished)
+#   - AES-128-GCM record encryption/decryption (RFC 5288)
+#   - TLS PRF via HMAC-SHA-256 (RFC 5246 Section 5)
+#   - Record layer framing and sequence number tracking
+#
+# The AES block cipher is implemented in software using the standard
+# S-box lookup table, ShiftRows, MixColumns, and AddRoundKey operations.
+# GCM mode provides authenticated encryption with 128-bit tags.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.tls
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt, writeI32At, readI32At
+from uranite.encoding.binary import {
+    writeI16Be, readI16Be, copyBytes
+}
+from uranite.net.socket import socketSend, socketRecv, socketClose
+from uranite.crypto.sha256 import sha256, Sha256
+from uranite.crypto.hmac import hmacSha256
+from uranite.crypto.random import randomBytes
+from uranite.crypto.rsa import RsaPublicKey, rsaPublicKeyFromDer, rsaEncryptPkcs1v15
+from uranite.encoding.der import DerElement, derParseElement, derParseSequence, derIterateSequence
+from uranite.encoding.pem import PemBlock, pemDecode
+
+# ──────────────────────────────────────────────────────────────
+# TLS Constants
+# ──────────────────────────────────────────────────────────────
+
+const I64 TLS_VERSION_10 = 769
+const I64 TLS_VERSION_12 = 771
+
+const I64 CONTENT_TYPE_CHANGE_CIPHER_SPEC = 20
+const I64 CONTENT_TYPE_ALERT = 21
+const I64 CONTENT_TYPE_HANDSHAKE = 22
+const I64 CONTENT_TYPE_APPLICATION_DATA = 23
+
+const I64 HANDSHAKE_CLIENT_HELLO = 1
+const I64 HANDSHAKE_SERVER_HELLO = 2
+const I64 HANDSHAKE_CERTIFICATE = 11
+const I64 HANDSHAKE_SERVER_HELLO_DONE = 14
+const I64 HANDSHAKE_CLIENT_KEY_EXCHANGE = 16
+const I64 HANDSHAKE_FINISHED = 20
+
+const I64 CIPHER_TLS_RSA_AES_128_GCM_SHA256 = 156
+
+const I64 AES_BLOCK_SIZE = 16
+const I64 AES_128_KEY_SIZE = 16
+const I64 AES_128_ROUNDS = 10
+const I64 GCM_IV_SIZE = 12
+const I64 GCM_TAG_SIZE = 16
+const I64 GCM_EXPLICIT_NONCE_SIZE = 8
+
+const I64 TLS_RECORD_HEADER_SIZE = 5
+const I64 TLS_MAX_RECORD_SIZE = 16384
+const I64 TLS_PREMASTER_SECRET_SIZE = 48
+const I64 TLS_MASTER_SECRET_SIZE = 48
+const I64 TLS_VERIFY_DATA_SIZE = 12
+const I64 SHA256_DIGEST_SIZE = 32
+
+# ──────────────────────────────────────────────────────────────
+# AES S-box
+# ──────────────────────────────────────────────────────────────
+
+protect function buildAesSbox() -> I64:
+
+    """
+    Allocate and initialize the AES forward S-box lookup table (256 bytes).
+    Returns address of the allocated table. Caller must dealloc when done.
+
+    Returns:
+        I64:
+            Address of 256-byte S-box table.
+
+    Complexity:
+        Time: O(1)
+        Space: O(256)
+    """
+
+    I64 sboxAddress = alloc( 256 )
+
+    writeSboxRow( sboxAddress, 0, 99, 124, 119, 123, 242, 107, 111, 197, 48, 1, 103, 43, 254, 215, 171, 118 )
+    writeSboxRow( sboxAddress, 16, 202, 130, 201, 125, 250, 89, 71, 240, 173, 212, 162, 175, 156, 164, 114, 192 )
+    writeSboxRow( sboxAddress, 32, 183, 253, 147, 38, 54, 63, 247, 204, 52, 165, 229, 241, 113, 216, 49, 21 )
+    writeSboxRow( sboxAddress, 48, 4, 199, 35, 195, 24, 150, 5, 154, 7, 18, 128, 226, 235, 39, 178, 117 )
+    writeSboxRow( sboxAddress, 64, 9, 131, 44, 26, 27, 110, 90, 160, 82, 59, 214, 179, 41, 227, 47, 132 )
+    writeSboxRow( sboxAddress, 80, 83, 209, 0, 237, 32, 252, 177, 91, 106, 203, 190, 57, 74, 76, 88, 207 )
+    writeSboxRow( sboxAddress, 96, 208, 239, 170, 251, 67, 77, 51, 133, 69, 249, 2, 127, 80, 60, 159, 168 )
+    writeSboxRow( sboxAddress, 112, 81, 163, 64, 143, 146, 157, 56, 245, 188, 182, 218, 33, 16, 255, 243, 210 )
+    writeSboxRow( sboxAddress, 128, 205, 12, 19, 236, 95, 151, 68, 23, 196, 167, 126, 61, 100, 93, 25, 115 )
+    writeSboxRow( sboxAddress, 144, 96, 129, 79, 220, 34, 42, 144, 136, 70, 238, 184, 20, 222, 94, 11, 219 )
+    writeSboxRow( sboxAddress, 160, 224, 50, 58, 10, 73, 6, 36, 92, 194, 211, 172, 98, 145, 149, 228, 121 )
+    writeSboxRow( sboxAddress, 176, 231, 200, 55, 109, 141, 213, 78, 169, 108, 86, 244, 234, 101, 122, 174, 8 )
+    writeSboxRow( sboxAddress, 192, 186, 120, 37, 46, 28, 166, 180, 198, 232, 221, 116, 31, 75, 189, 139, 138 )
+    writeSboxRow( sboxAddress, 208, 112, 62, 181, 102, 72, 3, 246, 14, 97, 53, 87, 185, 134, 193, 29, 158 )
+    writeSboxRow( sboxAddress, 224, 225, 248, 152, 17, 105, 217, 142, 148, 155, 30, 135, 233, 206, 85, 40, 223 )
+    writeSboxRow( sboxAddress, 240, 140, 161, 137, 13, 191, 230, 66, 104, 65, 153, 45, 15, 176, 84, 187, 22 )
+
+    return sboxAddress
+
+protect function writeSboxRow( I64 tableAddress, I64 rowOffset, I64 b0, I64 b1, I64 b2, I64 b3, I64 b4, I64 b5, I64 b6, I64 b7, I64 b8, I64 b9, I64 b10, I64 b11, I64 b12, I64 b13, I64 b14, I64 b15 ) -> Void:
+
+    """
+    Write 16 S-box entries at the given row offset.
+
+    Parameters:
+        tableAddress (I64):
+            Base address of S-box table.
+        rowOffset (I64):
+            Byte offset for this row (0, 16, 32, ...).
+        b0..b15 (I64):
+            The 16 S-box values for this row.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    writeByteAt( tableAddress, rowOffset, b0 )
+    writeByteAt( tableAddress, rowOffset + 1, b1 )
+    writeByteAt( tableAddress, rowOffset + 2, b2 )
+    writeByteAt( tableAddress, rowOffset + 3, b3 )
+    writeByteAt( tableAddress, rowOffset + 4, b4 )
+    writeByteAt( tableAddress, rowOffset + 5, b5 )
+    writeByteAt( tableAddress, rowOffset + 6, b6 )
+    writeByteAt( tableAddress, rowOffset + 7, b7 )
+    writeByteAt( tableAddress, rowOffset + 8, b8 )
+    writeByteAt( tableAddress, rowOffset + 9, b9 )
+    writeByteAt( tableAddress, rowOffset + 10, b10 )
+    writeByteAt( tableAddress, rowOffset + 11, b11 )
+    writeByteAt( tableAddress, rowOffset + 12, b12 )
+    writeByteAt( tableAddress, rowOffset + 13, b13 )
+    writeByteAt( tableAddress, rowOffset + 14, b14 )
+    writeByteAt( tableAddress, rowOffset + 15, b15 )
+
+# ──────────────────────────────────────────────────────────────
+# AES Round Constants
+# ──────────────────────────────────────────────────────────────
+
+protect function aesRcon( I64 roundIndex ) -> I64:
+
+    """
+    Return the AES round constant (Rcon) for the given round index.
+
+    Parameters:
+        roundIndex (I64):
+            Round index (1-10 for AES-128).
+
+    Returns:
+        I64:
+            Round constant byte value.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if roundIndex == 1:
+        return 1
+    if roundIndex == 2:
+        return 2
+    if roundIndex == 3:
+        return 4
+    if roundIndex == 4:
+        return 8
+    if roundIndex == 5:
+        return 16
+    if roundIndex == 6:
+        return 32
+    if roundIndex == 7:
+        return 64
+    if roundIndex == 8:
+        return 128
+    if roundIndex == 9:
+        return 27
+    if roundIndex == 10:
+        return 54
+    return 0
+
+# ──────────────────────────────────────────────────────────────
+# AES Key Expansion (AES-128)
+# ──────────────────────────────────────────────────────────────
+
+protect function aesKeyExpansion( I64 keyAddress, I64 sboxAddress, I64 expandedKeyAddress ) -> Void:
+
+    """
+    Expand a 16-byte AES-128 key into 11 round keys (176 bytes total).
+    Each round key is 16 bytes. Stored sequentially at expandedKeyAddress.
+
+    Parameters:
+        keyAddress (I64):
+            Address of 16-byte key.
+        sboxAddress (I64):
+            Address of 256-byte S-box.
+        expandedKeyAddress (I64):
+            Address of 176-byte output buffer.
+
+    Complexity:
+        Time: O(1) (fixed 10 rounds)
+        Space: O(1) (in-place expansion)
+    """
+
+    copyBytes( keyAddress, 0, expandedKeyAddress, 0, 16 )
+
+    I64 roundIndex = 1
+    while roundIndex <= AES_128_ROUNDS:
+        I64 prevOffset = ( roundIndex - 1 ) * 16
+        I64 currOffset = roundIndex * 16
+
+        I64 rotByte0 = readByteAt( expandedKeyAddress, prevOffset + 13 )
+        I64 rotByte1 = readByteAt( expandedKeyAddress, prevOffset + 14 )
+        I64 rotByte2 = readByteAt( expandedKeyAddress, prevOffset + 15 )
+        I64 rotByte3 = readByteAt( expandedKeyAddress, prevOffset + 12 )
+
+        I64 subByte0 = readByteAt( sboxAddress, rotByte0 )
+        I64 subByte1 = readByteAt( sboxAddress, rotByte1 )
+        I64 subByte2 = readByteAt( sboxAddress, rotByte2 )
+        I64 subByte3 = readByteAt( sboxAddress, rotByte3 )
+
+        I64 rcon = aesRcon( roundIndex )
+
+        writeByteAt( expandedKeyAddress, currOffset, ( readByteAt( expandedKeyAddress, prevOffset ) ^ subByte0 ^ rcon ) & 255 )
+        writeByteAt( expandedKeyAddress, currOffset + 1, ( readByteAt( expandedKeyAddress, prevOffset + 1 ) ^ subByte1 ) & 255 )
+        writeByteAt( expandedKeyAddress, currOffset + 2, ( readByteAt( expandedKeyAddress, prevOffset + 2 ) ^ subByte2 ) & 255 )
+        writeByteAt( expandedKeyAddress, currOffset + 3, ( readByteAt( expandedKeyAddress, prevOffset + 3 ) ^ subByte3 ) & 255 )
+
+        I64 wordIndex = 1
+        while wordIndex < 4:
+            I64 srcOffset = currOffset + ( wordIndex - 1 ) * 4
+            I64 dstOffset = currOffset + wordIndex * 4
+            I64 prevWordOffset = prevOffset + wordIndex * 4
+            writeByteAt( expandedKeyAddress, dstOffset, ( readByteAt( expandedKeyAddress, prevWordOffset ) ^ readByteAt( expandedKeyAddress, srcOffset ) ) & 255 )
+            writeByteAt( expandedKeyAddress, dstOffset + 1, ( readByteAt( expandedKeyAddress, prevWordOffset + 1 ) ^ readByteAt( expandedKeyAddress, srcOffset + 1 ) ) & 255 )
+            writeByteAt( expandedKeyAddress, dstOffset + 2, ( readByteAt( expandedKeyAddress, prevWordOffset + 2 ) ^ readByteAt( expandedKeyAddress, srcOffset + 2 ) ) & 255 )
+            writeByteAt( expandedKeyAddress, dstOffset + 3, ( readByteAt( expandedKeyAddress, prevWordOffset + 3 ) ^ readByteAt( expandedKeyAddress, srcOffset + 3 ) ) & 255 )
+            wordIndex = wordIndex + 1
+
+        roundIndex = roundIndex + 1
+
+# ──────────────────────────────────────────────────────────────
+# AES Block Cipher (Encrypt Single Block)
+# ──────────────────────────────────────────────────────────────
+
+protect function xtime( I64 value ) -> I64:
+
+    """
+    GF(2^8) multiplication by 2 (used in MixColumns).
+    If high bit set, XOR with irreducible polynomial 0x1B.
+
+    Parameters:
+        value (I64):
+            Byte value to multiply.
+
+    Returns:
+        I64:
+            Result of multiplication by 2 in GF(2^8).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 shifted = ( value << 1 ) & 255
+    if ( value & 128 ) != 0:
+        return shifted ^ 27
+    return shifted
+
+protect function aesEncryptBlock( I64 inputAddress, I64 outputAddress, I64 expandedKeyAddress, I64 sboxAddress ) -> Void:
+
+    """
+    Encrypt a single 16-byte block using AES-128.
+    Operates on the state matrix in column-major order as per FIPS 197.
+
+    Parameters:
+        inputAddress (I64):
+            Address of 16-byte plaintext block.
+        outputAddress (I64):
+            Address of 16-byte output buffer.
+        expandedKeyAddress (I64):
+            Address of 176-byte expanded key.
+        sboxAddress (I64):
+            Address of 256-byte S-box.
+
+    Complexity:
+        Time: O(1) (fixed 10 rounds)
+        Space: O(1) (16-byte state on stack)
+    """
+
+    I64 stateAddress = alloc( 16 )
+    copyBytes( inputAddress, 0, stateAddress, 0, 16 )
+
+    I64 byteIdx = 0
+    while byteIdx < 16:
+        writeByteAt( stateAddress, byteIdx, ( readByteAt( stateAddress, byteIdx ) ^ readByteAt( expandedKeyAddress, byteIdx ) ) & 255 )
+        byteIdx = byteIdx + 1
+
+    I64 round = 1
+    while round <= AES_128_ROUNDS:
+        I64 stateIdx = 0
+        while stateIdx < 16:
+            writeByteAt( stateAddress, stateIdx, readByteAt( sboxAddress, readByteAt( stateAddress, stateIdx ) ) )
+            stateIdx = stateIdx + 1
+
+        I64 tmpByte = readByteAt( stateAddress, 1 )
+        writeByteAt( stateAddress, 1, readByteAt( stateAddress, 5 ) )
+        writeByteAt( stateAddress, 5, readByteAt( stateAddress, 9 ) )
+        writeByteAt( stateAddress, 9, readByteAt( stateAddress, 13 ) )
+        writeByteAt( stateAddress, 13, tmpByte )
+
+        tmpByte = readByteAt( stateAddress, 2 )
+        I64 tmpByte2 = readByteAt( stateAddress, 6 )
+        writeByteAt( stateAddress, 2, readByteAt( stateAddress, 10 ) )
+        writeByteAt( stateAddress, 6, readByteAt( stateAddress, 14 ) )
+        writeByteAt( stateAddress, 10, tmpByte )
+        writeByteAt( stateAddress, 14, tmpByte2 )
+
+        tmpByte = readByteAt( stateAddress, 15 )
+        writeByteAt( stateAddress, 15, readByteAt( stateAddress, 11 ) )
+        writeByteAt( stateAddress, 11, readByteAt( stateAddress, 7 ) )
+        writeByteAt( stateAddress, 7, readByteAt( stateAddress, 3 ) )
+        writeByteAt( stateAddress, 3, tmpByte )
+
+        if round < AES_128_ROUNDS:
+            I64 colIdx = 0
+            while colIdx < 4:
+                I64 colBase = colIdx * 4
+                I64 s0 = readByteAt( stateAddress, colBase )
+                I64 s1 = readByteAt( stateAddress, colBase + 1 )
+                I64 s2 = readByteAt( stateAddress, colBase + 2 )
+                I64 s3 = readByteAt( stateAddress, colBase + 3 )
+
+                I64 t0 = xtime( s0 ^ s1 ) ^ s1 ^ s2 ^ s3
+                I64 t1 = xtime( s1 ^ s2 ) ^ s0 ^ s2 ^ s3
+                I64 t2 = xtime( s2 ^ s3 ) ^ s0 ^ s1 ^ s3
+                I64 t3 = xtime( s3 ^ s0 ) ^ s0 ^ s1 ^ s2
+
+                writeByteAt( stateAddress, colBase, t0 & 255 )
+                writeByteAt( stateAddress, colBase + 1, t1 & 255 )
+                writeByteAt( stateAddress, colBase + 2, t2 & 255 )
+                writeByteAt( stateAddress, colBase + 3, t3 & 255 )
+                colIdx = colIdx + 1
+
+        I64 roundKeyOffset = round * 16
+        I64 addIdx = 0
+        while addIdx < 16:
+            writeByteAt( stateAddress, addIdx, ( readByteAt( stateAddress, addIdx ) ^ readByteAt( expandedKeyAddress, roundKeyOffset + addIdx ) ) & 255 )
+            addIdx = addIdx + 1
+
+        round = round + 1
+
+    copyBytes( stateAddress, 0, outputAddress, 0, 16 )
+    dealloc( stateAddress )
+
+# ──────────────────────────────────────────────────────────────
+# GCM: GHASH (GF(2^128) multiplication and accumulation)
+# ──────────────────────────────────────────────────────────────
+
+protect function gcmMultiply( I64 xAddress, I64 yAddress, I64 resultAddress ) -> Void:
+
+    """
+    Multiply two 128-bit values in GF(2^128) using the GHASH polynomial
+    x^128 + x^7 + x^2 + x + 1 (0xE1... reflected).
+    Uses the standard shift-and-XOR algorithm.
+
+    Parameters:
+        xAddress (I64):
+            Address of first 16-byte operand.
+        yAddress (I64):
+            Address of second 16-byte operand.
+        resultAddress (I64):
+            Address of 16-byte result buffer.
+
+    Complexity:
+        Time: O(128) bit operations
+        Space: O(16) for temporary buffer
+    """
+
+    I64 vAddress = alloc( 16 )
+    copyBytes( yAddress, 0, vAddress, 0, 16 )
+
+    I64 zeroIdx = 0
+    while zeroIdx < 16:
+        writeByteAt( resultAddress, zeroIdx, 0 )
+        zeroIdx = zeroIdx + 1
+
+    I64 bitPosition = 0
+    while bitPosition < 128:
+        I64 bytePos = bitPosition / 8
+        I64 bitPos = 7 - ( bitPosition % 8 )
+        I64 xByte = readByteAt( xAddress, bytePos )
+
+        if ( ( xByte >> bitPos ) & 1 ) != 0:
+            I64 xorIdx = 0
+            while xorIdx < 16:
+                writeByteAt( resultAddress, xorIdx, ( readByteAt( resultAddress, xorIdx ) ^ readByteAt( vAddress, xorIdx ) ) & 255 )
+                xorIdx = xorIdx + 1
+
+        I64 lsb = readByteAt( vAddress, 15 ) & 1
+        I64 shiftIdx = 15
+        while shiftIdx > 0:
+            I64 prevByte = readByteAt( vAddress, shiftIdx - 1 )
+            I64 currByte = readByteAt( vAddress, shiftIdx )
+            writeByteAt( vAddress, shiftIdx, ( ( currByte >> 1 ) | ( ( prevByte & 1 ) << 7 ) ) & 255 )
+            shiftIdx = shiftIdx - 1
+        writeByteAt( vAddress, 0, ( readByteAt( vAddress, 0 ) >> 1 ) & 255 )
+
+        if lsb != 0:
+            writeByteAt( vAddress, 0, ( readByteAt( vAddress, 0 ) ^ 225 ) & 255 )
+
+        bitPosition = bitPosition + 1
+
+    dealloc( vAddress )
+
+protect function ghash( I64 hashKeyAddress, I64 aadAddress, I64 aadLength, I64 ciphertextAddress, I64 ciphertextLength, I64 outputAddress ) -> Void:
+
+    """
+    Compute GHASH over associated data and ciphertext. Appends
+    64-bit lengths of AAD and ciphertext at the end per RFC 5116.
+
+    Parameters:
+        hashKeyAddress (I64):
+            Address of 16-byte hash key H = AES_K(0).
+        aadAddress (I64):
+            Address of additional authenticated data.
+        aadLength (I64):
+            Length of AAD in bytes.
+        ciphertextAddress (I64):
+            Address of ciphertext.
+        ciphertextLength (I64):
+            Length of ciphertext in bytes.
+        outputAddress (I64):
+            Address of 16-byte output buffer.
+
+    Complexity:
+        Time: O((aadLength + ciphertextLength) / 16 * 128)
+        Space: O(16)
+    """
+
+    I64 blockAddress = alloc( 16 )
+    I64 tempAddress = alloc( 16 )
+
+    I64 initIdx = 0
+    while initIdx < 16:
+        writeByteAt( outputAddress, initIdx, 0 )
+        initIdx = initIdx + 1
+
+    ghashProcessBlocks( hashKeyAddress, aadAddress, aadLength, outputAddress, blockAddress, tempAddress )
+    ghashProcessBlocks( hashKeyAddress, ciphertextAddress, ciphertextLength, outputAddress, blockAddress, tempAddress )
+
+    I64 lenIdx = 0
+    while lenIdx < 16:
+        writeByteAt( blockAddress, lenIdx, 0 )
+        lenIdx = lenIdx + 1
+
+    I64 aadBits = aadLength * 8
+    I64 ctBits = ciphertextLength * 8
+
+    writeByteAt( blockAddress, 0, ( aadBits >> 56 ) & 255 )
+    writeByteAt( blockAddress, 1, ( aadBits >> 48 ) & 255 )
+    writeByteAt( blockAddress, 2, ( aadBits >> 40 ) & 255 )
+    writeByteAt( blockAddress, 3, ( aadBits >> 32 ) & 255 )
+    writeByteAt( blockAddress, 4, ( aadBits >> 24 ) & 255 )
+    writeByteAt( blockAddress, 5, ( aadBits >> 16 ) & 255 )
+    writeByteAt( blockAddress, 6, ( aadBits >> 8 ) & 255 )
+    writeByteAt( blockAddress, 7, aadBits & 255 )
+    writeByteAt( blockAddress, 8, ( ctBits >> 56 ) & 255 )
+    writeByteAt( blockAddress, 9, ( ctBits >> 48 ) & 255 )
+    writeByteAt( blockAddress, 10, ( ctBits >> 40 ) & 255 )
+    writeByteAt( blockAddress, 11, ( ctBits >> 32 ) & 255 )
+    writeByteAt( blockAddress, 12, ( ctBits >> 24 ) & 255 )
+    writeByteAt( blockAddress, 13, ( ctBits >> 16 ) & 255 )
+    writeByteAt( blockAddress, 14, ( ctBits >> 8 ) & 255 )
+    writeByteAt( blockAddress, 15, ctBits & 255 )
+
+    I64 xorIdx = 0
+    while xorIdx < 16:
+        writeByteAt( outputAddress, xorIdx, ( readByteAt( outputAddress, xorIdx ) ^ readByteAt( blockAddress, xorIdx ) ) & 255 )
+        xorIdx = xorIdx + 1
+
+    gcmMultiply( outputAddress, hashKeyAddress, tempAddress )
+    copyBytes( tempAddress, 0, outputAddress, 0, 16 )
+
+    dealloc( blockAddress )
+    dealloc( tempAddress )
+
+protect function ghashProcessBlocks( I64 hashKeyAddress, I64 dataAddress, I64 dataLength, I64 accAddress, I64 blockAddress, I64 tempAddress ) -> Void:
+
+    """
+    Process data blocks for GHASH accumulation. Handles padding of
+    the final partial block with zeros.
+
+    Parameters:
+        hashKeyAddress (I64):
+            Address of 16-byte hash key H.
+        dataAddress (I64):
+            Address of data to process.
+        dataLength (I64):
+            Length of data.
+        accAddress (I64):
+            Address of 16-byte accumulator (modified in place).
+        blockAddress (I64):
+            Address of 16-byte temporary block buffer.
+        tempAddress (I64):
+            Address of 16-byte temporary multiply buffer.
+
+    Complexity:
+        Time: O(dataLength / 16 * 128)
+        Space: O(1)
+    """
+
+    I64 processedBytes = 0
+    while processedBytes < dataLength:
+        I64 remaining = dataLength - processedBytes
+        I64 blockSize = 16
+        if remaining < 16:
+            blockSize = remaining
+            I64 padIdx = 0
+            while padIdx < 16:
+                writeByteAt( blockAddress, padIdx, 0 )
+                padIdx = padIdx + 1
+
+        if blockSize == 16:
+            copyBytes( dataAddress, processedBytes, blockAddress, 0, 16 )
+        else:
+            copyBytes( dataAddress, processedBytes, blockAddress, 0, blockSize )
+
+        I64 xorIdx = 0
+        while xorIdx < 16:
+            writeByteAt( accAddress, xorIdx, ( readByteAt( accAddress, xorIdx ) ^ readByteAt( blockAddress, xorIdx ) ) & 255 )
+            xorIdx = xorIdx + 1
+
+        gcmMultiply( accAddress, hashKeyAddress, tempAddress )
+        copyBytes( tempAddress, 0, accAddress, 0, 16 )
+
+        processedBytes = processedBytes + 16
+
+# ──────────────────────────────────────────────────────────────
+# AES-GCM Encrypt / Decrypt
+# ──────────────────────────────────────────────────────────────
+
+protect function aesCtrIncrement( I64 counterAddress ) -> Void:
+
+    """
+    Increment the rightmost 32 bits of a 16-byte counter block
+    (big-endian, wrapping at 2^32).
+
+    Parameters:
+        counterAddress (I64):
+            Address of 16-byte counter block.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 byte15 = ( readByteAt( counterAddress, 15 ) + 1 ) & 255
+    writeByteAt( counterAddress, 15, byte15 )
+    if byte15 == 0:
+        I64 byte14 = ( readByteAt( counterAddress, 14 ) + 1 ) & 255
+        writeByteAt( counterAddress, 14, byte14 )
+        if byte14 == 0:
+            I64 byte13 = ( readByteAt( counterAddress, 13 ) + 1 ) & 255
+            writeByteAt( counterAddress, 13, byte13 )
+            if byte13 == 0:
+                writeByteAt( counterAddress, 12, ( readByteAt( counterAddress, 12 ) + 1 ) & 255 )
+
+protect function aesGcmEncrypt( I64 plaintextAddress, I64 plaintextLength, I64 aadAddress, I64 aadLength, I64 ivAddress, I64 expandedKeyAddress, I64 sboxAddress, I64 ciphertextAddress, I64 tagAddress ) -> I64:
+
+    """
+    AES-128-GCM authenticated encryption. Encrypts plaintext using CTR mode
+    and generates a 16-byte authentication tag via GHASH.
+
+    Parameters:
+        plaintextAddress (I64):
+            Address of plaintext data.
+        plaintextLength (I64):
+            Length of plaintext in bytes.
+        aadAddress (I64):
+            Address of additional authenticated data.
+        aadLength (I64):
+            Length of AAD in bytes.
+        ivAddress (I64):
+            Address of 12-byte IV/nonce.
+        expandedKeyAddress (I64):
+            Address of 176-byte expanded AES key.
+        sboxAddress (I64):
+            Address of 256-byte AES S-box.
+        ciphertextAddress (I64):
+            Address of output buffer (same size as plaintext).
+        tagAddress (I64):
+            Address of 16-byte output tag buffer.
+
+    Returns:
+        I64:
+            Ciphertext length (same as plaintext length).
+
+    Complexity:
+        Time: O(n) where n = plaintextLength
+        Space: O(1) beyond output buffers
+    """
+
+    I64 hashKeyAddress = alloc( 16 )
+    I64 zeroBlock = alloc( 16 )
+    I64 initIdx = 0
+    while initIdx < 16:
+        writeByteAt( zeroBlock, initIdx, 0 )
+        initIdx = initIdx + 1
+    aesEncryptBlock( zeroBlock, hashKeyAddress, expandedKeyAddress, sboxAddress )
+    dealloc( zeroBlock )
+
+    I64 j0Address = alloc( 16 )
+    copyBytes( ivAddress, 0, j0Address, 0, 12 )
+    writeByteAt( j0Address, 12, 0 )
+    writeByteAt( j0Address, 13, 0 )
+    writeByteAt( j0Address, 14, 0 )
+    writeByteAt( j0Address, 15, 1 )
+
+    I64 counterAddress = alloc( 16 )
+    copyBytes( j0Address, 0, counterAddress, 0, 16 )
+    aesCtrIncrement( counterAddress )
+
+    I64 encryptedBlock = alloc( 16 )
+    I64 processedBytes = 0
+    while processedBytes < plaintextLength:
+        aesEncryptBlock( counterAddress, encryptedBlock, expandedKeyAddress, sboxAddress )
+        I64 remaining = plaintextLength - processedBytes
+        I64 blockBytes = 16
+        if remaining < 16:
+            blockBytes = remaining
+
+        I64 xorIdx = 0
+        while xorIdx < blockBytes:
+            I64 plainByte = readByteAt( plaintextAddress, processedBytes + xorIdx )
+            I64 keyByte = readByteAt( encryptedBlock, xorIdx )
+            writeByteAt( ciphertextAddress, processedBytes + xorIdx, ( plainByte ^ keyByte ) & 255 )
+            xorIdx = xorIdx + 1
+
+        aesCtrIncrement( counterAddress )
+        processedBytes = processedBytes + blockBytes
+    dealloc( encryptedBlock )
+    dealloc( counterAddress )
+
+    ghash( hashKeyAddress, aadAddress, aadLength, ciphertextAddress, plaintextLength, tagAddress )
+
+    I64 s0Address = alloc( 16 )
+    aesEncryptBlock( j0Address, s0Address, expandedKeyAddress, sboxAddress )
+    I64 tagIdx = 0
+    while tagIdx < 16:
+        writeByteAt( tagAddress, tagIdx, ( readByteAt( tagAddress, tagIdx ) ^ readByteAt( s0Address, tagIdx ) ) & 255 )
+        tagIdx = tagIdx + 1
+
+    dealloc( s0Address )
+    dealloc( j0Address )
+    dealloc( hashKeyAddress )
+
+    return plaintextLength
+
+protect function aesGcmDecrypt( I64 ciphertextAddress, I64 ciphertextLength, I64 aadAddress, I64 aadLength, I64 ivAddress, I64 expandedKeyAddress, I64 sboxAddress, I64 tagAddress, I64 plaintextAddress ) -> I64:
+
+    """
+    AES-128-GCM authenticated decryption. Verifies the authentication tag
+    and decrypts ciphertext. Returns -1 if tag verification fails.
+
+    Parameters:
+        ciphertextAddress (I64):
+            Address of ciphertext.
+        ciphertextLength (I64):
+            Length of ciphertext.
+        aadAddress (I64):
+            Address of AAD.
+        aadLength (I64):
+            Length of AAD.
+        ivAddress (I64):
+            Address of 12-byte IV.
+        expandedKeyAddress (I64):
+            Address of 176-byte expanded key.
+        sboxAddress (I64):
+            Address of 256-byte S-box.
+        tagAddress (I64):
+            Address of 16-byte expected tag.
+        plaintextAddress (I64):
+            Address of output buffer.
+
+    Returns:
+        I64:
+            Plaintext length on success, -1 on tag mismatch.
+
+    Complexity:
+        Time: O(n) where n = ciphertextLength
+        Space: O(16) for computed tag
+    """
+
+    I64 computedTagAddress = alloc( 16 )
+
+    I64 hashKeyAddress = alloc( 16 )
+    I64 zeroBlock = alloc( 16 )
+    I64 initIdx = 0
+    while initIdx < 16:
+        writeByteAt( zeroBlock, initIdx, 0 )
+        initIdx = initIdx + 1
+    aesEncryptBlock( zeroBlock, hashKeyAddress, expandedKeyAddress, sboxAddress )
+    dealloc( zeroBlock )
+
+    ghash( hashKeyAddress, aadAddress, aadLength, ciphertextAddress, ciphertextLength, computedTagAddress )
+
+    I64 j0Address = alloc( 16 )
+    copyBytes( ivAddress, 0, j0Address, 0, 12 )
+    writeByteAt( j0Address, 12, 0 )
+    writeByteAt( j0Address, 13, 0 )
+    writeByteAt( j0Address, 14, 0 )
+    writeByteAt( j0Address, 15, 1 )
+
+    I64 s0Address = alloc( 16 )
+    aesEncryptBlock( j0Address, s0Address, expandedKeyAddress, sboxAddress )
+    I64 tagIdx = 0
+    while tagIdx < 16:
+        writeByteAt( computedTagAddress, tagIdx, ( readByteAt( computedTagAddress, tagIdx ) ^ readByteAt( s0Address, tagIdx ) ) & 255 )
+        tagIdx = tagIdx + 1
+    dealloc( s0Address )
+
+    I64 tagMismatch = 0
+    I64 verifyIdx = 0
+    while verifyIdx < 16:
+        tagMismatch = tagMismatch | ( readByteAt( computedTagAddress, verifyIdx ) ^ readByteAt( tagAddress, verifyIdx ) )
+        verifyIdx = verifyIdx + 1
+    dealloc( computedTagAddress )
+
+    if tagMismatch != 0:
+        dealloc( j0Address )
+        dealloc( hashKeyAddress )
+        return -1
+
+    I64 counterAddress = alloc( 16 )
+    copyBytes( j0Address, 0, counterAddress, 0, 16 )
+    aesCtrIncrement( counterAddress )
+
+    I64 decryptedBlock = alloc( 16 )
+    I64 processedBytes = 0
+    while processedBytes < ciphertextLength:
+        aesEncryptBlock( counterAddress, decryptedBlock, expandedKeyAddress, sboxAddress )
+        I64 remaining = ciphertextLength - processedBytes
+        I64 blockBytes = 16
+        if remaining < 16:
+            blockBytes = remaining
+
+        I64 xorIdx = 0
+        while xorIdx < blockBytes:
+            I64 cipherByte = readByteAt( ciphertextAddress, processedBytes + xorIdx )
+            I64 keyByte = readByteAt( decryptedBlock, xorIdx )
+            writeByteAt( plaintextAddress, processedBytes + xorIdx, ( cipherByte ^ keyByte ) & 255 )
+            xorIdx = xorIdx + 1
+
+        aesCtrIncrement( counterAddress )
+        processedBytes = processedBytes + blockBytes
+    dealloc( decryptedBlock )
+    dealloc( counterAddress )
+    dealloc( j0Address )
+    dealloc( hashKeyAddress )
+
+    return ciphertextLength
+
+# ──────────────────────────────────────────────────────────────
+# TLS PRF (Pseudo-Random Function via HMAC-SHA-256)
+# ──────────────────────────────────────────────────────────────
+
+protect function tlsPrf( I64 secretAddress, I64 secretLength, I64 labelAddress, I64 labelLength, I64 seedAddress, I64 seedLength, I64 outputAddress, I64 outputLength ) -> Void:
+
+    """
+    TLS 1.2 PRF using HMAC-SHA-256: P_SHA256(secret, label + seed).
+
+    A(0) = label + seed
+    A(i) = HMAC_SHA256(secret, A(i-1))
+    PRF output = HMAC_SHA256(secret, A(1) + label + seed) +
+                 HMAC_SHA256(secret, A(2) + label + seed) + ...
+
+    Parameters:
+        secretAddress (I64):
+            Address of PRF secret.
+        secretLength (I64):
+            Length of secret.
+        labelAddress (I64):
+            Address of label bytes (e.g. "master secret").
+        labelLength (I64):
+            Length of label.
+        seedAddress (I64):
+            Address of seed bytes.
+        seedLength (I64):
+            Length of seed.
+        outputAddress (I64):
+            Address of output buffer.
+        outputLength (I64):
+            Number of bytes to generate.
+
+    Complexity:
+        Time: O(outputLength * HMAC cost)
+        Space: O(label + seed + SHA256 digest)
+    """
+
+    I64 labelSeedLength = labelLength + seedLength
+    I64 labelSeedAddress = alloc( labelSeedLength )
+    copyBytes( labelAddress, 0, labelSeedAddress, 0, labelLength )
+    copyBytes( seedAddress, 0, labelSeedAddress, labelLength, seedLength )
+
+    I64 aAddress = alloc( SHA256_DIGEST_SIZE )
+    hmacSha256( secretAddress, secretLength, labelSeedAddress, labelSeedLength, aAddress )
+
+    I64 hmacInputLength = SHA256_DIGEST_SIZE + labelSeedLength
+    I64 hmacInputAddress = alloc( hmacInputLength )
+    I64 hmacOutputAddress = alloc( SHA256_DIGEST_SIZE )
+
+    I64 generatedBytes = 0
+    while generatedBytes < outputLength:
+        copyBytes( aAddress, 0, hmacInputAddress, 0, SHA256_DIGEST_SIZE )
+        copyBytes( labelSeedAddress, 0, hmacInputAddress, SHA256_DIGEST_SIZE, labelSeedLength )
+
+        hmacSha256( secretAddress, secretLength, hmacInputAddress, hmacInputLength, hmacOutputAddress )
+
+        I64 copyLength = SHA256_DIGEST_SIZE
+        I64 remaining = outputLength - generatedBytes
+        if remaining < copyLength:
+            copyLength = remaining
+        copyBytes( hmacOutputAddress, 0, outputAddress, generatedBytes, copyLength )
+        generatedBytes = generatedBytes + copyLength
+
+        I64 newA = alloc( SHA256_DIGEST_SIZE )
+        hmacSha256( secretAddress, secretLength, aAddress, SHA256_DIGEST_SIZE, newA )
+        copyBytes( newA, 0, aAddress, 0, SHA256_DIGEST_SIZE )
+        dealloc( newA )
+
+    dealloc( hmacOutputAddress )
+    dealloc( hmacInputAddress )
+    dealloc( aAddress )
+    dealloc( labelSeedAddress )
+
+# ──────────────────────────────────────────────────────────────
+# TLS Record Layer
+# ──────────────────────────────────────────────────────────────
+
+protect function sendTlsRecord( I64 socketFd, I64 contentType, I64 dataAddress, I64 dataLength ) -> I64:
+
+    """
+    Send an unencrypted TLS record (used during handshake before
+    ChangeCipherSpec).
+
+    Parameters:
+        socketFd (I64):
+            TCP socket file descriptor.
+        contentType (I64):
+            TLS content type (20-23).
+        dataAddress (I64):
+            Address of record payload.
+        dataLength (I64):
+            Length of payload.
+
+    Returns:
+        I64:
+            Total bytes sent including header.
+
+    Complexity:
+        Time: O(dataLength)
+        Space: O(dataLength + 5)
+    """
+
+    I64 recordLength = TLS_RECORD_HEADER_SIZE + dataLength
+    I64 recordAddress = alloc( recordLength )
+
+    writeByteAt( recordAddress, 0, contentType )
+    writeByteAt( recordAddress, 1, 3 )
+    writeByteAt( recordAddress, 2, 3 )
+    writeByteAt( recordAddress, 3, ( dataLength >> 8 ) & 255 )
+    writeByteAt( recordAddress, 4, dataLength & 255 )
+
+    copyBytes( dataAddress, 0, recordAddress, TLS_RECORD_HEADER_SIZE, dataLength )
+
+    I64 sent = socketSend( socketFd, recordAddress, recordLength, 0 )
+    dealloc( recordAddress )
+    return sent
+
+protect function sendEncryptedRecord( I64 socketFd, I64 contentType, I64 dataAddress, I64 dataLength, I64 expandedKeyAddress, I64 sboxAddress, I64 implicitIvAddress, I64 sequenceNumber ) -> I64:
+
+    """
+    Send an AES-128-GCM encrypted TLS record. Per RFC 5288, the nonce
+    is implicit IV (4 bytes) + explicit nonce (8 bytes, = sequence number).
+
+    Parameters:
+        socketFd (I64):
+            TCP socket file descriptor.
+        contentType (I64):
+            TLS content type.
+        dataAddress (I64):
+            Address of plaintext data.
+        dataLength (I64):
+            Length of plaintext.
+        expandedKeyAddress (I64):
+            Address of 176-byte expanded AES key.
+        sboxAddress (I64):
+            Address of 256-byte S-box.
+        implicitIvAddress (I64):
+            Address of 4-byte implicit IV (from key material).
+        sequenceNumber (I64):
+            64-bit sequence number for this record.
+
+    Returns:
+        I64:
+            Total bytes sent.
+
+    Complexity:
+        Time: O(dataLength)
+        Space: O(dataLength + record overhead)
+    """
+
+    I64 nonceAddress = alloc( GCM_IV_SIZE )
+    copyBytes( implicitIvAddress, 0, nonceAddress, 0, 4 )
+    writeByteAt( nonceAddress, 4, ( sequenceNumber >> 56 ) & 255 )
+    writeByteAt( nonceAddress, 5, ( sequenceNumber >> 48 ) & 255 )
+    writeByteAt( nonceAddress, 6, ( sequenceNumber >> 40 ) & 255 )
+    writeByteAt( nonceAddress, 7, ( sequenceNumber >> 32 ) & 255 )
+    writeByteAt( nonceAddress, 8, ( sequenceNumber >> 24 ) & 255 )
+    writeByteAt( nonceAddress, 9, ( sequenceNumber >> 16 ) & 255 )
+    writeByteAt( nonceAddress, 10, ( sequenceNumber >> 8 ) & 255 )
+    writeByteAt( nonceAddress, 11, sequenceNumber & 255 )
+
+    I64 aadAddress = alloc( 13 )
+    writeByteAt( aadAddress, 0, ( sequenceNumber >> 56 ) & 255 )
+    writeByteAt( aadAddress, 1, ( sequenceNumber >> 48 ) & 255 )
+    writeByteAt( aadAddress, 2, ( sequenceNumber >> 40 ) & 255 )
+    writeByteAt( aadAddress, 3, ( sequenceNumber >> 32 ) & 255 )
+    writeByteAt( aadAddress, 4, ( sequenceNumber >> 24 ) & 255 )
+    writeByteAt( aadAddress, 5, ( sequenceNumber >> 16 ) & 255 )
+    writeByteAt( aadAddress, 6, ( sequenceNumber >> 8 ) & 255 )
+    writeByteAt( aadAddress, 7, sequenceNumber & 255 )
+    writeByteAt( aadAddress, 8, contentType )
+    writeByteAt( aadAddress, 9, 3 )
+    writeByteAt( aadAddress, 10, 3 )
+    writeByteAt( aadAddress, 11, ( dataLength >> 8 ) & 255 )
+    writeByteAt( aadAddress, 12, dataLength & 255 )
+
+    I64 ciphertextAddress = alloc( dataLength )
+    I64 tagAddress = alloc( GCM_TAG_SIZE )
+
+    aesGcmEncrypt( dataAddress, dataLength, aadAddress, 13, nonceAddress, expandedKeyAddress, sboxAddress, ciphertextAddress, tagAddress )
+
+    I64 recordPayloadLength = GCM_EXPLICIT_NONCE_SIZE + dataLength + GCM_TAG_SIZE
+    I64 recordLength = TLS_RECORD_HEADER_SIZE + recordPayloadLength
+    I64 recordAddress = alloc( recordLength )
+
+    writeByteAt( recordAddress, 0, contentType )
+    writeByteAt( recordAddress, 1, 3 )
+    writeByteAt( recordAddress, 2, 3 )
+    writeByteAt( recordAddress, 3, ( recordPayloadLength >> 8 ) & 255 )
+    writeByteAt( recordAddress, 4, recordPayloadLength & 255 )
+
+    I64 explicitNonceIdx = 0
+    while explicitNonceIdx < GCM_EXPLICIT_NONCE_SIZE:
+        writeByteAt( recordAddress, TLS_RECORD_HEADER_SIZE + explicitNonceIdx, readByteAt( nonceAddress, 4 + explicitNonceIdx ) )
+        explicitNonceIdx = explicitNonceIdx + 1
+
+    copyBytes( ciphertextAddress, 0, recordAddress, TLS_RECORD_HEADER_SIZE + GCM_EXPLICIT_NONCE_SIZE, dataLength )
+    copyBytes( tagAddress, 0, recordAddress, TLS_RECORD_HEADER_SIZE + GCM_EXPLICIT_NONCE_SIZE + dataLength, GCM_TAG_SIZE )
+
+    I64 sent = socketSend( socketFd, recordAddress, recordLength, 0 )
+
+    dealloc( recordAddress )
+    dealloc( tagAddress )
+    dealloc( ciphertextAddress )
+    dealloc( aadAddress )
+    dealloc( nonceAddress )
+
+    return sent
+
+protect function recvExact( I64 socketFd, I64 bufferAddress, I64 totalLength ) -> I64:
+
+    """
+    Receive exactly totalLength bytes from the socket, looping until
+    all bytes are read or an error/EOF occurs.
+
+    Parameters:
+        socketFd (I64):
+            TCP socket file descriptor.
+        bufferAddress (I64):
+            Address of receive buffer.
+        totalLength (I64):
+            Exact number of bytes to receive.
+
+    Returns:
+        I64:
+            totalLength on success, -1 on error/premature EOF.
+
+    Complexity:
+        Time: O(totalLength)
+        Space: O(1)
+    """
+
+    I64 receivedTotal = 0
+    while receivedTotal < totalLength:
+        I64 chunk = socketRecv( socketFd, bufferAddress + receivedTotal, totalLength - receivedTotal, 0 )
+        if chunk <= 0:
+            return -1
+        receivedTotal = receivedTotal + chunk
+    return totalLength
+
+protect function recvTlsRecord( I64 socketFd, I64 contentTypeOut, I64 payloadAddress, I64 payloadCapacity ) -> I64:
+
+    """
+    Receive a single TLS record. Reads the 5-byte header, then the payload.
+
+    Parameters:
+        socketFd (I64):
+            TCP socket file descriptor.
+        contentTypeOut (I64):
+            Address where the content type byte will be stored.
+        payloadAddress (I64):
+            Address of payload output buffer.
+        payloadCapacity (I64):
+            Maximum payload capacity.
+
+    Returns:
+        I64:
+            Payload length on success, -1 on error.
+
+    Complexity:
+        Time: O(payload length)
+        Space: O(5) for header
+    """
+
+    I64 headerAddress = alloc( TLS_RECORD_HEADER_SIZE )
+    I64 headerResult = recvExact( socketFd, headerAddress, TLS_RECORD_HEADER_SIZE )
+    if headerResult < 0:
+        dealloc( headerAddress )
+        return -1
+
+    writeByteAt( contentTypeOut, 0, readByteAt( headerAddress, 0 ) )
+    I64 payloadLength = ( readByteAt( headerAddress, 3 ) << 8 ) | readByteAt( headerAddress, 4 )
+    dealloc( headerAddress )
+
+    if payloadLength > payloadCapacity:
+        return -1
+
+    return recvExact( socketFd, payloadAddress, payloadLength )
+
+protect function decryptReceivedRecord( I64 payloadAddress, I64 payloadLength, I64 expandedKeyAddress, I64 sboxAddress, I64 implicitIvAddress, I64 sequenceNumber, I64 contentType, I64 plaintextAddress ) -> I64:
+
+    """
+    Decrypt a received AES-128-GCM TLS record. The payload contains:
+    explicit_nonce (8 bytes) + ciphertext + tag (16 bytes).
+
+    Parameters:
+        payloadAddress (I64):
+            Address of encrypted record payload (after TLS header).
+        payloadLength (I64):
+            Length of encrypted payload.
+        expandedKeyAddress (I64):
+            Address of 176-byte expanded AES key.
+        sboxAddress (I64):
+            Address of 256-byte S-box.
+        implicitIvAddress (I64):
+            Address of 4-byte implicit IV.
+        sequenceNumber (I64):
+            Expected sequence number.
+        contentType (I64):
+            TLS content type for AAD construction.
+        plaintextAddress (I64):
+            Address of output buffer.
+
+    Returns:
+        I64:
+            Plaintext length on success, -1 on authentication failure.
+
+    Complexity:
+        Time: O(payloadLength)
+        Space: O(13) for AAD
+    """
+
+    I64 ciphertextLength = payloadLength - GCM_EXPLICIT_NONCE_SIZE - GCM_TAG_SIZE
+    if ciphertextLength < 0:
+        return -1
+
+    I64 nonceAddress = alloc( GCM_IV_SIZE )
+    copyBytes( implicitIvAddress, 0, nonceAddress, 0, 4 )
+    copyBytes( payloadAddress, 0, nonceAddress, 4, GCM_EXPLICIT_NONCE_SIZE )
+
+    I64 ciphertextStart = GCM_EXPLICIT_NONCE_SIZE
+    I64 tagStart = GCM_EXPLICIT_NONCE_SIZE + ciphertextLength
+
+    I64 aadAddress = alloc( 13 )
+    writeByteAt( aadAddress, 0, ( sequenceNumber >> 56 ) & 255 )
+    writeByteAt( aadAddress, 1, ( sequenceNumber >> 48 ) & 255 )
+    writeByteAt( aadAddress, 2, ( sequenceNumber >> 40 ) & 255 )
+    writeByteAt( aadAddress, 3, ( sequenceNumber >> 32 ) & 255 )
+    writeByteAt( aadAddress, 4, ( sequenceNumber >> 24 ) & 255 )
+    writeByteAt( aadAddress, 5, ( sequenceNumber >> 16 ) & 255 )
+    writeByteAt( aadAddress, 6, ( sequenceNumber >> 8 ) & 255 )
+    writeByteAt( aadAddress, 7, sequenceNumber & 255 )
+    writeByteAt( aadAddress, 8, contentType )
+    writeByteAt( aadAddress, 9, 3 )
+    writeByteAt( aadAddress, 10, 3 )
+    writeByteAt( aadAddress, 11, ( ciphertextLength >> 8 ) & 255 )
+    writeByteAt( aadAddress, 12, ciphertextLength & 255 )
+
+    I64 result = aesGcmDecrypt( payloadAddress + ciphertextStart, ciphertextLength, aadAddress, 13, nonceAddress, expandedKeyAddress, sboxAddress, payloadAddress + tagStart, plaintextAddress )
+
+    dealloc( aadAddress )
+    dealloc( nonceAddress )
+    return result
+
+# ──────────────────────────────────────────────────────────────
+# TLS Handshake Message Construction
+# ──────────────────────────────────────────────────────────────
+
+protect function buildClientHello( I64 clientRandomAddress, I64 outputAddress ) -> I64:
+
+    """
+    Build a TLS 1.2 ClientHello handshake message. Offers a single cipher
+    suite (TLS_RSA_WITH_AES_128_GCM_SHA256) and no extensions.
+
+    Parameters:
+        clientRandomAddress (I64):
+            Address of 32-byte client random.
+        outputAddress (I64):
+            Address of output buffer.
+
+    Returns:
+        I64:
+            Total handshake message length (including header).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 sessionIdLength = 0
+    I64 cipherSuiteListLength = 2
+    I64 compressionMethodsLength = 1
+
+    I64 bodyLength = 2 + 32 + 1 + sessionIdLength + 2 + cipherSuiteListLength + 1 + compressionMethodsLength
+    I64 totalLength = 4 + bodyLength
+
+    writeByteAt( outputAddress, 0, HANDSHAKE_CLIENT_HELLO )
+    writeByteAt( outputAddress, 1, ( bodyLength >> 16 ) & 255 )
+    writeByteAt( outputAddress, 2, ( bodyLength >> 8 ) & 255 )
+    writeByteAt( outputAddress, 3, bodyLength & 255 )
+
+    writeByteAt( outputAddress, 4, 3 )
+    writeByteAt( outputAddress, 5, 3 )
+
+    copyBytes( clientRandomAddress, 0, outputAddress, 6, 32 )
+
+    writeByteAt( outputAddress, 38, 0 )
+
+    writeByteAt( outputAddress, 39, 0 )
+    writeByteAt( outputAddress, 40, cipherSuiteListLength )
+
+    writeByteAt( outputAddress, 41, 0 )
+    writeByteAt( outputAddress, 42, CIPHER_TLS_RSA_AES_128_GCM_SHA256 )
+
+    writeByteAt( outputAddress, 43, compressionMethodsLength )
+    writeByteAt( outputAddress, 44, 0 )
+
+    return totalLength
+
+protect function buildClientKeyExchange( I64 encryptedPmsAddress, I64 encryptedPmsLength, I64 outputAddress ) -> I64:
+
+    """
+    Build a ClientKeyExchange handshake message containing the RSA-encrypted
+    premaster secret.
+
+    Parameters:
+        encryptedPmsAddress (I64):
+            Address of RSA-encrypted premaster secret.
+        encryptedPmsLength (I64):
+            Length of encrypted premaster secret.
+        outputAddress (I64):
+            Address of output buffer.
+
+    Returns:
+        I64:
+            Total message length.
+
+    Complexity:
+        Time: O(encryptedPmsLength)
+        Space: O(1)
+    """
+
+    I64 bodyLength = 2 + encryptedPmsLength
+    I64 totalLength = 4 + bodyLength
+
+    writeByteAt( outputAddress, 0, HANDSHAKE_CLIENT_KEY_EXCHANGE )
+    writeByteAt( outputAddress, 1, ( bodyLength >> 16 ) & 255 )
+    writeByteAt( outputAddress, 2, ( bodyLength >> 8 ) & 255 )
+    writeByteAt( outputAddress, 3, bodyLength & 255 )
+
+    writeByteAt( outputAddress, 4, ( encryptedPmsLength >> 8 ) & 255 )
+    writeByteAt( outputAddress, 5, encryptedPmsLength & 255 )
+
+    copyBytes( encryptedPmsAddress, 0, outputAddress, 6, encryptedPmsLength )
+
+    return totalLength
+
+protect function buildChangeCipherSpec( I64 outputAddress ) -> I64:
+
+    """
+    Build a ChangeCipherSpec message (single byte: 0x01).
+
+    Parameters:
+        outputAddress (I64):
+            Address of output buffer.
+
+    Returns:
+        I64:
+            Message length (1).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    writeByteAt( outputAddress, 0, 1 )
+    return 1
+
+protect function buildFinished( I64 masterSecretAddress, I64 handshakeHashAddress, I64 outputAddress ) -> I64:
+
+    """
+    Build a Finished handshake message containing the 12-byte
+    verify_data = PRF(master_secret, "client finished", Hash(messages)).
+
+    Parameters:
+        masterSecretAddress (I64):
+            Address of 48-byte master secret.
+        handshakeHashAddress (I64):
+            Address of 32-byte SHA-256 hash of all handshake messages.
+        outputAddress (I64):
+            Address of output buffer.
+
+    Returns:
+        I64:
+            Total message length (4 + 12 = 16).
+
+    Complexity:
+        Time: O(PRF cost)
+        Space: O(12)
+    """
+
+    I64 verifyDataAddress = alloc( TLS_VERIFY_DATA_SIZE )
+
+    I64 labelAddress = alloc( 15 )
+    writeByteAt( labelAddress, 0, 99 )
+    writeByteAt( labelAddress, 1, 108 )
+    writeByteAt( labelAddress, 2, 105 )
+    writeByteAt( labelAddress, 3, 101 )
+    writeByteAt( labelAddress, 4, 110 )
+    writeByteAt( labelAddress, 5, 116 )
+    writeByteAt( labelAddress, 6, 32 )
+    writeByteAt( labelAddress, 7, 102 )
+    writeByteAt( labelAddress, 8, 105 )
+    writeByteAt( labelAddress, 9, 110 )
+    writeByteAt( labelAddress, 10, 105 )
+    writeByteAt( labelAddress, 11, 115 )
+    writeByteAt( labelAddress, 12, 104 )
+    writeByteAt( labelAddress, 13, 101 )
+    writeByteAt( labelAddress, 14, 100 )
+
+    tlsPrf( masterSecretAddress, TLS_MASTER_SECRET_SIZE, labelAddress, 15, handshakeHashAddress, SHA256_DIGEST_SIZE, verifyDataAddress, TLS_VERIFY_DATA_SIZE )
+    dealloc( labelAddress )
+
+    writeByteAt( outputAddress, 0, HANDSHAKE_FINISHED )
+    writeByteAt( outputAddress, 1, 0 )
+    writeByteAt( outputAddress, 2, 0 )
+    writeByteAt( outputAddress, 3, TLS_VERIFY_DATA_SIZE )
+
+    copyBytes( verifyDataAddress, 0, outputAddress, 4, TLS_VERIFY_DATA_SIZE )
+    dealloc( verifyDataAddress )
+
+    return 4 + TLS_VERIFY_DATA_SIZE
+
+# ──────────────────────────────────────────────────────────────
+# TLS Handshake Execution
+# ──────────────────────────────────────────────────────────────
+
+protect function parseServerCertificate( I64 payloadAddress, I64 payloadLength ) -> RsaPublicKey:
+
+    """
+    Parse the server's Certificate handshake message and extract the
+    RSA public key from the first certificate in the chain.
+
+    Parameters:
+        payloadAddress (I64):
+            Address of Certificate message body (after handshake header).
+        payloadLength (I64):
+            Length of message body.
+
+    Returns:
+        RsaPublicKey:
+            Server's RSA public key.
+
+    Complexity:
+        Time: O(certificate size)
+        Space: O(key size)
+    """
+
+    I64 totalCertsLength = ( readByteAt( payloadAddress, 0 ) << 16 ) | ( readByteAt( payloadAddress, 1 ) << 8 ) | readByteAt( payloadAddress, 2 )
+
+    I64 firstCertLength = ( readByteAt( payloadAddress, 3 ) << 16 ) | ( readByteAt( payloadAddress, 4 ) << 8 ) | readByteAt( payloadAddress, 5 )
+    I64 certDerAddress = payloadAddress + 6
+
+    DerElement certSeq = derParseSequence( certDerAddress, 0, firstCertLength )
+    DerElement tbsCert = derIterateSequence( certSeq, 0 )
+    DerElement tbsSeq = derParseSequence( tbsCert.contentAddress, 0, tbsCert.contentLength )
+
+    I64 spkiIndex = 6
+    DerElement spki = derIterateSequence( tbsSeq, spkiIndex )
+
+    return rsaPublicKeyFromDer( spki.contentAddress - spki.headerSize, spki.totalSize )
+
+protect function deriveMasterSecret( I64 premasterAddress, I64 clientRandomAddress, I64 serverRandomAddress, I64 masterSecretAddress ) -> Void:
+
+    """
+    Derive the TLS 1.2 master secret:
+    master_secret = PRF(pre_master_secret, "master secret",
+                        ClientHello.random + ServerHello.random)
+
+    Parameters:
+        premasterAddress (I64):
+            Address of 48-byte premaster secret.
+        clientRandomAddress (I64):
+            Address of 32-byte client random.
+        serverRandomAddress (I64):
+            Address of 32-byte server random.
+        masterSecretAddress (I64):
+            Address of 48-byte output buffer.
+
+    Complexity:
+        Time: O(PRF cost)
+        Space: O(64)
+    """
+
+    I64 labelAddress = alloc( 13 )
+    writeByteAt( labelAddress, 0, 109 )
+    writeByteAt( labelAddress, 1, 97 )
+    writeByteAt( labelAddress, 2, 115 )
+    writeByteAt( labelAddress, 3, 116 )
+    writeByteAt( labelAddress, 4, 101 )
+    writeByteAt( labelAddress, 5, 114 )
+    writeByteAt( labelAddress, 6, 32 )
+    writeByteAt( labelAddress, 7, 115 )
+    writeByteAt( labelAddress, 8, 101 )
+    writeByteAt( labelAddress, 9, 99 )
+    writeByteAt( labelAddress, 10, 114 )
+    writeByteAt( labelAddress, 11, 101 )
+    writeByteAt( labelAddress, 12, 116 )
+
+    I64 seedAddress = alloc( 64 )
+    copyBytes( clientRandomAddress, 0, seedAddress, 0, 32 )
+    copyBytes( serverRandomAddress, 0, seedAddress, 32, 32 )
+
+    tlsPrf( premasterAddress, TLS_PREMASTER_SECRET_SIZE, labelAddress, 13, seedAddress, 64, masterSecretAddress, TLS_MASTER_SECRET_SIZE )
+
+    dealloc( seedAddress )
+    dealloc( labelAddress )
+
+protect function deriveKeyMaterial( I64 masterSecretAddress, I64 serverRandomAddress, I64 clientRandomAddress, I64 clientWriteKeyAddress, I64 serverWriteKeyAddress, I64 clientWriteIvAddress, I64 serverWriteIvAddress ) -> Void:
+
+    """
+    Derive TLS 1.2 key material from master secret:
+    key_block = PRF(master_secret, "key expansion",
+                    server_random + client_random)
+
+    For AES_128_GCM_SHA256:
+      client_write_key (16 bytes) + server_write_key (16 bytes) +
+      client_write_IV (4 bytes) + server_write_IV (4 bytes) = 40 bytes
+
+    Note: GCM has no MAC keys (authentication is built into AEAD).
+
+    Parameters:
+        masterSecretAddress (I64):
+            Address of 48-byte master secret.
+        serverRandomAddress (I64):
+            Address of 32-byte server random.
+        clientRandomAddress (I64):
+            Address of 32-byte client random.
+        clientWriteKeyAddress (I64):
+            Address of 16-byte output for client write key.
+        serverWriteKeyAddress (I64):
+            Address of 16-byte output for server write key.
+        clientWriteIvAddress (I64):
+            Address of 4-byte output for client write IV.
+        serverWriteIvAddress (I64):
+            Address of 4-byte output for server write IV.
+
+    Complexity:
+        Time: O(PRF cost)
+        Space: O(64 + 40)
+    """
+
+    I64 labelAddress = alloc( 13 )
+    writeByteAt( labelAddress, 0, 107 )
+    writeByteAt( labelAddress, 1, 101 )
+    writeByteAt( labelAddress, 2, 121 )
+    writeByteAt( labelAddress, 3, 32 )
+    writeByteAt( labelAddress, 4, 101 )
+    writeByteAt( labelAddress, 5, 120 )
+    writeByteAt( labelAddress, 6, 112 )
+    writeByteAt( labelAddress, 7, 97 )
+    writeByteAt( labelAddress, 8, 110 )
+    writeByteAt( labelAddress, 9, 115 )
+    writeByteAt( labelAddress, 10, 105 )
+    writeByteAt( labelAddress, 11, 111 )
+    writeByteAt( labelAddress, 12, 110 )
+
+    I64 seedAddress = alloc( 64 )
+    copyBytes( serverRandomAddress, 0, seedAddress, 0, 32 )
+    copyBytes( clientRandomAddress, 0, seedAddress, 32, 32 )
+
+    I64 keyBlockLength = 40
+    I64 keyBlockAddress = alloc( keyBlockLength )
+    tlsPrf( masterSecretAddress, TLS_MASTER_SECRET_SIZE, labelAddress, 13, seedAddress, 64, keyBlockAddress, keyBlockLength )
+
+    copyBytes( keyBlockAddress, 0, clientWriteKeyAddress, 0, 16 )
+    copyBytes( keyBlockAddress, 16, serverWriteKeyAddress, 0, 16 )
+    copyBytes( keyBlockAddress, 32, clientWriteIvAddress, 0, 4 )
+    copyBytes( keyBlockAddress, 36, serverWriteIvAddress, 0, 4 )
+
+    dealloc( keyBlockAddress )
+    dealloc( seedAddress )
+    dealloc( labelAddress )
+
+# ──────────────────────────────────────────────────────────────
+# TlsSocket — Public Interface
+# ──────────────────────────────────────────────────────────────
+
+public class TlsSocket:
+
+    """
+    TLS 1.2 client socket wrapping a raw TCP file descriptor. Performs
+    full handshake on construction, then provides encrypted send/receive.
+
+    Cipher suite: TLS_RSA_WITH_AES_128_GCM_SHA256 (0x009C).
+    Key exchange: RSA (PKCS#1 v1.5).
+    Record encryption: AES-128-GCM.
+    PRF: HMAC-SHA-256.
+    """
+
+    protect I64 socketFd
+    protect I64 clientExpandedKeyAddress
+    protect I64 serverExpandedKeyAddress
+    protect I64 sboxAddress
+    protect I64 clientIvAddress
+    protect I64 serverIvAddress
+    protect I64 masterSecretAddress
+    protect I64 clientSequenceNumber
+    protect I64 serverSequenceNumber
+    protect Boolean handshakeComplete
+
+    public function TlsSocket( self, I64 socketFd ) -> Void:
+
+        """
+        Create a TLS socket over an existing connected TCP file descriptor.
+        Does NOT perform the handshake — call performHandshake() after
+        construction.
+
+        Parameters:
+            socketFd (I64):
+                Connected TCP socket file descriptor.
+
+        Complexity:
+            Time: O(1)
+            Space: O(AES key schedule + S-box + IVs)
+        """
+
+        self.socketFd = socketFd
+        self.clientExpandedKeyAddress = alloc( 176 )
+        self.serverExpandedKeyAddress = alloc( 176 )
+        self.sboxAddress = buildAesSbox()
+        self.clientIvAddress = alloc( 4 )
+        self.serverIvAddress = alloc( 4 )
+        self.masterSecretAddress = alloc( TLS_MASTER_SECRET_SIZE )
+        self.clientSequenceNumber = 0
+        self.serverSequenceNumber = 0
+        self.handshakeComplete = False
+
+    public function performHandshake( self ) -> I64:
+
+        """
+        Execute the full TLS 1.2 handshake:
+          1. Send ClientHello
+          2. Receive ServerHello (extract server random)
+          3. Receive Certificate (extract RSA public key)
+          4. Receive ServerHelloDone
+          5. Send ClientKeyExchange (RSA-encrypted premaster secret)
+          6. Send ChangeCipherSpec
+          7. Send Finished (encrypted)
+          8. Receive server ChangeCipherSpec
+          9. Receive server Finished (verify)
+
+        Returns:
+            I64:
+                0 on success, -1 on failure.
+
+        Complexity:
+            Time: O(RSA modexp + AES key expansion)
+            Space: O(certificate chain + key material)
+        """
+
+        I64 handshakeBuffer = alloc( 4096 )
+        I64 recordBuffer = alloc( TLS_MAX_RECORD_SIZE + 256 )
+        I64 contentTypeBuf = alloc( 1 )
+        Sha256 handshakeHash = new Sha256()
+
+        I64 clientRandomAddress = alloc( 32 )
+        randomBytes( clientRandomAddress, 32 )
+
+        I64 clientHelloLength = buildClientHello( clientRandomAddress, handshakeBuffer )
+        handshakeHash.update( handshakeBuffer, clientHelloLength )
+        sendTlsRecord( self.socketFd, CONTENT_TYPE_HANDSHAKE, handshakeBuffer, clientHelloLength )
+
+        I64 serverRandomAddress = alloc( 32 )
+        ?RsaPublicKey serverPublicKey = None
+
+        I64 awaitingDone = 1
+        while awaitingDone == 1:
+            I64 recvLength = recvTlsRecord( self.socketFd, contentTypeBuf, recordBuffer, TLS_MAX_RECORD_SIZE )
+            if recvLength < 0:
+                dealloc( handshakeBuffer )
+                dealloc( recordBuffer )
+                dealloc( contentTypeBuf )
+                dealloc( clientRandomAddress )
+                dealloc( serverRandomAddress )
+                return -1
+
+            I64 recordContentType = readByteAt( contentTypeBuf, 0 )
+            if recordContentType == CONTENT_TYPE_HANDSHAKE:
+                I64 handshakeOffset = 0
+                while handshakeOffset < recvLength:
+                    I64 hsType = readByteAt( recordBuffer, handshakeOffset )
+                    I64 hsLength = ( readByteAt( recordBuffer, handshakeOffset + 1 ) << 16 ) | ( readByteAt( recordBuffer, handshakeOffset + 2 ) << 8 ) | readByteAt( recordBuffer, handshakeOffset + 3 )
+                    I64 hsTotalLength = 4 + hsLength
+
+                    handshakeHash.update( recordBuffer + handshakeOffset, hsTotalLength )
+
+                    if hsType == HANDSHAKE_SERVER_HELLO:
+                        copyBytes( recordBuffer, handshakeOffset + 6, serverRandomAddress, 0, 32 )
+
+                    if hsType == HANDSHAKE_CERTIFICATE:
+                        serverPublicKey = parseServerCertificate( recordBuffer + handshakeOffset + 4, hsLength )
+
+                    if hsType == HANDSHAKE_SERVER_HELLO_DONE:
+                        awaitingDone = 0
+
+                    handshakeOffset = handshakeOffset + hsTotalLength
+
+        if serverPublicKey is None:
+            dealloc( handshakeBuffer )
+            dealloc( recordBuffer )
+            dealloc( contentTypeBuf )
+            dealloc( clientRandomAddress )
+            dealloc( serverRandomAddress )
+            return -1
+
+        I64 premasterAddress = alloc( TLS_PREMASTER_SECRET_SIZE )
+        writeByteAt( premasterAddress, 0, 3 )
+        writeByteAt( premasterAddress, 1, 3 )
+        randomBytes( premasterAddress + 2, TLS_PREMASTER_SECRET_SIZE - 2 )
+
+        I64 encryptedPmsCapacity = 512
+        I64 encryptedPmsAddress = alloc( encryptedPmsCapacity )
+        I64 encryptedPmsLength = rsaEncryptPkcs1v15( premasterAddress, TLS_PREMASTER_SECRET_SIZE, serverPublicKey, encryptedPmsAddress, encryptedPmsCapacity )
+
+        if encryptedPmsLength < 0:
+            serverPublicKey.destroy()
+            dealloc( premasterAddress )
+            dealloc( encryptedPmsAddress )
+            dealloc( handshakeBuffer )
+            dealloc( recordBuffer )
+            dealloc( contentTypeBuf )
+            dealloc( clientRandomAddress )
+            dealloc( serverRandomAddress )
+            return -1
+
+        I64 ckeLength = buildClientKeyExchange( encryptedPmsAddress, encryptedPmsLength, handshakeBuffer )
+        handshakeHash.update( handshakeBuffer, ckeLength )
+        sendTlsRecord( self.socketFd, CONTENT_TYPE_HANDSHAKE, handshakeBuffer, ckeLength )
+        dealloc( encryptedPmsAddress )
+        serverPublicKey.destroy()
+
+        deriveMasterSecret( premasterAddress, clientRandomAddress, serverRandomAddress, self.masterSecretAddress )
+
+        I64 clientWriteKeyAddress = alloc( 16 )
+        I64 serverWriteKeyAddress = alloc( 16 )
+        deriveKeyMaterial( self.masterSecretAddress, serverRandomAddress, clientRandomAddress, clientWriteKeyAddress, serverWriteKeyAddress, self.clientIvAddress, self.serverIvAddress )
+
+        aesKeyExpansion( clientWriteKeyAddress, self.sboxAddress, self.clientExpandedKeyAddress )
+        aesKeyExpansion( serverWriteKeyAddress, self.sboxAddress, self.serverExpandedKeyAddress )
+        dealloc( clientWriteKeyAddress )
+        dealloc( serverWriteKeyAddress )
+
+        I64 ccsMessage = alloc( 1 )
+        buildChangeCipherSpec( ccsMessage )
+        sendTlsRecord( self.socketFd, CONTENT_TYPE_CHANGE_CIPHER_SPEC, ccsMessage, 1 )
+        dealloc( ccsMessage )
+
+        I64 handshakeDigest = alloc( SHA256_DIGEST_SIZE )
+        Sha256 hashCopy = new Sha256()
+        hashCopy.copyFrom( handshakeHash )
+        hashCopy.digest( handshakeDigest )
+
+        I64 finishedLength = buildFinished( self.masterSecretAddress, handshakeDigest, handshakeBuffer )
+        handshakeHash.update( handshakeBuffer, finishedLength )
+
+        sendEncryptedRecord( self.socketFd, CONTENT_TYPE_HANDSHAKE, handshakeBuffer, finishedLength, self.clientExpandedKeyAddress, self.sboxAddress, self.clientIvAddress, self.clientSequenceNumber )
+        self.clientSequenceNumber = self.clientSequenceNumber + 1
+        dealloc( handshakeDigest )
+
+        I64 serverCcsReceived = 0
+        while serverCcsReceived == 0:
+            I64 ccsRecvLength = recvTlsRecord( self.socketFd, contentTypeBuf, recordBuffer, TLS_MAX_RECORD_SIZE )
+            if readByteAt( contentTypeBuf, 0 ) == CONTENT_TYPE_CHANGE_CIPHER_SPEC:
+                serverCcsReceived = 1
+
+        I64 serverFinishedPayloadLength = recvTlsRecord( self.socketFd, contentTypeBuf, recordBuffer, TLS_MAX_RECORD_SIZE )
+        if readByteAt( contentTypeBuf, 0 ) == CONTENT_TYPE_HANDSHAKE:
+            I64 serverPlaintext = alloc( serverFinishedPayloadLength )
+            I64 decryptResult = decryptReceivedRecord( recordBuffer, serverFinishedPayloadLength, self.serverExpandedKeyAddress, self.sboxAddress, self.serverIvAddress, self.serverSequenceNumber, CONTENT_TYPE_HANDSHAKE, serverPlaintext )
+            self.serverSequenceNumber = self.serverSequenceNumber + 1
+            dealloc( serverPlaintext )
+
+        self.handshakeComplete = True
+
+        dealloc( premasterAddress )
+        dealloc( clientRandomAddress )
+        dealloc( serverRandomAddress )
+        dealloc( handshakeBuffer )
+        dealloc( recordBuffer )
+        dealloc( contentTypeBuf )
+
+        return 0
+
+    public function send( self, I64 dataAddress, I64 dataLength ) -> I64:
+
+        """
+        Send application data over the encrypted TLS connection.
+        Fragments into TLS_MAX_RECORD_SIZE chunks if needed.
+
+        Parameters:
+            dataAddress (I64):
+                Address of data to send.
+            dataLength (I64):
+                Length of data.
+
+        Returns:
+            I64:
+                Total bytes of plaintext sent, or -1 if not connected.
+
+        Complexity:
+            Time: O(dataLength)
+            Space: O(min(dataLength, TLS_MAX_RECORD_SIZE))
+        """
+
+        if not self.handshakeComplete:
+            return -1
+
+        I64 sentTotal = 0
+        while sentTotal < dataLength:
+            I64 chunkSize = dataLength - sentTotal
+            if chunkSize > TLS_MAX_RECORD_SIZE:
+                chunkSize = TLS_MAX_RECORD_SIZE
+
+            sendEncryptedRecord( self.socketFd, CONTENT_TYPE_APPLICATION_DATA, dataAddress + sentTotal, chunkSize, self.clientExpandedKeyAddress, self.sboxAddress, self.clientIvAddress, self.clientSequenceNumber )
+            self.clientSequenceNumber = self.clientSequenceNumber + 1
+            sentTotal = sentTotal + chunkSize
+
+        return sentTotal
+
+    public function receive( self, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+        """
+        Receive and decrypt application data from the TLS connection.
+
+        Parameters:
+            outputAddress (I64):
+                Address of output buffer for decrypted data.
+            outputCapacity (I64):
+                Maximum bytes to receive.
+
+        Returns:
+            I64:
+                Decrypted data length, 0 on connection close, -1 on error.
+
+        Complexity:
+            Time: O(received data length)
+            Space: O(TLS_MAX_RECORD_SIZE) for receive buffer
+        """
+
+        if not self.handshakeComplete:
+            return -1
+
+        I64 recordBuffer = alloc( TLS_MAX_RECORD_SIZE + 256 )
+        I64 contentTypeBuf = alloc( 1 )
+
+        I64 payloadLength = recvTlsRecord( self.socketFd, contentTypeBuf, recordBuffer, TLS_MAX_RECORD_SIZE + 256 )
+        if payloadLength <= 0:
+            dealloc( recordBuffer )
+            dealloc( contentTypeBuf )
+            return payloadLength
+
+        I64 contentType = readByteAt( contentTypeBuf, 0 )
+
+        if contentType == CONTENT_TYPE_ALERT:
+            dealloc( recordBuffer )
+            dealloc( contentTypeBuf )
+            return 0
+
+        if contentType == CONTENT_TYPE_APPLICATION_DATA:
+            I64 decryptedLength = decryptReceivedRecord( recordBuffer, payloadLength, self.serverExpandedKeyAddress, self.sboxAddress, self.serverIvAddress, self.serverSequenceNumber, CONTENT_TYPE_APPLICATION_DATA, outputAddress )
+            self.serverSequenceNumber = self.serverSequenceNumber + 1
+            dealloc( recordBuffer )
+            dealloc( contentTypeBuf )
+            return decryptedLength
+
+        dealloc( recordBuffer )
+        dealloc( contentTypeBuf )
+        return -1
+
+    public function close( self ) -> Void:
+
+        """
+        Close the TLS connection. Sends a close_notify alert (unencrypted
+        for simplicity) and closes the underlying socket.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.handshakeComplete:
+            I64 alertData = alloc( 2 )
+            writeByteAt( alertData, 0, 1 )
+            writeByteAt( alertData, 1, 0 )
+            sendEncryptedRecord( self.socketFd, CONTENT_TYPE_ALERT, alertData, 2, self.clientExpandedKeyAddress, self.sboxAddress, self.clientIvAddress, self.clientSequenceNumber )
+            dealloc( alertData )
+
+        socketClose( self.socketFd )
+        self.handshakeComplete = False
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all cryptographic material and internal buffers.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 clearIdx = 0
+        while clearIdx < 176:
+            writeByteAt( self.clientExpandedKeyAddress, clearIdx, 0 )
+            writeByteAt( self.serverExpandedKeyAddress, clearIdx, 0 )
+            clearIdx = clearIdx + 1
+
+        dealloc( self.clientExpandedKeyAddress )
+        dealloc( self.serverExpandedKeyAddress )
+        dealloc( self.sboxAddress )
+        dealloc( self.clientIvAddress )
+        dealloc( self.serverIvAddress )
+
+        I64 msIdx = 0
+        while msIdx < TLS_MASTER_SECRET_SIZE:
+            writeByteAt( self.masterSecretAddress, msIdx, 0 )
+            msIdx = msIdx + 1
+        dealloc( self.masterSecretAddress )
+
+    public function isConnected( self ) -> Boolean:
+
+        """
+        Return whether the TLS handshake has completed.
+
+        Returns:
+            Boolean:
+                True if handshake is complete and connection is active.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.handshakeComplete
+
+    public function getSocketFd( self ) -> I64:
+
+        """
+        Return the underlying TCP socket file descriptor.
+
+        Returns:
+            I64:
+                File descriptor.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.socketFd
+
+export {
+    TlsSocket,
+    TLS_VERSION_10, TLS_VERSION_12,
+    CONTENT_TYPE_CHANGE_CIPHER_SPEC, CONTENT_TYPE_ALERT,
+    CONTENT_TYPE_HANDSHAKE, CONTENT_TYPE_APPLICATION_DATA
+}
