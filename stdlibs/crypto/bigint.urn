@@ -1,0 +1,590 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/bigint.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Arbitrary-precision unsigned integer arithmetic for RSA operations.
+# Numbers are stored as arrays of 32-bit limbs in little-endian order
+# (least significant limb first). Each limb occupies 8 bytes of storage
+# (I64 holding a 32-bit value) for alignment.
+#
+# Supports: add, subtract, multiply, divide, modular exponentiation
+# (via square-and-multiply), comparison, bit operations, and
+# conversion to/from big-endian byte arrays.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.crypto.bigint
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.encoding.binary import copyBytes
+
+const I64 LIMB_BITS = 32
+const I64 LIMB_MASK = 4294967295
+const I64 LIMB_SIZE = 8
+const I64 MAX_LIMBS = 256
+
+public class BigInt:
+
+    """
+    Arbitrary-precision unsigned integer stored as an array of 32-bit
+    limbs in little-endian order. Supports up to MAX_LIMBS limbs
+    (8192 bits), sufficient for RSA-4096.
+    """
+
+    public I64 limbsAddress
+    public I64 limbCount
+
+    public function BigInt( self, I64 limbCount ) -> Void:
+
+        """
+        Construct a zero-initialized BigInt with the given limb count.
+
+        Parameters:
+            limbCount (I64):
+                Number of 32-bit limbs.
+        """
+
+        I64 effectiveLimbCount = limbCount
+        if effectiveLimbCount > MAX_LIMBS:
+            effectiveLimbCount = MAX_LIMBS
+        self.limbCount = effectiveLimbCount
+        self.limbsAddress = alloc( effectiveLimbCount * LIMB_SIZE )
+
+        I64 limbIndex = 0
+        while limbIndex < effectiveLimbCount:
+            self.setLimb( limbIndex, 0 )
+            limbIndex = limbIndex + 1
+
+    public function setLimb( self, I64 index, I64 value ) -> Void:
+
+        """
+        Set a limb at the given index.
+
+        Parameters:
+            index (I64):
+                Limb index (0 = least significant).
+            value (I64):
+                32-bit limb value.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 slot = self.limbsAddress + index * LIMB_SIZE
+        I64 masked = value & LIMB_MASK
+        asm volatile "movq $1, ($0)" : output() : input( "r" slot, "r" masked ) : clobber( "memory" )
+
+    public function getLimb( self, I64 index ) -> I64:
+
+        """
+        Get a limb at the given index.
+
+        Parameters:
+            index (I64):
+                Limb index.
+
+        Returns:
+            I64:
+                32-bit limb value.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if index >= self.limbCount:
+            return 0
+        I64 slot = self.limbsAddress + index * LIMB_SIZE
+        I64 value = 0
+        asm volatile "movq ($1), $0" : output( "=r" value ) : input( "r" slot ) : clobber()
+        return value & LIMB_MASK
+
+    public function isZero( self ) -> Boolean:
+
+        """
+        Check if this BigInt is zero.
+
+        Returns:
+            Boolean:
+                True if all limbs are zero.
+
+        Complexity:
+            Time: O(n) where n is limbCount
+            Space: O(1)
+        """
+
+        I64 limbIndex = 0
+        while limbIndex < self.limbCount:
+            if self.getLimb( limbIndex ) != 0:
+                return False
+            limbIndex = limbIndex + 1
+        return True
+
+    public function effectiveLimbs( self ) -> I64:
+
+        """
+        Count of significant limbs (excluding leading zeros).
+
+        Returns:
+            I64:
+                Number of significant limbs (minimum 1).
+
+        Complexity:
+            Time: O(n) where n is limbCount
+            Space: O(1)
+        """
+
+        I64 topLimb = self.limbCount - 1
+        while topLimb > 0 and self.getLimb( topLimb ) == 0:
+            topLimb = topLimb - 1
+        return topLimb + 1
+
+    public function bitLength( self ) -> I64:
+
+        """
+        Number of significant bits.
+
+        Returns:
+            I64:
+                Bit length of this integer.
+
+        Complexity:
+            Time: O(n) where n is limbCount
+            Space: O(1)
+        """
+
+        I64 topIdx = self.effectiveLimbs() - 1
+        I64 topLimb = self.getLimb( topIdx )
+        I64 bits = topIdx * LIMB_BITS
+        while topLimb > 0:
+            bits = bits + 1
+            topLimb = topLimb >> 1
+        return bits
+
+    public function getBit( self, I64 bitIndex ) -> I64:
+
+        """
+        Get a single bit.
+
+        Parameters:
+            bitIndex (I64):
+                Bit index (0 = LSB).
+
+        Returns:
+            I64:
+                0 or 1.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 limbIndex = bitIndex / LIMB_BITS
+        I64 bitOffset = bitIndex % LIMB_BITS
+        return ( self.getLimb( limbIndex ) >> bitOffset ) & 1
+
+    public function compare( self, BigInt other ) -> I64:
+
+        """
+        Compare this BigInt with another.
+
+        Parameters:
+            other (BigInt):
+                BigInt to compare against.
+
+        Returns:
+            I64:
+                -1 if self < other, 0 if equal, 1 if self > other.
+
+        Complexity:
+            Time: O(n) where n is max limb count
+            Space: O(1)
+        """
+
+        I64 maxLimbs = self.limbCount
+        if other.limbCount > maxLimbs:
+            maxLimbs = other.limbCount
+
+        I64 limbIndex = maxLimbs - 1
+        while limbIndex >= 0:
+            I64 selfLimb = self.getLimb( limbIndex )
+            I64 otherLimb = other.getLimb( limbIndex )
+            if selfLimb > otherLimb:
+                return 1
+            if selfLimb < otherLimb:
+                return -1
+            limbIndex = limbIndex - 1
+        return 0
+
+    public function copyFrom( self, BigInt source ) -> Void:
+
+        """
+        Copy value from another BigInt.
+
+        Parameters:
+            source (BigInt):
+                Source to copy from.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 limbIndex = 0
+        while limbIndex < self.limbCount:
+            if limbIndex < source.limbCount:
+                self.setLimb( limbIndex, source.getLimb( limbIndex ) )
+            else:
+                self.setLimb( limbIndex, 0 )
+            limbIndex = limbIndex + 1
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release limb storage.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.limbsAddress != 0:
+            dealloc( self.limbsAddress )
+            self.limbsAddress = 0
+
+public function bigintFromBytes( I64 dataAddress, I64 dataLength, I64 limbCount ) -> BigInt:
+
+    """
+    Create a BigInt from big-endian byte array.
+
+    Parameters:
+        dataAddress (I64):
+            Address of big-endian bytes.
+        dataLength (I64):
+            Number of bytes.
+        limbCount (I64):
+            Limb count for the result.
+
+    Returns:
+        BigInt:
+            New BigInt with the value.
+
+    Complexity:
+        Time: O(n) where n is dataLength
+        Space: O(limbCount)
+    """
+
+    BigInt result = new BigInt( limbCount )
+
+    I64 byteIndex = 0
+    while byteIndex < dataLength:
+        I64 dataByte = readByteAt( dataAddress, dataLength - 1 - byteIndex )
+        I64 limbIndex = byteIndex / 4
+        I64 byteOffset = byteIndex % 4
+        I64 currentLimb = result.getLimb( limbIndex )
+        currentLimb = currentLimb | ( dataByte << ( byteOffset * 8 ) )
+        result.setLimb( limbIndex, currentLimb )
+        byteIndex = byteIndex + 1
+
+    return result
+
+public function bigintToBytes( BigInt value, I64 outputAddress, I64 outputLength ) -> I64:
+
+    """
+    Write a BigInt as big-endian bytes.
+
+    Parameters:
+        value (BigInt):
+            BigInt to serialize.
+        outputAddress (I64):
+            Destination address.
+        outputLength (I64):
+            Maximum output bytes.
+
+    Returns:
+        I64:
+            Bytes written.
+
+    Complexity:
+        Time: O(n) where n is outputLength
+        Space: O(1)
+    """
+
+    I64 byteIndex = 0
+    while byteIndex < outputLength:
+        I64 limbIndex = ( outputLength - 1 - byteIndex ) / 4
+        I64 byteOffset = ( outputLength - 1 - byteIndex ) % 4
+        I64 limb = value.getLimb( limbIndex )
+        I64 dataByte = ( limb >> ( byteOffset * 8 ) ) & 255
+        writeByteAt( outputAddress, byteIndex, dataByte )
+        byteIndex = byteIndex + 1
+    return outputLength
+
+public function bigintFromI64( I64 value, I64 limbCount ) -> BigInt:
+
+    """
+    Create a BigInt from a 64-bit integer.
+
+    Parameters:
+        value (I64):
+            Integer value.
+        limbCount (I64):
+            Limb count.
+
+    Returns:
+        BigInt:
+            New BigInt.
+
+    Complexity:
+        Time: O(limbCount)
+        Space: O(limbCount)
+    """
+
+    BigInt result = new BigInt( limbCount )
+    result.setLimb( 0, value & LIMB_MASK )
+    result.setLimb( 1, ( value >> 32 ) & LIMB_MASK )
+    return result
+
+public function bigintAdd( BigInt augend, BigInt addend, BigInt result ) -> Void:
+
+    """
+    result = augend + addend.
+
+    Parameters:
+        augend (BigInt):
+            First operand.
+        addend (BigInt):
+            Second operand.
+        result (BigInt):
+            Destination for sum.
+
+    Complexity:
+        Time: O(n) where n is limb count
+        Space: O(1)
+    """
+
+    I64 carry = 0
+    I64 limbIndex = 0
+    while limbIndex < result.limbCount:
+        I64 sum = augend.getLimb( limbIndex ) + addend.getLimb( limbIndex ) + carry
+        result.setLimb( limbIndex, sum & LIMB_MASK )
+        carry = sum >> LIMB_BITS
+        limbIndex = limbIndex + 1
+
+public function bigintSubtract( BigInt minuend, BigInt subtrahend, BigInt result ) -> Void:
+
+    """
+    result = minuend - subtrahend. Assumes minuend >= subtrahend.
+
+    Parameters:
+        minuend (BigInt):
+            Value to subtract from.
+        subtrahend (BigInt):
+            Value to subtract.
+        result (BigInt):
+            Destination for difference.
+
+    Complexity:
+        Time: O(n) where n is limb count
+        Space: O(1)
+    """
+
+    I64 borrow = 0
+    I64 limbIndex = 0
+    while limbIndex < result.limbCount:
+        I64 diff = minuend.getLimb( limbIndex ) - subtrahend.getLimb( limbIndex ) - borrow
+        if diff < 0:
+            diff = diff + 4294967296
+            borrow = 1
+        else:
+            borrow = 0
+        result.setLimb( limbIndex, diff & LIMB_MASK )
+        limbIndex = limbIndex + 1
+
+public function bigintMultiply( BigInt multiplicand, BigInt multiplier, BigInt result ) -> Void:
+
+    """
+    result = multiplicand * multiplier (schoolbook multiplication).
+
+    Parameters:
+        multiplicand (BigInt):
+            First factor.
+        multiplier (BigInt):
+            Second factor.
+        result (BigInt):
+            Destination for product.
+
+    Complexity:
+        Time: O(n^2) where n is limb count
+        Space: O(1)
+    """
+
+    I64 clearIndex = 0
+    while clearIndex < result.limbCount:
+        result.setLimb( clearIndex, 0 )
+        clearIndex = clearIndex + 1
+
+    I64 outerIndex = 0
+    while outerIndex < multiplicand.effectiveLimbs():
+        I64 carry = 0
+        I64 innerIndex = 0
+        I64 multiplicandLimb = multiplicand.getLimb( outerIndex )
+
+        while innerIndex < multiplier.effectiveLimbs():
+            I64 resultIndex = outerIndex + innerIndex
+            if resultIndex < result.limbCount:
+                I64 product = multiplicandLimb * multiplier.getLimb( innerIndex ) + result.getLimb( resultIndex ) + carry
+                result.setLimb( resultIndex, product & LIMB_MASK )
+                carry = product >> LIMB_BITS
+            innerIndex = innerIndex + 1
+
+        I64 carryIndex = outerIndex + innerIndex
+        while carry > 0 and carryIndex < result.limbCount:
+            I64 sum = result.getLimb( carryIndex ) + carry
+            result.setLimb( carryIndex, sum & LIMB_MASK )
+            carry = sum >> LIMB_BITS
+            carryIndex = carryIndex + 1
+
+        outerIndex = outerIndex + 1
+
+public function bigintDivMod( BigInt dividend, BigInt divisor, BigInt quotient, BigInt remainder ) -> Void:
+
+    """
+    quotient = dividend / divisor, remainder = dividend % divisor.
+    Uses shift-and-subtract long division.
+
+    Parameters:
+        dividend (BigInt):
+            Dividend.
+        divisor (BigInt):
+            Divisor (must be non-zero).
+        quotient (BigInt):
+            Destination for quotient.
+        remainder (BigInt):
+            Destination for remainder.
+
+    Complexity:
+        Time: O(n^2) where n is bit length
+        Space: O(n) for temporary
+    """
+
+    I64 clearIdx = 0
+    while clearIdx < quotient.limbCount:
+        quotient.setLimb( clearIdx, 0 )
+        clearIdx = clearIdx + 1
+    clearIdx = 0
+    while clearIdx < remainder.limbCount:
+        remainder.setLimb( clearIdx, 0 )
+        clearIdx = clearIdx + 1
+
+    if divisor.isZero():
+        return
+
+    I64 dividendBits = dividend.bitLength()
+    I64 bitIndex = dividendBits - 1
+
+    while bitIndex >= 0:
+        I64 shiftCarry = 0
+        I64 shiftIdx = 0
+        while shiftIdx < remainder.limbCount:
+            I64 currentLimb = remainder.getLimb( shiftIdx )
+            I64 newCarry = ( currentLimb >> 31 ) & 1
+            remainder.setLimb( shiftIdx, ( ( currentLimb << 1 ) | shiftCarry ) & LIMB_MASK )
+            shiftCarry = newCarry
+            shiftIdx = shiftIdx + 1
+
+        I64 dividendBit = dividend.getBit( bitIndex )
+        I64 lowestLimb = remainder.getLimb( 0 )
+        remainder.setLimb( 0, ( lowestLimb | dividendBit ) & LIMB_MASK )
+
+        if remainder.compare( divisor ) >= 0:
+            bigintSubtract( remainder, divisor, remainder )
+            I64 quotientLimbIdx = bitIndex / LIMB_BITS
+            I64 quotientBitOffset = bitIndex % LIMB_BITS
+            I64 quotientLimb = quotient.getLimb( quotientLimbIdx )
+            quotient.setLimb( quotientLimbIdx, ( quotientLimb | ( 1 << quotientBitOffset ) ) & LIMB_MASK )
+
+        bitIndex = bitIndex - 1
+
+public function bigintModExp( BigInt base, BigInt exponent, BigInt modulus ) -> BigInt:
+
+    """
+    Compute base^exponent mod modulus via square-and-multiply.
+
+    Parameters:
+        base (BigInt):
+            Base value.
+        exponent (BigInt):
+            Exponent.
+        modulus (BigInt):
+            Modulus.
+
+    Returns:
+        BigInt:
+            Result of modular exponentiation.
+
+    Complexity:
+        Time: O(n^2 * e) where n is limb count, e is exponent bit length
+        Space: O(n) for temporaries
+    """
+
+    I64 limbCount = modulus.limbCount * 2 + 2
+
+    BigInt result = new BigInt( limbCount )
+    result.setLimb( 0, 1 )
+
+    BigInt currentBase = new BigInt( limbCount )
+    currentBase.copyFrom( base )
+
+    BigInt tempProduct = new BigInt( limbCount )
+    BigInt tempQuotient = new BigInt( limbCount )
+    BigInt tempRemainder = new BigInt( limbCount )
+
+    I64 expBits = exponent.bitLength()
+    I64 bitIndex = 0
+
+    while bitIndex < expBits:
+        I64 expBit = exponent.getBit( bitIndex )
+
+        if expBit == 1:
+            bigintMultiply( result, currentBase, tempProduct )
+            bigintDivMod( tempProduct, modulus, tempQuotient, tempRemainder )
+            result.copyFrom( tempRemainder )
+
+        bigintMultiply( currentBase, currentBase, tempProduct )
+        bigintDivMod( tempProduct, modulus, tempQuotient, tempRemainder )
+        currentBase.copyFrom( tempRemainder )
+
+        bitIndex = bitIndex + 1
+
+    BigInt finalResult = new BigInt( modulus.limbCount )
+    finalResult.copyFrom( result )
+
+    result.destroy()
+    currentBase.destroy()
+    tempProduct.destroy()
+    tempQuotient.destroy()
+    tempRemainder.destroy()
+
+    return finalResult
+
+export {
+    BigInt,
+    bigintFromBytes, bigintToBytes, bigintFromI64,
+    bigintAdd, bigintSubtract, bigintMultiply, bigintDivMod,
+    bigintModExp
+}
