@@ -20,13 +20,14 @@
 
 package uranite.os.sync
 
-from uranite.os.sync.spinlock import Spinlock
+from uranite.os.sync.spinlock import Spinlock, SpinlockIrq
 from uranite.os.sync.mutex import KernelMutex
 from uranite.os.sync.read-write-lock import ReadWriteLock
 from uranite.os.sync.semaphore import Semaphore
 
 export {
     Spinlock,
+    SpinlockIrq,
     KernelMutex,
     ReadWriteLock,
     Semaphore
