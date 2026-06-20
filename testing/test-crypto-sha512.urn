@@ -1,0 +1,57 @@
+package testing
+
+from uranite.crypto.sha512 import Sha512, sha512
+from uranite.encoding.binary import writeI8, readI8
+from uranite.memory.allocator import alloc, dealloc
+from uranite.testing.assertions import assertEqualI64, assertNotEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Crypto SHA-512 Tests ===" )
+
+    I64 outputAddress = alloc( 64 )
+
+    sha512( 0, 0, outputAddress )
+    # SHA-512("") = cf83e1357eefb8bd...
+    assertEqualI64( -49, readI8( outputAddress, 0 ), "empty hash byte 0 (0xcf)" )
+    assertEqualI64( -125, readI8( outputAddress, 1 ), "empty hash byte 1 (0x83)" )
+    assertEqualI64( -31, readI8( outputAddress, 2 ), "empty hash byte 2 (0xe1)" )
+    assertEqualI64( 0x35, readI8( outputAddress, 3 ), "empty hash byte 3" )
+    putsln( "empty string hash OK" )
+
+    # SHA-512("abc") = ddaf35a193617aba...
+    I64 abcBuffer = alloc( 3 )
+    writeI8( abcBuffer, 0, 0x61 )
+    writeI8( abcBuffer, 1, 0x62 )
+    writeI8( abcBuffer, 2, 0x63 )
+    sha512( abcBuffer, 3, outputAddress )
+    assertEqualI64( -35, readI8( outputAddress, 0 ), "abc hash byte 0 (0xdd)" )
+    assertEqualI64( -81, readI8( outputAddress, 1 ), "abc hash byte 1 (0xaf)" )
+    assertEqualI64( 0x35, readI8( outputAddress, 2 ), "abc hash byte 2" )
+    assertEqualI64( -95, readI8( outputAddress, 3 ), "abc hash byte 3 (0xa1)" )
+    putsln( "abc hash OK" )
+
+    I64 secondOutput = alloc( 64 )
+    sha512( abcBuffer, 3, secondOutput )
+    I64 hashIndex = 0
+    while hashIndex < 64:
+        assertEqualI64( readI8( outputAddress, hashIndex ), readI8( secondOutput, hashIndex ), "deterministic" )
+        hashIndex = hashIndex + 1
+    putsln( "deterministic OK" )
+
+    Sha512 hasher = new Sha512()
+    hasher.update( abcBuffer, 1 )
+    hasher.update( abcBuffer + 1, 2 )
+    I64 incrementalOutput = alloc( 64 )
+    hasher.digest( incrementalOutput )
+    assertEqualI64( -35, readI8( incrementalOutput, 0 ), "incremental byte 0 (0xdd)" )
+    assertEqualI64( -81, readI8( incrementalOutput, 1 ), "incremental byte 1 (0xaf)" )
+    putsln( "incremental update OK" )
+
+    dealloc( abcBuffer )
+    dealloc( outputAddress )
+    dealloc( secondOutput )
+    dealloc( incrementalOutput )
+
+    putsln( "=== All Crypto SHA-512 Tests Passed ===" )
+    return 0
