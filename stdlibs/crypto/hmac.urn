@@ -1,0 +1,171 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/hmac.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# HMAC (Hash-based Message Authentication Code) per RFC 2104. Provides
+# HMAC-SHA-256 and HMAC-SHA-512 functions for Kafka SCRAM SASL authentication
+# and TLS PRF computation.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.crypto.hmac
+
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
+from uranite.crypto.sha256 import Sha256, SHA256_BLOCK_SIZE, SHA256_DIGEST_SIZE
+from uranite.crypto.sha512 import Sha512, SHA512_BLOCK_SIZE, SHA512_DIGEST_SIZE
+
+const I64 IPAD_BYTE = 54
+"""Inner padding byte 0x36."""
+
+const I64 OPAD_BYTE = 92
+"""Outer padding byte 0x5C."""
+
+public function hmacSha256( I64 keyAddress, I64 keyLength, I64 dataAddress, I64 dataLength, I64 outputAddress ) -> Void:
+
+    """
+    Compute HMAC-SHA-256 per RFC 2104. If the key is longer than the
+    block size (64 bytes), it is first hashed with SHA-256 to produce
+    a 32-byte derived key.
+
+    Parameters:
+        keyAddress (I64):
+            Base address of the HMAC key.
+        keyLength (I64):
+            Length of the key in bytes.
+        dataAddress (I64):
+            Base address of the message data.
+        dataLength (I64):
+            Length of the message in bytes.
+        outputAddress (I64):
+            Address to write the 32-byte HMAC result.
+
+    Complexity:
+        Time: O(n) where n is keyLength + dataLength
+        Space: O(1) (fixed overhead for padding buffers)
+    """
+
+    I64 effectiveKeyAddress = keyAddress
+    I64 effectiveKeyLength = keyLength
+    I64 hashedKeyAddress = 0
+    if keyLength > SHA256_BLOCK_SIZE:
+        hashedKeyAddress = alloc( SHA256_DIGEST_SIZE )
+        Sha256 keyHasher = new Sha256()
+        keyHasher.update( keyAddress, keyLength )
+        keyHasher.digest( hashedKeyAddress )
+        keyHasher.destroy()
+        effectiveKeyAddress = hashedKeyAddress
+        effectiveKeyLength = SHA256_DIGEST_SIZE
+
+    I64 innerPadAddress = alloc( SHA256_BLOCK_SIZE )
+    I64 outerPadAddress = alloc( SHA256_BLOCK_SIZE )
+    I64 padIndex = 0
+    while padIndex < SHA256_BLOCK_SIZE:
+        I64 keyByte = 0
+        if padIndex < effectiveKeyLength:
+            keyByte = readByteAt( effectiveKeyAddress, padIndex )
+        writeByteAt( innerPadAddress, padIndex, ( keyByte ^ IPAD_BYTE ) & 255 )
+        writeByteAt( outerPadAddress, padIndex, ( keyByte ^ OPAD_BYTE ) & 255 )
+        padIndex = padIndex + 1
+
+    I64 innerDigestAddress = alloc( SHA256_DIGEST_SIZE )
+    Sha256 innerHasher = new Sha256()
+    innerHasher.update( innerPadAddress, SHA256_BLOCK_SIZE )
+    innerHasher.update( dataAddress, dataLength )
+    innerHasher.digest( innerDigestAddress )
+    innerHasher.destroy()
+
+    Sha256 outerHasher = new Sha256()
+    outerHasher.update( outerPadAddress, SHA256_BLOCK_SIZE )
+    outerHasher.update( innerDigestAddress, SHA256_DIGEST_SIZE )
+    outerHasher.digest( outputAddress )
+    outerHasher.destroy()
+
+    dealloc( innerPadAddress )
+    dealloc( outerPadAddress )
+    dealloc( innerDigestAddress )
+    if hashedKeyAddress != 0:
+        dealloc( hashedKeyAddress )
+
+public function hmacSha512( I64 keyAddress, I64 keyLength, I64 dataAddress, I64 dataLength, I64 outputAddress ) -> Void:
+
+    """
+    Compute HMAC-SHA-512 per RFC 2104. If the key is longer than the
+    block size (128 bytes), it is first hashed with SHA-512 to produce
+    a 64-byte derived key.
+
+    Parameters:
+        keyAddress (I64):
+            Base address of the HMAC key.
+        keyLength (I64):
+            Length of the key in bytes.
+        dataAddress (I64):
+            Base address of the message data.
+        dataLength (I64):
+            Length of the message in bytes.
+        outputAddress (I64):
+            Address to write the 64-byte HMAC result.
+
+    Complexity:
+        Time: O(n) where n is keyLength + dataLength
+        Space: O(1) (fixed overhead for padding buffers)
+    """
+
+    I64 effectiveKeyAddress = keyAddress
+    I64 effectiveKeyLength = keyLength
+    I64 hashedKeyAddress = 0
+    if keyLength > SHA512_BLOCK_SIZE:
+        hashedKeyAddress = alloc( SHA512_DIGEST_SIZE )
+        Sha512 keyHasher = new Sha512()
+        keyHasher.update( keyAddress, keyLength )
+        keyHasher.digest( hashedKeyAddress )
+        keyHasher.destroy()
+        effectiveKeyAddress = hashedKeyAddress
+        effectiveKeyLength = SHA512_DIGEST_SIZE
+
+    I64 innerPadAddress = alloc( SHA512_BLOCK_SIZE )
+    I64 outerPadAddress = alloc( SHA512_BLOCK_SIZE )
+    I64 padIndex = 0
+    while padIndex < SHA512_BLOCK_SIZE:
+        I64 keyByte = 0
+        if padIndex < effectiveKeyLength:
+            keyByte = readByteAt( effectiveKeyAddress, padIndex )
+        writeByteAt( innerPadAddress, padIndex, ( keyByte ^ IPAD_BYTE ) & 255 )
+        writeByteAt( outerPadAddress, padIndex, ( keyByte ^ OPAD_BYTE ) & 255 )
+        padIndex = padIndex + 1
+
+    I64 innerDigestAddress = alloc( SHA512_DIGEST_SIZE )
+    Sha512 innerHasher = new Sha512()
+    innerHasher.update( innerPadAddress, SHA512_BLOCK_SIZE )
+    innerHasher.update( dataAddress, dataLength )
+    innerHasher.digest( innerDigestAddress )
+    innerHasher.destroy()
+
+    Sha512 outerHasher = new Sha512()
+    outerHasher.update( outerPadAddress, SHA512_BLOCK_SIZE )
+    outerHasher.update( innerDigestAddress, SHA512_DIGEST_SIZE )
+    outerHasher.digest( outputAddress )
+    outerHasher.destroy()
+
+    dealloc( innerPadAddress )
+    dealloc( outerPadAddress )
+    dealloc( innerDigestAddress )
+    if hashedKeyAddress != 0:
+        dealloc( hashedKeyAddress )
+
+export {
+    hmacSha256,
+    hmacSha512
+}
