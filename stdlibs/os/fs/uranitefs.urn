@@ -7,7 +7,7 @@
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
-# AetherFS custom filesystem optimized for Uranite with capability-aware metadata, crash-safe journaling, efficient small-file storage, and arena-friendly allocation. Implements the FileSystem interface for VFS integration.
+# UraniteFS custom filesystem optimized for Uranite with capability-aware metadata, crash-safe journaling, efficient small-file storage, and arena-friendly allocation. Implements the FileSystem interface for VFS integration.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,10 +23,10 @@ package uranite.os.fs.uranitefs
 from uranite.memory.memory import Memory
 from uranite.os.vfs.filesystem import FileSystem
 
-public class AetherFsSuperblock:
+public class UraniteFsSuperblock:
     
     """
-    AetherFS superblock containing filesystem-level metadata including the magic
+    UraniteFS superblock containing filesystem-level metadata including the magic
     number for identification, format version, block size, total and free block/inode
     counts, and journal location. The magic number 0x41455448 ("AETH") is used to
     validate the superblock on mount.
@@ -42,10 +42,10 @@ public class AetherFsSuperblock:
     public I64 journalStart
     public I64 journalSize
     
-    public function AetherFsSuperblock( self ) -> Void:
+    public function UraniteFsSuperblock( self ) -> Void:
         
         """
-        Construct an AetherFS superblock with default values: magic number
+        Construct an UraniteFS superblock with default values: magic number
         0x41455448, version 1, 4096-byte block size, and all counters at zero.
         
         Complexity:
@@ -66,7 +66,7 @@ public class AetherFsSuperblock:
     public function isValid( self ) -> Boolean:
         
         """
-        Return whether this superblock has a valid AetherFS magic number.
+        Return whether this superblock has a valid UraniteFS magic number.
         
         Complexity:
             Time: O(n)
@@ -75,10 +75,10 @@ public class AetherFsSuperblock:
         
         return self.magic == 1095062081
 
-public class AetherFsInode:
+public class UraniteFsInode:
     
     """
-    AetherFS inode that extends traditional POSIX metadata with a capability token
+    UraniteFS inode that extends traditional POSIX metadata with a capability token
     for capability-based access control. Stores file mode, ownership (uid/gid),
     size, link count, timestamps, and a pointer to the first data block.
     """
@@ -93,10 +93,10 @@ public class AetherFsInode:
     public I64 modifiedTime
     public I64 dataBlock
     
-    public function AetherFsInode( self ) -> Void:
+    public function UraniteFsInode( self ) -> Void:
         
         """
-        Construct an AetherFS inode with default values. The link count
+        Construct an UraniteFS inode with default values. The link count
         defaults to 1 and all other fields are initialized to zero.
         
         Complexity:
@@ -138,23 +138,23 @@ public class AetherFsInode:
         
         return self.capabilityToken != 0
 
-public class AetherFileSystem implements FileSystem:
+public class UraniteFileSystem implements FileSystem:
     
     """
-    AetherFS filesystem driver skeleton implementing the FileSystem interface
+    UraniteFS filesystem driver skeleton implementing the FileSystem interface
     for integration with the Virtual File System layer. Provides stub
     implementations for read, write, lookup, create, remove, and sync
     operations that will be completed with actual disk I/O logic.
     """
     
-    protect AetherFsSuperblock superblock
+    protect UraniteFsSuperblock superblock
     protect I64 deviceId
     protect I64 filesystemId
     
-    public function AetherFileSystem( self, I64 devId, I64 fsId ) -> Void:
+    public function UraniteFileSystem( self, I64 devId, I64 fsId ) -> Void:
         
         """
-        Construct an AetherFS filesystem driver bound to the specified device
+        Construct an UraniteFS filesystem driver bound to the specified device
         and filesystem IDs. Initializes the superblock with default values.
         
         Complexity:
@@ -162,7 +162,7 @@ public class AetherFileSystem implements FileSystem:
             Space: O(1)
         """
         
-        self.superblock = new AetherFsSuperblock()
+        self.superblock = new UraniteFsSuperblock()
         self.deviceId = devId
         self.filesystemId = fsId
     
@@ -256,7 +256,7 @@ public class AetherFileSystem implements FileSystem:
     
     public function isValid( self ) -> Boolean:
         
-        """ Return whether the filesystem superblock has a valid AetherFS magic number. """
+        """ Return whether the filesystem superblock has a valid UraniteFS magic number. """
         
         return self.superblock.isValid()
     
@@ -273,7 +273,7 @@ public class AetherFileSystem implements FileSystem:
         return self.deviceId
 
 export {
-    AetherFsSuperblock,
-    AetherFsInode,
-    AetherFileSystem
+    UraniteFsSuperblock,
+    UraniteFsInode,
+    UraniteFileSystem
 }
