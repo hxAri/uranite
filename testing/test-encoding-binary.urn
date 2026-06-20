@@ -1,0 +1,107 @@
+package testing
+
+from uranite.encoding.binary import {
+    readI8, writeI8,
+    readI16Be, writeI16Be,
+    readI32Be, writeI32Be,
+    readI64Be, writeI64Be,
+    readVarI32, writeVarI32,
+    readUnsignedVarI32, writeUnsignedVarI32,
+    copyBytes
+}
+from uranite.memory.allocator import alloc, dealloc
+from uranite.testing.assertions import assertEqualI64, assertTrue
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Encoding Binary Tests ===" )
+
+    I64 bufferAddress = alloc( 64 )
+
+    writeI8( bufferAddress, 0, 42 )
+    assertEqualI64( 42, readI8( bufferAddress, 0 ), "writeI8/readI8 42" )
+
+    writeI8( bufferAddress, 1, 255 )
+    assertEqualI64( -1, readI8( bufferAddress, 1 ), "writeI8/readI8 255 sign-extended" )
+
+    writeI8( bufferAddress, 2, 0 )
+    assertEqualI64( 0, readI8( bufferAddress, 2 ), "writeI8/readI8 0" )
+    putsln( "I8 OK" )
+
+    writeI16Be( bufferAddress, 0, 0x0102 )
+    assertEqualI64( 0x0102, readI16Be( bufferAddress, 0 ), "I16Be 0x0102" )
+
+    writeI16Be( bufferAddress, 0, 0x7FFF )
+    assertEqualI64( 0x7FFF, readI16Be( bufferAddress, 0 ), "I16Be 0x7FFF" )
+
+    writeI16Be( bufferAddress, 0, 0 )
+    assertEqualI64( 0, readI16Be( bufferAddress, 0 ), "I16Be 0" )
+    putsln( "I16Be OK" )
+
+    writeI32Be( bufferAddress, 0, 0x01020304 )
+    assertEqualI64( 0x01020304, readI32Be( bufferAddress, 0 ), "I32Be 0x01020304" )
+
+    writeI32Be( bufferAddress, 0, 0x7FFFFFFF )
+    assertEqualI64( 0x7FFFFFFF, readI32Be( bufferAddress, 0 ), "I32Be max" )
+
+    writeI32Be( bufferAddress, 0, 0 )
+    assertEqualI64( 0, readI32Be( bufferAddress, 0 ), "I32Be 0" )
+    putsln( "I32Be OK" )
+
+    writeI64Be( bufferAddress, 0, 0x0102030405060708 )
+    assertEqualI64( 0x0102030405060708, readI64Be( bufferAddress, 0 ), "I64Be 0x0102030405060708" )
+
+    writeI64Be( bufferAddress, 0, 0 )
+    assertEqualI64( 0, readI64Be( bufferAddress, 0 ), "I64Be 0" )
+    putsln( "I64Be OK" )
+
+    I64 bytesWritten = writeVarI32( bufferAddress, 0, 0 )
+    assertEqualI64( 1, bytesWritten, "varI32 zero length" )
+    I64 packedVarI32 = readVarI32( bufferAddress, 0 )
+    assertEqualI64( 0, packedVarI32 & 4294967295, "varI32 zero value" )
+    assertEqualI64( 1, packedVarI32 >> 32, "varI32 zero bytes consumed" )
+
+    bytesWritten = writeVarI32( bufferAddress, 0, 1 )
+    assertEqualI64( 1, bytesWritten, "varI32(1) length" )
+    packedVarI32 = readVarI32( bufferAddress, 0 )
+    assertEqualI64( 1, packedVarI32 & 4294967295, "varI32(1) value" )
+
+    bytesWritten = writeVarI32( bufferAddress, 0, 300 )
+    assertTrue( bytesWritten > 1, "varI32(300) multi-byte" )
+    packedVarI32 = readVarI32( bufferAddress, 0 )
+    assertEqualI64( 300, packedVarI32 & 4294967295, "varI32(300) round-trip" )
+    putsln( "VarI32 OK" )
+
+    bytesWritten = writeUnsignedVarI32( bufferAddress, 0, 0 )
+    assertEqualI64( 1, bytesWritten, "unsignedVarI32(0) length" )
+    I64 packedUVarI32 = readUnsignedVarI32( bufferAddress, 0 )
+    assertEqualI64( 0, packedUVarI32 & 4294967295, "unsignedVarI32(0) value" )
+
+    bytesWritten = writeUnsignedVarI32( bufferAddress, 0, 127 )
+    assertEqualI64( 1, bytesWritten, "unsignedVarI32(127) length" )
+    packedUVarI32 = readUnsignedVarI32( bufferAddress, 0 )
+    assertEqualI64( 127, packedUVarI32 & 4294967295, "unsignedVarI32(127) value" )
+
+    bytesWritten = writeUnsignedVarI32( bufferAddress, 0, 128 )
+    assertEqualI64( 2, bytesWritten, "unsignedVarI32(128) length" )
+    packedUVarI32 = readUnsignedVarI32( bufferAddress, 0 )
+    assertEqualI64( 128, packedUVarI32 & 4294967295, "unsignedVarI32(128) value" )
+    putsln( "UnsignedVarI32 OK" )
+
+    I64 sourceAddress = alloc( 16 )
+    I64 destinationAddress = alloc( 16 )
+    writeI8( sourceAddress, 0, 0xAA )
+    writeI8( sourceAddress, 1, 0xBB )
+    writeI8( sourceAddress, 2, 0xCC )
+    copyBytes( sourceAddress, 0, destinationAddress, 0, 3 )
+    assertEqualI64( -86, readI8( destinationAddress, 0 ), "copyBytes byte 0 (0xAA sign-extended)" )
+    assertEqualI64( -69, readI8( destinationAddress, 1 ), "copyBytes byte 1 (0xBB sign-extended)" )
+    assertEqualI64( -52, readI8( destinationAddress, 2 ), "copyBytes byte 2 (0xCC sign-extended)" )
+    putsln( "copyBytes OK" )
+
+    dealloc( sourceAddress )
+    dealloc( destinationAddress )
+    dealloc( bufferAddress )
+
+    putsln( "=== All Encoding Binary Tests Passed ===" )
+    return 0
