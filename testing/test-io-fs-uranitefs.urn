@@ -1,0 +1,13 @@
+package testing
+
+from uranite.io.fs.uranitefs import UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== IO FS UraniteFS Tests ===" )
+
+    UraniteFsSuperblock superblock = new UraniteFsSuperblock()
+    putsln( "UraniteFsSuperblock constructed OK" )
+
+    putsln( "=== All IO FS UraniteFS Tests Passed ===" )
+    return 0
