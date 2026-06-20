@@ -1,0 +1,194 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/pbkdf2.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# PBKDF2 (Password-Based Key Derivation Function 2) per RFC 2898. Derives
+# cryptographic keys from passwords using iterated HMAC. Used by Kafka
+# SCRAM SASL authentication for salted password derivation.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.crypto.pbkdf2
+
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
+from uranite.encoding.binary import writeI32Be
+from uranite.crypto.hmac import hmacSha256, hmacSha512
+from uranite.crypto.sha256 import SHA256_DIGEST_SIZE
+from uranite.crypto.sha512 import SHA512_DIGEST_SIZE
+
+public function pbkdf2HmacSha256( I64 passwordAddress, I64 passwordLength, I64 saltAddress, I64 saltLength, I64 iterations, I64 outputAddress, I64 outputLength ) -> Void:
+
+    """
+    Derive a key from a password using PBKDF2 with HMAC-SHA-256 as the
+    pseudorandom function per RFC 2898 section 5.2.
+
+    For each block of derived key material, computes:
+      U1 = HMAC(password, salt || INT(blockIndex))
+      U2 = HMAC(password, U1)
+      ...
+      Ui = HMAC(password, U_{i-1})
+      DK_block = U1 ^ U2 ^ ... ^ Ui
+
+    Parameters:
+        passwordAddress (I64):
+            Base address of the password bytes.
+        passwordLength (I64):
+            Length of the password in bytes.
+        saltAddress (I64):
+            Base address of the salt bytes.
+        saltLength (I64):
+            Length of the salt in bytes.
+        iterations (I64):
+            Number of HMAC iterations (SCRAM typically uses 4096+).
+        outputAddress (I64):
+            Address to write the derived key.
+        outputLength (I64):
+            Desired length of the derived key in bytes.
+
+    Complexity:
+        Time: O(iterations * ceil(outputLength / 32))
+        Space: O(1) (fixed overhead for intermediate buffers)
+    """
+
+    I64 saltPlusBlockAddress = alloc( saltLength + 4 )
+    I64 copySaltIndex = 0
+    while copySaltIndex < saltLength:
+        I64 saltByte = readByteAt( saltAddress, copySaltIndex )
+        writeByteAt( saltPlusBlockAddress, copySaltIndex, saltByte )
+        copySaltIndex = copySaltIndex + 1
+
+    I64 currentUAddress = alloc( SHA256_DIGEST_SIZE )
+    I64 xorAccumulatorAddress = alloc( SHA256_DIGEST_SIZE )
+    I64 outputBytesWritten = 0
+    I64 blockIndex = 1
+
+    while outputBytesWritten < outputLength:
+        writeI32Be( saltPlusBlockAddress, saltLength, blockIndex )
+        hmacSha256( passwordAddress, passwordLength, saltPlusBlockAddress, saltLength + 4, currentUAddress )
+        I64 initIndex = 0
+        while initIndex < SHA256_DIGEST_SIZE:
+            writeByteAt( xorAccumulatorAddress, initIndex, readByteAt( currentUAddress, initIndex ) )
+            initIndex = initIndex + 1
+        I64 iterationIndex = 1
+        while iterationIndex < iterations:
+            I64 previousUAddress = alloc( SHA256_DIGEST_SIZE )
+            I64 copyUIndex = 0
+            while copyUIndex < SHA256_DIGEST_SIZE:
+                writeByteAt( previousUAddress, copyUIndex, readByteAt( currentUAddress, copyUIndex ) )
+                copyUIndex = copyUIndex + 1
+            hmacSha256( passwordAddress, passwordLength, previousUAddress, SHA256_DIGEST_SIZE, currentUAddress )
+            dealloc( previousUAddress )
+            I64 xorIndex = 0
+            while xorIndex < SHA256_DIGEST_SIZE:
+                I64 accByte = readByteAt( xorAccumulatorAddress, xorIndex )
+                I64 uByte = readByteAt( currentUAddress, xorIndex )
+                writeByteAt( xorAccumulatorAddress, xorIndex, ( accByte ^ uByte ) & 255 )
+                xorIndex = xorIndex + 1
+            iterationIndex = iterationIndex + 1
+        I64 bytesToCopy = outputLength - outputBytesWritten
+        if bytesToCopy > SHA256_DIGEST_SIZE:
+            bytesToCopy = SHA256_DIGEST_SIZE
+        I64 outputCopyIndex = 0
+        while outputCopyIndex < bytesToCopy:
+            writeByteAt( outputAddress, outputBytesWritten + outputCopyIndex, readByteAt( xorAccumulatorAddress, outputCopyIndex ) )
+            outputCopyIndex = outputCopyIndex + 1
+        outputBytesWritten = outputBytesWritten + bytesToCopy
+        blockIndex = blockIndex + 1
+
+    dealloc( saltPlusBlockAddress )
+    dealloc( currentUAddress )
+    dealloc( xorAccumulatorAddress )
+
+public function pbkdf2HmacSha512( I64 passwordAddress, I64 passwordLength, I64 saltAddress, I64 saltLength, I64 iterations, I64 outputAddress, I64 outputLength ) -> Void:
+
+    """
+    Derive a key from a password using PBKDF2 with HMAC-SHA-512.
+    Same algorithm as pbkdf2HmacSha256 but using SHA-512.
+
+    Parameters:
+        passwordAddress (I64):
+            Base address of the password bytes.
+        passwordLength (I64):
+            Length of the password in bytes.
+        saltAddress (I64):
+            Base address of the salt bytes.
+        saltLength (I64):
+            Length of the salt in bytes.
+        iterations (I64):
+            Number of HMAC iterations.
+        outputAddress (I64):
+            Address to write the derived key.
+        outputLength (I64):
+            Desired length of the derived key in bytes.
+
+    Complexity:
+        Time: O(iterations * ceil(outputLength / 64))
+        Space: O(1)
+    """
+
+    I64 saltPlusBlockAddress = alloc( saltLength + 4 )
+    I64 copySaltIndex = 0
+    while copySaltIndex < saltLength:
+        I64 saltByte = readByteAt( saltAddress, copySaltIndex )
+        writeByteAt( saltPlusBlockAddress, copySaltIndex, saltByte )
+        copySaltIndex = copySaltIndex + 1
+
+    I64 currentUAddress = alloc( SHA512_DIGEST_SIZE )
+    I64 xorAccumulatorAddress = alloc( SHA512_DIGEST_SIZE )
+    I64 outputBytesWritten = 0
+    I64 blockIndex = 1
+
+    while outputBytesWritten < outputLength:
+        writeI32Be( saltPlusBlockAddress, saltLength, blockIndex )
+        hmacSha512( passwordAddress, passwordLength, saltPlusBlockAddress, saltLength + 4, currentUAddress )
+        I64 initIndex = 0
+        while initIndex < SHA512_DIGEST_SIZE:
+            writeByteAt( xorAccumulatorAddress, initIndex, readByteAt( currentUAddress, initIndex ) )
+            initIndex = initIndex + 1
+        I64 iterationIndex = 1
+        while iterationIndex < iterations:
+            I64 previousUAddress = alloc( SHA512_DIGEST_SIZE )
+            I64 copyUIndex = 0
+            while copyUIndex < SHA512_DIGEST_SIZE:
+                writeByteAt( previousUAddress, copyUIndex, readByteAt( currentUAddress, copyUIndex ) )
+                copyUIndex = copyUIndex + 1
+            hmacSha512( passwordAddress, passwordLength, previousUAddress, SHA512_DIGEST_SIZE, currentUAddress )
+            dealloc( previousUAddress )
+            I64 xorIndex = 0
+            while xorIndex < SHA512_DIGEST_SIZE:
+                I64 accByte = readByteAt( xorAccumulatorAddress, xorIndex )
+                I64 uByte = readByteAt( currentUAddress, xorIndex )
+                writeByteAt( xorAccumulatorAddress, xorIndex, ( accByte ^ uByte ) & 255 )
+                xorIndex = xorIndex + 1
+            iterationIndex = iterationIndex + 1
+        I64 bytesToCopy = outputLength - outputBytesWritten
+        if bytesToCopy > SHA512_DIGEST_SIZE:
+            bytesToCopy = SHA512_DIGEST_SIZE
+        I64 outputCopyIndex = 0
+        while outputCopyIndex < bytesToCopy:
+            writeByteAt( outputAddress, outputBytesWritten + outputCopyIndex, readByteAt( xorAccumulatorAddress, outputCopyIndex ) )
+            outputCopyIndex = outputCopyIndex + 1
+        outputBytesWritten = outputBytesWritten + bytesToCopy
+        blockIndex = blockIndex + 1
+
+    dealloc( saltPlusBlockAddress )
+    dealloc( currentUAddress )
+    dealloc( xorAccumulatorAddress )
+
+export {
+    pbkdf2HmacSha256,
+    pbkdf2HmacSha512
+}

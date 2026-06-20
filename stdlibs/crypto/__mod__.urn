@@ -7,15 +7,36 @@
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
+# Re-exports all cryptographic primitives: AES cipher, secure random,
+# keystore, SHA-256, SHA-512, HMAC, PBKDF2, BigInt arithmetic, and RSA.
+#
 
 package uranite.crypto
 
 from uranite.crypto.random import SecureRandom, Csprng
 from uranite.crypto.cipher import AesCipher, AES_128, AES_256, AES_BLOCK_SIZE, AesContext
 from uranite.crypto.keystore import SecureKeyStore, KeyType, KeyState, KeyStore
+from uranite.crypto.sha256 import Sha256, sha256, SHA256_BLOCK_SIZE, SHA256_DIGEST_SIZE
+from uranite.crypto.sha512 import Sha512, sha512, SHA512_BLOCK_SIZE, SHA512_DIGEST_SIZE
+from uranite.crypto.hmac import hmacSha256, hmacSha512
+from uranite.crypto.pbkdf2 import pbkdf2HmacSha256, pbkdf2HmacSha512
+from uranite.crypto.bigint import {
+    BigInt, bigintFromBytes, bigintToBytes, bigintFromI64,
+    bigintAdd, bigintSubtract, bigintMultiply, bigintDivMod, bigintModExp
+}
+from uranite.crypto.rsa import {
+    RsaPublicKey, rsaPublicKeyFromDer, rsaRawEncrypt, rsaEncryptPkcs1v15
+}
 
 export {
     SecureRandom, Csprng,
     AesCipher, AES_128, AES_256, AES_BLOCK_SIZE, AesContext,
-    SecureKeyStore, KeyType, KeyState, KeyStore
+    SecureKeyStore, KeyType, KeyState, KeyStore,
+    Sha256, sha256, SHA256_BLOCK_SIZE, SHA256_DIGEST_SIZE,
+    Sha512, sha512, SHA512_BLOCK_SIZE, SHA512_DIGEST_SIZE,
+    hmacSha256, hmacSha512,
+    pbkdf2HmacSha256, pbkdf2HmacSha512,
+    BigInt, bigintFromBytes, bigintToBytes, bigintFromI64,
+    bigintAdd, bigintSubtract, bigintMultiply, bigintDivMod, bigintModExp,
+    RsaPublicKey, rsaPublicKeyFromDer, rsaRawEncrypt, rsaEncryptPkcs1v15
 }

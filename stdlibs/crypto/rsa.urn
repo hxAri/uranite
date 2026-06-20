@@ -1,0 +1,237 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/rsa.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# RSA public-key cryptographic primitives for TLS key exchange.
+# Supports PKCS#1 v1.5 encryption (used in RSA key exchange during
+# TLS 1.2 handshake) and public key parsing from DER-encoded
+# SubjectPublicKeyInfo structures.
+#
+# Operations:
+#   - rsaEncryptPkcs1v15: Encrypt premaster secret with server's
+#     RSA public key (PKCS#1 v1.5 type 2 padding).
+#   - rsaPublicKeyFromDer: Parse RSA public key (n, e) from DER.
+#   - rsaRawEncrypt: Raw modular exponentiation c = m^e mod n.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.crypto.rsa
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.encoding.binary import copyBytes
+from uranite.encoding.der import {
+    DerElement, derParseElement, derParseSequence,
+    derIterateSequence, derParseBitString,
+    derGetIntegerBytes, DER_TAG_SEQUENCE, DER_TAG_BIT_STRING, DER_TAG_INTEGER
+}
+from uranite.crypto.bigint import {
+    BigInt, bigintFromBytes, bigintToBytes, bigintModExp
+}
+from uranite.crypto.random import randomBytes
+
+const I64 RSA_BLOCK_TYPE_ENCRYPT = 2
+const I64 RSA_PKCS1_PADDING_MIN = 11
+
+public class RsaPublicKey:
+
+    """
+    RSA public key containing the modulus (n) and public exponent (e).
+    """
+
+    public BigInt modulus
+    public BigInt exponent
+    public I64 modulusByteLength
+
+    public function RsaPublicKey( self, BigInt modulus, BigInt exponent, I64 modulusByteLength ) -> Void:
+
+        """
+        Parameters:
+            modulus (BigInt):
+                RSA modulus n.
+            exponent (BigInt):
+                Public exponent e.
+            modulusByteLength (I64):
+                Byte length of the modulus.
+        """
+
+        self.modulus = modulus
+        self.exponent = exponent
+        self.modulusByteLength = modulusByteLength
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release key storage.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.modulus.destroy()
+        self.exponent.destroy()
+
+public function rsaPublicKeyFromDer( I64 derAddress, I64 derLength ) -> RsaPublicKey:
+
+    """
+    Parse an RSA public key from DER-encoded SubjectPublicKeyInfo.
+
+    The structure is:
+        SEQUENCE {
+            SEQUENCE { OID, NULL }  -- algorithm identifier
+            BIT STRING {            -- subjectPublicKey
+                SEQUENCE {
+                    INTEGER n       -- modulus
+                    INTEGER e       -- exponent
+                }
+            }
+        }
+
+    Parameters:
+        derAddress (I64):
+            Address of DER data.
+        derLength (I64):
+            Length of DER data.
+
+    Returns:
+        RsaPublicKey:
+            Parsed public key.
+
+    Complexity:
+        Time: O(n) where n is key size in bytes
+        Space: O(key size in limbs)
+    """
+
+    DerElement outerSeq = derParseSequence( derAddress, 0, derLength )
+
+    DerElement bitString = derIterateSequence( outerSeq, 1 )
+
+    I64 keyDataAddress = bitString.contentAddress + 1
+    I64 keyDataLength = bitString.contentLength - 1
+
+    DerElement keySeq = derParseSequence( keyDataAddress, 0, keyDataLength )
+
+    DerElement modulusElement = derIterateSequence( keySeq, 0 )
+    DerElement exponentElement = derIterateSequence( keySeq, 1 )
+
+    I64 modulusInfo = derGetIntegerBytes( modulusElement )
+    I64 modulusContentOffset = modulusInfo & 4294967295
+    I64 modulusByteLength = ( modulusInfo >> 32 ) & 4294967295
+
+    I64 limbCount = ( modulusByteLength + 3 ) / 4 + 2
+    BigInt modulus = bigintFromBytes( modulusElement.contentAddress + modulusContentOffset, modulusByteLength, limbCount )
+
+    I64 expInfo = derGetIntegerBytes( exponentElement )
+    I64 expContentOffset = expInfo & 4294967295
+    I64 expByteLength = ( expInfo >> 32 ) & 4294967295
+    BigInt exponent = bigintFromBytes( exponentElement.contentAddress + expContentOffset, expByteLength, limbCount )
+
+    return new RsaPublicKey( modulus, exponent, modulusByteLength )
+
+public function rsaRawEncrypt( BigInt message, RsaPublicKey publicKey ) -> BigInt:
+
+    """
+    Raw RSA encryption: ciphertext = message^e mod n.
+
+    Parameters:
+        message (BigInt):
+            Plaintext message as BigInt (must be < n).
+        publicKey (RsaPublicKey):
+            RSA public key.
+
+    Returns:
+        BigInt:
+            Encrypted ciphertext as BigInt.
+
+    Complexity:
+        Time: O(k^2 * e) where k is key size in limbs, e is exponent bits
+        Space: O(k) for temporaries
+    """
+
+    return bigintModExp( message, publicKey.exponent, publicKey.modulus )
+
+public function rsaEncryptPkcs1v15( I64 plaintextAddress, I64 plaintextLength, RsaPublicKey publicKey, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Encrypt plaintext using PKCS#1 v1.5 type 2 padding (for key
+    exchange). Constructs the padded block:
+        0x00 || 0x02 || PS (non-zero random) || 0x00 || M
+
+    Parameters:
+        plaintextAddress (I64):
+            Address of plaintext (e.g. 48-byte premaster secret).
+        plaintextLength (I64):
+            Length of plaintext.
+        publicKey (RsaPublicKey):
+            Server's RSA public key.
+        outputAddress (I64):
+            Address of output buffer for ciphertext.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Ciphertext length (= modulus byte length), or -1 on error.
+
+    Complexity:
+        Time: O(k^2 * e) dominated by modexp
+        Space: O(k) for padded block and BigInt temporaries
+    """
+
+    I64 keyLength = publicKey.modulusByteLength
+    if keyLength < plaintextLength + RSA_PKCS1_PADDING_MIN:
+        return -1
+    if outputCapacity < keyLength:
+        return -1
+
+    I64 paddedAddress = alloc( keyLength )
+
+    writeByteAt( paddedAddress, 0, 0 )
+    writeByteAt( paddedAddress, 1, RSA_BLOCK_TYPE_ENCRYPT )
+
+    I64 paddingLength = keyLength - plaintextLength - 3
+    I64 randomBuffer = alloc( paddingLength )
+    randomBytes( randomBuffer, paddingLength )
+
+    I64 padIndex = 0
+    while padIndex < paddingLength:
+        I64 padByte = readByteAt( randomBuffer, padIndex )
+        if padByte == 0:
+            padByte = 1
+        writeByteAt( paddedAddress, 2 + padIndex, padByte )
+        padIndex = padIndex + 1
+    dealloc( randomBuffer )
+
+    writeByteAt( paddedAddress, 2 + paddingLength, 0 )
+
+    copyBytes( plaintextAddress, 0, paddedAddress, 3 + paddingLength, plaintextLength )
+
+    I64 limbCount = ( keyLength + 3 ) / 4 + 2
+    BigInt paddedMessage = bigintFromBytes( paddedAddress, keyLength, limbCount )
+    dealloc( paddedAddress )
+
+    BigInt ciphertext = rsaRawEncrypt( paddedMessage, publicKey )
+    paddedMessage.destroy()
+
+    bigintToBytes( ciphertext, outputAddress, keyLength )
+    ciphertext.destroy()
+
+    return keyLength
+
+export {
+    RsaPublicKey,
+    rsaPublicKeyFromDer, rsaRawEncrypt, rsaEncryptPkcs1v15
+}

@@ -7,7 +7,7 @@
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
-# Defines the pluggable filesystem interface that concrete filesystem implementations (FAT32, ext4, AetherFS) must satisfy, along with filesystem type identifiers.
+# Defines the pluggable filesystem interface that concrete filesystem implementations (FAT32, ext4, UraniteFS) must satisfy, along with filesystem type identifiers.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ public interface FileSystem:
     
     """
     Pluggable filesystem interface that abstracts the underlying storage format. Concrete
-    filesystem implementations (such as FAT32, ext4, or AetherFS) implement this interface
+    filesystem implementations (such as FAT32, ext4, or UraniteFS) implement this interface
     to provide file and directory operations. All operations use inode numbers and raw memory
     buffers, maintaining independence from the VNode layer above.
     """
@@ -84,7 +84,7 @@ enum FileSystemType backed I64:
     unit Unknown 0
     unit Fat32 1
     unit Ext4 2
-    unit AetherFs 3
+    unit UraniteFs 3
     unit RamFs 4
 
 export {

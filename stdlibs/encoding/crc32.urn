@@ -1,0 +1,164 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/crc32.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Standard CRC-32 (ISO 3309) checksum implementation using a 256-entry lookup
+# table precomputed from the polynomial 0xEDB88320 (bit-reversed 0x04C11DB7).
+# Used by Kafka legacy record format (magic 0/1) and gzip/zlib checksums.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.encoding.crc32
+
+from uranite.io.syscall import readByteAt, writeI64At, readI64At
+from uranite.memory.allocator import alloc
+
+const I64 CRC32_POLYNOMIAL = 3988292384
+"""Standard CRC-32 polynomial 0xEDB88320 (bit-reversed form)."""
+
+const I64 CRC32_INITIAL = 4294967295
+"""Initial CRC value (all bits set, 0xFFFFFFFF)."""
+
+const I64 CRC32_TABLE_ENTRIES = 256
+"""Number of entries in the CRC lookup table."""
+
+const I64 CRC32_TABLE_BYTE_SIZE = 2048
+"""Byte size of the lookup table (256 entries * 8 bytes each)."""
+
+I64 tableAddress = 0
+"""Lazily initialized address of the 256-entry CRC-32 lookup table."""
+
+I64 tableInitialized = 0
+"""Flag indicating whether the lookup table has been computed."""
+
+public function initializeCrc32Table() -> Void:
+
+    """
+    Compute the 256-entry standard CRC-32 lookup table from the ISO 3309
+    polynomial. Each entry represents the CRC contribution of a single
+    byte value (0-255). Allocated once and reused for all subsequent
+    CRC computations.
+
+    Complexity:
+        Time: O(1) (256 * 8 = 2048 iterations, constant)
+        Space: O(1) (2048 bytes allocated)
+    """
+
+    if tableInitialized != 0:
+        return
+    tableAddress = alloc( CRC32_TABLE_BYTE_SIZE )
+    I64 byteValue = 0
+    while byteValue < CRC32_TABLE_ENTRIES:
+        I64 crcAccumulator = byteValue
+        I64 bitIndex = 0
+        while bitIndex < 8:
+            if ( crcAccumulator & 1 ) != 0:
+                crcAccumulator = ( ( crcAccumulator >> 1 ) & 2147483647 ) ^ CRC32_POLYNOMIAL
+            else:
+                crcAccumulator = ( crcAccumulator >> 1 ) & 2147483647
+            bitIndex = bitIndex + 1
+        writeI64At( tableAddress, byteValue * 8, crcAccumulator & 4294967295 )
+        byteValue = byteValue + 1
+    tableInitialized = 1
+
+public function crc32Update( I64 currentCrc, I64 bufferAddress, I64 length ) -> I64:
+
+    """
+    Update a running CRC-32 value by processing length bytes from the
+    buffer. The lookup table is lazily initialized on first call.
+
+    Parameters:
+        currentCrc (I64):
+            The current CRC value (use CRC32_INITIAL for a fresh
+            computation, or a previous crc32Update result for
+            incremental updates).
+        bufferAddress (I64):
+            Base address of the data buffer.
+        length (I64):
+            Number of bytes to process.
+
+    Returns:
+        I64:
+            The updated CRC-32 value (not yet finalized).
+
+    Complexity:
+        Time: O(n) where n is length
+        Space: O(1)
+    """
+
+    initializeCrc32Table()
+    I64 crcState = currentCrc & 4294967295
+    I64 byteIndex = 0
+    while byteIndex < length:
+        I64 dataByte = readByteAt( bufferAddress, byteIndex )
+        I64 tableIndex = ( crcState ^ dataByte ) & 255
+        I64 tableEntry = readI64At( tableAddress, tableIndex * 8 )
+        crcState = tableEntry ^ ( ( crcState >> 8 ) & 16777215 )
+        byteIndex = byteIndex + 1
+    return crcState & 4294967295
+
+public function crc32Finalize( I64 crc ) -> I64:
+
+    """
+    Finalize a CRC-32 value by XOR-ing with 0xFFFFFFFF.
+
+    Parameters:
+        crc (I64):
+            The running CRC value from crc32Update.
+
+    Returns:
+        I64:
+            The finalized CRC-32 checksum.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return ( crc ^ CRC32_INITIAL ) & 4294967295
+
+public function crc32( I64 bufferAddress, I64 length ) -> I64:
+
+    """
+    Compute the standard CRC-32 checksum of length bytes starting at
+    bufferAddress. Convenience function combining initialization, update,
+    and finalization.
+
+    Parameters:
+        bufferAddress (I64):
+            Base address of the data buffer.
+        length (I64):
+            Number of bytes to checksum.
+
+    Returns:
+        I64:
+            The CRC-32 checksum of the data.
+
+    Complexity:
+        Time: O(n) where n is length
+        Space: O(1)
+    """
+
+    I64 crcState = crc32Update( CRC32_INITIAL, bufferAddress, length )
+    return crc32Finalize( crcState )
+
+export {
+    CRC32_POLYNOMIAL,
+    CRC32_INITIAL,
+    initializeCrc32Table,
+    crc32Update,
+    crc32Finalize,
+    crc32
+}

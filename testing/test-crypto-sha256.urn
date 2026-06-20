@@ -1,0 +1,65 @@
+package testing
+
+from uranite.crypto.sha256 import Sha256, sha256
+from uranite.encoding.binary import writeI8, readI8
+from uranite.memory.allocator import alloc, dealloc
+from uranite.testing.assertions import assertEqualI64, assertNotEqualI64
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Crypto SHA-256 Tests ===" )
+
+    I64 outputAddress = alloc( 32 )
+
+    sha256( 0, 0, outputAddress )
+    # SHA-256("") = e3b0c44298fc1c14...
+    # First byte = 0xe3 = 227
+    assertEqualI64( -29, readI8( outputAddress, 0 ), "empty hash byte 0 (0xe3)" )
+    assertEqualI64( -80, readI8( outputAddress, 1 ), "empty hash byte 1 (0xb0)" )
+    assertEqualI64( -60, readI8( outputAddress, 2 ), "empty hash byte 2 (0xc4)" )
+    assertEqualI64( 0x42, readI8( outputAddress, 3 ), "empty hash byte 3" )
+    putsln( "empty string hash OK" )
+
+    # SHA-256("abc") = ba7816bf8f01cfea...
+    I64 abcBuffer = alloc( 3 )
+    writeI8( abcBuffer, 0, 0x61 )
+    writeI8( abcBuffer, 1, 0x62 )
+    writeI8( abcBuffer, 2, 0x63 )
+    sha256( abcBuffer, 3, outputAddress )
+    assertEqualI64( -70, readI8( outputAddress, 0 ), "abc hash byte 0 (0xba)" )
+    assertEqualI64( 0x78, readI8( outputAddress, 1 ), "abc hash byte 1" )
+    assertEqualI64( 0x16, readI8( outputAddress, 2 ), "abc hash byte 2" )
+    assertEqualI64( -65, readI8( outputAddress, 3 ), "abc hash byte 3 (0xbf)" )
+    putsln( "abc hash OK" )
+
+    I64 secondOutput = alloc( 32 )
+    sha256( abcBuffer, 3, secondOutput )
+    I64 hashIndex = 0
+    while hashIndex < 32:
+        assertEqualI64( readI8( outputAddress, hashIndex ), readI8( secondOutput, hashIndex ), "deterministic" )
+        hashIndex = hashIndex + 1
+    putsln( "deterministic OK" )
+
+    Sha256 hasher = new Sha256()
+    hasher.update( abcBuffer, 1 )
+    hasher.update( abcBuffer + 1, 2 )
+    I64 incrementalOutput = alloc( 32 )
+    hasher.digest( incrementalOutput )
+    assertEqualI64( -70, readI8( incrementalOutput, 0 ), "incremental byte 0 (0xba)" )
+    assertEqualI64( 0x78, readI8( incrementalOutput, 1 ), "incremental byte 1" )
+    putsln( "incremental update OK" )
+
+    writeI8( abcBuffer, 0, 0x64 )
+    I64 differentOutput = alloc( 32 )
+    sha256( abcBuffer, 3, differentOutput )
+    assertNotEqualI64( readI8( outputAddress, 0 ), readI8( differentOutput, 0 ), "different input different hash" )
+    putsln( "different inputs differ OK" )
+
+    dealloc( abcBuffer )
+    dealloc( outputAddress )
+    dealloc( secondOutput )
+    dealloc( incrementalOutput )
+    dealloc( differentOutput )
+
+    putsln( "=== All Crypto SHA-256 Tests Passed ===" )
+    return 0

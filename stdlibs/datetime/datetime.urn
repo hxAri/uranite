@@ -161,6 +161,52 @@ public function clockGettime( I64 clockId ) -> Memory<I64>:
         raise new DateTimeError( "clock_gettime failed", result.errorCode(), None )
     return timespec
 
+public function currentTimeNanos() -> I64:
+
+    """
+    Returns current wall-clock time as nanoseconds since Unix epoch.
+
+    Returns:
+        I64:
+            Nanoseconds since 1970-01-01 00:00:00 UTC.
+
+    Raises:
+        DateTimeError:
+            If the clock_gettime syscall fails.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    Memory<I64> timespec = clockGettime( CLOCK_REALTIME )
+    I64 seconds = timespec.get( 0 )
+    I64 nanoseconds = timespec.get( 1 )
+    return seconds * 1000000000 + nanoseconds
+
+public function currentTimeMillis() -> I64:
+
+    """
+    Returns current wall-clock time as milliseconds since Unix epoch.
+
+    Returns:
+        I64:
+            Milliseconds since 1970-01-01 00:00:00 UTC.
+
+    Raises:
+        DateTimeError:
+            If the clock_gettime syscall fails.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    Memory<I64> timespec = clockGettime( CLOCK_REALTIME )
+    I64 seconds = timespec.get( 0 )
+    I64 nanoseconds = timespec.get( 1 )
+    return seconds * 1000 + nanoseconds / 1000000
+
 public class DateTime:
     
     """

@@ -1,0 +1,308 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/base64.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# RFC 4648 Base64 encoding and decoding. Provides functions to encode raw
+# binary data into Base64 ASCII strings and decode Base64 strings back to
+# raw bytes. Used by SCRAM SASL authentication, PEM certificate parsing,
+# and AWS MSK IAM signature construction.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.encoding.base64
+
+from uranite.io.syscall import readByteAt, writeByteAt, writeI64At, readI64At
+from uranite.memory.allocator import alloc, dealloc
+from uranite.errors.error import Error
+
+const I64 BASE64_PAD = 61
+"""ASCII code for '=' padding character."""
+
+I64 encodeTableAddress = 0
+"""Lazily initialized 64-byte encode lookup table (index -> ASCII char)."""
+
+I64 decodeTableAddress = 0
+"""Lazily initialized 256-byte decode lookup table (ASCII char -> 6-bit value)."""
+
+I64 tablesInitialized = 0
+"""Flag indicating whether encode/decode tables have been computed."""
+
+public class Base64Error extends Error:
+
+    """
+    Raised when Base64 decoding encounters invalid input such as
+    illegal characters or incorrect padding.
+    """
+
+    public function Base64Error( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct a Base64 decoding error.
+
+        Parameters:
+            message (String):
+                Description of the decoding failure.
+            code (I64):
+                Numeric error code (0 for general decode errors).
+            cause (?Error):
+                Optional underlying error.
+        """
+
+        parent( message, code, cause )
+
+public function initializeBase64Tables() -> Void:
+
+    """
+    Build the 64-byte encode table mapping 6-bit indices to ASCII characters
+    (A-Z, a-z, 0-9, +, /) and the 256-byte decode table mapping ASCII
+    characters back to 6-bit values. Invalid decode entries are set to 255.
+
+    Complexity:
+        Time: O(1) (constant 320 iterations)
+        Space: O(1) (320 bytes allocated)
+    """
+
+    if tablesInitialized != 0:
+        return
+    encodeTableAddress = alloc( 64 )
+    I64 charIndex = 0
+    while charIndex < 26:
+        writeByteAt( encodeTableAddress, charIndex, 65 + charIndex )
+        charIndex = charIndex + 1
+    charIndex = 0
+    while charIndex < 26:
+        writeByteAt( encodeTableAddress, 26 + charIndex, 97 + charIndex )
+        charIndex = charIndex + 1
+    charIndex = 0
+    while charIndex < 10:
+        writeByteAt( encodeTableAddress, 52 + charIndex, 48 + charIndex )
+        charIndex = charIndex + 1
+    writeByteAt( encodeTableAddress, 62, 43 )
+    writeByteAt( encodeTableAddress, 63, 47 )
+
+    decodeTableAddress = alloc( 256 )
+    I64 fillIndex = 0
+    while fillIndex < 256:
+        writeByteAt( decodeTableAddress, fillIndex, 255 )
+        fillIndex = fillIndex + 1
+    charIndex = 0
+    while charIndex < 26:
+        writeByteAt( decodeTableAddress, 65 + charIndex, charIndex )
+        charIndex = charIndex + 1
+    charIndex = 0
+    while charIndex < 26:
+        writeByteAt( decodeTableAddress, 97 + charIndex, 26 + charIndex )
+        charIndex = charIndex + 1
+    charIndex = 0
+    while charIndex < 10:
+        writeByteAt( decodeTableAddress, 48 + charIndex, 52 + charIndex )
+        charIndex = charIndex + 1
+    writeByteAt( decodeTableAddress, 43, 62 )
+    writeByteAt( decodeTableAddress, 47, 63 )
+    tablesInitialized = 1
+
+public function base64EncodedLength( I64 inputLength ) -> I64:
+
+    """
+    Calculate the length of the Base64-encoded output for a given input
+    length, including padding.
+
+    Parameters:
+        inputLength (I64):
+            Number of bytes to encode.
+
+    Returns:
+        I64:
+            Length of the Base64-encoded string in bytes.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 fullGroups = inputLength / 3
+    I64 remainder = inputLength % 3
+    if remainder != 0:
+        return ( fullGroups + 1 ) * 4
+    return fullGroups * 4
+
+public function base64Encode( I64 dataAddress, I64 dataLength, I64 outputAddress ) -> I64:
+
+    """
+    Encode raw binary data into Base64 ASCII at the output address. The
+    output buffer must be at least base64EncodedLength(dataLength) bytes.
+    Output is padded with '=' to a multiple of 4 characters.
+
+    Parameters:
+        dataAddress (I64):
+            Base address of the input data.
+        dataLength (I64):
+            Number of input bytes to encode.
+        outputAddress (I64):
+            Base address of the output buffer.
+
+    Returns:
+        I64:
+            Number of Base64 characters written.
+
+    Complexity:
+        Time: O(n) where n is dataLength
+        Space: O(1)
+    """
+
+    initializeBase64Tables()
+    I64 inputIndex = 0
+    I64 outputIndex = 0
+    while inputIndex + 2 < dataLength:
+        I64 byte0 = readByteAt( dataAddress, inputIndex )
+        I64 byte1 = readByteAt( dataAddress, inputIndex + 1 )
+        I64 byte2 = readByteAt( dataAddress, inputIndex + 2 )
+        I64 triplet = ( byte0 << 16 ) | ( byte1 << 8 ) | byte2
+        writeByteAt( outputAddress, outputIndex, readByteAt( encodeTableAddress, ( triplet >> 18 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 1, readByteAt( encodeTableAddress, ( triplet >> 12 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 2, readByteAt( encodeTableAddress, ( triplet >> 6 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 3, readByteAt( encodeTableAddress, triplet & 63 ) )
+        inputIndex = inputIndex + 3
+        outputIndex = outputIndex + 4
+    I64 remainingBytes = dataLength - inputIndex
+    if remainingBytes == 2:
+        I64 byte0 = readByteAt( dataAddress, inputIndex )
+        I64 byte1 = readByteAt( dataAddress, inputIndex + 1 )
+        I64 triplet = ( byte0 << 16 ) | ( byte1 << 8 )
+        writeByteAt( outputAddress, outputIndex, readByteAt( encodeTableAddress, ( triplet >> 18 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 1, readByteAt( encodeTableAddress, ( triplet >> 12 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 2, readByteAt( encodeTableAddress, ( triplet >> 6 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 3, BASE64_PAD )
+        outputIndex = outputIndex + 4
+    elif remainingBytes == 1:
+        I64 byte0 = readByteAt( dataAddress, inputIndex )
+        I64 triplet = byte0 << 16
+        writeByteAt( outputAddress, outputIndex, readByteAt( encodeTableAddress, ( triplet >> 18 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 1, readByteAt( encodeTableAddress, ( triplet >> 12 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 2, BASE64_PAD )
+        writeByteAt( outputAddress, outputIndex + 3, BASE64_PAD )
+        outputIndex = outputIndex + 4
+    return outputIndex
+
+public function base64DecodedLength( I64 encodedAddress, I64 encodedLength ) -> I64:
+
+    """
+    Calculate the number of raw bytes that a Base64-encoded string will
+    decode to, accounting for padding characters.
+
+    Parameters:
+        encodedAddress (I64):
+            Base address of the Base64-encoded string.
+        encodedLength (I64):
+            Length of the encoded string in bytes.
+
+    Returns:
+        I64:
+            Number of bytes in the decoded output.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    if encodedLength == 0:
+        return 0
+    I64 rawLength = ( encodedLength / 4 ) * 3
+    if encodedLength >= 1:
+        if readByteAt( encodedAddress, encodedLength - 1 ) == BASE64_PAD:
+            rawLength = rawLength - 1
+    if encodedLength >= 2:
+        if readByteAt( encodedAddress, encodedLength - 2 ) == BASE64_PAD:
+            rawLength = rawLength - 1
+    return rawLength
+
+public function base64Decode( I64 encodedAddress, I64 encodedLength, I64 outputAddress ) -> I64:
+
+    """
+    Decode a Base64-encoded string into raw bytes at the output address.
+    The output buffer must be at least base64DecodedLength bytes.
+
+    Parameters:
+        encodedAddress (I64):
+            Base address of the Base64-encoded input.
+        encodedLength (I64):
+            Length of the encoded input in bytes.
+        outputAddress (I64):
+            Base address of the output buffer.
+
+    Returns:
+        I64:
+            Number of decoded bytes written.
+
+    Raises:
+        Base64Error:
+            When an invalid character is encountered in the input.
+
+    Complexity:
+        Time: O(n) where n is encodedLength
+        Space: O(1)
+    """
+
+    initializeBase64Tables()
+    I64 inputIndex = 0
+    I64 outputIndex = 0
+    while inputIndex + 3 < encodedLength:
+        I64 char0 = readByteAt( encodedAddress, inputIndex )
+        I64 char1 = readByteAt( encodedAddress, inputIndex + 1 )
+        I64 char2 = readByteAt( encodedAddress, inputIndex + 2 )
+        I64 char3 = readByteAt( encodedAddress, inputIndex + 3 )
+        I64 sextet0 = readByteAt( decodeTableAddress, char0 )
+        I64 sextet1 = readByteAt( decodeTableAddress, char1 )
+        if sextet0 == 255:
+            raise new Base64Error( "invalid base64 character", 0, None )
+        if sextet1 == 255:
+            raise new Base64Error( "invalid base64 character", 0, None )
+        if char2 == BASE64_PAD:
+            I64 combined = ( sextet0 << 18 ) | ( sextet1 << 12 )
+            writeByteAt( outputAddress, outputIndex, ( combined >> 16 ) & 255 )
+            outputIndex = outputIndex + 1
+            inputIndex = inputIndex + 4
+        elif char3 == BASE64_PAD:
+            I64 sextet2 = readByteAt( decodeTableAddress, char2 )
+            if sextet2 == 255:
+                raise new Base64Error( "invalid base64 character", 0, None )
+            I64 combined = ( sextet0 << 18 ) | ( sextet1 << 12 ) | ( sextet2 << 6 )
+            writeByteAt( outputAddress, outputIndex, ( combined >> 16 ) & 255 )
+            writeByteAt( outputAddress, outputIndex + 1, ( combined >> 8 ) & 255 )
+            outputIndex = outputIndex + 2
+            inputIndex = inputIndex + 4
+        else:
+            I64 sextet2 = readByteAt( decodeTableAddress, char2 )
+            I64 sextet3 = readByteAt( decodeTableAddress, char3 )
+            if sextet2 == 255:
+                raise new Base64Error( "invalid base64 character", 0, None )
+            if sextet3 == 255:
+                raise new Base64Error( "invalid base64 character", 0, None )
+            I64 combined = ( sextet0 << 18 ) | ( sextet1 << 12 ) | ( sextet2 << 6 ) | sextet3
+            writeByteAt( outputAddress, outputIndex, ( combined >> 16 ) & 255 )
+            writeByteAt( outputAddress, outputIndex + 1, ( combined >> 8 ) & 255 )
+            writeByteAt( outputAddress, outputIndex + 2, combined & 255 )
+            outputIndex = outputIndex + 3
+            inputIndex = inputIndex + 4
+    return outputIndex
+
+export {
+    Base64Error,
+    base64EncodedLength,
+    base64Encode,
+    base64DecodedLength,
+    base64Decode,
+    initializeBase64Tables
+}

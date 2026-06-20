@@ -1,0 +1,50 @@
+package testing
+
+from uranite.encoding.crc32c import initializeCrc32cTable, crc32c, crc32cUpdate, crc32cFinalize
+from uranite.encoding.binary import writeI8
+from uranite.memory.allocator import alloc, dealloc
+from uranite.testing.assertions import assertEqualI64, assertNotEqualI64, assertTrue
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Encoding CRC-32C Tests ===" )
+
+    initializeCrc32cTable()
+
+    I64 emptyChecksum = crc32c( 0, 0 )
+    assertEqualI64( 0, emptyChecksum, "crc32c empty input" )
+    putsln( "empty input OK" )
+
+    I64 singleByteBuffer = alloc( 1 )
+    writeI8( singleByteBuffer, 0, 0 )
+    I64 zeroByteChecksum = crc32c( singleByteBuffer, 1 )
+    assertTrue( zeroByteChecksum >= 0, "crc32c single zero byte non-negative" )
+    putsln( "single zero byte OK" )
+
+    writeI8( singleByteBuffer, 0, 0xFF )
+    I64 ffByteChecksum = crc32c( singleByteBuffer, 1 )
+    assertNotEqualI64( zeroByteChecksum, ffByteChecksum, "different byte different checksum" )
+    putsln( "different bytes differ OK" )
+    dealloc( singleByteBuffer )
+
+    I64 multiByteBuffer = alloc( 4 )
+    writeI8( multiByteBuffer, 0, 0x01 )
+    writeI8( multiByteBuffer, 1, 0x02 )
+    writeI8( multiByteBuffer, 2, 0x03 )
+    writeI8( multiByteBuffer, 3, 0x04 )
+    I64 fourByteChecksum = crc32c( multiByteBuffer, 4 )
+    I64 fourByteChecksumAgain = crc32c( multiByteBuffer, 4 )
+    assertEqualI64( fourByteChecksum, fourByteChecksumAgain, "deterministic" )
+    putsln( "deterministic OK" )
+
+    I64 incrementalCrc = 0xFFFFFFFF
+    incrementalCrc = crc32cUpdate( incrementalCrc, multiByteBuffer, 2 )
+    incrementalCrc = crc32cUpdate( incrementalCrc, multiByteBuffer + 2, 2 )
+    incrementalCrc = crc32cFinalize( incrementalCrc )
+    assertEqualI64( fourByteChecksum, incrementalCrc, "incremental matches whole" )
+    putsln( "incremental update OK" )
+
+    dealloc( multiByteBuffer )
+
+    putsln( "=== All Encoding CRC-32C Tests Passed ===" )
+    return 0

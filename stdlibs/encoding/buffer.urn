@@ -1,0 +1,700 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/buffer.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Growable binary buffer with position tracking for building and parsing
+# network protocol messages. Provides big-endian integer read/write, variable-
+# length integer encoding, and raw byte operations. Automatically doubles
+# capacity when writes exceed the current allocation.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.encoding.buffer
+
+from uranite.memory.allocator import alloc, dealloc, realloc
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.encoding.binary import {
+    readI8, writeI8,
+    readI16Be, writeI16Be,
+    readI32Be, writeI32Be,
+    readI64Be, writeI64Be,
+    readVarI32, writeVarI32,
+    readVarI64, writeVarI64,
+    readVarI64WithLength,
+    readUnsignedVarI32, writeUnsignedVarI32,
+    copyBytes
+}
+from uranite.errors.error import Error
+
+const I64 BUFFER_DEFAULT_CAPACITY = 1024
+"""Default initial capacity in bytes for new buffers."""
+
+const I64 BUFFER_GROWTH_FACTOR = 2
+"""Factor by which buffer capacity is multiplied when it needs to grow."""
+
+public class BufferOverflowError extends Error:
+
+    """
+    Raised when a read operation attempts to access bytes beyond the
+    buffer's current limit.
+    """
+
+    public function BufferOverflowError( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct a buffer overflow error.
+
+        Parameters:
+            message (String):
+                Description of the overflow condition.
+            code (I64):
+                Numeric error code.
+            cause (?Error):
+                Optional underlying error.
+        """
+
+        parent( message, code, cause )
+
+public class BinaryBuffer:
+
+    """
+    Growable binary buffer for constructing and parsing wire protocol
+    messages. Maintains a write position for appending data and a separate
+    read position for sequential parsing. The buffer automatically doubles
+    its backing allocation when a write would exceed capacity.
+
+    After writing, call flip() to prepare for reading: this sets the limit
+    to the current write position and resets the read position to zero.
+    """
+
+    protect I64 dataAddress
+    protect I64 bufferCapacity
+    protect I64 writePosition
+    protect I64 readPosition
+    protect I64 bufferLimit
+
+    public function BinaryBuffer( self, I64 initialCapacity ) -> Void:
+
+        """
+        Construct a new binary buffer with the specified initial capacity.
+
+        Parameters:
+            initialCapacity (I64):
+                Initial allocation size in bytes. If zero or negative,
+                BUFFER_DEFAULT_CAPACITY (1024) is used.
+
+        Complexity:
+            Time: O(1)
+            Space: O(n) where n is initialCapacity
+        """
+
+        I64 effectiveCapacity = initialCapacity
+        if effectiveCapacity <= 0:
+            effectiveCapacity = BUFFER_DEFAULT_CAPACITY
+        self.dataAddress = alloc( effectiveCapacity )
+        self.bufferCapacity = effectiveCapacity
+        self.writePosition = 0
+        self.readPosition = 0
+        self.bufferLimit = effectiveCapacity
+
+    public function ensureCapacity( self, I64 additionalBytes ) -> Void:
+
+        """
+        Ensure the buffer has room for at least additionalBytes more bytes
+        at the current write position. Doubles capacity until sufficient.
+
+        Parameters:
+            additionalBytes (I64):
+                Number of additional bytes needed.
+
+        Complexity:
+            Time: O(n) amortized where n is current data size (on realloc)
+            Space: O(n) where n is new capacity (on realloc)
+        """
+
+        I64 requiredCapacity = self.writePosition + additionalBytes
+        if requiredCapacity <= self.bufferCapacity:
+            return
+        I64 newCapacity = self.bufferCapacity
+        while newCapacity < requiredCapacity:
+            newCapacity = newCapacity * BUFFER_GROWTH_FACTOR
+        self.dataAddress = realloc( self.dataAddress, newCapacity )
+        self.bufferCapacity = newCapacity
+        self.bufferLimit = newCapacity
+
+    public function putI8( self, I64 value ) -> Void:
+
+        """
+        Write a single byte at the current write position and advance it.
+
+        Parameters:
+            value (I64):
+                The value whose low 8 bits will be written.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.ensureCapacity( 1 )
+        writeI8( self.dataAddress, self.writePosition, value )
+        self.writePosition = self.writePosition + 1
+
+    public function putI16( self, I64 value ) -> Void:
+
+        """
+        Write a 16-bit big-endian integer at the current write position.
+
+        Parameters:
+            value (I64):
+                The value whose low 16 bits will be written.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.ensureCapacity( 2 )
+        writeI16Be( self.dataAddress, self.writePosition, value )
+        self.writePosition = self.writePosition + 2
+
+    public function putI32( self, I64 value ) -> Void:
+
+        """
+        Write a 32-bit big-endian integer at the current write position.
+
+        Parameters:
+            value (I64):
+                The value whose low 32 bits will be written.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.ensureCapacity( 4 )
+        writeI32Be( self.dataAddress, self.writePosition, value )
+        self.writePosition = self.writePosition + 4
+
+    public function putI64( self, I64 value ) -> Void:
+
+        """
+        Write a 64-bit big-endian integer at the current write position.
+
+        Parameters:
+            value (I64):
+                The 64-bit value to write.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.ensureCapacity( 8 )
+        writeI64Be( self.dataAddress, self.writePosition, value )
+        self.writePosition = self.writePosition + 8
+
+    public function putBytes( self, I64 sourceAddress, I64 sourceLength ) -> Void:
+
+        """
+        Write raw bytes from source into the buffer at the current write
+        position.
+
+        Parameters:
+            sourceAddress (I64):
+                Base address of the source data.
+            sourceLength (I64):
+                Number of bytes to copy.
+
+        Complexity:
+            Time: O(n) where n is sourceLength
+            Space: O(1)
+        """
+
+        self.ensureCapacity( sourceLength )
+        copyBytes( sourceAddress, 0, self.dataAddress, self.writePosition, sourceLength )
+        self.writePosition = self.writePosition + sourceLength
+
+    public function putByte( self, I64 value ) -> Void:
+
+        """
+        Write a single byte value at the current write position. Alias for
+        putI8 with explicit byte semantics.
+
+        Parameters:
+            value (I64):
+                Byte value (0-255) to write.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.putI8( value )
+
+    public function putVarI32( self, I64 value ) -> Void:
+
+        """
+        Write a zig-zag encoded variable-length 32-bit integer at the
+        current write position.
+
+        Parameters:
+            value (I64):
+                The signed 32-bit value to encode.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.ensureCapacity( 5 )
+        I64 bytesWritten = writeVarI32( self.dataAddress, self.writePosition, value )
+        self.writePosition = self.writePosition + bytesWritten
+
+    public function putVarI64( self, I64 value ) -> Void:
+
+        """
+        Write a zig-zag encoded variable-length 64-bit integer at the
+        current write position.
+
+        Parameters:
+            value (I64):
+                The signed 64-bit value to encode.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.ensureCapacity( 10 )
+        I64 bytesWritten = writeVarI64( self.dataAddress, self.writePosition, value )
+        self.writePosition = self.writePosition + bytesWritten
+
+    public function putUnsignedVarI32( self, I64 value ) -> Void:
+
+        """
+        Write an unsigned variable-length 32-bit integer (no zig-zag)
+        at the current write position.
+
+        Parameters:
+            value (I64):
+                The unsigned 32-bit value to encode.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        self.ensureCapacity( 5 )
+        I64 bytesWritten = writeUnsignedVarI32( self.dataAddress, self.writePosition, value )
+        self.writePosition = self.writePosition + bytesWritten
+
+    public function putI32At( self, I64 absoluteOffset, I64 value ) -> Void:
+
+        """
+        Write a 32-bit big-endian integer at an absolute offset without
+        advancing the write position. Used for backpatching length fields
+        after the payload size is known.
+
+        Parameters:
+            absoluteOffset (I64):
+                Absolute byte offset in the buffer.
+            value (I64):
+                The value whose low 32 bits will be written.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        writeI32Be( self.dataAddress, absoluteOffset, value )
+
+    public function putI16At( self, I64 absoluteOffset, I64 value ) -> Void:
+
+        """
+        Write a 16-bit big-endian integer at an absolute offset without
+        advancing the write position.
+
+        Parameters:
+            absoluteOffset (I64):
+                Absolute byte offset in the buffer.
+            value (I64):
+                The value whose low 16 bits will be written.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        writeI16Be( self.dataAddress, absoluteOffset, value )
+
+    public function getI8( self ) -> I64:
+
+        """
+        Read a signed byte from the current read position and advance it.
+
+        Returns:
+            I64:
+                The signed byte value (-128 to 127).
+
+        Raises:
+            BufferOverflowError:
+                When fewer than 1 byte remains before the limit.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.readPosition + 1 > self.bufferLimit:
+            raise new BufferOverflowError( "read past buffer limit", 0, None )
+        I64 value = readI8( self.dataAddress, self.readPosition )
+        self.readPosition = self.readPosition + 1
+        return value
+
+    public function getI16( self ) -> I64:
+
+        """
+        Read a signed 16-bit big-endian integer from the current read
+        position and advance it.
+
+        Returns:
+            I64:
+                The signed 16-bit value.
+
+        Raises:
+            BufferOverflowError:
+                When fewer than 2 bytes remain.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.readPosition + 2 > self.bufferLimit:
+            raise new BufferOverflowError( "read past buffer limit", 0, None )
+        I64 value = readI16Be( self.dataAddress, self.readPosition )
+        self.readPosition = self.readPosition + 2
+        return value
+
+    public function getI32( self ) -> I64:
+
+        """
+        Read a signed 32-bit big-endian integer from the current read
+        position and advance it.
+
+        Returns:
+            I64:
+                The signed 32-bit value.
+
+        Raises:
+            BufferOverflowError:
+                When fewer than 4 bytes remain.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.readPosition + 4 > self.bufferLimit:
+            raise new BufferOverflowError( "read past buffer limit", 0, None )
+        I64 value = readI32Be( self.dataAddress, self.readPosition )
+        self.readPosition = self.readPosition + 4
+        return value
+
+    public function getI64( self ) -> I64:
+
+        """
+        Read a 64-bit big-endian integer from the current read position
+        and advance it.
+
+        Returns:
+            I64:
+                The 64-bit value.
+
+        Raises:
+            BufferOverflowError:
+                When fewer than 8 bytes remain.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.readPosition + 8 > self.bufferLimit:
+            raise new BufferOverflowError( "read past buffer limit", 0, None )
+        I64 value = readI64Be( self.dataAddress, self.readPosition )
+        self.readPosition = self.readPosition + 8
+        return value
+
+    public function getBytes( self, I64 destinationAddress, I64 byteCount ) -> Void:
+
+        """
+        Read byteCount bytes from the current read position into the
+        destination buffer and advance the read position.
+
+        Parameters:
+            destinationAddress (I64):
+                Base address of the destination buffer.
+            byteCount (I64):
+                Number of bytes to read.
+
+        Raises:
+            BufferOverflowError:
+                When fewer than byteCount bytes remain.
+
+        Complexity:
+            Time: O(n) where n is byteCount
+            Space: O(1)
+        """
+
+        if self.readPosition + byteCount > self.bufferLimit:
+            raise new BufferOverflowError( "read past buffer limit", 0, None )
+        copyBytes( self.dataAddress, self.readPosition, destinationAddress, 0, byteCount )
+        self.readPosition = self.readPosition + byteCount
+
+    public function getVarI32( self ) -> I64:
+
+        """
+        Read a zig-zag encoded variable-length 32-bit integer from the
+        current read position and advance it.
+
+        Returns:
+            I64:
+                The decoded signed 32-bit value.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        I64 packed = readVarI32( self.dataAddress, self.readPosition )
+        I64 bytesConsumed = packed >> 32
+        I64 rawValue = packed & 4294967295
+        if rawValue >= 2147483648:
+            rawValue = rawValue - 4294967296
+        self.readPosition = self.readPosition + bytesConsumed
+        return rawValue
+
+    public function getVarI64( self ) -> I64:
+
+        """
+        Read a zig-zag encoded variable-length 64-bit integer from the
+        current read position and advance it.
+
+        Returns:
+            I64:
+                The decoded signed 64-bit value.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        I64 lengthStore = alloc( 8 )
+        I64 value = readVarI64WithLength( self.dataAddress, self.readPosition, lengthStore )
+        I64 bytesConsumed = 0
+        I64 effectiveAddress = lengthStore
+        asm volatile "movq ($1), $0" : output( "=r" bytesConsumed ) : input( "r" effectiveAddress ) : clobber()
+        dealloc( lengthStore )
+        self.readPosition = self.readPosition + bytesConsumed
+        return value
+
+    public function getUnsignedVarI32( self ) -> I64:
+
+        """
+        Read an unsigned variable-length 32-bit integer from the current
+        read position and advance it.
+
+        Returns:
+            I64:
+                The unsigned 32-bit value.
+
+        Complexity:
+            Time: O(1) amortized
+            Space: O(1)
+        """
+
+        I64 packed = readUnsignedVarI32( self.dataAddress, self.readPosition )
+        I64 bytesConsumed = packed >> 32
+        I64 value = packed & 4294967295
+        self.readPosition = self.readPosition + bytesConsumed
+        return value
+
+    public function flip( self ) -> Void:
+
+        """
+        Prepare the buffer for reading after writing. Sets the limit to
+        the current write position and resets the read position to zero.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.bufferLimit = self.writePosition
+        self.readPosition = 0
+
+    public function reset( self ) -> Void:
+
+        """
+        Reset both read and write positions to zero and limit to capacity.
+        Does not deallocate or zero the backing memory.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.writePosition = 0
+        self.readPosition = 0
+        self.bufferLimit = self.bufferCapacity
+
+    public function position( self ) -> I64:
+
+        """
+        Return the current write position.
+
+        Returns:
+            I64:
+                The byte offset where the next write will occur.
+        """
+
+        return self.writePosition
+
+    public function readPos( self ) -> I64:
+
+        """
+        Return the current read position.
+
+        Returns:
+            I64:
+                The byte offset where the next read will occur.
+        """
+
+        return self.readPosition
+
+    public function remaining( self ) -> I64:
+
+        """
+        Return the number of bytes available for reading between the
+        current read position and the limit.
+
+        Returns:
+            I64:
+                Number of readable bytes remaining.
+        """
+
+        return self.bufferLimit - self.readPosition
+
+    public function capacity( self ) -> I64:
+
+        """
+        Return the current buffer capacity.
+
+        Returns:
+            I64:
+                Total allocated size in bytes.
+        """
+
+        return self.bufferCapacity
+
+    public function limit( self ) -> I64:
+
+        """
+        Return the current buffer limit.
+
+        Returns:
+            I64:
+                The limit beyond which reads are not allowed.
+        """
+
+        return self.bufferLimit
+
+    public function address( self ) -> I64:
+
+        """
+        Return the raw memory address of the buffer's backing allocation.
+        Use with caution — the address may change after ensureCapacity
+        triggers a reallocation.
+
+        Returns:
+            I64:
+                Base address of the buffer data.
+        """
+
+        return self.dataAddress
+
+    public function setWritePosition( self, I64 newPosition ) -> Void:
+
+        """
+        Set the write position to an absolute offset. Used for backpatching
+        or rewinding writes.
+
+        Parameters:
+            newPosition (I64):
+                The new write position.
+        """
+
+        self.writePosition = newPosition
+
+    public function setReadPosition( self, I64 newPosition ) -> Void:
+
+        """
+        Set the read position to an absolute offset.
+
+        Parameters:
+            newPosition (I64):
+                The new read position.
+        """
+
+        self.readPosition = newPosition
+
+    public function setLimit( self, I64 newLimit ) -> Void:
+
+        """
+        Set the buffer limit explicitly.
+
+        Parameters:
+            newLimit (I64):
+                The new limit value.
+        """
+
+        self.bufferLimit = newLimit
+
+    public function destroy( self ) -> Void:
+
+        """
+        Deallocate the buffer's backing memory. The buffer must not be
+        used after this call.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        dealloc( self.dataAddress )
+        self.dataAddress = 0
+        self.bufferCapacity = 0
+        self.writePosition = 0
+        self.readPosition = 0
+        self.bufferLimit = 0
+
+export {
+    BUFFER_DEFAULT_CAPACITY,
+    BUFFER_GROWTH_FACTOR,
+    BufferOverflowError,
+    BinaryBuffer
+}

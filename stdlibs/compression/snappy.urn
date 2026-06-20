@@ -1,0 +1,666 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/compression/snappy.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Google Snappy compression and decompression. Implements the raw Snappy
+# block format (no framing) and the Xerial framing format used by Kafka.
+#
+# Snappy is an LZ77-based codec: literals are emitted verbatim, copies
+# reference earlier data via (offset, length) pairs. Four element types
+# distinguished by the two low bits of the tag byte:
+#   00 = literal, 01 = copy with 1-byte offset, 10 = copy with 2-byte
+#   offset, 11 = copy with 4-byte offset.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.compression.snappy
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.encoding.binary import copyBytes
+
+const I64 SNAPPY_LITERAL = 0
+const I64 SNAPPY_COPY_1 = 1
+const I64 SNAPPY_COPY_2 = 2
+const I64 SNAPPY_COPY_4 = 3
+
+const I64 HASH_TABLE_BITS = 14
+const I64 HASH_TABLE_SIZE = 16384
+const I64 MAX_HASH_TABLE_SIZE = 16384
+const I64 INPUT_MARGIN_BYTES = 15
+const I64 MAX_BLOCK_SIZE = 65536
+
+const I64 XERIAL_MAGIC_BYTE_0 = 130
+const I64 XERIAL_MAGIC_BYTE_1 = 83
+const I64 XERIAL_MAGIC_BYTE_2 = 78
+const I64 XERIAL_MAGIC_BYTE_3 = 65
+const I64 XERIAL_MAGIC_BYTE_4 = 80
+const I64 XERIAL_MAGIC_BYTE_5 = 80
+const I64 XERIAL_MAGIC_BYTE_6 = 89
+const I64 XERIAL_MAGIC_BYTE_7 = 0
+const I64 XERIAL_HEADER_SIZE = 16
+const I64 XERIAL_DEFAULT_BLOCK_SIZE = 32768
+
+public function readVarint( I64 sourceAddress, I64 sourceOffset ) -> I64:
+
+    """
+    Read a varint-encoded unsigned integer from source buffer.
+    Returns the decoded value in bits [0..31] and the number of
+    bytes consumed in bits [32..63].
+
+    Parameters:
+        sourceAddress (I64):
+            Base address of the buffer.
+        sourceOffset (I64):
+            Offset to start reading.
+
+    Returns:
+        I64:
+            Lower 32 bits = decoded value, upper 32 bits = bytes consumed.
+
+    Complexity:
+        Time: O(1), max 5 bytes
+        Space: O(1)
+    """
+
+    I64 result = 0
+    I64 shift = 0
+    I64 bytesRead = 0
+
+    I64 continueParsing = 1
+    while continueParsing == 1 and bytesRead < 5:
+        I64 currentByte = readByteAt( sourceAddress, sourceOffset + bytesRead )
+        result = result | ( ( currentByte & 127 ) << shift )
+        bytesRead = bytesRead + 1
+        if ( currentByte & 128 ) == 0:
+            continueParsing = 0
+        shift = shift + 7
+
+    return result | ( bytesRead << 32 )
+
+public function writeVarint( I64 destAddress, I64 destOffset, I64 value ) -> I64:
+
+    """
+    Write a varint-encoded unsigned integer to destination buffer.
+
+    Parameters:
+        destAddress (I64):
+            Destination base address.
+        destOffset (I64):
+            Offset to write at.
+        value (I64):
+            Value to encode (unsigned, max 32-bit range).
+
+    Returns:
+        I64:
+            Number of bytes written.
+
+    Complexity:
+        Time: O(1), max 5 bytes
+        Space: O(1)
+    """
+
+    I64 remaining = value
+    I64 bytesWritten = 0
+
+    while remaining >= 128:
+        writeByteAt( destAddress, destOffset + bytesWritten, ( remaining & 127 ) | 128 )
+        remaining = remaining >> 7
+        bytesWritten = bytesWritten + 1
+
+    writeByteAt( destAddress, destOffset + bytesWritten, remaining & 127 )
+    bytesWritten = bytesWritten + 1
+    return bytesWritten
+
+public function hashBytes( I64 value, I64 shift ) -> I64:
+
+    """
+    Hash 4 bytes for the Snappy hash table lookup.
+
+    Parameters:
+        value (I64):
+            4-byte value (little-endian word).
+        shift (I64):
+            Right-shift amount (32 - table bits).
+
+    Returns:
+        I64:
+            Hash table index.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 multiplied = ( value * 506832829 ) & 4294967295
+    return ( multiplied >> shift ) & ( HASH_TABLE_SIZE - 1 )
+
+public function load32( I64 sourceAddress, I64 offset ) -> I64:
+
+    """
+    Load 4 bytes as a little-endian 32-bit value.
+
+    Parameters:
+        sourceAddress (I64):
+            Base address.
+        offset (I64):
+            Byte offset.
+
+    Returns:
+        I64:
+            32-bit value.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 byte0 = readByteAt( sourceAddress, offset )
+    I64 byte1 = readByteAt( sourceAddress, offset + 1 )
+    I64 byte2 = readByteAt( sourceAddress, offset + 2 )
+    I64 byte3 = readByteAt( sourceAddress, offset + 3 )
+    return byte0 | ( byte1 << 8 ) | ( byte2 << 16 ) | ( byte3 << 24 )
+
+public function snappyMaxCompressedLength( I64 sourceLength ) -> I64:
+
+    """
+    Maximum possible compressed size for a given input length.
+
+    Parameters:
+        sourceLength (I64):
+            Uncompressed input length.
+
+    Returns:
+        I64:
+            Worst-case compressed size.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return 32 + sourceLength + sourceLength / 6
+
+public function emitLiteral( I64 destAddress, I64 destOffset, I64 sourceAddress, I64 literalOffset, I64 literalLength ) -> I64:
+
+    """
+    Emit a literal element into the compressed stream.
+
+    Parameters:
+        destAddress (I64):
+            Destination buffer address.
+        destOffset (I64):
+            Current write offset in destination.
+        sourceAddress (I64):
+            Source buffer address.
+        literalOffset (I64):
+            Start offset of the literal in source.
+        literalLength (I64):
+            Number of literal bytes.
+
+    Returns:
+        I64:
+            Number of bytes written to destination.
+
+    Complexity:
+        Time: O(n) where n is literalLength
+        Space: O(1)
+    """
+
+    I64 bytesWritten = 0
+    I64 adjustedLength = literalLength - 1
+
+    if adjustedLength < 60:
+        writeByteAt( destAddress, destOffset, ( adjustedLength << 2 ) | SNAPPY_LITERAL )
+        bytesWritten = 1
+    else:
+        if adjustedLength < 256:
+            writeByteAt( destAddress, destOffset, ( 60 << 2 ) | SNAPPY_LITERAL )
+            writeByteAt( destAddress, destOffset + 1, adjustedLength & 255 )
+            bytesWritten = 2
+        else:
+            if adjustedLength < 65536:
+                writeByteAt( destAddress, destOffset, ( 61 << 2 ) | SNAPPY_LITERAL )
+                writeByteAt( destAddress, destOffset + 1, adjustedLength & 255 )
+                writeByteAt( destAddress, destOffset + 2, ( adjustedLength >> 8 ) & 255 )
+                bytesWritten = 3
+            else:
+                if adjustedLength < 16777216:
+                    writeByteAt( destAddress, destOffset, ( 62 << 2 ) | SNAPPY_LITERAL )
+                    writeByteAt( destAddress, destOffset + 1, adjustedLength & 255 )
+                    writeByteAt( destAddress, destOffset + 2, ( adjustedLength >> 8 ) & 255 )
+                    writeByteAt( destAddress, destOffset + 3, ( adjustedLength >> 16 ) & 255 )
+                    bytesWritten = 4
+                else:
+                    writeByteAt( destAddress, destOffset, ( 63 << 2 ) | SNAPPY_LITERAL )
+                    writeByteAt( destAddress, destOffset + 1, adjustedLength & 255 )
+                    writeByteAt( destAddress, destOffset + 2, ( adjustedLength >> 8 ) & 255 )
+                    writeByteAt( destAddress, destOffset + 3, ( adjustedLength >> 16 ) & 255 )
+                    writeByteAt( destAddress, destOffset + 4, ( adjustedLength >> 24 ) & 255 )
+                    bytesWritten = 5
+
+    copyBytes( sourceAddress, literalOffset, destAddress, destOffset + bytesWritten, literalLength )
+    return bytesWritten + literalLength
+
+public function emitCopy( I64 destAddress, I64 destOffset, I64 matchOffset, I64 matchLength ) -> I64:
+
+    """
+    Emit a copy element referencing earlier data.
+
+    Parameters:
+        destAddress (I64):
+            Destination buffer address.
+        destOffset (I64):
+            Current write offset.
+        matchOffset (I64):
+            Backward offset to the match.
+        matchLength (I64):
+            Length of the match (4..64).
+
+    Returns:
+        I64:
+            Number of bytes written.
+
+    Complexity:
+        Time: O(1) per copy element, O(n/64) for long matches
+        Space: O(1)
+    """
+
+    I64 bytesWritten = 0
+    I64 remainingLength = matchLength
+
+    while remainingLength >= 68:
+        writeByteAt( destAddress, destOffset + bytesWritten, ( ( 64 - 4 ) << 2 ) | SNAPPY_COPY_2 )
+        writeByteAt( destAddress, destOffset + bytesWritten + 1, matchOffset & 255 )
+        writeByteAt( destAddress, destOffset + bytesWritten + 2, ( matchOffset >> 8 ) & 255 )
+        bytesWritten = bytesWritten + 3
+        remainingLength = remainingLength - 64
+
+    if remainingLength > 64:
+        writeByteAt( destAddress, destOffset + bytesWritten, ( ( 60 - 4 ) << 2 ) | SNAPPY_COPY_2 )
+        writeByteAt( destAddress, destOffset + bytesWritten + 1, matchOffset & 255 )
+        writeByteAt( destAddress, destOffset + bytesWritten + 2, ( matchOffset >> 8 ) & 255 )
+        bytesWritten = bytesWritten + 3
+        remainingLength = remainingLength - 60
+
+    if remainingLength >= 12 or matchOffset >= 2048:
+        writeByteAt( destAddress, destOffset + bytesWritten, ( ( remainingLength - 1 ) << 2 ) | SNAPPY_COPY_2 )
+        writeByteAt( destAddress, destOffset + bytesWritten + 1, matchOffset & 255 )
+        writeByteAt( destAddress, destOffset + bytesWritten + 2, ( matchOffset >> 8 ) & 255 )
+        bytesWritten = bytesWritten + 3
+    else:
+        I64 tagByte = ( ( matchOffset >> 8 ) << 5 ) | ( ( remainingLength - 4 ) << 2 ) | SNAPPY_COPY_1
+        writeByteAt( destAddress, destOffset + bytesWritten, tagByte & 255 )
+        writeByteAt( destAddress, destOffset + bytesWritten + 1, matchOffset & 255 )
+        bytesWritten = bytesWritten + 2
+
+    return bytesWritten
+
+public function snappyCompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Compress data using raw Snappy block format.
+
+    Parameters:
+        inputAddress (I64):
+            Address of uncompressed input.
+        inputLength (I64):
+            Length of input data.
+        outputAddress (I64):
+            Address of output buffer.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Compressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is inputLength
+        Space: O(HASH_TABLE_SIZE) for hash table
+    """
+
+    if inputLength == 0:
+        I64 varintBytes = writeVarint( outputAddress, 0, 0 )
+        return varintBytes
+
+    I64 outputOffset = writeVarint( outputAddress, 0, inputLength )
+
+    I64 hashTableAddress = alloc( HASH_TABLE_SIZE * 4 )
+    I64 clearIndex = 0
+    while clearIndex < HASH_TABLE_SIZE:
+        I64 clearSlot = hashTableAddress + clearIndex * 4
+        writeByteAt( clearSlot, 0, 0 )
+        writeByteAt( clearSlot, 1, 0 )
+        writeByteAt( clearSlot, 2, 0 )
+        writeByteAt( clearSlot, 3, 0 )
+        clearIndex = clearIndex + 1
+
+    I64 inputOffset = 0
+    I64 hashShift = 32 - HASH_TABLE_BITS
+
+    while inputOffset < inputLength:
+        I64 blockEnd = inputOffset + MAX_BLOCK_SIZE
+        if blockEnd > inputLength:
+            blockEnd = inputLength
+
+        I64 scanPosition = inputOffset
+        I64 literalStart = inputOffset
+        I64 nextEmit = inputOffset
+
+        if blockEnd - inputOffset >= INPUT_MARGIN_BYTES:
+            I64 searchPosition = scanPosition + 1
+            I64 blockDone = 0
+
+            while searchPosition + 4 <= blockEnd and blockDone == 0:
+                I64 currentWord = load32( inputAddress, searchPosition )
+                I64 hashIndex = hashBytes( currentWord, hashShift )
+                I64 hashSlot = hashTableAddress + hashIndex * 4
+                I64 candidate = readByteAt( hashSlot, 0 ) | ( readByteAt( hashSlot, 1 ) << 8 ) | ( readByteAt( hashSlot, 2 ) << 16 ) | ( readByteAt( hashSlot, 3 ) << 24 )
+
+                writeByteAt( hashSlot, 0, searchPosition & 255 )
+                writeByteAt( hashSlot, 1, ( searchPosition >> 8 ) & 255 )
+                writeByteAt( hashSlot, 2, ( searchPosition >> 16 ) & 255 )
+                writeByteAt( hashSlot, 3, ( searchPosition >> 24 ) & 255 )
+
+                if candidate >= inputOffset and searchPosition - candidate < 65536:
+                    I64 candidateWord = load32( inputAddress, candidate )
+                    if currentWord == candidateWord:
+                        if searchPosition > nextEmit:
+                            I64 literalLen = searchPosition - nextEmit
+                            outputOffset = outputOffset + emitLiteral( outputAddress, outputOffset, inputAddress, nextEmit, literalLen )
+
+                        I64 matchStart = searchPosition
+                        I64 matchRef = candidate
+                        I64 matchLen = 4
+                        while matchStart + matchLen < blockEnd and readByteAt( inputAddress, matchRef + matchLen ) == readByteAt( inputAddress, matchStart + matchLen ):
+                            matchLen = matchLen + 1
+
+                        I64 backOffset = matchStart - matchRef
+                        outputOffset = outputOffset + emitCopy( outputAddress, outputOffset, backOffset, matchLen )
+                        searchPosition = matchStart + matchLen
+                        nextEmit = searchPosition
+                    else:
+                        searchPosition = searchPosition + 1
+                else:
+                    searchPosition = searchPosition + 1
+
+            if nextEmit < blockEnd:
+                I64 trailingLen = blockEnd - nextEmit
+                outputOffset = outputOffset + emitLiteral( outputAddress, outputOffset, inputAddress, nextEmit, trailingLen )
+        else:
+            I64 shortLen = blockEnd - inputOffset
+            outputOffset = outputOffset + emitLiteral( outputAddress, outputOffset, inputAddress, inputOffset, shortLen )
+
+        inputOffset = blockEnd
+
+    dealloc( hashTableAddress )
+    return outputOffset
+
+public function snappyDecompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Decompress raw Snappy block format data.
+
+    Parameters:
+        inputAddress (I64):
+            Address of compressed input.
+        inputLength (I64):
+            Length of compressed data.
+        outputAddress (I64):
+            Address of output buffer.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Decompressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is compressed size
+        Space: O(1) beyond output buffer
+    """
+
+    if inputLength == 0:
+        return 0
+
+    I64 varintResult = readVarint( inputAddress, 0 )
+    I64 uncompressedLength = varintResult & 4294967295
+    I64 varintSize = ( varintResult >> 32 ) & 4294967295
+
+    if uncompressedLength > outputCapacity:
+        return -1
+
+    I64 inputOffset = varintSize
+    I64 outputOffset = 0
+
+    while inputOffset < inputLength and outputOffset < uncompressedLength:
+        I64 tagByte = readByteAt( inputAddress, inputOffset )
+        I64 elementType = tagByte & 3
+
+        if elementType == SNAPPY_LITERAL:
+            I64 literalLength = ( tagByte >> 2 ) + 1
+
+            if ( tagByte >> 2 ) == 60:
+                literalLength = readByteAt( inputAddress, inputOffset + 1 ) + 1
+                inputOffset = inputOffset + 2
+            else:
+                if ( tagByte >> 2 ) == 61:
+                    literalLength = readByteAt( inputAddress, inputOffset + 1 ) | ( readByteAt( inputAddress, inputOffset + 2 ) << 8 )
+                    literalLength = literalLength + 1
+                    inputOffset = inputOffset + 3
+                else:
+                    if ( tagByte >> 2 ) == 62:
+                        literalLength = readByteAt( inputAddress, inputOffset + 1 ) | ( readByteAt( inputAddress, inputOffset + 2 ) << 8 ) | ( readByteAt( inputAddress, inputOffset + 3 ) << 16 )
+                        literalLength = literalLength + 1
+                        inputOffset = inputOffset + 4
+                    else:
+                        if ( tagByte >> 2 ) == 63:
+                            literalLength = readByteAt( inputAddress, inputOffset + 1 ) | ( readByteAt( inputAddress, inputOffset + 2 ) << 8 ) | ( readByteAt( inputAddress, inputOffset + 3 ) << 16 ) | ( readByteAt( inputAddress, inputOffset + 4 ) << 24 )
+                            literalLength = literalLength + 1
+                            inputOffset = inputOffset + 5
+                        else:
+                            inputOffset = inputOffset + 1
+
+            copyBytes( inputAddress, inputOffset, outputAddress, outputOffset, literalLength )
+            inputOffset = inputOffset + literalLength
+            outputOffset = outputOffset + literalLength
+
+        else:
+            if elementType == SNAPPY_COPY_1:
+                I64 copyLength = ( ( tagByte >> 2 ) & 7 ) + 4
+                I64 copyOffset = ( ( tagByte >> 5 ) << 8 ) | readByteAt( inputAddress, inputOffset + 1 )
+                inputOffset = inputOffset + 2
+
+                I64 copySource = outputOffset - copyOffset
+                I64 copyIndex = 0
+                while copyIndex < copyLength:
+                    I64 sourceByte = readByteAt( outputAddress, copySource + copyIndex )
+                    writeByteAt( outputAddress, outputOffset + copyIndex, sourceByte )
+                    copyIndex = copyIndex + 1
+                outputOffset = outputOffset + copyLength
+
+            else:
+                if elementType == SNAPPY_COPY_2:
+                    I64 copyLength = ( tagByte >> 2 ) + 1
+                    I64 copyOffset = readByteAt( inputAddress, inputOffset + 1 ) | ( readByteAt( inputAddress, inputOffset + 2 ) << 8 )
+                    inputOffset = inputOffset + 3
+
+                    I64 copySource = outputOffset - copyOffset
+                    I64 copyIndex = 0
+                    while copyIndex < copyLength:
+                        I64 sourceByte = readByteAt( outputAddress, copySource + copyIndex )
+                        writeByteAt( outputAddress, outputOffset + copyIndex, sourceByte )
+                        copyIndex = copyIndex + 1
+                    outputOffset = outputOffset + copyLength
+
+                else:
+                    I64 copyLength = ( tagByte >> 2 ) + 1
+                    I64 copyOffset = readByteAt( inputAddress, inputOffset + 1 ) | ( readByteAt( inputAddress, inputOffset + 2 ) << 8 ) | ( readByteAt( inputAddress, inputOffset + 3 ) << 16 ) | ( readByteAt( inputAddress, inputOffset + 4 ) << 24 )
+                    inputOffset = inputOffset + 5
+
+                    I64 copySource = outputOffset - copyOffset
+                    I64 copyIndex = 0
+                    while copyIndex < copyLength:
+                        I64 sourceByte = readByteAt( outputAddress, copySource + copyIndex )
+                        writeByteAt( outputAddress, outputOffset + copyIndex, sourceByte )
+                        copyIndex = copyIndex + 1
+                    outputOffset = outputOffset + copyLength
+
+    return outputOffset
+
+public function snappyXerialCompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Compress data using the Xerial Snappy framing format used by
+    Kafka. Prepends magic header, then chunks input into blocks
+    each preceded by a big-endian 32-bit compressed-block length.
+
+    Parameters:
+        inputAddress (I64):
+            Address of uncompressed input.
+        inputLength (I64):
+            Length of input data.
+        outputAddress (I64):
+            Address of output buffer.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Total framed compressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is inputLength
+        Space: O(block size) for temporary block buffer
+    """
+
+    I64 outputOffset = 0
+
+    writeByteAt( outputAddress, 0, XERIAL_MAGIC_BYTE_0 )
+    writeByteAt( outputAddress, 1, XERIAL_MAGIC_BYTE_1 )
+    writeByteAt( outputAddress, 2, XERIAL_MAGIC_BYTE_2 )
+    writeByteAt( outputAddress, 3, XERIAL_MAGIC_BYTE_3 )
+    writeByteAt( outputAddress, 4, XERIAL_MAGIC_BYTE_4 )
+    writeByteAt( outputAddress, 5, XERIAL_MAGIC_BYTE_5 )
+    writeByteAt( outputAddress, 6, XERIAL_MAGIC_BYTE_6 )
+    writeByteAt( outputAddress, 7, XERIAL_MAGIC_BYTE_7 )
+
+    writeByteAt( outputAddress, 8, 0 )
+    writeByteAt( outputAddress, 9, 0 )
+    writeByteAt( outputAddress, 10, 0 )
+    writeByteAt( outputAddress, 11, 1 )
+
+    writeByteAt( outputAddress, 12, 0 )
+    writeByteAt( outputAddress, 13, 0 )
+    writeByteAt( outputAddress, 14, 0 )
+    writeByteAt( outputAddress, 15, 1 )
+
+    outputOffset = XERIAL_HEADER_SIZE
+
+    I64 blockBufferCapacity = snappyMaxCompressedLength( XERIAL_DEFAULT_BLOCK_SIZE )
+    I64 blockBufferAddress = alloc( blockBufferCapacity )
+
+    I64 inputOffset = 0
+    while inputOffset < inputLength:
+        I64 blockSize = XERIAL_DEFAULT_BLOCK_SIZE
+        if inputOffset + blockSize > inputLength:
+            blockSize = inputLength - inputOffset
+
+        I64 compressedSize = snappyCompress( inputAddress + inputOffset, blockSize, blockBufferAddress, blockBufferCapacity )
+        if compressedSize < 0:
+            dealloc( blockBufferAddress )
+            return -1
+
+        writeByteAt( outputAddress, outputOffset, ( compressedSize >> 24 ) & 255 )
+        writeByteAt( outputAddress, outputOffset + 1, ( compressedSize >> 16 ) & 255 )
+        writeByteAt( outputAddress, outputOffset + 2, ( compressedSize >> 8 ) & 255 )
+        writeByteAt( outputAddress, outputOffset + 3, compressedSize & 255 )
+        outputOffset = outputOffset + 4
+
+        copyBytes( blockBufferAddress, 0, outputAddress, outputOffset, compressedSize )
+        outputOffset = outputOffset + compressedSize
+
+        inputOffset = inputOffset + blockSize
+
+    dealloc( blockBufferAddress )
+    return outputOffset
+
+public function snappyXerialDecompress( I64 inputAddress, I64 inputLength, I64 outputAddress, I64 outputCapacity ) -> I64:
+
+    """
+    Decompress Xerial Snappy framed data. Verifies the magic header,
+    then decompresses each block sequentially.
+
+    Parameters:
+        inputAddress (I64):
+            Address of compressed input.
+        inputLength (I64):
+            Length of compressed data.
+        outputAddress (I64):
+            Address of output buffer.
+        outputCapacity (I64):
+            Capacity of output buffer.
+
+    Returns:
+        I64:
+            Total decompressed size, or -1 on failure.
+
+    Complexity:
+        Time: O(n) where n is total decompressed size
+        Space: O(1) beyond output buffer
+    """
+
+    if inputLength < XERIAL_HEADER_SIZE:
+        return snappyDecompress( inputAddress, inputLength, outputAddress, outputCapacity )
+
+    I64 magic0 = readByteAt( inputAddress, 0 )
+    I64 magic1 = readByteAt( inputAddress, 1 )
+    I64 magic2 = readByteAt( inputAddress, 2 )
+    I64 magic3 = readByteAt( inputAddress, 3 )
+    I64 magic4 = readByteAt( inputAddress, 4 )
+    I64 magic5 = readByteAt( inputAddress, 5 )
+    I64 magic6 = readByteAt( inputAddress, 6 )
+    I64 magic7 = readByteAt( inputAddress, 7 )
+
+    Boolean isXerial = magic0 == XERIAL_MAGIC_BYTE_0 and magic1 == XERIAL_MAGIC_BYTE_1 and magic2 == XERIAL_MAGIC_BYTE_2 and magic3 == XERIAL_MAGIC_BYTE_3 and magic4 == XERIAL_MAGIC_BYTE_4 and magic5 == XERIAL_MAGIC_BYTE_5 and magic6 == XERIAL_MAGIC_BYTE_6 and magic7 == XERIAL_MAGIC_BYTE_7
+
+    if not isXerial:
+        return snappyDecompress( inputAddress, inputLength, outputAddress, outputCapacity )
+
+    I64 inputOffset = XERIAL_HEADER_SIZE
+    I64 outputOffset = 0
+
+    while inputOffset + 4 <= inputLength:
+        I64 blockSize = ( readByteAt( inputAddress, inputOffset ) << 24 ) | ( readByteAt( inputAddress, inputOffset + 1 ) << 16 ) | ( readByteAt( inputAddress, inputOffset + 2 ) << 8 ) | readByteAt( inputAddress, inputOffset + 3 )
+        inputOffset = inputOffset + 4
+
+        if blockSize <= 0 or inputOffset + blockSize > inputLength:
+            return -1
+
+        I64 decompressedSize = snappyDecompress( inputAddress + inputOffset, blockSize, outputAddress + outputOffset, outputCapacity - outputOffset )
+        if decompressedSize < 0:
+            return -1
+
+        outputOffset = outputOffset + decompressedSize
+        inputOffset = inputOffset + blockSize
+
+    return outputOffset
+
+export {
+    snappyCompress, snappyDecompress,
+    snappyXerialCompress, snappyXerialDecompress,
+    snappyMaxCompressedLength
+}

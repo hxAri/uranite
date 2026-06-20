@@ -7,7 +7,7 @@
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
-# Re-exports all filesystem types from the FAT32, ext4, and AetherFS submodules for convenient access.
+# Re-exports all filesystem types from the FAT32, ext4, and UraniteFS submodules for convenient access.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ package uranite.os.fs
 
 from uranite.os.fs.fat32 import Fat32Info, Fat32DirEntry, Fat32FileSystem
 from uranite.os.fs.ext4 import Ext4Superblock, Ext4Inode, Ext4FileSystem
-from uranite.os.fs.uranitefs import AetherFsSuperblock, AetherFsInode, AetherFileSystem
+from uranite.os.fs.uranitefs import UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
 
 export {
     Fat32Info,
@@ -31,7 +31,7 @@ export {
     Ext4Superblock,
     Ext4Inode,
     Ext4FileSystem,
-    AetherFsSuperblock,
-    AetherFsInode,
-    AetherFileSystem
+    UraniteFsSuperblock,
+    UraniteFsInode,
+    UraniteFileSystem
 }

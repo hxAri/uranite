@@ -7,7 +7,7 @@
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
-# Re-exports the AetherFS filesystem implementation from the OS layer.
+# Re-exports the UraniteFS filesystem implementation from the OS layer.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@
 
 package uranite.io.fs.uranitefs
 
-from uranite.os.fs.uranitefs import AetherFsSuperblock, AetherFsInode, AetherFileSystem
+from uranite.os.fs.uranitefs import UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
 
 export {
-    AetherFsSuperblock, AetherFsInode, AetherFileSystem
+    UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
 }

@@ -1,0 +1,234 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-20 06:00
+# @update 2026-06-20 06:00
+# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/pem.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# PEM (Privacy Enhanced Mail) format parser. Extracts the base64-encoded
+# DER data between `-----BEGIN <label>-----` and `-----END <label>-----`
+# markers. Handles certificates, RSA keys, and other PEM-encoded objects.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.encoding.pem
+
+from uranite.memory.allocator import alloc, dealloc
+from uranite.io.syscall import readByteAt, writeByteAt, stringToPtr, stringLen
+from uranite.encoding.base64 import base64Decode
+from uranite.encoding.binary import copyBytes
+
+const I64 PEM_BEGIN_MARKER_LENGTH = 11
+const I64 PEM_END_MARKER_LENGTH = 9
+const I64 PEM_MAX_DECODED_SIZE = 8192
+
+public class PemBlock:
+
+    """
+    A decoded PEM block containing the raw DER bytes and the
+    PEM label (e.g. "CERTIFICATE", "RSA PRIVATE KEY").
+    """
+
+    public I64 derAddress
+    public I64 derLength
+    public I64 labelAddress
+    public I64 labelLength
+
+    public function PemBlock( self, I64 derAddress, I64 derLength, I64 labelAddress, I64 labelLength ) -> Void:
+
+        """
+        Parameters:
+            derAddress (I64):
+                Address of decoded DER bytes.
+            derLength (I64):
+                Length of DER data.
+            labelAddress (I64):
+                Address of label string bytes.
+            labelLength (I64):
+                Length of label string.
+        """
+
+        self.derAddress = derAddress
+        self.derLength = derLength
+        self.labelAddress = labelAddress
+        self.labelLength = labelLength
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release DER and label storage.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.derAddress != 0:
+            dealloc( self.derAddress )
+            self.derAddress = 0
+        if self.labelAddress != 0:
+            dealloc( self.labelAddress )
+            self.labelAddress = 0
+
+public function pemDecode( I64 pemAddress, I64 pemLength ) -> PemBlock:
+
+    """
+    Decode the first PEM block found in the input. Extracts the
+    base64 content between BEGIN and END markers, strips whitespace
+    and newlines, and base64-decodes to DER bytes.
+
+    Parameters:
+        pemAddress (I64):
+            Address of PEM-encoded text.
+        pemLength (I64):
+            Length of PEM text.
+
+    Returns:
+        PemBlock:
+            Decoded PEM block with DER bytes and label.
+
+    Complexity:
+        Time: O(n) where n is pemLength
+        Space: O(n) for base64 content + decoded DER
+    """
+
+    I64 beginOffset = findBeginMarker( pemAddress, pemLength )
+    if beginOffset < 0:
+        return new PemBlock( 0, 0, 0, 0 )
+
+    I64 labelStart = beginOffset + PEM_BEGIN_MARKER_LENGTH
+    I64 labelEnd = labelStart
+    while labelEnd < pemLength and readByteAt( pemAddress, labelEnd ) != 45:
+        labelEnd = labelEnd + 1
+
+    I64 labelLength = labelEnd - labelStart
+    I64 labelAddress = alloc( labelLength + 1 )
+    copyBytes( pemAddress, labelStart, labelAddress, 0, labelLength )
+    writeByteAt( labelAddress, labelLength, 0 )
+
+    I64 contentStart = labelEnd
+    while contentStart < pemLength and readByteAt( pemAddress, contentStart ) != 10:
+        contentStart = contentStart + 1
+    contentStart = contentStart + 1
+
+    I64 endOffset = findEndMarker( pemAddress, pemLength, contentStart )
+    if endOffset < 0:
+        dealloc( labelAddress )
+        return new PemBlock( 0, 0, 0, 0 )
+
+    I64 base64Length = endOffset - contentStart
+    I64 cleanBase64Address = alloc( base64Length )
+    I64 cleanLength = 0
+
+    I64 scanOffset = contentStart
+    while scanOffset < endOffset:
+        I64 currentByte = readByteAt( pemAddress, scanOffset )
+        if currentByte != 10 and currentByte != 13 and currentByte != 32 and currentByte != 9:
+            writeByteAt( cleanBase64Address, cleanLength, currentByte )
+            cleanLength = cleanLength + 1
+        scanOffset = scanOffset + 1
+
+    I64 derCapacity = ( cleanLength * 3 ) / 4 + 4
+    I64 derAddress = alloc( derCapacity )
+    I64 derLength = base64Decode( cleanBase64Address, cleanLength, derAddress )
+
+    dealloc( cleanBase64Address )
+
+    if derLength < 0:
+        dealloc( derAddress )
+        dealloc( labelAddress )
+        return new PemBlock( 0, 0, 0, 0 )
+
+    return new PemBlock( derAddress, derLength, labelAddress, labelLength )
+
+public function pemDecodeString( String pemContent ) -> PemBlock:
+
+    """
+    Decode PEM from a String.
+
+    Parameters:
+        pemContent (String):
+            PEM-encoded string.
+
+    Returns:
+        PemBlock:
+            Decoded PEM block.
+
+    Complexity:
+        Time: O(n) where n is string length
+        Space: O(n)
+    """
+
+    I64 pemAddress = stringToPtr( pemContent )
+    I64 pemLength = stringLen( pemContent )
+    return pemDecode( pemAddress, pemLength )
+
+function findBeginMarker( I64 dataAddress, I64 dataLength ) -> I64:
+
+    """
+    Find the offset of "-----BEGIN " in the data.
+
+    Parameters:
+        dataAddress (I64):
+            Data address.
+        dataLength (I64):
+            Data length.
+
+    Returns:
+        I64:
+            Offset of marker, or -1 if not found.
+
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    I64 searchOffset = 0
+    while searchOffset + PEM_BEGIN_MARKER_LENGTH <= dataLength:
+        if readByteAt( dataAddress, searchOffset ) == 45 and readByteAt( dataAddress, searchOffset + 1 ) == 45 and readByteAt( dataAddress, searchOffset + 2 ) == 45 and readByteAt( dataAddress, searchOffset + 3 ) == 45 and readByteAt( dataAddress, searchOffset + 4 ) == 45 and readByteAt( dataAddress, searchOffset + 5 ) == 66 and readByteAt( dataAddress, searchOffset + 6 ) == 69 and readByteAt( dataAddress, searchOffset + 7 ) == 71 and readByteAt( dataAddress, searchOffset + 8 ) == 73 and readByteAt( dataAddress, searchOffset + 9 ) == 78 and readByteAt( dataAddress, searchOffset + 10 ) == 32:
+            return searchOffset
+        searchOffset = searchOffset + 1
+    return -1
+
+function findEndMarker( I64 dataAddress, I64 dataLength, I64 startOffset ) -> I64:
+
+    """
+    Find the offset of "-----END " in the data.
+
+    Parameters:
+        dataAddress (I64):
+            Data address.
+        dataLength (I64):
+            Data length.
+        startOffset (I64):
+            Start searching from this offset.
+
+    Returns:
+        I64:
+            Offset of marker, or -1 if not found.
+
+    Complexity:
+        Time: O(n)
+        Space: O(1)
+    """
+
+    I64 searchOffset = startOffset
+    while searchOffset + PEM_END_MARKER_LENGTH <= dataLength:
+        if readByteAt( dataAddress, searchOffset ) == 45 and readByteAt( dataAddress, searchOffset + 1 ) == 45 and readByteAt( dataAddress, searchOffset + 2 ) == 45 and readByteAt( dataAddress, searchOffset + 3 ) == 45 and readByteAt( dataAddress, searchOffset + 4 ) == 45 and readByteAt( dataAddress, searchOffset + 5 ) == 69 and readByteAt( dataAddress, searchOffset + 6 ) == 78 and readByteAt( dataAddress, searchOffset + 7 ) == 68 and readByteAt( dataAddress, searchOffset + 8 ) == 32:
+            return searchOffset
+        searchOffset = searchOffset + 1
+    return -1
+
+export {
+    PemBlock,
+    pemDecode, pemDecodeString
+}

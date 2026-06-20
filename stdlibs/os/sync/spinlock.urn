@@ -7,7 +7,10 @@
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
-# Interrupt-safe spinlock using atomic xchg instruction. Disables interrupts before acquiring the lock to prevent deadlock when an interrupt handler attempts to acquire the same lock on the same CPU.
+# Atomic spinlock primitives. Provides two classes: Spinlock for user-space
+# or kernel code that manages interrupts externally, and SpinlockIrq for
+# kernel-context use that automatically saves and restores interrupt state
+# around lock acquisition to prevent deadlock from interrupt handlers.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,12 +23,15 @@
 
 package uranite.os.sync.spinlock
 
+from uranite.os.arch.x86-64.cpu import disableInterrupts, enableInterrupts, readRflags
+
 public class Spinlock:
 
     """
-    Atomic spinlock using xchg instruction. Works in both kernel and
-    user space. Interrupt management is the caller's responsibility
-    when used in kernel context.
+    Atomic spinlock using xchg instruction for mutual exclusion. Suitable
+    for user-space code or kernel code where interrupt management is handled
+    externally by the caller. Does not modify interrupt state. For kernel
+    contexts requiring automatic interrupt safety, use SpinlockIrq instead.
     """
 
     protect I64 locked
@@ -96,6 +102,112 @@ public class Spinlock:
 
         return self.locked != 0
 
+public class SpinlockIrq:
+
+    """
+    Interrupt-safe spinlock for kernel-context use. Saves the processor
+    interrupt state (RFLAGS IF bit) and disables maskable interrupts before
+    acquiring the lock, then restores the previous interrupt state on
+    release. This prevents deadlock when an interrupt handler running on the
+    same CPU attempts to acquire a lock already held by the interrupted code
+    path. Each SpinlockIrq instance stores its own saved flags, so nested
+    locking across different instances is safe.
+    """
+
+    protect I64 locked
+    protect I64 savedFlags
+
+    public function SpinlockIrq( self ) -> Void:
+
+        """
+        Construct an unlocked interrupt-safe spinlock with the locked flag
+        and saved RFLAGS both initialized to zero.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.locked = 0
+        self.savedFlags = 0
+
+    public function lock( self ) -> Void:
+
+        """
+        Acquire the spinlock with interrupt protection. Reads the current
+        RFLAGS register to capture the interrupt enable state, disables
+        maskable interrupts via cli, then spins using atomic xchg until
+        the lock is acquired. The saved RFLAGS value is stored for
+        restoration when the lock is released.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 flagsBeforeLock = readRflags()
+        disableInterrupts()
+        I64 expected = 1
+        I64 old = 1
+        I64 lockAddr = addressof self.locked
+        while old != 0:
+            asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+            if old != 0:
+                asm volatile "pause"
+        self.savedFlags = flagsBeforeLock
+
+    public function unlock( self ) -> Void:
+
+        """
+        Release the spinlock and restore the interrupt state that was active
+        before lock acquisition. A memory barrier ensures all writes performed
+        while the lock was held are visible before release. Interrupts are
+        re-enabled only if the IF flag (bit 9) was set in the saved RFLAGS
+        register, preserving the caller's original interrupt disposition.
+        """
+
+        I64 flagsBeforeUnlock = self.savedFlags
+        asm volatile "" : : : clobber( "memory" )
+        self.locked = 0
+        I64 interruptFlagMask = 512
+        if ( flagsBeforeUnlock & interruptFlagMask ) != 0:
+            enableInterrupts()
+
+    public function tryLock( self ) -> Boolean:
+
+        """
+        Attempt to acquire the interrupt-safe spinlock without spinning.
+        Saves RFLAGS and disables interrupts before the single atomic
+        exchange attempt. If the lock is already held, restores the previous
+        interrupt state before returning False. Returns True on successful
+        acquisition.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 flagsBeforeLock = readRflags()
+        disableInterrupts()
+        I64 expected = 1
+        I64 old = 0
+        I64 lockAddr = addressof self.locked
+        asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+        if old != 0:
+            I64 interruptFlagMask = 512
+            if ( flagsBeforeLock & interruptFlagMask ) != 0:
+                enableInterrupts()
+            return False
+        self.savedFlags = flagsBeforeLock
+        return True
+
+    public function isLocked( self ) -> Boolean:
+
+        """ Return whether the interrupt-safe spinlock is currently held. """
+
+        return self.locked != 0
+
 export {
-    Spinlock
+    Spinlock,
+    SpinlockIrq
 }

@@ -1,0 +1,73 @@
+package testing
+
+from uranite.crypto.pbkdf2 import pbkdf2HmacSha256
+from uranite.encoding.binary import writeI8, readI8
+from uranite.memory.allocator import alloc, dealloc
+from uranite.testing.assertions import assertEqualI64, assertNotEqualI64, assertTrue
+from uranite.io.console import putsln
+
+public function main() -> I32:
+    putsln( "=== Crypto PBKDF2 Tests ===" )
+
+    # RFC 6070 Test Vector 1 (adapted for HMAC-SHA-256):
+    # Password = "password" (8 bytes), Salt = "salt" (4 bytes), Iterations = 1, dkLen = 32
+    I64 passwordAddress = alloc( 8 )
+    writeI8( passwordAddress, 0, 0x70 )
+    writeI8( passwordAddress, 1, 0x61 )
+    writeI8( passwordAddress, 2, 0x73 )
+    writeI8( passwordAddress, 3, 0x73 )
+    writeI8( passwordAddress, 4, 0x77 )
+    writeI8( passwordAddress, 5, 0x6f )
+    writeI8( passwordAddress, 6, 0x72 )
+    writeI8( passwordAddress, 7, 0x64 )
+
+    I64 saltAddress = alloc( 4 )
+    writeI8( saltAddress, 0, 0x73 )
+    writeI8( saltAddress, 1, 0x61 )
+    writeI8( saltAddress, 2, 0x6c )
+    writeI8( saltAddress, 3, 0x74 )
+
+    I64 outputAddress = alloc( 32 )
+    pbkdf2HmacSha256( passwordAddress, 8, saltAddress, 4, 1, outputAddress, 32 )
+
+    # PBKDF2-HMAC-SHA256("password", "salt", 1, 32) known first bytes:
+    # 120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b
+    assertEqualI64( 0x12, readI8( outputAddress, 0 ), "PBKDF2 iter=1 byte 0" )
+    assertEqualI64( 0x0f, readI8( outputAddress, 1 ), "PBKDF2 iter=1 byte 1" )
+    assertEqualI64( -74, readI8( outputAddress, 2 ), "PBKDF2 iter=1 byte 2 (0xb6)" )
+    assertEqualI64( -49, readI8( outputAddress, 3 ), "PBKDF2 iter=1 byte 3 (0xcf)" )
+    putsln( "PBKDF2 iteration=1 OK" )
+
+    I64 secondOutput = alloc( 32 )
+    pbkdf2HmacSha256( passwordAddress, 8, saltAddress, 4, 1, secondOutput, 32 )
+    I64 byteIndex = 0
+    while byteIndex < 32:
+        assertEqualI64( readI8( outputAddress, byteIndex ), readI8( secondOutput, byteIndex ), "deterministic" )
+        byteIndex = byteIndex + 1
+    putsln( "deterministic OK" )
+
+    I64 twoIterOutput = alloc( 32 )
+    pbkdf2HmacSha256( passwordAddress, 8, saltAddress, 4, 2, twoIterOutput, 32 )
+    assertNotEqualI64( readI8( outputAddress, 0 ), readI8( twoIterOutput, 0 ), "different iterations differ" )
+    putsln( "different iterations differ OK" )
+
+    I64 differentSalt = alloc( 4 )
+    writeI8( differentSalt, 0, 0x70 )
+    writeI8( differentSalt, 1, 0x65 )
+    writeI8( differentSalt, 2, 0x70 )
+    writeI8( differentSalt, 3, 0x70 )
+    I64 differentSaltOutput = alloc( 32 )
+    pbkdf2HmacSha256( passwordAddress, 8, differentSalt, 4, 1, differentSaltOutput, 32 )
+    assertNotEqualI64( readI8( outputAddress, 0 ), readI8( differentSaltOutput, 0 ), "different salt differ" )
+    putsln( "different salt differ OK" )
+
+    dealloc( passwordAddress )
+    dealloc( saltAddress )
+    dealloc( outputAddress )
+    dealloc( secondOutput )
+    dealloc( twoIterOutput )
+    dealloc( differentSalt )
+    dealloc( differentSaltOutput )
+
+    putsln( "=== All Crypto PBKDF2 Tests Passed ===" )
+    return 0
