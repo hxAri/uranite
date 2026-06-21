@@ -35,13 +35,13 @@
 #include "uranite-fmt/comments/comment-extractor.hpp"
 
 /**
- * @brief Recursively collects all Aether source files within a target directory.
+ * @brief Recursively collects all Uranite source files within a target directory.
  * * Scans the specified directory path and all of its subdirectories to find regular 
  * files that contain the `.urn` file extension, appending their full paths to the collection vector.
  * * @param directoryPath The root directory path where the recursive search begins.
  * @param collectedFiles Output reference vector where the absolute or relative matching file paths are appended.
  */
-static void collectAetherFiles( const std::string& directoryPath, std::vector<std::string>& collectedFiles ) {
+static void collectUraniteFiles( const std::string& directoryPath, std::vector<std::string>& collectedFiles ) {
     for( const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator( directoryPath ) ) {
         if( entry.is_regular_file() && entry.path().extension() == ".urn" ) {
             collectedFiles.push_back( entry.path().string() );
@@ -192,7 +192,7 @@ int main( int argc, char* argv[] ) {
 	if( validateOnly ) {
 		std::vector<std::string> sourceFiles;
 		if( std::filesystem::is_directory( targetPath ) ) {
-			collectAetherFiles( targetPath, sourceFiles );
+			collectUraniteFiles( targetPath, sourceFiles );
 		}
 		else {
 			sourceFiles.push_back( targetPath );
