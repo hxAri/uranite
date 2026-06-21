@@ -1,0 +1,94 @@
+
+//
+// @author hxAri (hxari)
+// @create 2025-02-24 15:15
+// @update 2026-06-17 20:03
+// @github https://github.com/uranite-lang/uranite
+//
+// Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+// Uranite Licence under GNU General Public Licence v3
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// any later version.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+#include "uranite/semantic/scope.hpp"
+
+namespace uranite::semantic {
+	
+	Scope::Scope( Kind kind, ScopeSharedPointer parent ) : kindT( kind ), parentT( std::move( parent ) ) {
+	}
+	
+	bool Scope::define( const std::string& name, SymbolSharedPointer symbol ) {
+		if( this->symbolsT.count( name ) ) {
+			return false;
+		}
+		this->symbolsT[name] = symbol;
+		return true;
+	}
+	
+	bool Scope::isInsideClass() const {
+		if( this->kindT == Scope::Kind::Class ) {
+			return true;
+		}
+		if( this->parentT ) {
+			return this->parentT->isInsideClass();
+		}
+		return false;
+	}
+	
+	bool Scope::isInsideFunction() const {
+		if( this->kindT == Scope::Kind::Function ) {
+			return true;
+		}
+		if( this->parentT ) {
+			return this->parentT->isInsideFunction();
+		}
+		return false;
+	}
+	
+	bool Scope::isInsideLoop() const {
+		if( this->kindT == Scope::Kind::Loop || this->kindT == Scope::Kind::Switch ) {
+			return true;
+		}
+		if( this->parentT ) {
+			return this->parentT->isInsideLoop();
+		}
+		return false;
+	}
+	
+	bool Scope::isInsideUnsafe() const {
+		if( this->kindT == Scope::Kind::Unsafe ) {
+			return true;
+		}
+		if( this->parentT ) {
+			return this->parentT->isInsideUnsafe();
+		}
+		return false;
+	}
+	
+	SymbolSharedPointer Scope::lookup( const std::string& name ) const {
+		std::unordered_map<std::string,SymbolSharedPointer>::const_iterator symbolIterator = this->symbolsT.find( name );
+		if( symbolIterator != this->symbolsT.end() ) {
+			return symbolIterator->second;
+		}
+		if( this->parentT ) {
+			return this->parentT->lookup( name );
+		}
+		return nullptr;
+	}
+	
+	SymbolSharedPointer Scope::lookupLocal( const std::string& name ) const {
+		std::unordered_map<std::string,SymbolSharedPointer>::const_iterator symbolIterator = this->symbolsT.find( name );
+		if( symbolIterator != this->symbolsT.end() ) {
+			return symbolIterator->second;
+		}
+		return nullptr;
+	}
+	
+}
