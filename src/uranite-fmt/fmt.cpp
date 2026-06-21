@@ -38,14 +38,14 @@ static int lintSingleFile( const std::string& filePath );
 static std::string readFileContents( const std::string& filePath );
 
 /**
- * @brief Recursively collects all Aether source files within a target directory path.
+ * @brief Recursively collects all Uranite source files within a target directory path.
  * * Scans the specified workspace directory and all its underlying subfolders to isolate 
  * regular files containing the native `.urn` file extension, appending their path strings 
  * to the provided storage container.
  * * @param directoryPath The root directory path where the recursive iterator begins its search.
  * @param collectedFiles Output reference vector where the discovered source file paths are appended.
  */
-static void collectAetherFiles( const std::string& directoryPath, std::vector<std::string>& collectedFiles ) {
+static void collectUraniteFiles( const std::string& directoryPath, std::vector<std::string>& collectedFiles ) {
 	for( const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator( directoryPath ) ) {
 		if( entry.is_regular_file() && entry.path().extension() == ".urn" ) {
 			collectedFiles.push_back( entry.path().string() );
@@ -62,7 +62,7 @@ static void collectAetherFiles( const std::string& directoryPath, std::vector<st
  * 4. Invokes the `CommentReattacher` to safely re-inject the extracted comments back into their correct logical coordinates.
  * * Depending on the configuration flags, it can either print the resulting stream directly to stdout, 
  * overwrite the original file in-place, or operate in validation mode (`checkOnly`) to detect deviations without mutation.
- * * @param filePath Path to the Aether source file slated for code formatting.
+ * * @param filePath Path to the Uranite source file slated for code formatting.
  * @param writeInPlace Set to true to overwrite the physical disk file with the cleanly formatted string payload.
  * @param checkOnly Set to true to switch to verification mode, validating compliance without modifying the code layout.
  * @return int Returns 0 on successful processing or when a file complies with formatting layout rules; returns 1 on syntax errors, IO failures, or when modifications are detected in verification mode.
@@ -115,7 +115,7 @@ static int formatSingleFile( const std::string& filePath, bool writeInPlace, boo
 /**
  * @brief Executes style enforcement, static analysis rules, and syntactic linting on a single file.
  * * Processes the target file contents through the compiler frontend (Lexer and Parser), passing the resulting 
- * AST and tokenized comment array into the Aether Linter subsystem. Discovered style anomalies, code smells, 
+ * AST and tokenized comment array into the Uranite Linter subsystem. Discovered style anomalies, code smells, 
  * or structural rule violations are dumped directly to standard error with detailed coordinates.
  * * @param filePath Path to the target source file to be audited by the lint rules.
  * @return int Returns 0 if the file passes all configured style guidelines and structural rule checks without errors; returns 1 on frontend tracking compilation errors or if lint diagnostics are detected.
@@ -210,7 +210,7 @@ int main( int argc, char* argv[] ) {
 	std::string targetPath = *inputPath;
 	if( std::filesystem::is_directory( targetPath ) ) {
 		std::vector<std::string> sourceFiles;
-		collectAetherFiles( targetPath, sourceFiles );
+		collectUraniteFiles( targetPath, sourceFiles );
 		int failureCount = 0;
 		int successCount = 0;
 		for( const std::string& sourceFile : sourceFiles ) {
