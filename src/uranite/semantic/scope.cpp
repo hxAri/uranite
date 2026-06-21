@@ -25,10 +25,44 @@ namespace uranite::semantic {
 	}
 	
 	bool Scope::define( const std::string& name, SymbolSharedPointer symbol ) {
-		if( this->symbolsT.count( name ) ) {
-			return false;
+		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::iterator existingIterator = this->symbolsT.find( name );
+		if( existingIterator != this->symbolsT.end() ) {
+			if( symbol->kind == Symbol::Kind::Field || symbol->kind == Symbol::Kind::Variable ||
+				symbol->kind == Symbol::Kind::Parameter || symbol->kind == Symbol::Kind::Type ||
+				symbol->kind == Symbol::Kind::EnumVariant || symbol->kind == Symbol::Kind::Module ) {
+				return false;
+			}
+			for( size_t existingIndex = 0; existingIndex < existingIterator->second.size(); existingIndex++ ) {
+				const SymbolSharedPointer& existingSymbol = existingIterator->second[existingIndex];
+				if( existingSymbol->source != nullptr && symbol->source != nullptr &&
+					existingSymbol->source->pathname == symbol->source->pathname &&
+					existingSymbol->source->location != nullptr && symbol->source->location != nullptr &&
+					existingSymbol->source->location->line == symbol->source->location->line ) {
+					existingIterator->second[existingIndex] = symbol;
+					return true;
+				}
+				if( existingSymbol->typeref != nullptr && symbol->typeref != nullptr &&
+					existingSymbol->typeref->kind == Type::Kind::Function && symbol->typeref->kind == Type::Kind::Function ) {
+					FunctionTypeSharedPointer existingFunctionType = std::static_pointer_cast<FunctionType>( existingSymbol->typeref );
+					FunctionTypeSharedPointer newFunctionType = std::static_pointer_cast<FunctionType>( symbol->typeref );
+					if( newFunctionType->parameterTypes.size() == existingFunctionType->parameterTypes.size() ) {
+						bool signatureMatch = true;
+						for( size_t paramIndex = 0; paramIndex < newFunctionType->parameterTypes.size(); paramIndex++ ) {
+							if( newFunctionType->parameterTypes[paramIndex]->toString() != existingFunctionType->parameterTypes[paramIndex]->toString() ) {
+								signatureMatch = false;
+								break;
+							}
+						}
+						if( signatureMatch ) {
+							return false;
+						}
+					}
+				}
+			}
+			existingIterator->second.push_back( symbol );
+			return true;
 		}
-		this->symbolsT[name] = symbol;
+		this->symbolsT[name] = { symbol };
 		return true;
 	}
 	
@@ -73,22 +107,41 @@ namespace uranite::semantic {
 	}
 	
 	SymbolSharedPointer Scope::lookup( const std::string& name ) const {
-		std::unordered_map<std::string,SymbolSharedPointer>::const_iterator symbolIterator = this->symbolsT.find( name );
-		if( symbolIterator != this->symbolsT.end() ) {
-			return symbolIterator->second;
+		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::const_iterator symbolIterator = this->symbolsT.find( name );
+		if( symbolIterator != this->symbolsT.end() && symbolIterator->second.empty() == false ) {
+			return symbolIterator->second.front();
 		}
 		if( this->parentT ) {
 			return this->parentT->lookup( name );
 		}
 		return nullptr;
 	}
-	
+
 	SymbolSharedPointer Scope::lookupLocal( const std::string& name ) const {
-		std::unordered_map<std::string,SymbolSharedPointer>::const_iterator symbolIterator = this->symbolsT.find( name );
+		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::const_iterator symbolIterator = this->symbolsT.find( name );
+		if( symbolIterator != this->symbolsT.end() && symbolIterator->second.empty() == false ) {
+			return symbolIterator->second.front();
+		}
+		return nullptr;
+	}
+
+	std::vector<SymbolSharedPointer> Scope::lookupAll( const std::string& name ) const {
+		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::const_iterator symbolIterator = this->symbolsT.find( name );
 		if( symbolIterator != this->symbolsT.end() ) {
 			return symbolIterator->second;
 		}
-		return nullptr;
+		if( this->parentT ) {
+			return this->parentT->lookupAll( name );
+		}
+		return {};
+	}
+
+	std::vector<SymbolSharedPointer> Scope::lookupAllLocal( const std::string& name ) const {
+		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::const_iterator symbolIterator = this->symbolsT.find( name );
+		if( symbolIterator != this->symbolsT.end() ) {
+			return symbolIterator->second;
+		}
+		return {};
 	}
 	
 }
