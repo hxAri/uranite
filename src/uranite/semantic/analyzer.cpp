@@ -193,20 +193,19 @@ namespace uranite::semantic {
 		}
 	}
 	
-	void Analyzer::importModuleSymbols( const std::unordered_map<std::string, SymbolSharedPointer>& symbols ) {
-		for( const std::pair<const std::string, SymbolSharedPointer>& entry : symbols ) {
-			SymbolSharedPointer existing = this->currentScope->lookupLocal( entry.first );
-			if( existing == nullptr ) {
-				this->currentScope->define( entry.first, entry.second );
+	void Analyzer::importModuleSymbols( const std::unordered_map<std::string, std::vector<SymbolSharedPointer>>& symbols ) {
+		for( const std::pair<const std::string, std::vector<SymbolSharedPointer>>& entry : symbols ) {
+			for( const SymbolSharedPointer& symbol : entry.second ) {
+				this->currentScope->define( entry.first, symbol );
 			}
 		}
 	}
-	
+
 	std::unordered_map<std::string, TypeSharedPointer> Analyzer::getRegisteredTypes() const {
 		return this->typeRegistry.getUserTypes();
 	}
-	
-	std::unordered_map<std::string, SymbolSharedPointer> Analyzer::getRegisteredSymbols() const {
+
+	std::unordered_map<std::string, std::vector<SymbolSharedPointer>> Analyzer::getRegisteredSymbols() const {
 		return this->globalScope_->symbols();
 	}
 	
@@ -765,7 +764,10 @@ namespace uranite::semantic {
 					SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( functionDeclaration.name, Symbol::Kind::Function, functionDeclaration.source, functionType );
 					functionSymbol->access = functionDeclaration.access;
 					functionSymbol->isInitialized = true;
-					this->currentScope->define( functionDeclaration.name, functionSymbol );
+					if( this->currentScope->define( functionDeclaration.name, functionSymbol ) == false ) {
+						std::string duplicateOverloadMessage = fmt::format( "function \"{}\" already has an overload with the same parameter signature", functionDeclaration.name );
+						this->diagnostic.error( functionDeclaration.source, duplicateOverloadMessage );
+					}
 					break;
 				}
 				case ast::Node::Kind::TypeAliasDeclaration: {
@@ -1114,7 +1116,98 @@ namespace uranite::semantic {
 			return this->typeRegistry.getError();
 		}
 		FunctionTypeSharedPointer functionType = std::static_pointer_cast<FunctionType>( calleeType );
-		
+
+		// Overload resolution: if callee is an identifier with multiple function symbols, pick best match
+		if( expression.callee->kind == ast::Node::Kind::IdentifierExpression ) {
+			ast::nodes::IdentifierExpression& identifierCallee = static_cast<ast::nodes::IdentifierExpression&>( *expression.callee );
+			std::vector<SymbolSharedPointer> overloadCandidates = this->currentScope->lookupAll( identifierCallee.name );
+			if( overloadCandidates.size() > 1 ) {
+				std::vector<TypeSharedPointer> argumentTypes;
+				for( ast::nodes::ExpressionSharedPointer& argument : expression.arguments ) {
+					argumentTypes.push_back( this->analyzeExpression( argument ) );
+				}
+				size_t argumentCount = argumentTypes.size();
+				int bestScore = -1;
+				FunctionTypeSharedPointer bestFunctionType = nullptr;
+				SymbolSharedPointer bestSymbol = nullptr;
+				bool bestIsExactArity = false;
+				bool ambiguous = false;
+				for( const SymbolSharedPointer& candidate : overloadCandidates ) {
+					if( candidate->kind != Symbol::Kind::Function || candidate->typeref == nullptr || candidate->typeref->kind != Type::Kind::Function ) {
+						continue;
+					}
+					FunctionTypeSharedPointer candidateFunction = std::static_pointer_cast<FunctionType>( candidate->typeref );
+					size_t candidateFixedParamCount;
+					if( candidateFunction->variadicParameterIndex >= 0 ) {
+						candidateFixedParamCount = static_cast<size_t>( candidateFunction->variadicParameterIndex );
+					}
+					else if( candidateFunction->keywordParameterIndex >= 0 ) {
+						candidateFixedParamCount = static_cast<size_t>( candidateFunction->keywordParameterIndex );
+					}
+					else {
+						candidateFixedParamCount = candidateFunction->parameterTypes.size();
+					}
+					if( argumentCount < candidateFixedParamCount ) {
+						continue;
+					}
+					if( argumentCount > candidateFixedParamCount && candidateFunction->variadicParameterIndex < 0 && candidateFunction->isVariadic == false ) {
+						continue;
+					}
+					int score = 0;
+					bool compatible = true;
+					for( size_t paramIndex = 0; paramIndex < candidateFixedParamCount && paramIndex < argumentCount; paramIndex++ ) {
+						if( argumentTypes[paramIndex] == nullptr || argumentTypes[paramIndex]->isError() ) {
+							continue;
+						}
+						if( candidateFunction->parameterTypes[paramIndex]->toString() == argumentTypes[paramIndex]->toString() ) {
+							score += 2;
+						}
+						else if( this->typeRegistry.isAssignable( candidateFunction->parameterTypes[paramIndex], argumentTypes[paramIndex] ) ) {
+							score += 1;
+						}
+						else {
+							compatible = false;
+							break;
+						}
+					}
+					if( compatible == false ) {
+						continue;
+					}
+					bool candidateIsExactArity = ( candidateFunction->variadicParameterIndex < 0 && candidateFunction->isVariadic == false && argumentCount == candidateFunction->parameterTypes.size() );
+					if( score > bestScore ) {
+						bestScore = score;
+						bestFunctionType = candidateFunction;
+						bestSymbol = candidate;
+						bestIsExactArity = candidateIsExactArity;
+						ambiguous = false;
+					}
+					else if( score == bestScore && bestFunctionType != nullptr ) {
+						if( candidateIsExactArity && bestIsExactArity == false ) {
+							bestFunctionType = candidateFunction;
+							bestSymbol = candidate;
+							bestIsExactArity = candidateIsExactArity;
+							ambiguous = false;
+						}
+						else if( candidateIsExactArity == false && bestIsExactArity ) {
+							// current best already more specific
+						}
+						else {
+							ambiguous = true;
+						}
+					}
+				}
+				if( ambiguous ) {
+					std::string ambiguousOverloadMessage = fmt::format( "ambiguous call to overloaded function \"{}\"", identifierCallee.name );
+					this->diagnostic.error( expression.source, ambiguousOverloadMessage );
+				}
+				if( bestFunctionType != nullptr ) {
+					functionType = bestFunctionType;
+					calleeType = bestFunctionType;
+					identifierCallee.resolvedSymbol = bestSymbol;
+				}
+			}
+		}
+
 		// Determine fixed parameter count (excluding variadic/keyword params)
 		size_t fixedParamCount;
 		if( functionType->variadicParameterIndex >= 0 ) {
@@ -2278,14 +2371,11 @@ namespace uranite::semantic {
 			}
 		}
 		
-		// Register function in current scope (skip if already forward-declared)
-		SymbolSharedPointer existingSymbol = this->currentScope->lookupLocal( declaration.name );
-		if( existingSymbol == nullptr ) {
-			SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( declaration.name, Symbol::Kind::Function, declaration.source, functionType );
-			functionSymbol->access = declaration.access;
-			functionSymbol->isInitialized = true;
-			this->currentScope->define( declaration.name, functionSymbol );
-		}
+		// Register function in current scope (overloads allowed via vector-backed scope)
+		SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( declaration.name, Symbol::Kind::Function, declaration.source, functionType );
+		functionSymbol->access = declaration.access;
+		functionSymbol->isInitialized = true;
+		this->currentScope->define( declaration.name, functionSymbol );
 		
 		// Analyze function body
 		this->pushScope( Scope::Kind::Function );
@@ -3328,12 +3418,13 @@ namespace uranite::semantic {
 			else {
 				priority = 1;
 			}
-			for( const std::pair<const std::string, SymbolSharedPointer>& symbolEntry : scope->symbols() ) {
+			for( const std::pair<const std::string, std::vector<SymbolSharedPointer>>& symbolEntry : scope->symbols() ) {
 				const std::string& symbolName = symbolEntry.first;
 				if( seenLabels.count( symbolName ) > 0 ) continue;
+				if( symbolEntry.second.empty() ) continue;
 				seenLabels.insert( symbolName );
-				
-				const SymbolSharedPointer& symbol = symbolEntry.second;
+
+				const SymbolSharedPointer& symbol = symbolEntry.second.front();
 				std::string typeString = symbol->typeref ? symbol->typeref->toString() : "";
 				CompletionItem item( symbolName, symbol->kind, typeString );
 				item.sortPriority = priority;
