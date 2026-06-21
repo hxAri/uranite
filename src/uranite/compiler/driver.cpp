@@ -351,6 +351,10 @@ namespace uranite::compiler {
 					}
 
 					if( existingIdentifier.empty() == false && existingIdentifier == declarationIdentifier ) {
+						if( existingDeclaration->kind == ast::Node::Kind::FunctionDeclaration &&
+							moduleDeclaration->kind == ast::Node::Kind::FunctionDeclaration ) {
+							continue;
+						}
 						isDuplicateDeclarationFound = true;
 						break;
 					}
