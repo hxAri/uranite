@@ -77,7 +77,7 @@ namespace uranite::doc {
 	 * @struct ComplexityDocumentation
 	 * @brief Encapsulates algorithmic performance guarantees using Big-O notation.
 	 * * Holds the parsed semantic components originating from custom performance or complexity tracking tags 
-	 * (e.g., `@complexity`). Highly beneficial for low-level systems programming in Aether.
+	 * (e.g., `@complexity`). Highly beneficial for low-level systems programming in Uranite.
 	 */
 	struct ComplexityDocumentation {
 		
