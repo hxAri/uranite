@@ -38,7 +38,7 @@ namespace uranite::doc {
 		return contentStream.str();
 	}
 	
-	static void collectAetherFiles( const std::string& directoryPath, std::vector<std::string>& collectedFiles ) {
+	static void collectUraniteFiles( const std::string& directoryPath, std::vector<std::string>& collectedFiles ) {
 		for( const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator( directoryPath ) ) {
 			if( entry.is_regular_file() && entry.path().extension() == ".urn" ) {
 				collectedFiles.push_back( entry.path().string() );
@@ -79,7 +79,7 @@ namespace uranite::doc {
 		site.inputBaseDirectory = directoryPath;
 		site.projectMetadata = this->readProjectMetadata( directoryPath );
 		std::vector<std::string> sourceFiles;
-		collectAetherFiles( directoryPath, sourceFiles );
+		collectUraniteFiles( directoryPath, sourceFiles );
 		for( const std::string& sourceFile : sourceFiles ) {
 			ModuleDocumentation moduleDoc = this->extractFromFile( sourceFile );
 			if( moduleDoc.packageName.empty() ) {
