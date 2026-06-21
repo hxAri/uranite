@@ -32,11 +32,11 @@ typedef enum {
     URANITE_TASK_SUSPENDED,
     URANITE_TASK_IO_WAITING,
     URANITE_TASK_COMPLETED
-} AetherTaskState;
+} UraniteTaskState;
 
-typedef struct AetherTask {
+typedef struct UraniteTask {
     int64_t id;
-    AetherTaskState state;
+    UraniteTaskState state;
     void (*function)(void*);
     ucontext_t context;
     char* stack;
@@ -48,17 +48,17 @@ typedef struct AetherTask {
     int waitingFd;
     uint32_t waitingEvents;
     void* userData;
-} AetherTask;
+} UraniteTask;
 
 typedef struct {
-    AetherTask* tasks[URANITE_MAX_TASKS];
+    UraniteTask* tasks[URANITE_MAX_TASKS];
     int taskCount;
     int currentTaskIndex;
-    AetherTask* currentTask;
+    UraniteTask* currentTask;
     ucontext_t schedulerContext;
     int64_t nextTaskId;
     int epollFd;
-} AetherScheduler;
+} UraniteScheduler;
 
 void uraniteSchedulerInit(void);
 int64_t uraniteSpawnTask(void (*func)(void*), void* userData);
@@ -67,7 +67,7 @@ void uraniteTaskYield(void);
 int64_t uraniteAwaitTask(int64_t taskId);
 void uraniteRunScheduler(void);
 int uraniteHasPendingTasks(void);
-AetherTask* uraniteGetCurrentTask(void);
+UraniteTask* uraniteGetCurrentTask(void);
 
 // Error propagation
 void uraniteTaskError(void* task, const char* message);
