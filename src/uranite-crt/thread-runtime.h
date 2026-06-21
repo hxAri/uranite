@@ -21,22 +21,22 @@
 
 #include <stdint.h>
 
-typedef struct AetherThread AetherThread;
-typedef struct AetherMutex AetherMutex;
+typedef struct UraniteThread UraniteThread;
+typedef struct UraniteMutex UraniteMutex;
 
 // Thread creation and management
-AetherThread* uraniteThreadCreate(void (*entry)(void*), void* arg);
-void uraniteThreadJoin(AetherThread* thread);
-void uraniteThreadDetach(AetherThread* thread);
-void uraniteThreadDestroy(AetherThread* thread);
-int64_t uraniteThreadId(AetherThread* thread);
+UraniteThread* uraniteThreadCreate(void (*entry)(void*), void* arg);
+void uraniteThreadJoin(UraniteThread* thread);
+void uraniteThreadDetach(UraniteThread* thread);
+void uraniteThreadDestroy(UraniteThread* thread);
+int64_t uraniteThreadId(UraniteThread* thread);
 
 // Mutex
-AetherMutex* uraniteMutexCreate(void);
-void uraniteMutexLock(AetherMutex* mutex);
-void uraniteMutexUnlock(AetherMutex* mutex);
-int uraniteMutexTryLock(AetherMutex* mutex);
-void uraniteMutexDestroy(AetherMutex* mutex);
+UraniteMutex* uraniteMutexCreate(void);
+void uraniteMutexLock(UraniteMutex* mutex);
+void uraniteMutexUnlock(UraniteMutex* mutex);
+int uraniteMutexTryLock(UraniteMutex* mutex);
+void uraniteMutexDestroy(UraniteMutex* mutex);
 
 // Atomics
 int64_t uraniteAtomicLoad(int64_t* ptr);
@@ -46,29 +46,29 @@ int64_t uraniteAtomicSub(int64_t* ptr, int64_t val);
 int uraniteAtomicCompareExchange(int64_t* ptr, int64_t* expected, int64_t desired);
 
 // ConditionVariable
-typedef struct AetherCondVar AetherCondVar;
-AetherCondVar* uraniteCondVarCreate(void);
-void uraniteCondVarWait(AetherCondVar* cv, AetherMutex* mutex);
-int uraniteCondVarTimedWait(AetherCondVar* cv, AetherMutex* mutex, int64_t timeoutMs);
-void uraniteCondVarSignal(AetherCondVar* cv);
-void uraniteCondVarBroadcast(AetherCondVar* cv);
-void uraniteCondVarDestroy(AetherCondVar* cv);
+typedef struct UraniteCondVar UraniteCondVar;
+UraniteCondVar* uraniteCondVarCreate(void);
+void uraniteCondVarWait(UraniteCondVar* cv, UraniteMutex* mutex);
+int uraniteCondVarTimedWait(UraniteCondVar* cv, UraniteMutex* mutex, int64_t timeoutMs);
+void uraniteCondVarSignal(UraniteCondVar* cv);
+void uraniteCondVarBroadcast(UraniteCondVar* cv);
+void uraniteCondVarDestroy(UraniteCondVar* cv);
 
 // Semaphore
-typedef struct AetherSemaphore AetherSemaphore;
-AetherSemaphore* uraniteSemaphoreCreate(int64_t initial);
-void uraniteSemaphoreAcquire(AetherSemaphore* sem);
-int uraniteSemaphoreTryAcquire(AetherSemaphore* sem);
-void uraniteSemaphoreRelease(AetherSemaphore* sem);
-void uraniteSemaphoreDestroy(AetherSemaphore* sem);
+typedef struct UraniteSemaphore UraniteSemaphore;
+UraniteSemaphore* uraniteSemaphoreCreate(int64_t initial);
+void uraniteSemaphoreAcquire(UraniteSemaphore* sem);
+int uraniteSemaphoreTryAcquire(UraniteSemaphore* sem);
+void uraniteSemaphoreRelease(UraniteSemaphore* sem);
+void uraniteSemaphoreDestroy(UraniteSemaphore* sem);
 
 // ReadWriteLock
-typedef struct AetherRWLock AetherRWLock;
-AetherRWLock* uraniteRWLockCreate(void);
-void uraniteRWLockReadLock(AetherRWLock* rwl);
-void uraniteRWLockWriteLock(AetherRWLock* rwl);
-void uraniteRWLockUnlock(AetherRWLock* rwl);
-void uraniteRWLockDestroy(AetherRWLock* rwl);
+typedef struct UraniteRWLock UraniteRWLock;
+UraniteRWLock* uraniteRWLockCreate(void);
+void uraniteRWLockReadLock(UraniteRWLock* rwl);
+void uraniteRWLockWriteLock(UraniteRWLock* rwl);
+void uraniteRWLockUnlock(UraniteRWLock* rwl);
+void uraniteRWLockDestroy(UraniteRWLock* rwl);
 
 // Sleep
 void uraniteThreadSleep(int64_t milliseconds);
