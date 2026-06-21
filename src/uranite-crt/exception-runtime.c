@@ -1,3 +1,21 @@
+
+//
+// @author hxAri (hxari)
+// @create 2025-02-24 15:15
+// @github https://github.com/uranite-lang/uranite
+//
+// Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+// Uranite Licence under GNU General Public Licence v3
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// any later version.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 #include "exception-runtime.h"
 
 #include <stdio.h>
@@ -8,12 +26,12 @@ static const uint64_t URANITE_EXCEPTION_CLASS = 0x4145544852000000ULL;
 
 #define URANITE_MAX_STACK_FRAMES 256
 
-static AetherStackFrame uranite_frame_stack[URANITE_MAX_STACK_FRAMES];
+static UraniteStackFrame uranite_frame_stack[URANITE_MAX_STACK_FRAMES];
 static int uranite_frame_depth = 0;
 
 void __uranite_push_frame( const char* file, int64_t line, int64_t column, const char* function ) {
     if( uranite_frame_depth < URANITE_MAX_STACK_FRAMES ) {
-        AetherStackFrame* frame = &uranite_frame_stack[uranite_frame_depth];
+        UraniteStackFrame* frame = &uranite_frame_stack[uranite_frame_depth];
         frame->file = file;
         frame->line = line;
         frame->column = column;
@@ -37,7 +55,7 @@ typedef struct {
     char* file;
     int64_t line;
     char* message;
-} AetherThrowableLayout;
+} UraniteThrowableLayout;
 
 static void print_source_context( const char* filepath, int64_t errorLine ) {
     if( filepath == NULL || filepath[0] == '\0' || errorLine <= 0 ) {
@@ -81,7 +99,7 @@ static void print_call_stack( void ) {
     }
     fprintf( stderr, "\033[1;33mCall stack\033[0m (most recent call last):\n" );
     for( int i = 0; i < uranite_frame_depth; i++ ) {
-        AetherStackFrame* frame = &uranite_frame_stack[i];
+        UraniteStackFrame* frame = &uranite_frame_stack[i];
         const char* funcName = frame->function ? frame->function : "<unknown>";
         if( frame->file != NULL && frame->file[0] != '\0' && frame->line > 0 ) {
             if( frame->column > 0 ) {
@@ -100,7 +118,7 @@ static void print_call_stack( void ) {
 }
 
 static void report_unhandled_exception( void* object, const char* typeName ) {
-    AetherThrowableLayout* throwable = (AetherThrowableLayout*)object;
+    UraniteThrowableLayout* throwable = (UraniteThrowableLayout*)object;
     const char* name = ( typeName != NULL && typeName[0] != '\0' ) ? typeName : "Exception";
     const char* message = ( throwable->message != NULL ) ? throwable->message : "(no message)";
     const char* file = throwable->file;
@@ -121,7 +139,7 @@ static void report_unhandled_exception( void* object, const char* typeName ) {
 }
 
 void __uranite_throw( void* object, const char* typeName ) {
-    AetherException* exc = (AetherException*)malloc( sizeof( AetherException ) );
+    UraniteException* exc = (UraniteException*)malloc( sizeof( UraniteException ) );
     memset( &exc->header, 0, sizeof( struct _Unwind_Exception ) );
     exc->header.exception_class = URANITE_EXCEPTION_CLASS;
     exc->header.exception_cleanup = uranite_exception_cleanup;
@@ -132,7 +150,7 @@ void __uranite_throw( void* object, const char* typeName ) {
 }
 
 void* __uranite_begin_catch( void* unwind_exception_ptr ) {
-    AetherException* exc = (AetherException*)unwind_exception_ptr;
+    UraniteException* exc = (UraniteException*)unwind_exception_ptr;
     return exc->uraniteObject;
 }
 
