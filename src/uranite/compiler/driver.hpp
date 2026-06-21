@@ -40,7 +40,7 @@ namespace uranite::compiler {
 		std::set<std::string> exportedEntities;
 		std::unordered_map<std::string, ast::AccessModifier> entityAccessMap;
 		std::unordered_map<std::string, semantic::TypeSharedPointer> analyzedTypes;
-		std::unordered_map<std::string, semantic::SymbolSharedPointer> analyzedSymbols;
+		std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>> analyzedSymbols;
 		enum class State { Parsed, Analyzing, Analyzed };
 		State state = State::Parsed;
 	};
