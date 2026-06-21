@@ -30,7 +30,7 @@
 
 #include "uranite-crt/async-runtime.h"
 
-static AetherScheduler globalScheduler;
+static UraniteScheduler globalScheduler;
 static int schedulerInitialized = 0;
 
 void uraniteSchedulerInit(void) {
@@ -46,7 +46,7 @@ void uraniteSchedulerInit(void) {
 }
 
 static void taskTrampoline(int highBits, int lowBits) {
-    AetherTask* task = (AetherTask*)(((uintptr_t)(unsigned int)highBits << 32) | (uintptr_t)(unsigned int)lowBits);
+    UraniteTask* task = (UraniteTask*)(((uintptr_t)(unsigned int)highBits << 32) | (uintptr_t)(unsigned int)lowBits);
     task->function((void*)task);
     if (task->state != URANITE_TASK_COMPLETED) {
         task->state = URANITE_TASK_COMPLETED;
@@ -58,7 +58,7 @@ int64_t uraniteSpawnTask(void (*func)(void*), void* userData) {
     if (!schedulerInitialized) uraniteSchedulerInit();
     if (globalScheduler.taskCount >= URANITE_MAX_TASKS) return -1;
 
-    AetherTask* task = (AetherTask*)calloc(1, sizeof(AetherTask));
+    UraniteTask* task = (UraniteTask*)calloc(1, sizeof(UraniteTask));
     task->id = globalScheduler.nextTaskId++;
     task->state = URANITE_TASK_CREATED;
     task->function = func;
@@ -82,7 +82,7 @@ int64_t uraniteSpawnTask(void (*func)(void*), void* userData) {
     return task->id;
 }
 
-static AetherTask* findTaskById(int64_t taskId) {
+static UraniteTask* findTaskById(int64_t taskId) {
     for (int i = 0; i < globalScheduler.taskCount; i++) {
         if (globalScheduler.tasks[i] && globalScheduler.tasks[i]->id == taskId) {
             return globalScheduler.tasks[i];
@@ -92,7 +92,7 @@ static AetherTask* findTaskById(int64_t taskId) {
 }
 
 void uraniteTaskComplete(void* taskPtr, int64_t result) {
-    AetherTask* task = (AetherTask*)taskPtr;
+    UraniteTask* task = (UraniteTask*)taskPtr;
     task->result = result;
     task->hasResult = 1;
     task->state = URANITE_TASK_COMPLETED;
@@ -102,7 +102,7 @@ void uraniteTaskComplete(void* taskPtr, int64_t result) {
 }
 
 void uraniteTaskError(void* taskPtr, const char* message) {
-    AetherTask* task = (AetherTask*)taskPtr;
+    UraniteTask* task = (UraniteTask*)taskPtr;
     task->hasError = 1;
     task->errorMessage = message;
     task->state = URANITE_TASK_COMPLETED;
@@ -112,28 +112,28 @@ void uraniteTaskError(void* taskPtr, const char* message) {
 }
 
 int uraniteTaskHasError(int64_t taskId) {
-    AetherTask* target = findTaskById(taskId);
+    UraniteTask* target = findTaskById(taskId);
     if (!target) return 0;
     return target->hasError;
 }
 
 const char* uraniteTaskGetError(int64_t taskId) {
-    AetherTask* target = findTaskById(taskId);
+    UraniteTask* target = findTaskById(taskId);
     if (!target) return NULL;
     return target->errorMessage;
 }
 
 void uraniteTaskYield(void) {
-    AetherTask* task = globalScheduler.currentTask;
+    UraniteTask* task = globalScheduler.currentTask;
     if (!task) return;
     task->state = URANITE_TASK_SUSPENDED;
     swapcontext(&task->context, &globalScheduler.schedulerContext);
 }
 
-static int canRunTask(AetherTask* task) {
+static int canRunTask(UraniteTask* task) {
     if (task->state == URANITE_TASK_COMPLETED || task->state == URANITE_TASK_IO_WAITING) return 0;
     if (task->awaitingTaskId >= 0) {
-        AetherTask* awaited = findTaskById(task->awaitingTaskId);
+        UraniteTask* awaited = findTaskById(task->awaitingTaskId);
         if (awaited && awaited->state != URANITE_TASK_COMPLETED) return 0;
     }
     return 1;
@@ -163,7 +163,7 @@ static void uraniteRunSchedulerLoop(void) {
 
             int nfds = epoll_wait(globalScheduler.epollFd, events, URANITE_MAX_EVENTS, -1);
             for (int n = 0; n < nfds; n++) {
-                AetherTask* task = (AetherTask*)events[n].data.ptr;
+                UraniteTask* task = (UraniteTask*)events[n].data.ptr;
                 task->state = URANITE_TASK_SUSPENDED;
                 epoll_ctl(globalScheduler.epollFd, EPOLL_CTL_DEL, task->waitingFd, NULL);
                 task->waitingFd = -1;
@@ -172,7 +172,7 @@ static void uraniteRunSchedulerLoop(void) {
         }
 
         for (int i = 0; i < globalScheduler.taskCount; i++) {
-            AetherTask* task = globalScheduler.tasks[i];
+            UraniteTask* task = globalScheduler.tasks[i];
             if (!task || !canRunTask(task)) continue;
 
             globalScheduler.currentTask = task;
@@ -189,11 +189,11 @@ static void uraniteRunSchedulerLoop(void) {
 }
 
 int64_t uraniteAwaitTask(int64_t taskId) {
-    AetherTask* target = findTaskById(taskId);
+    UraniteTask* target = findTaskById(taskId);
     if (!target) return 0;
     if (target->state == URANITE_TASK_COMPLETED) return target->result;
 
-    AetherTask* current = globalScheduler.currentTask;
+    UraniteTask* current = globalScheduler.currentTask;
     if (current) {
         current->state = URANITE_TASK_SUSPENDED;
         current->awaitingTaskId = taskId;
@@ -206,7 +206,7 @@ int64_t uraniteAwaitTask(int64_t taskId) {
     return target->result;
 }
 
-AetherTask* uraniteGetCurrentTask(void) {
+UraniteTask* uraniteGetCurrentTask(void) {
     return globalScheduler.currentTask;
 }
 
@@ -221,7 +221,7 @@ int uraniteHasPendingTasks(void) {
 }
 
 void uraniteAwaitFD(int fd, uint32_t events) {
-    AetherTask* task = globalScheduler.currentTask;
+    UraniteTask* task = globalScheduler.currentTask;
     if (!task) return;
 
     task->state = URANITE_TASK_IO_WAITING;
