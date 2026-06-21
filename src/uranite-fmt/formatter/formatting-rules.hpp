@@ -25,7 +25,7 @@ namespace uranite::formatter {
 	
 	/**
 	 * @struct FormattingRules
-	 * @brief Configuration dataset defining code style layout rules for the Aether Formatter.
+	 * @brief Configuration dataset defining code style layout rules for the Uranite Formatter.
 	 *
 	 * This structure aggregates configuration flags, line boundaries, and sorting mechanics.
 	 * Modifying these parameters allows the orchestration engine to shift between varying standard 
