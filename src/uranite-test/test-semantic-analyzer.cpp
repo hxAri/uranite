@@ -296,6 +296,16 @@ TEST_F( SemanticAnalyzerTest, FunctionOverloadDifferentArity ) {
 
 TEST_F( SemanticAnalyzerTest, FunctionOverloadRejectsDuplicateSignature ) {
     bool result = this->analyze(
+        "function duplicate() -> Int:\n"
+        "    return 0\n"
+        "function duplicate() -> String:\n"
+        "    return \"String\"\n"
+    );
+    EXPECT_FALSE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadRejectsDuplicateSignatureParameter ) {
+    bool result = this->analyze(
         "function duplicate( I64 x ) -> Void:\n"
         "    I64 a = x\n"
         "function duplicate( I64 y ) -> Void:\n"
