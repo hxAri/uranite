@@ -35,7 +35,7 @@ namespace uranite::semantic {
 			for( size_t existingIndex = 0; existingIndex < existingIterator->second.size(); existingIndex++ ) {
 				const SymbolSharedPointer& existingSymbol = existingIterator->second[existingIndex];
 				if( existingSymbol->source != nullptr && symbol->source != nullptr &&
-					existingSymbol->source->pathname == symbol->source->pathname &&
+					existingSymbol->source->filename == symbol->source->filename &&
 					existingSymbol->source->location != nullptr && symbol->source->location != nullptr &&
 					existingSymbol->source->location->line == symbol->source->location->line ) {
 					existingIterator->second[existingIndex] = symbol;
@@ -54,6 +54,11 @@ namespace uranite::semantic {
 							}
 						}
 						if( signatureMatch ) {
+							bool crossModuleDuplicate = ( existingSymbol->source != nullptr && symbol->source != nullptr &&
+								existingSymbol->source->filename != symbol->source->filename );
+							if( crossModuleDuplicate ) {
+								return true;
+							}
 							return false;
 						}
 					}
