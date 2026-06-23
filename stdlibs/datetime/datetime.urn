@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/datetime/datetime.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/datetime/datetime.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,23 +22,23 @@
 
 package uranite.datetime.datetime
 
-from uranite.os.syscall.invoke import syscall2
-from uranite.os.syscall.result import SyscallResult
-from uranite.memory.memory import Memory
-from uranite.io.syscall import {
-    memoryToPtr,
-    readI64At,
-    writeI64At,
-    writeByteAt,
-    readByteAt,
-    stringToPtr,
-    stringLen
-}
-from uranite.memory.allocator import alloc
-from uranite.functions.builtin import ptrToString
-from uranite.string.format import padZero, appendTo
 from uranite.datetime.duration import Duration, SECS_PER_DAY
 from uranite.datetime.errors import DateTimeError, InvalidDateError
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import {
+    memoryToPtr,
+    readByteAt,
+    readI64At,
+    stringLen,
+    stringToPtr,
+    writeByteAt,
+    writeI64At
+}
+from uranite.memory.allocator import alloc
+from uranite.memory.memory import Memory
+from uranite.os.syscall.invoke import syscall2
+from uranite.os.syscall.result import SyscallResult
+from uranite.string.format import appendTo, padZero
 
 const I64 SYS_CLOCK_GETTIME = 228
 """ Linux syscall number for clock_gettime. """
@@ -129,7 +129,7 @@ public function daysInYear( I64 year ) -> I64:
         return 366
     return 365
 
-public function clockGettime( I64 clockId ) -> Memory<I64>:
+function clockGettime( I64 clockId ) -> Memory<I64>:
     
     """
     Read the current time from the given kernel clock via the
@@ -702,20 +702,18 @@ public function date( I64 year, I64 month, I64 day ) -> DateTime:
     return new DateTime( year, month, day, 0, 0, 0, 0, 0 )
 
 export {
+    CLOCK_MONOTONIC,
+    CLOCK_REALTIME,
     DateTime,
-    isLeapYear,
+    EPOCH_YEAR,
+    date,
     daysInMonth,
     daysInYear,
     fromTimestamp,
+    isLeapYear,
     now,
     nowMonotonic,
-    utc,
-    date,
-    padTwo,
     padFour,
-    clockGettime,
-    SYS_CLOCK_GETTIME,
-    CLOCK_REALTIME,
-    CLOCK_MONOTONIC,
-    EPOCH_YEAR
+    padTwo,
+    utc
 }
