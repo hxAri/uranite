@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/fs/uranitefs.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/fs/uranitefs.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,8 +20,10 @@
 
 package uranite.io.fs.uranitefs
 
-from uranite.os.fs.uranitefs import UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
+from uranite.os.fs.uranitefs import UraniteFileSystem, UraniteFsInode, UraniteFsSuperblock
 
 export {
-    UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
+    UraniteFileSystem,
+    UraniteFsInode,
+    UraniteFsSuperblock
 }
