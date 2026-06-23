@@ -1,7 +1,7 @@
 package testing
 
-from uranite.sys.errors import SyscallError
 from uranite.io.console import putsln
+from uranite.sys.errors import SyscallError
 
 public function main() -> I32:
     putsln( "=== Sys Errors Tests ===" )
