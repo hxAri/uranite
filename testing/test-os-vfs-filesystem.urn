@@ -1,13 +1,13 @@
 package testing
 
-from uranite.testing.assertions import assertEqualI64
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
     putsln( "=== OS VFS Filesystem Tests ===" )
 
     # FileSystem is an interface — cannot instantiate directly
-    # Concrete implementations (Fat32, Ext4, AetherFS) tested separately
+    # Concrete implementations (Fat32, Ext4, UraniteFS) tested separately
     assertEqualI64( 1, 1, "compile verification" )
 
     putsln( "=== All filesystem tests passed ===" )
