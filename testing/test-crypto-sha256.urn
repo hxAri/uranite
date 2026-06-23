@@ -1,10 +1,10 @@
 package testing
 
 from uranite.crypto.sha256 import Sha256, sha256
-from uranite.encoding.binary import writeI8, readI8
+from uranite.encoding.binary import readI8, writeI8
+from uranite.io.console import putsln
 from uranite.memory.allocator import alloc, dealloc
 from uranite.testing.assertions import assertEqualI64, assertNotEqualI64
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Crypto SHA-256 Tests ===" )
