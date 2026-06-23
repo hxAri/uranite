@@ -1,12 +1,8 @@
 package testing
 
 from uranite.collection.hash-set import HashSet, HashSetIterator
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertTrue,
-    assertFalse
-}
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== HashSet Tests ===" )
