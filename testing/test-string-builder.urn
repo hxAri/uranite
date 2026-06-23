@@ -1,13 +1,8 @@
 package testing
 
-from uranite.string.builder import StringBuilder
-from uranite.testing.assertions import {
-    assertEqualStr,
-    assertEqualI64,
-    assertTrue,
-    assertGreaterOrEqual
-}
 from uranite.io.console import putsln
+from uranite.string.builder import StringBuilder
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertGreaterOrEqual, assertTrue
 
 public function main() -> I32:
     putsln( "=== StringBuilder Tests ===" )
