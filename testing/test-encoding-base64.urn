@@ -1,14 +1,17 @@
 package testing
 
 from uranite.encoding.base64 import {
-    initializeBase64Tables, base64Encode, base64Decode,
-    base64EncodedLength, base64DecodedLength
+    base64Decode,
+    base64DecodedLength,
+    base64Encode,
+    base64EncodedLength,
+    initializeBase64Tables
 }
-from uranite.encoding.binary import writeI8, readI8
+from uranite.encoding.binary import readI8, writeI8
+from uranite.io.console import putsln
+from uranite.io.syscall import stringLen, stringToPtr
 from uranite.memory.allocator import alloc, dealloc
 from uranite.testing.assertions import assertEqualI64, assertTrue
-from uranite.io.console import putsln
-from uranite.io.syscall import stringToPtr, stringLen
 
 public function main() -> I32:
     putsln( "=== Encoding Base64 Tests ===" )
