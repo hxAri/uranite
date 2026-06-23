@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-27 19:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/channel.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/channel.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,12 +22,12 @@
 package uranite.threading.channel
 
 from uranite.memory.memory import Memory
-from uranite.os.sync.spinlock import Spinlock
-from uranite.os.sync.semaphore import Semaphore
 from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.sync.semaphore import Semaphore
+from uranite.os.sync.spinlock import Spinlock
 from uranite.os.task.task import BlockReason
+from uranite.threading.atomic import AtomicBoolean, AtomicI64
 from uranite.threading.errors import ThreadChannelError
-from uranite.threading.atomic import AtomicI64, AtomicBoolean
 
 public class ChannelInner<T>:
     
@@ -436,7 +436,7 @@ public class Receiver<T>:
         self.inner.closeReceive()
 
 export {
-    Sender,
+    ChannelInner,
     Receiver,
-    ChannelInner
+    Sender
 }
