@@ -24,7 +24,7 @@
 
 static const uint64_t URANITE_EXCEPTION_CLASS = 0x4145544852000000ULL;
 
-#define URANITE_MAX_STACK_FRAMES 256
+#define URANITE_MAX_STACK_FRAMES 4096
 
 static UraniteStackFrame uranite_frame_stack[URANITE_MAX_STACK_FRAMES];
 static int uranite_frame_depth = 0;
