@@ -1,14 +1,17 @@
 package testing
 
-from uranite.os.vfs.vnode import {
-    PERM_READ, PERM_WRITE, PERM_EXECUTE,
-    PERM_OWNER_READ, PERM_OWNER_WRITE, PERM_OWNER_EXECUTE,
-    VNode, VNodeCache
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.vfs.vnode import {
+    PERM_EXECUTE,
+    PERM_OWNER_EXECUTE,
+    PERM_OWNER_READ,
+    PERM_OWNER_WRITE,
+    PERM_READ,
+    PERM_WRITE,
+    VNode,
+    VNodeCache
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS VFS VNode Tests ===" )
