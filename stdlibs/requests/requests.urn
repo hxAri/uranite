@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/requests/requests.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/requests/requests.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,27 +23,24 @@
 
 package uranite.requests.requests
 
+from uranite.net.http.client import sendRequest
 from uranite.net.http.request import HttpRequest
 from uranite.net.http.response import HttpResponse
-from uranite.net.http.client import sendRequest
-from uranite.requests.response import Response
+from uranite.requests.errors import RequestConnectionError, RequestError
 from uranite.requests.headers import Headers, parseHeaders
+from uranite.requests.response import Response
 from uranite.requests.url import ParsedURL, parseURL
-from uranite.requests.errors import RequestError, RequestConnectionError
 
-public function request( String method, I64 ip, I64 port, String path, String body, String contentType ) -> Response:
+public function request( String method, String host, I64 port, String path, String body, String contentType ) -> Response:
 
     """
-    Send an HTTP request using a raw 32-bit IP address and port.
-
-    Low-level entry point for when the caller has already resolved the
-    target address. Prefer the URL-based overloads for ergonomic usage.
+    Send an HTTP request to the specified host and port.
 
     Parameters:
         method (String):
             The HTTP method (e.g., "GET", "POST").
-        ip (I64):
-            The target server IP address as a packed 32-bit integer.
+        host (String):
+            IPv4 address as dotted-decimal string (e.g., "127.0.0.1").
         port (I64):
             The target server port number.
         path (String):
@@ -67,7 +64,7 @@ public function request( String method, I64 ip, I64 port, String path, String bo
         httpRequest.setBody( body )
     if contentType != "":
         httpRequest.setContentType( contentType )
-    HttpResponse httpResponse = sendRequest( ip, port, httpRequest )
+    HttpResponse httpResponse = sendRequest( host, port, httpRequest )
     return new Response( httpResponse.statusCode, httpResponse.body, httpResponse.rawHeaders )
 
 public function request( String method, String url, String body, String contentType ) -> Response:
@@ -75,8 +72,8 @@ public function request( String method, String url, String body, String contentT
     """
     Send an HTTP request using a URL string.
 
-    Parses the URL into host, port, and path, converts the host to a
-    packed IPv4 address, and delegates to the low-level request function.
+    Parses the URL into host, port, and path components, then delegates
+    to the host-based request function.
 
     Parameters:
         method (String):
@@ -98,7 +95,7 @@ public function request( String method, String url, String body, String contentT
     """
 
     ParsedURL parsed = parseURL( url )
-    return request( method, parsed.ipAddress, parsed.port, parsed.path, body, contentType )
+    return request( method, parsed.host, parsed.port, parsed.path, body, contentType )
 
 public function get( String url ) -> Response:
 
@@ -116,14 +113,14 @@ public function get( String url ) -> Response:
 
     return request( "GET", url, "", "" )
 
-public function get( I64 ip, I64 port, String path ) -> Response:
+protect function get( String host, I64 port, String path ) -> Response:
 
     """
-    Send an HTTP GET request using a raw IP address.
+    Send an HTTP GET request using host and port directly.
 
     Parameters:
-        ip (I64):
-            The target server IP as a packed 32-bit integer.
+        host (String):
+            IPv4 address as dotted-decimal string.
         port (I64):
             The target server port number.
         path (String):
@@ -134,7 +131,7 @@ public function get( I64 ip, I64 port, String path ) -> Response:
             The server's response.
     """
 
-    return request( "GET", ip, port, path, "", "" )
+    return request( "GET", host, port, path, "", "" )
 
 public function post( String url, String body ) -> Response:
 
@@ -154,14 +151,14 @@ public function post( String url, String body ) -> Response:
 
     return request( "POST", url, body, "application/json" )
 
-public function post( I64 ip, I64 port, String path, String body ) -> Response:
+protect function post( String host, I64 port, String path, String body ) -> Response:
 
     """
-    Send an HTTP POST request with a JSON body using a raw IP address.
+    Send an HTTP POST request with a JSON body using host and port directly.
 
     Parameters:
-        ip (I64):
-            The target server IP as a packed 32-bit integer.
+        host (String):
+            IPv4 address as dotted-decimal string.
         port (I64):
             The target server port number.
         path (String):
@@ -174,7 +171,7 @@ public function post( I64 ip, I64 port, String path, String body ) -> Response:
             The server's response.
     """
 
-    return request( "POST", ip, port, path, body, "application/json" )
+    return request( "POST", host, port, path, body, "application/json" )
 
 public function put( String url, String body ) -> Response:
 
@@ -194,14 +191,14 @@ public function put( String url, String body ) -> Response:
 
     return request( "PUT", url, body, "application/json" )
 
-public function put( I64 ip, I64 port, String path, String body ) -> Response:
+protect function put( String host, I64 port, String path, String body ) -> Response:
 
     """
-    Send an HTTP PUT request with a JSON body using a raw IP address.
+    Send an HTTP PUT request with a JSON body using host and port directly.
 
     Parameters:
-        ip (I64):
-            The target server IP as a packed 32-bit integer.
+        host (String):
+            IPv4 address as dotted-decimal string.
         port (I64):
             The target server port number.
         path (String):
@@ -214,7 +211,7 @@ public function put( I64 ip, I64 port, String path, String body ) -> Response:
             The server's response.
     """
 
-    return request( "PUT", ip, port, path, body, "application/json" )
+    return request( "PUT", host, port, path, body, "application/json" )
 
 public function del( String url ) -> Response:
 
@@ -232,14 +229,14 @@ public function del( String url ) -> Response:
 
     return request( "DELETE", url, "", "" )
 
-public function del( I64 ip, I64 port, String path ) -> Response:
+protect function del( String host, I64 port, String path ) -> Response:
 
     """
-    Send an HTTP DELETE request using a raw IP address.
+    Send an HTTP DELETE request using host and port directly.
 
     Parameters:
-        ip (I64):
-            The target server IP as a packed 32-bit integer.
+        host (String):
+            IPv4 address as dotted-decimal string.
         port (I64):
             The target server port number.
         path (String):
@@ -250,7 +247,7 @@ public function del( I64 ip, I64 port, String path ) -> Response:
             The server's response.
     """
 
-    return request( "DELETE", ip, port, path, "", "" )
+    return request( "DELETE", host, port, path, "", "" )
 
 public function patch( String url, String body ) -> Response:
 
@@ -270,14 +267,14 @@ public function patch( String url, String body ) -> Response:
 
     return request( "PATCH", url, body, "application/json" )
 
-public function patch( I64 ip, I64 port, String path, String body ) -> Response:
+protect function patch( String host, I64 port, String path, String body ) -> Response:
 
     """
-    Send an HTTP PATCH request with a JSON body using a raw IP address.
+    Send an HTTP PATCH request with a JSON body using host and port directly.
 
     Parameters:
-        ip (I64):
-            The target server IP as a packed 32-bit integer.
+        host (String):
+            IPv4 address as dotted-decimal string.
         port (I64):
             The target server port number.
         path (String):
@@ -290,7 +287,7 @@ public function patch( I64 ip, I64 port, String path, String body ) -> Response:
             The server's response.
     """
 
-    return request( "PATCH", ip, port, path, body, "application/json" )
+    return request( "PATCH", host, port, path, body, "application/json" )
 
 public function postForm( String url, String body ) -> Response:
 
@@ -310,14 +307,14 @@ public function postForm( String url, String body ) -> Response:
 
     return request( "POST", url, body, "application/x-www-form-urlencoded" )
 
-public function postForm( I64 ip, I64 port, String path, String body ) -> Response:
+protect function postForm( String host, I64 port, String path, String body ) -> Response:
 
     """
-    Send an HTTP POST with URL-encoded form data using a raw IP address.
+    Send an HTTP POST with URL-encoded form data using host and port directly.
 
     Parameters:
-        ip (I64):
-            The target server IP as a packed 32-bit integer.
+        host (String):
+            IPv4 address as dotted-decimal string.
         port (I64):
             The target server port number.
         path (String):
@@ -328,15 +325,20 @@ public function postForm( I64 ip, I64 port, String path, String body ) -> Respon
     Returns:
         Response:
             The server's response.
-    
+
     Complexity:
-        Time: O(1)
-        Space: O(1)
+        Time: O(n) where n is request + response size
+        Space: O(n)
     """
 
-    return request( "POST", ip, port, path, body, "application/x-www-form-urlencoded" )
+    return request( "POST", host, port, path, body, "application/x-www-form-urlencoded" )
 
 export {
-    request,
-    get, post, put, del, patch, postForm
+    del,
+    get,
+    patch,
+    post,
+    postForm,
+    put,
+    request
 }
