@@ -2,13 +2,8 @@ package testing
 
 from uranite.errors.error import Error
 from uranite.errors.throwable import Throwable
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertEqualStr,
-    assertTrue,
-    assertFalse
-}
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Error Tests ===" )
