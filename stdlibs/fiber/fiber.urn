@@ -1,11 +1,11 @@
 package uranite.fiber.fiber
 
-from uranite.memory.memory import Memory
+from uranite.async.context import makeContext, swapContext
+from uranite.errors.error import Error
 from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.memory.memory import Memory
 from uranite.os.syscall.invoke import syscall2, syscall6
 from uranite.os.syscall.result import SyscallResult
-from uranite.errors.error import Error
-from uranite.async.context import swapContext, makeContext
 
 public class FiberError extends Error:
     
@@ -174,23 +174,66 @@ public class Fiber:
     public Memory<I64> callerRsp
     """Single-element buffer holding the caller's saved RSP for context switch return."""
     
-    public function Fiber( self, I64 entryFn ) -> Void:
-        
+    public function Fiber( self, Callable<I64, <>> entryFn ) -> Void:
+
         """
-        Create a new fiber that will execute the given function. Allocates
+        Create a new fiber that will execute the given callable. Allocates
         a 64 KB stack via mmap and prepares the initial context so that the
         first context switch jumps to fiberTrampoline.
-        
+
         Parameters:
-            entryFn (I64):
-                Raw address of the entry function. The function receives 0
-                as its first argument (rdi) and its return value is stored
-                as the fiber's return value.
-        
+            entryFn (Callable<I64, <>>):
+                The entry function to execute. Receives no arguments and
+                its return value is stored as the fiber's return value.
+
         Raises:
             FiberError:
                 If the stack allocation mmap syscall fails.
-        
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        self.initFiber( extractedAddr )
+
+    public function Fiber( self, I64 entryFn ) -> Void:
+
+        """
+        Create a new fiber from a raw function address. Prefer the Callable
+        overload for type-safe construction.
+
+        Parameters:
+            entryFn (I64):
+                Raw address of the entry function.
+
+        Raises:
+            FiberError:
+                If the stack allocation mmap syscall fails.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.initFiber( entryFn )
+
+    protect function initFiber( self, I64 entryFnAddr ) -> Void:
+
+        """
+        Initialize fiber state, allocate stack, and prepare the initial
+        execution context.
+
+        Parameters:
+            entryFnAddr (I64):
+                Raw address of the entry function.
+
+        Raises:
+            FiberError:
+                If the stack allocation mmap syscall fails.
+
         Complexity:
             Time: O(1)
             Space: O(1)
@@ -390,11 +433,27 @@ public class Fiber:
         self.callerRsp.free()
 
 export {
-    FiberError, Fiber, fiberSuspend, fiberTrampoline,
-    F_STATE, F_ENTRY_FN, F_STACK_BASE, F_STACK_SIZE,
-    F_CONTEXT_RSP, F_RETURN_VALUE, F_SUSPEND_VALUE,
-    F_RESUME_VALUE, F_HAS_RETURN, F_ERROR,
-    FIBER_FIELD_COUNT, FIBER_CREATED, FIBER_STARTED,
-    FIBER_RUNNING, FIBER_SUSPENDED, FIBER_TERMINATED,
-    DEFAULT_FIBER_STACK, gCurrentFiberPtr, gCallerRspPtr
+    DEFAULT_FIBER_STACK,
+    FIBER_CREATED,
+    FIBER_FIELD_COUNT,
+    FIBER_RUNNING,
+    FIBER_STARTED,
+    FIBER_SUSPENDED,
+    FIBER_TERMINATED,
+    F_CONTEXT_RSP,
+    F_ENTRY_FN,
+    F_ERROR,
+    F_HAS_RETURN,
+    F_RESUME_VALUE,
+    F_RETURN_VALUE,
+    F_STACK_BASE,
+    F_STACK_SIZE,
+    F_STATE,
+    F_SUSPEND_VALUE,
+    Fiber,
+    FiberError,
+    fiberSuspend,
+    fiberTrampoline,
+    gCallerRspPtr,
+    gCurrentFiberPtr
 }
