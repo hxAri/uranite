@@ -1,22 +1,17 @@
 package testing
 
 from uranite.convert.convert import {
-    intToString,
-    stringToInt,
-    floatToString,
-    stringToFloat,
     boolToString,
+    floatToString,
     hexToInt,
+    intToBin,
     intToHex,
-    intToBin
-}
-from uranite.testing.assertions import {
-    assertEqualStr,
-    assertEqualI64,
-    assertEqualF64,
-    assertTrue
+    intToString,
+    stringToFloat,
+    stringToInt
 }
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualF64, assertEqualI64, assertEqualStr, assertTrue
 
 public function main() -> I32:
     putsln( "=== Convert Tests ===" )
