@@ -1,19 +1,22 @@
 package testing
 
-from uranite.process.process-future import {
-    ProcessFutureBase, ProcessFuture, ProcessFutureState,
-    PFUTURE_PENDING, PFUTURE_RUNNING, PFUTURE_FINISHED, PFUTURE_ERROR
-}
+from uranite.io.console import putsln
+from uranite.memory.memory import Memory
 from uranite.os.ipc.shared-memory import SharedRegion
-from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.time.clock import SystemClock
 from uranite.process.process import ProcessRuntime
-from uranite.memory.memory import Memory
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
+from uranite.process.process-future import {
+    PFUTURE_ERROR,
+    PFUTURE_FINISHED,
+    PFUTURE_PENDING,
+    PFUTURE_RUNNING,
+    ProcessFuture,
+    ProcessFutureBase,
+    ProcessFutureState
 }
-from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Multiprocessing Future Tests ===" )
