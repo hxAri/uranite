@@ -63,7 +63,7 @@ namespace uranite::doc {
 	}
 	
 	std::string MarkdownRenderer::buildModuleTableOfContents( const ModuleDocumentation& moduleDoc ) const {
-		if( moduleDoc.exportedEntities.empty() && moduleDoc.importedModules.empty() ) {
+		if( moduleDoc.exportedEntities.empty() && moduleDoc.importedModules.empty() && moduleDoc.reExportedNames.empty() ) {
 			return "";
 		}
 		std::string toc = "## Table of Contents\n\n";
@@ -99,13 +99,23 @@ namespace uranite::doc {
 		content+= this->buildModuleTableOfContents( moduleDoc );
 		if( moduleDoc.importedModules.empty() == false ) {
 			content+= "## Imports\n\n";
-			for( const std::string& importPath : moduleDoc.importedModules ) {
-				content+= fmt::format( "- `{}`\n", importPath );
+			for( const ImportEntry& importEntry : moduleDoc.importedModules ) {
+				content+= fmt::format( "- `{}`\n", importEntry.modulePath );
+				for( const std::string& importedName : importEntry.importedNames ) {
+					content+= fmt::format( "  - `{}`\n", importedName );
+				}
 			}
 			content+= "\n";
 		}
 		for( const EntityDocumentationEntry& entity : moduleDoc.exportedEntities ) {
 			content+= this->renderEntity( entity, 2 );
+		}
+		if( moduleDoc.reExportedNames.empty() == false && moduleDoc.exportedEntities.empty() ) {
+			content+= "## Exported Symbols\n\n";
+			for( const std::string& exportedName : moduleDoc.reExportedNames ) {
+				content+= fmt::format( "- `{}`\n", exportedName );
+			}
+			content+= "\n";
 		}
 		std::string relativePath;
 		if( inputBaseDirectory.empty() == false ) {
@@ -334,8 +344,8 @@ namespace uranite::doc {
 				relativePath = canonicalSourcePath;
 			}
 		}
-		if( relativePath.size() >= 3 && relativePath.substr( relativePath.size() - 3 ) == ".urn" ) {
-			relativePath = relativePath.substr( 0, relativePath.size() - 3 );
+		if( relativePath.size() >= 4 && relativePath.substr( relativePath.size() - 4 ) == ".urn" ) {
+			relativePath = relativePath.substr( 0, relativePath.size() - 4 );
 		}
 		std::string stem = relativePath;
 		size_t lastSlashInResult = stem.rfind( '/' );
