@@ -1,15 +1,17 @@
 package testing
 
-from uranite.io.file import writeFileString, readFileString
-from uranite.io.filesystem import copy, rename, remove, getcwd, statfs, FilesystemInfo
-from uranite.io.path import exists
-from uranite.testing.assertions import {
-    assertEqualStr,
-    assertTrue,
-    assertFalse,
-    assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.io.file import readFileString, writeFileString
+from uranite.io.filesystem import {
+    FilesystemInfo,
+    copy,
+    getcwd,
+    remove,
+    rename,
+    statfs
+}
+from uranite.io.path import exists
+from uranite.testing.assertions import assertEqualStr, assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
     putsln( "=== IO Filesystem Tests ===" )
