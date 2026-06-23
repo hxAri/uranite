@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/net/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -18,34 +18,75 @@
 
 package uranite.net
 
-from uranite.net.socket import {
-    socketCreate, socketBind, socketListen, socketAccept,
-    socketConnect, socketSend, socketRecv, socketClose,
-    sendString, recvString,
-    createTcpSocket, createUdpSocket, tcpListen, tcpConnect
-}
-from uranite.net.errors import SocketError, ConnectionError, TimeoutError, ConnectionRefusedError
-from uranite.net.tcp import TcpSocket, TcpListener
+from uranite.net.address import HostAddress, parseHostPort, parseIpv4, resolveHostname
+from uranite.net.dns import DnsResolver
+from uranite.net.errors import ConnectionError, ConnectionRefusedError, SocketError, TimeoutError
 from uranite.net.protocol import {
+    ArpTable,
+    EthernetFrame,
+    Ipv4Header,
     NetworkStack,
-    EthernetFrame, ArpTable,
-    Ipv4Header, RoutingTable,
-    TcpState, TcpHeader, TcpConnectionTable,
-    UdpHeader, UdpBindTable,
-    SocketTable
+    RoutingTable,
+    SocketTable,
+    TcpConnectionTable,
+    TcpHeader,
+    TcpState,
+    UdpBindTable,
+    UdpHeader
 }
+from uranite.net.socket import {
+    createTcpSocket,
+    createUdpSocket,
+    recvString,
+    sendString,
+    socketAccept,
+    socketBind,
+    socketClose,
+    socketConnect,
+    socketCreate,
+    socketListen,
+    socketRecv,
+    socketSend,
+    tcpConnect,
+    tcpListen
+}
+from uranite.net.tcp import TcpListener, TcpSocket
 
 export {
-    socketCreate, socketBind, socketListen, socketAccept,
-    socketConnect, socketSend, socketRecv, socketClose,
-    sendString, recvString,
-    createTcpSocket, createUdpSocket, tcpListen, tcpConnect,
-    SocketError, ConnectionError, TimeoutError, ConnectionRefusedError,
+    ArpTable,
+    ConnectionError,
+    ConnectionRefusedError,
+    DnsResolver,
+    EthernetFrame,
+    HostAddress,
+    Ipv4Header,
     NetworkStack,
-    EthernetFrame, ArpTable,
-    Ipv4Header, RoutingTable,
-    TcpState, TcpHeader, TcpConnectionTable,
-    UdpHeader, UdpBindTable,
+    RoutingTable,
+    SocketError,
     SocketTable,
-    TcpSocket, TcpListener
+    TcpConnectionTable,
+    TcpHeader,
+    TcpListener,
+    TcpSocket,
+    TcpState,
+    TimeoutError,
+    UdpBindTable,
+    UdpHeader,
+    createTcpSocket,
+    createUdpSocket,
+    parseHostPort,
+    parseIpv4,
+    recvString,
+    resolveHostname,
+    sendString,
+    socketAccept,
+    socketBind,
+    socketClose,
+    socketConnect,
+    socketCreate,
+    socketListen,
+    socketRecv,
+    socketSend,
+    tcpConnect,
+    tcpListen
 }
