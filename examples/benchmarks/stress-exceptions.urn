@@ -1,8 +1,8 @@
 package testing
 
+from uranite.convert.convert import intToString
 from uranite.errors.error import Error
 from uranite.io.console import putsln
-from uranite.convert.convert import intToString
 
 public class TestError extends Error:
     public function TestError( self, String message, I64 code, ?Error cause ) -> Void:
