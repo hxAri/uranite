@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/syscall/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/syscall/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,19 +21,25 @@
 
 package uranite.os.syscall
 
-from uranite.os.syscall.number import SyscallNumber
-from uranite.os.syscall.error import SyscallError
-from uranite.os.syscall.result import SyscallResult
-from uranite.os.syscall.invoke import {
-    syscall0, syscall1, syscall2, syscall3, syscall4, syscall5, syscall6
-}
 from uranite.os.syscall.dispatch import SyscallDispatch
+from uranite.os.syscall.error import SyscallError
+from uranite.os.syscall.invoke import {
+    syscall0,
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4,
+    syscall5,
+    syscall6
+}
+from uranite.os.syscall.number import SyscallNumber
+from uranite.os.syscall.result import SyscallResult
 
 export {
-    SyscallNumber,
-    SyscallError,
-    SyscallResult,
     SyscallDispatch,
+    SyscallError,
+    SyscallNumber,
+    SyscallResult,
     syscall0,
     syscall1,
     syscall2,
