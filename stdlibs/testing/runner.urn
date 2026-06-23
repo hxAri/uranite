@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/testing/runner.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/testing/runner.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,9 +21,9 @@
 
 package uranite.testing.runner
 
-from uranite.io.console import putsln
 from uranite.convert.convert import intToString
 from uranite.datetime.datetime import nowMonotonic
+from uranite.io.console import putsln
 
 public class TestRunner:
     
