@@ -1,7 +1,7 @@
 package testing
 
-from uranite.testing.assertions import assertEqualI64
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64
 
 function sum( I64 numbers[] ) -> I64:
     I64 total = 0
