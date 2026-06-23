@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/security/handle.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/security/handle.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -24,7 +24,7 @@ from uranite.memory.memory import Memory
 from uranite.os.memory.object import KernelObject
 from uranite.os.security.capability import Capability
 
-public class HandleEntry:
+public struct HandleEntry:
     
     """
     Represents a single slot in a handle table, pairing a kernel object reference with
