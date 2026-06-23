@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-29 14:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/executor.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/multiprocessing/executor.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -31,22 +31,26 @@
 
 package uranite.process.executor
 
-from uranite.memory.memory import Memory
-from uranite.os.ipc.signal import Event
-from uranite.os.ipc.shared-memory import SharedRegion
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.task.task import Task, BlockReason
-from uranite.os.time.clock import SystemClock
-from uranite.threading.atomic import AtomicI64, AtomicBoolean
-from uranite.threading.channel import ChannelInner
 from uranite.language.callable import Callable
-from uranite.process.process import Process, ProcessRuntime, DEFAULT_PROCESS_STACK_PAGES, DEFAULT_PROCESS_PRIORITY
-from uranite.process.process-future import {
-    ProcessFutureBase, ProcessFuture,
-    PFUTURE_PENDING, PFUTURE_RUNNING, PFUTURE_FINISHED, PFUTURE_ERROR
-}
+from uranite.memory.memory import Memory
+from uranite.os.ipc.shared-memory import SharedRegion
+from uranite.os.ipc.signal import Event
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.task.task import BlockReason, Task
+from uranite.os.time.clock import SystemClock
 from uranite.process.errors import ProcessError
+from uranite.process.process import DEFAULT_PROCESS_PRIORITY, DEFAULT_PROCESS_STACK_PAGES, Process, ProcessRuntime
+from uranite.process.process-future import {
+    PFUTURE_ERROR,
+    PFUTURE_FINISHED,
+    PFUTURE_PENDING,
+    PFUTURE_RUNNING,
+    ProcessFuture,
+    ProcessFutureBase
+}
+from uranite.threading.atomic import AtomicBoolean, AtomicI64
+from uranite.threading.channel import ChannelInner
 
 const I64 DEFAULT_PROCESS_QUEUE_CAPACITY = 256
 """ Default maximum number of pending tasks in the executor work channel. """
@@ -246,7 +250,7 @@ public class ProcessPoolExecutor:
         I64 slot = self.nextFutureSlot.fetchAdd( 1 ) % self.futurePoolCapacity
         return self.futurePoolRegion.getPhysicalBase() + slot * FUTURE_SLOT_SIZE
     
-    public function run( self, I64 fnAddr ) -> ProcessFutureBase:
+    protect function run( self, I64 fnAddr ) -> ProcessFutureBase:
         
         """
         Submit a zero-argument function for execution and return a future.
@@ -293,7 +297,7 @@ public class ProcessPoolExecutor:
         
         return base
     
-    public function submit1( self, I64 fnAddr, I64 arg ) -> ProcessFutureBase:
+    protect function submit1( self, I64 fnAddr, I64 arg ) -> ProcessFutureBase:
         
         """
         Submit a one-argument function for execution and return a future.
@@ -342,7 +346,7 @@ public class ProcessPoolExecutor:
         
         return base
     
-    public function submit2( self, I64 fnAddr, I64 arg1, I64 arg2 ) -> ProcessFutureBase:
+    protect function submit2( self, I64 fnAddr, I64 arg1, I64 arg2 ) -> ProcessFutureBase:
         
         """
         Submit a two-argument function for execution and return a future.
@@ -393,7 +397,7 @@ public class ProcessPoolExecutor:
         
         return base
     
-    public function submit3( self, I64 fnAddr, I64 arg1, I64 arg2, I64 arg3 ) -> ProcessFutureBase:
+    protect function submit3( self, I64 fnAddr, I64 arg1, I64 arg2, I64 arg3 ) -> ProcessFutureBase:
         
         """
         Submit a three-argument function for execution and return a future.
@@ -780,13 +784,13 @@ public class ProcessSubmitter3<R, A, B, C>:
         return new ProcessFuture<R>( base )
 
 export {
+    DEFAULT_PROCESS_QUEUE_CAPACITY,
+    EXECUTOR_PROCESS_STACK_PAGES,
+    FUTURE_POOL_PAGES,
+    FUTURE_SLOT_SIZE,
     ProcessPoolExecutor,
     ProcessSubmitter0,
     ProcessSubmitter1,
     ProcessSubmitter2,
-    ProcessSubmitter3,
-    DEFAULT_PROCESS_QUEUE_CAPACITY,
-    EXECUTOR_PROCESS_STACK_PAGES,
-    FUTURE_SLOT_SIZE,
-    FUTURE_POOL_PAGES
+    ProcessSubmitter3
 }
