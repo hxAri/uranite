@@ -1,10 +1,8 @@
 package testing
 
-from uranite.os.debug.log import KernelLogLevel, EventLog
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue
-}
 from uranite.io.console import putsln
+from uranite.os.debug.log import EventLog, KernelLogLevel
+from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Debug Log Tests ===" )
