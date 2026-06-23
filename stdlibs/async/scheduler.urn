@@ -2,44 +2,44 @@ package uranite.async.scheduler
 
 from uranite.async.context import swapContext
 from uranite.async.epoll import {
-    allocateEventBuffer, 
-    epollAdd, 
-    epollCreate, 
+    EPOLLIN,
+    allocateEventBuffer,
+    epollAdd,
+    epollCreate,
     epollDel,
-    epollEventGetFd, 
-    EPOLLIN, 
+    epollEventGetFd,
     epollWait
 }
 from uranite.async.errors import AsyncRuntimeError
 from uranite.async.task import {
-    createTask,
-    FIELD_AWAIT_EVENTS, 
-    FIELD_AWAIT_FD, 
     FIELD_AWAITING_ID,
-    FIELD_CONTEXT_RSP, 
-    FIELD_ENTRY_FN, 
+    FIELD_AWAIT_EVENTS,
+    FIELD_AWAIT_FD,
+    FIELD_CONTEXT_RSP,
+    FIELD_ENTRY_FN,
     FIELD_HAS_ERROR,
-    FIELD_ID, 
-    FIELD_RESULT, 
+    FIELD_ID,
+    FIELD_RESULT,
     FIELD_STACK_BASE,
-    FIELD_STACK_SIZE, 
+    FIELD_STACK_SIZE,
     FIELD_STATE,
-    STATE_COMPLETED, 
-    STATE_CREATED, 
+    STATE_COMPLETED,
+    STATE_CREATED,
     STATE_FAILED,
-    STATE_IO_WAITING, 
-    STATE_RUNNING, 
+    STATE_IO_WAITING,
+    STATE_RUNNING,
     STATE_SUSPENDED,
-    taskAllocateStack, 
-    taskInitContext, 
+    createTask,
+    taskAllocateStack,
+    taskInitContext,
     taskRspAddr
 }
 from uranite.async.timer import timerfdClose, timerfdCreate, timerfdSettime
+from uranite.coroutine.scheduler import Scheduler
 from uranite.io.syscall import memoryToPtr, readI64At, sysClose, writeI64At
 from uranite.memory.memory import Memory
 from uranite.os.syscall.invoke import syscall2
 from uranite.os.syscall.result import SyscallResult
-from uranite.coroutine.scheduler import Scheduler
 
 const I64 MAX_TASKS = 1024
 """ Maximum number of concurrent tasks the scheduler can manage. """
@@ -559,5 +559,6 @@ public class NativeScheduler implements Scheduler:
             self.epollFd = -1
 
 export {
-    NativeScheduler, MAX_TASKS
+    MAX_TASKS,
+    NativeScheduler
 }
