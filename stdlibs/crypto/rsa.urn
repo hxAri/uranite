@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/rsa.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/crypto/rsa.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -29,18 +29,24 @@
 
 package uranite.crypto.rsa
 
-from uranite.memory.allocator import alloc, dealloc
-from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.crypto.bigint import BigInt, bigintFromBytes, bigintModExp, bigintToBytes
+from uranite.crypto.random import randomBytes
 from uranite.encoding.binary import copyBytes
 from uranite.encoding.der import {
-    DerElement, derParseElement, derParseSequence,
-    derIterateSequence, derParseBitString,
-    derGetIntegerBytes, DER_TAG_SEQUENCE, DER_TAG_BIT_STRING, DER_TAG_INTEGER
+    DER_TAG_BIT_STRING,
+    DER_TAG_INTEGER,
+    DER_TAG_SEQUENCE,
+    DerElement,
+    derGetIntegerBytes,
+    derIterateSequence,
+    derParseBitString,
+    derParseElement,
+    derParseSequence
 }
-from uranite.crypto.bigint import {
-    BigInt, bigintFromBytes, bigintToBytes, bigintModExp
-}
-from uranite.crypto.random import randomBytes
+from uranite.encoding.pem import PemBlock, pemDecodeString
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 RSA_BLOCK_TYPE_ENCRYPT = 2
 const I64 RSA_PKCS1_PADDING_MIN = 11
@@ -231,7 +237,68 @@ public function rsaEncryptPkcs1v15( I64 plaintextAddress, I64 plaintextLength, R
 
     return keyLength
 
+public function rsaPublicKeyFromPem( String pemData ) -> RsaPublicKey:
+
+    """
+    Parse an RSA public key from a PEM-encoded string. Decodes the PEM
+    envelope and delegates to rsaPublicKeyFromDer for SubjectPublicKeyInfo
+    parsing.
+
+    Parameters:
+        pemData (String):
+            PEM-encoded public key string (including BEGIN/END markers).
+
+    Returns:
+        RsaPublicKey:
+            Parsed public key with modulus and exponent.
+
+    Complexity:
+        Time: O(n) where n is PEM data length
+        Space: O(key size in limbs)
+    """
+
+    PemBlock block = pemDecodeString( pemData )
+    RsaPublicKey publicKey = rsaPublicKeyFromDer( block.derAddress, block.derLength )
+    block.destroy()
+    return publicKey
+
+public function rsaEncryptString( String plaintext, RsaPublicKey publicKey ) -> String:
+
+    """
+    Encrypt a plaintext string using PKCS#1 v1.5 padding and return
+    the ciphertext as a raw byte string.
+
+    Parameters:
+        plaintext (String):
+            The plaintext data to encrypt.
+        publicKey (RsaPublicKey):
+            The RSA public key to encrypt with.
+
+    Returns:
+        String:
+            The ciphertext bytes as a string.
+
+    Complexity:
+        Time: O(k^2 * e) dominated by modular exponentiation
+        Space: O(k) where k is key size in bytes
+    """
+
+    I64 plaintextAddress = stringToPtr( plaintext )
+    I64 plaintextLength = stringLen( plaintext )
+    I64 outputCapacity = publicKey.modulusByteLength
+    I64 outputAddress = alloc( outputCapacity + 1 )
+    I64 ciphertextLength = rsaEncryptPkcs1v15( plaintextAddress, plaintextLength, publicKey, outputAddress, outputCapacity )
+    if ciphertextLength < 0:
+        dealloc( outputAddress )
+        return ""
+    writeByteAt( outputAddress, ciphertextLength, 0 )
+    return ptrToString( outputAddress )
+
 export {
     RsaPublicKey,
-    rsaPublicKeyFromDer, rsaRawEncrypt, rsaEncryptPkcs1v15
+    rsaEncryptPkcs1v15,
+    rsaEncryptString,
+    rsaPublicKeyFromDer,
+    rsaPublicKeyFromPem,
+    rsaRawEncrypt
 }
