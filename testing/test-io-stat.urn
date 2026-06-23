@@ -1,12 +1,8 @@
 package testing
 
-from uranite.io.stat import statPath, FileStat, FileType
-from uranite.testing.assertions import {
-    assertTrue,
-    assertFalse,
-    assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.io.stat import FileStat, FileType, statPath
+from uranite.testing.assertions import assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
     putsln( "=== IO Stat Tests ===" )
