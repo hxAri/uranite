@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/security/identity.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/security/identity.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,13 @@
 
 package uranite.security.identity
 
-from uranite.os.identity.identity import ProcessIdentity, ROOT_UID, ROOT_GID, NOBODY_UID, NOBODY_GID
+from uranite.os.identity.identity import {
+    NOBODY_GID,
+    NOBODY_UID,
+    ProcessIdentity,
+    ROOT_GID,
+    ROOT_UID
+}
 
 public class UserIdentity:
 
@@ -200,8 +206,10 @@ public class UserIdentity:
         self.identity.setEffectiveGid( NOBODY_GID )
 
 export {
-    UserIdentity,
+    NOBODY_GID,
+    NOBODY_UID,
     ProcessIdentity,
-    ROOT_UID, ROOT_GID,
-    NOBODY_UID, NOBODY_GID
+    ROOT_GID,
+    ROOT_UID,
+    UserIdentity
 }
