@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/compression/gzip.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/compression/gzip.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -27,10 +27,10 @@
 
 package uranite.compression.gzip
 
-from uranite.memory.allocator import alloc, dealloc
-from uranite.io.syscall import readByteAt, writeByteAt
 from uranite.encoding.binary import copyBytes
 from uranite.encoding.crc32 import crc32
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 GZIP_MAGIC_1 = 31
 const I64 GZIP_MAGIC_2 = 139
@@ -1090,7 +1090,11 @@ public function gzipDecompress( I64 inputAddress, I64 inputLength, I64 outputAdd
     return decompressedSize
 
 export {
-    inflate, deflateFixed,
-    gzipCompress, gzipDecompress,
-    BitReader, BitWriter, HuffmanTable
+    BitReader,
+    BitWriter,
+    HuffmanTable,
+    deflateFixed,
+    gzipCompress,
+    gzipDecompress,
+    inflate
 }
