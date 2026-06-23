@@ -1,16 +1,16 @@
 package uranite.async.epoll
 
-from uranite.os.syscall.invoke import syscall1, syscall2, syscall4
-from uranite.os.syscall.result import SyscallResult
-from uranite.memory.memory import Memory
+from uranite.async.errors import AsyncRuntimeError
 from uranite.io.syscall import {
-    memoryToPtr, 
-    readI32At, 
+    memoryToPtr,
+    readI32At,
     readI64At,
-    writeI32At, 
+    writeI32At,
     writeI64At
 }
-from uranite.async.errors import AsyncRuntimeError
+from uranite.memory.memory import Memory
+from uranite.os.syscall.invoke import syscall1, syscall2, syscall4
+from uranite.os.syscall.result import SyscallResult
 
 const I64 SYS_EPOLL_CREATE1 = 291
 """ Syscall number for epoll_create1 on x86-64 Linux. """
@@ -269,10 +269,26 @@ public function allocateEventBuffer( I64 maxEvents ) -> Memory<I64>:
     return new Memory<I64>( slots )
 
 export {
-    SYS_EPOLL_CREATE1, SYS_EPOLL_CTL, SYS_EPOLL_WAIT,
-    EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
-    EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLRDHUP, EPOLLET, EPOLLONESHOT,
+    EPOLLERR,
+    EPOLLET,
+    EPOLLHUP,
+    EPOLLIN,
+    EPOLLONESHOT,
+    EPOLLOUT,
+    EPOLLRDHUP,
+    EPOLL_CTL_ADD,
+    EPOLL_CTL_DEL,
+    EPOLL_CTL_MOD,
     EPOLL_EVENT_SIZE,
-    epollCreate, epollAdd, epollDel, epollMod, epollWait,
-    epollEventGetEvents, epollEventGetFd, allocateEventBuffer
+    SYS_EPOLL_CREATE1,
+    SYS_EPOLL_CTL,
+    SYS_EPOLL_WAIT,
+    allocateEventBuffer,
+    epollAdd,
+    epollCreate,
+    epollDel,
+    epollEventGetEvents,
+    epollEventGetFd,
+    epollMod,
+    epollWait
 }
