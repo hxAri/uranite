@@ -1,12 +1,10 @@
 package testing
 
-from uranite.os.vfs.vnode import VNode, PERM_OWNER_READ, PERM_OWNER_WRITE
-from uranite.os.vfs.file-descriptor import FileDescriptor, FLAG_READ, FLAG_WRITE
-from uranite.os.vfs.mount import MountEntry
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.vfs.file-descriptor import FLAG_READ, FLAG_WRITE, FileDescriptor
+from uranite.os.vfs.mount import MountEntry
+from uranite.os.vfs.vnode import PERM_OWNER_READ, PERM_OWNER_WRITE, VNode
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS VFS Combined Tests ===" )
