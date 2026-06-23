@@ -1,12 +1,8 @@
 package testing
 
-from uranite.iterators.iterator import Iterator
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertTrue,
-    assertFalse
-}
 from uranite.io.console import putsln
+from uranite.iterators.iterator import Iterator
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public class RangeIterator implements Iterator<Int>:
     private Int current
