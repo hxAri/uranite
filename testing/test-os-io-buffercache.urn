@@ -1,13 +1,14 @@
 package testing
 
-from uranite.os.io.buffer-cache import {
-    BUFFER_VALID, BUFFER_DIRTY, BUFFER_LOCKED,
-    BufferEntry, BufferCache
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.io.buffer-cache import {
+    BUFFER_DIRTY,
+    BUFFER_LOCKED,
+    BUFFER_VALID,
+    BufferCache,
+    BufferEntry
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS IO BufferCache Tests ===" )
