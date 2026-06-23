@@ -1,5 +1,7 @@
 package uranite.memory.droper
 
+
+
 public interface Droper:
 
     """
