@@ -1,11 +1,9 @@
 package testing
 
-from uranite.threading.channel import ChannelInner, Sender, Receiver
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
+from uranite.threading.channel import ChannelInner, Receiver, Sender
 
 public function main() -> I32:
     putsln( "=== Threading Channel Tests ===" )
