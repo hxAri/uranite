@@ -1,11 +1,9 @@
 package testing
 
-from uranite.adelia.palette-generator import PaletteGenerator
 from uranite.adelia.color-palette import ColorPalette
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualStr, assertGreaterThan
-}
+from uranite.adelia.palette-generator import PaletteGenerator
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== Adelia PaletteGenerator Tests ===" )
