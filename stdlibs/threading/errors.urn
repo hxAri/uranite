@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-27 19:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/errors.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/errors.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,8 +20,8 @@
 
 package uranite.threading.errors
 
-from uranite.errors.throwable import Throwable
 from uranite.errors.error import Error
+from uranite.errors.throwable import Throwable
 
 public class ThreadError extends Error:
     
@@ -160,9 +160,9 @@ public class ThreadTimeoutError extends ThreadError:
         parent( message, code, previous )
 
 export {
+    ThreadCancellationError,
+    ThreadChannelError,
     ThreadError,
     ThreadPoisonError,
-    ThreadChannelError,
-    ThreadCancellationError,
     ThreadTimeoutError
 }
