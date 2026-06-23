@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-06 02:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/logging/formatter.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/logging/formatter.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,14 +23,14 @@
 
 package uranite.logging.formatter
 
-from uranite.logging.level import LogLevel
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
-from uranite.memory.allocator import alloc
-from uranite.functions.builtin import ptrToString
-from uranite.string.format import padRight, padZero, formatUtcOffset, appendTo
-from uranite.datetime.datetime import now, DateTime
 from uranite.convert.convert import intToString
-from uranite.sys.process import getpid, getUsername
+from uranite.datetime.datetime import DateTime, now
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.logging.level import LogLevel
+from uranite.memory.allocator import alloc
+from uranite.string.format import appendTo, formatUtcOffset, padRight, padZero
+from uranite.sys.process import getUsername, getpid
 
 public const String DEFAULT_PATTERN = "{datetime}{utcoffset}   {level7}   {username}  P{pid}:T{thread}    --- [{program16}] {name40} : {message}"
 """ Default log format pattern matching the custom logger output style. """
@@ -334,15 +334,15 @@ public function slf4jFormatter() -> LogFormatter:
     return new LogFormatter( SLF4J_PATTERN )
 
 export {
-    LogFormatter,
-    defaultFormatter,
-    simpleFormatter,
-    detailedFormatter,
-    classicFormatter,
-    slf4jFormatter,
-    DEFAULT_PATTERN,
-    SIMPLE_PATTERN,
-    DETAILED_PATTERN,
     CLASSIC_PATTERN,
-    SLF4J_PATTERN
+    DEFAULT_PATTERN,
+    DETAILED_PATTERN,
+    LogFormatter,
+    SIMPLE_PATTERN,
+    SLF4J_PATTERN,
+    classicFormatter,
+    defaultFormatter,
+    detailedFormatter,
+    simpleFormatter,
+    slf4jFormatter
 }
