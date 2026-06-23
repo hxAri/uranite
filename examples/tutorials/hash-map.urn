@@ -12,8 +12,8 @@
 
 package main
 
-from uranite.io.console import puts
 from uranite.collection.hash-map import HashMap
+from uranite.io.console import puts
 
 
 public function main() -> I32:
