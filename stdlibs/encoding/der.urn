@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/der.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/encoding/der.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,8 +23,8 @@
 
 package uranite.encoding.der
 
-from uranite.memory.allocator import alloc, dealloc
 from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 DER_TAG_INTEGER = 2
 const I64 DER_TAG_BIT_STRING = 3
@@ -37,7 +37,7 @@ const I64 DER_TAG_CONTEXT_0 = 160
 const I64 DER_TAG_CONTEXT_1 = 161
 const I64 DER_TAG_CONTEXT_3 = 163
 
-public class DerElement:
+public struct DerElement:
 
     """
     A parsed DER TLV element. Holds the tag, content address and
@@ -300,11 +300,23 @@ public function derCountSequenceElements( DerElement sequence ) -> I64:
     return count
 
 export {
-    DER_TAG_INTEGER, DER_TAG_BIT_STRING, DER_TAG_OCTET_STRING,
-    DER_TAG_NULL, DER_TAG_OID, DER_TAG_SEQUENCE, DER_TAG_SET,
-    DER_TAG_CONTEXT_0, DER_TAG_CONTEXT_1, DER_TAG_CONTEXT_3,
+    DER_TAG_BIT_STRING,
+    DER_TAG_CONTEXT_0,
+    DER_TAG_CONTEXT_1,
+    DER_TAG_CONTEXT_3,
+    DER_TAG_INTEGER,
+    DER_TAG_NULL,
+    DER_TAG_OCTET_STRING,
+    DER_TAG_OID,
+    DER_TAG_SEQUENCE,
+    DER_TAG_SET,
     DerElement,
-    derParseElement, derParseSequence, derParseInteger,
-    derIntegerToI64, derGetIntegerBytes,
-    derParseBitString, derIterateSequence, derCountSequenceElements
+    derCountSequenceElements,
+    derGetIntegerBytes,
+    derIntegerToI64,
+    derIterateSequence,
+    derParseBitString,
+    derParseElement,
+    derParseInteger,
+    derParseSequence
 }
