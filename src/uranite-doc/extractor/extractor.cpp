@@ -103,19 +103,25 @@ namespace uranite::doc {
 		ModuleDocumentation moduleDoc;
 		moduleDoc.sourceFilePath = sourceFilePath;
 		moduleDoc.packageName = program.module != nullptr ? program.module->name : "";
-		for( const ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
-			if( declaration->kind == ast::Node::Kind::ImportDeclaration ) {
-				ast::nodes::ImportDeclaration& importDecl = static_cast<ast::nodes::ImportDeclaration&>( *declaration );
-				std::string importPath;
-				for( size_t segmentIndex = 0; segmentIndex < importDecl.path.size(); segmentIndex++ ) {
-					if( segmentIndex > 0 ) {
-						importPath+= ".";
-					}
-					importPath+= importDecl.path[segmentIndex];
+		for( const ast::nodes::ImportDeclarationSharedPointer& importDecl : program.imports ) {
+			ImportEntry importEntry;
+			for( size_t segmentIndex = 0; segmentIndex < importDecl->path.size(); segmentIndex++ ) {
+				if( segmentIndex > 0 ) {
+					importEntry.modulePath+= ".";
 				}
-				moduleDoc.importedModules.push_back( importPath );
-				continue;
+				importEntry.modulePath+= importDecl->path[segmentIndex];
 			}
+			for( const ast::nodes::ImportItem& item : importDecl->importItems ) {
+				importEntry.importedNames.push_back( item.name );
+			}
+			moduleDoc.importedModules.push_back( importEntry );
+		}
+		for( const ast::nodes::ExportDeclarationSharedPointer& exportDecl : program.exports ) {
+			for( const ast::nodes::ExportItem& exportItem : exportDecl->items ) {
+				moduleDoc.reExportedNames.push_back( exportItem.name );
+			}
+		}
+		for( const ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			ast::nodes::DeclarationSharedPointer targetDecl = declaration;
 			if( declaration->kind == ast::Node::Kind::ExportDeclaration ) {
 				ast::nodes::ExportDeclaration& exportDecl = static_cast<ast::nodes::ExportDeclaration&>( *declaration );
