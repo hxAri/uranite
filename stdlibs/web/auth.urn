@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/auth.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/auth.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,9 +20,9 @@
 
 package uranite.web.auth
 
+from uranite.web.middleware import Middleware
 from uranite.web.request import HttpRequest
 from uranite.web.response import HttpResponse
-from uranite.web.middleware import Middleware
 
 public interface AuthMiddleware:
     
