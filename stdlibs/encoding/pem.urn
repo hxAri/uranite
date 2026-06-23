@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/pem.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/encoding/pem.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,10 +22,10 @@
 
 package uranite.encoding.pem
 
-from uranite.memory.allocator import alloc, dealloc
-from uranite.io.syscall import readByteAt, writeByteAt, stringToPtr, stringLen
 from uranite.encoding.base64 import base64Decode
 from uranite.encoding.binary import copyBytes
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 PEM_BEGIN_MARKER_LENGTH = 11
 const I64 PEM_END_MARKER_LENGTH = 9
@@ -230,5 +230,6 @@ function findEndMarker( I64 dataAddress, I64 dataLength, I64 startOffset ) -> I6
 
 export {
     PemBlock,
-    pemDecode, pemDecodeString
+    pemDecode,
+    pemDecodeString
 }
