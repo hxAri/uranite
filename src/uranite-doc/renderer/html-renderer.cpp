@@ -454,8 +454,8 @@ namespace uranite::doc {
 				relativePath = canonicalSourcePath;
 			}
 		}
-		if( relativePath.size() >= 3 && relativePath.substr( relativePath.size() - 3 ) == ".urn" ) {
-			relativePath = relativePath.substr( 0, relativePath.size() - 3 );
+		if( relativePath.size() >= 4 && relativePath.substr( relativePath.size() - 4 ) == ".urn" ) {
+			relativePath = relativePath.substr( 0, relativePath.size() - 4 );
 		}
 		std::string stem = relativePath;
 		size_t lastSlashInResult = stem.rfind( '/' );
@@ -474,7 +474,7 @@ namespace uranite::doc {
 	}
 	
 	std::string HtmlRenderer::buildModuleTableOfContentsHtml( const ModuleDocumentation& moduleDoc ) const {
-		if( moduleDoc.exportedEntities.empty() && moduleDoc.importedModules.empty() ) {
+		if( moduleDoc.exportedEntities.empty() && moduleDoc.importedModules.empty() && moduleDoc.reExportedNames.empty() ) {
 			return "";
 		}
 		std::string toc = "<nav class=\"module-toc\">\n<h2>Table of Contents</h2>\n<ul>\n";
@@ -525,13 +525,28 @@ namespace uranite::doc {
 			bodyContent+= this->buildModuleTableOfContentsHtml( moduleDoc );
 			if( moduleDoc.importedModules.empty() == false ) {
 				bodyContent+= "<h2 id=\"imports\">Imports</h2>\n<ul>\n";
-				for( const std::string& importPath : moduleDoc.importedModules ) {
-					bodyContent+= fmt::format( "<li><code>{}</code></li>\n", this->escapeHtml( importPath ) );
+				for( const ImportEntry& importEntry : moduleDoc.importedModules ) {
+					bodyContent+= fmt::format( "<li><code>{}</code>", this->escapeHtml( importEntry.modulePath ) );
+					if( importEntry.importedNames.empty() == false ) {
+						bodyContent+= "\n<ul>\n";
+						for( const std::string& importedName : importEntry.importedNames ) {
+							bodyContent+= fmt::format( "<li><code>{}</code></li>\n", this->escapeHtml( importedName ) );
+						}
+						bodyContent+= "</ul>";
+					}
+					bodyContent+= "</li>\n";
 				}
 				bodyContent+= "</ul>\n";
 			}
 			for( const EntityDocumentationEntry& entity : moduleDoc.exportedEntities ) {
 				bodyContent+= this->renderEntityHtml( entity, 2 );
+			}
+			if( moduleDoc.reExportedNames.empty() == false && moduleDoc.exportedEntities.empty() ) {
+				bodyContent+= "<h2>Exported Symbols</h2>\n<ul>\n";
+				for( const std::string& exportedName : moduleDoc.reExportedNames ) {
+					bodyContent+= fmt::format( "<li><code>{}</code></li>\n", this->escapeHtml( exportedName ) );
+				}
+				bodyContent+= "</ul>\n";
 			}
 			std::string outputRelativePath = this->computeOutputRelativePath( moduleDoc, inputBaseDirectory );
 			std::string filePath = outputDirectory + "/" + outputRelativePath + ".html";
