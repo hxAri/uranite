@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/arch.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/kernel/arch.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,25 +23,75 @@
 package uranite.kernel.arch
 
 from uranite.os.arch.x86-64.cpu import {
-    Registers, halt, enableInterrupts, disableInterrupts,
-    readCr0, writeCr0, readCr2, readCr3, writeCr3, readCr4, writeCr4,
-    invlpg, readMsr, writeMsr, readRflags, readTsc
+    Registers,
+    disableInterrupts,
+    enableInterrupts,
+    halt,
+    invlpg,
+    readCr0,
+    readCr2,
+    readCr3,
+    readCr4,
+    readMsr,
+    readRflags,
+    readTsc,
+    writeCr0,
+    writeCr3,
+    writeCr4,
+    writeMsr
 }
 from uranite.os.arch.x86-64.gdt import {
-    GdtEntry, GdtPointer, Gdt, loadGdt, reloadSegments,
-    KERNEL_CODE_SELECTOR, KERNEL_DATA_SELECTOR, userCodeSelector, userDataSelector
+    Gdt,
+    GdtEntry,
+    GdtPointer,
+    KERNEL_CODE_SELECTOR,
+    KERNEL_DATA_SELECTOR,
+    loadGdt,
+    reloadSegments,
+    userCodeSelector,
+    userDataSelector
 }
 from uranite.os.arch.x86-64.idt import {
-    IdtEntry, IdtPointer, Idt, loadIdt, GateType, InterruptVector, IRQ_BASE
+    GateType,
+    IRQ_BASE,
+    Idt,
+    IdtEntry,
+    IdtPointer,
+    InterruptVector,
+    loadIdt
 }
 from uranite.os.arch.x86-64.paging import {
-    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER, PAGE_WRITE_THROUGH,
-    PAGE_CACHE_DISABLE, PAGE_ACCESSED, PAGE_DIRTY, PAGE_HUGE, PAGE_GLOBAL,
-    pageNoExecute, PageTableEntry, PageTable,
-    pml4Index, pdptIndex, pdIndex, ptIndex,
-    PAGE_SIZE, HUGE_PAGE_2MB, HUGE_PAGE_1GB, flushPage, flushTlb
+    HUGE_PAGE_1GB,
+    HUGE_PAGE_2MB,
+    PAGE_ACCESSED,
+    PAGE_CACHE_DISABLE,
+    PAGE_DIRTY,
+    PAGE_GLOBAL,
+    PAGE_HUGE,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PAGE_WRITE_THROUGH,
+    PageTable,
+    PageTableEntry,
+    flushPage,
+    flushTlb,
+    pageNoExecute,
+    pdIndex,
+    pdptIndex,
+    pml4Index,
+    ptIndex
 }
-from uranite.os.arch.x86-64.port import outb, inb, outw, inw, outl, inl, ioWait
+from uranite.os.arch.x86-64.port import {
+    inb,
+    inl,
+    inw,
+    ioWait,
+    outb,
+    outl,
+    outw
+}
 
 public class CpuContext:
 
@@ -178,17 +228,65 @@ public class PageMapper:
 export {
     CpuContext,
     DescriptorTables,
+    GateType,
+    Gdt,
+    GdtEntry,
+    GdtPointer,
+    HUGE_PAGE_1GB,
+    HUGE_PAGE_2MB,
+    IRQ_BASE,
+    Idt,
+    IdtEntry,
+    IdtPointer,
+    InterruptVector,
+    KERNEL_CODE_SELECTOR,
+    KERNEL_DATA_SELECTOR,
+    PAGE_ACCESSED,
+    PAGE_CACHE_DISABLE,
+    PAGE_DIRTY,
+    PAGE_GLOBAL,
+    PAGE_HUGE,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PAGE_WRITE_THROUGH,
     PageMapper,
-    Registers, halt, enableInterrupts, disableInterrupts,
-    readCr0, writeCr0, readCr2, readCr3, writeCr3, readCr4, writeCr4,
-    invlpg, readMsr, writeMsr, readRflags, readTsc,
-    GdtEntry, GdtPointer, Gdt, loadGdt, reloadSegments,
-    KERNEL_CODE_SELECTOR, KERNEL_DATA_SELECTOR, userCodeSelector, userDataSelector,
-    IdtEntry, IdtPointer, Idt, loadIdt, GateType, InterruptVector, IRQ_BASE,
-    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER, PAGE_WRITE_THROUGH,
-    PAGE_CACHE_DISABLE, PAGE_ACCESSED, PAGE_DIRTY, PAGE_HUGE, PAGE_GLOBAL,
-    pageNoExecute, PageTableEntry, PageTable,
-    pml4Index, pdptIndex, pdIndex, ptIndex,
-    PAGE_SIZE, HUGE_PAGE_2MB, HUGE_PAGE_1GB, flushPage, flushTlb,
-    outb, inb, outw, inw, outl, inl, ioWait
+    PageTable,
+    PageTableEntry,
+    Registers,
+    disableInterrupts,
+    enableInterrupts,
+    flushPage,
+    flushTlb,
+    halt,
+    inb,
+    inl,
+    invlpg,
+    inw,
+    ioWait,
+    loadGdt,
+    loadIdt,
+    outb,
+    outl,
+    outw,
+    pageNoExecute,
+    pdIndex,
+    pdptIndex,
+    pml4Index,
+    ptIndex,
+    readCr0,
+    readCr2,
+    readCr3,
+    readCr4,
+    readMsr,
+    readRflags,
+    readTsc,
+    reloadSegments,
+    userCodeSelector,
+    userDataSelector,
+    writeCr0,
+    writeCr3,
+    writeCr4,
+    writeMsr
 }
