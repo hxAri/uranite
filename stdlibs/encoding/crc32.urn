@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/crc32.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/encoding/crc32.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,13 @@
 
 package uranite.encoding.crc32
 
-from uranite.io.syscall import readByteAt, writeI64At, readI64At
+from uranite.io.syscall import {
+    readByteAt,
+    readI64At,
+    stringLen,
+    stringToPtr,
+    writeI64At
+}
 from uranite.memory.allocator import alloc
 
 const I64 CRC32_POLYNOMIAL = 3988292384
@@ -154,11 +160,34 @@ public function crc32( I64 bufferAddress, I64 length ) -> I64:
     I64 crcState = crc32Update( CRC32_INITIAL, bufferAddress, length )
     return crc32Finalize( crcState )
 
+public function crc32String( String data ) -> I64:
+
+    """
+    Compute the standard CRC-32 checksum of a string.
+
+    Parameters:
+        data (String):
+            The input data to checksum.
+
+    Returns:
+        I64:
+            The CRC-32 checksum.
+
+    Complexity:
+        Time: O(n) where n is string length
+        Space: O(1)
+    """
+
+    I64 dataAddress = stringToPtr( data )
+    I64 dataLength = stringLen( data )
+    return crc32( dataAddress, dataLength )
+
 export {
-    CRC32_POLYNOMIAL,
     CRC32_INITIAL,
-    initializeCrc32Table,
-    crc32Update,
+    CRC32_POLYNOMIAL,
+    crc32,
     crc32Finalize,
-    crc32
+    crc32String,
+    crc32Update,
+    initializeCrc32Table
 }
