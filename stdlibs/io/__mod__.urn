@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,110 +21,205 @@
 
 package uranite.io
 
-from uranite.io.errors import {
-    IOError,
-    FileNotFoundError,
-    PermissionError,
-    FileExistsError,
-    IsADirectoryError,
-    NotADirectoryError,
-    DirectoryNotEmptyError,
-    BrokenPipeError
-}
-
-from uranite.io.stream import InputStream, OutputStream
-
-from uranite.io.stat import FileType, FileStat, statPath, lstatPath, fstatFd
-
-from uranite.io.console import puts, putsln, putserr, putserrln, input, getpass, putsI64
-from uranite.io.writer import STDIN_FD, STDOUT_FD, STDERR_FD, writeFd, writeNewlineFd, writeLineFd, writeRawFd
-
-from uranite.io.file import File, openFile, createFile, appendFile, readFileString, writeFileString
-
-from uranite.io.path import {
-    join,
-    dirname,
-    basename,
-    extension,
-    stem,
-    exists,
-    isFile,
-    isDir,
-    isSymlink,
-    readlink,
-    absolute
-}
-
-from uranite.io.directory import {
-    EntryType,
-    DirectoryEntry,
-    DirectoryIterator,
-    mkdir,
-    makedirs,
-    rmdir,
-    removetree,
-    listdir,
-    countContents
-}
-
-from uranite.io.buffered-reader import BufferedReader
-from uranite.io.buffered-writer import BufferedWriter
 from uranite.io.binary-reader import BinaryReader
 from uranite.io.binary-writer import BinaryWriter
+from uranite.io.buffered-reader import BufferedReader
+from uranite.io.buffered-writer import BufferedWriter
+from uranite.io.console import {
+    getpass,
+    input,
+    puts,
+    putsI64,
+    putserr,
+    putserrln,
+    putsln
+}
+from uranite.io.directory import {
+    DirectoryEntry,
+    DirectoryIterator,
+    EntryType,
+    countContents,
+    listdir,
+    makedirs,
+    mkdir,
+    removetree,
+    rmdir
+}
+from uranite.io.errors import {
+    BrokenPipeError,
+    DirectoryNotEmptyError,
+    FileExistsError,
+    FileNotFoundError,
+    IOError,
+    IsADirectoryError,
+    NotADirectoryError,
+    PermissionError
+}
+from uranite.io.file import {
+    File,
+    appendFile,
+    createFile,
+    openFile,
+    readFileString,
+    writeFileString
+}
+from uranite.io.filesystem import {
+    FilesystemInfo,
+    Pipe,
+    chdir,
+    chmod,
+    chown,
+    copy,
+    fchmod,
+    fchown,
+    getTerminalCols,
+    getTerminalRows,
+    getTerminalSize,
+    getcwd,
+    hardlink,
+    lockExclusive,
+    lockShared,
+    moveFile,
+    remove,
+    rename,
+    restoreMode,
+    setRawMode,
+    statfs,
+    symlink,
+    tempDir,
+    tempFile,
+    tryLockExclusive,
+    unlock
+}
+from uranite.io.line-iterator import LineIterator
+from uranite.io.path import {
+    absolute,
+    basename,
+    dirname,
+    exists,
+    extension,
+    isDir,
+    isFile,
+    isSymlink,
+    join,
+    readlink,
+    stem
+}
+from uranite.io.stat import {
+    FileStat,
+    FileType,
+    fstatFd,
+    lstatPath,
+    statPath
+}
+from uranite.io.stream import InputStream, OutputStream
 from uranite.io.string-reader import StringReader
 from uranite.io.string-writer import StringWriter
-from uranite.io.line-iterator import LineIterator
-
-from uranite.io.filesystem import {
-    copy,
-    moveFile,
-    rename,
-    remove,
-    symlink,
-    hardlink,
-    lockShared,
-    lockExclusive,
-    unlock,
-    tryLockExclusive,
-    Pipe,
-    getTerminalSize,
-    getTerminalRows,
-    getTerminalCols,
-    setRawMode,
-    restoreMode,
-    chmod,
-    fchmod,
-    chown,
-    fchown,
-    FilesystemInfo,
-    statfs,
-    getcwd,
-    chdir,
-    tempFile,
-    tempDir
+from uranite.io.writer import {
+    STDERR_FD,
+    STDIN_FD,
+    STDOUT_FD,
+    writeFd,
+    writeLineFd,
+    writeNewlineFd,
+    writeRawFd
 }
 
+
+
+
+
+
+
+
+
 export {
-    IOError, FileNotFoundError, PermissionError, FileExistsError,
-    IsADirectoryError, NotADirectoryError, DirectoryNotEmptyError, BrokenPipeError,
-    InputStream, OutputStream,
-    FileType, FileStat, statPath, lstatPath, fstatFd,
-    puts, putsln, putserr, putserrln, input, getpass, putsI64,
-    STDIN_FD, STDOUT_FD, STDERR_FD,
-    writeFd, writeNewlineFd, writeLineFd, writeRawFd,
-    File, openFile, createFile, appendFile, readFileString, writeFileString,
-    join, dirname, basename, extension, stem, exists, isFile, isDir, isSymlink, readlink, absolute,
-    EntryType, DirectoryEntry, DirectoryIterator,
-    mkdir, makedirs, rmdir, removetree, listdir, countContents,
-    BufferedReader, BufferedWriter, BinaryReader, BinaryWriter,
-    StringReader, StringWriter, LineIterator,
-    copy, moveFile, rename, remove, symlink, hardlink,
-    lockShared, lockExclusive, unlock, tryLockExclusive,
+    BinaryReader,
+    BinaryWriter,
+    BrokenPipeError,
+    BufferedReader,
+    BufferedWriter,
+    DirectoryEntry,
+    DirectoryIterator,
+    DirectoryNotEmptyError,
+    EntryType,
+    File,
+    FileExistsError,
+    FileNotFoundError,
+    FileStat,
+    FileType,
+    FilesystemInfo,
+    IOError,
+    InputStream,
+    IsADirectoryError,
+    LineIterator,
+    NotADirectoryError,
+    OutputStream,
+    PermissionError,
     Pipe,
-    getTerminalSize, getTerminalRows, getTerminalCols,
-    setRawMode, restoreMode,
-    chmod, fchmod, chown, fchown,
-    FilesystemInfo, statfs,
-    getcwd, chdir,
-    tempFile, tempDir
+    STDERR_FD,
+    STDIN_FD,
+    STDOUT_FD,
+    StringReader,
+    StringWriter,
+    absolute,
+    appendFile,
+    basename,
+    chdir,
+    chmod,
+    chown,
+    copy,
+    countContents,
+    createFile,
+    dirname,
+    exists,
+    extension,
+    fchmod,
+    fchown,
+    fstatFd,
+    getTerminalCols,
+    getTerminalRows,
+    getTerminalSize,
+    getcwd,
+    getpass,
+    hardlink,
+    input,
+    isDir,
+    isFile,
+    isSymlink,
+    join,
+    listdir,
+    lockExclusive,
+    lockShared,
+    lstatPath,
+    makedirs,
+    mkdir,
+    moveFile,
+    openFile,
+    puts,
+    putsI64,
+    putserr,
+    putserrln,
+    putsln,
+    readFileString,
+    readlink,
+    remove,
+    removetree,
+    rename,
+    restoreMode,
+    rmdir,
+    setRawMode,
+    statPath,
+    statfs,
+    stem,
+    symlink,
+    tempDir,
+    tempFile,
+    tryLockExclusive,
+    unlock,
+    writeFd,
+    writeFileString,
+    writeLineFd,
+    writeNewlineFd,
+    writeRawFd
 }
