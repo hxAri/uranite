@@ -1,10 +1,10 @@
 package testing
 
-from uranite.encoding.crc32c import initializeCrc32cTable, crc32c, crc32cUpdate, crc32cFinalize
 from uranite.encoding.binary import writeI8
+from uranite.encoding.crc32c import crc32c, crc32cFinalize, crc32cUpdate, initializeCrc32cTable
+from uranite.io.console import putsln
 from uranite.memory.allocator import alloc, dealloc
 from uranite.testing.assertions import assertEqualI64, assertNotEqualI64, assertTrue
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Encoding CRC-32C Tests ===" )
