@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-29 14:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process-handle.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/multiprocessing/process-handle.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,10 +21,10 @@
 
 package uranite.process.process-handle
 
-from uranite.os.task.task import BlockReason
 from uranite.os.ipc.signal import Event
+from uranite.os.task.task import BlockReason
+from uranite.process.errors import ProcessCrashedError, ProcessError
 from uranite.process.process import Process, ProcessRuntime
-from uranite.process.errors import ProcessError, ProcessCrashedError
 
 public class ProcessHandle:
     
