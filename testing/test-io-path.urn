@@ -1,12 +1,17 @@
 package testing
 
-from uranite.io.path import join, dirname, basename, extension, stem, exists, isFile, isDir
-from uranite.testing.assertions import {
-    assertEqualStr,
-    assertTrue,
-    assertFalse
-}
 from uranite.io.console import putsln
+from uranite.io.path import {
+    basename,
+    dirname,
+    exists,
+    extension,
+    isDir,
+    isFile,
+    join,
+    stem
+}
+from uranite.testing.assertions import assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== IO Path Tests ===" )
