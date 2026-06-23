@@ -1,10 +1,8 @@
 package testing
 
-from uranite.os.debug.panic import PanicReason, PanicContext
-from uranite.testing.assertions import {
-    assertEqualI64, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.debug.panic import PanicContext, PanicReason
+from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
     putsln( "=== OS Debug Panic Tests ===" )
