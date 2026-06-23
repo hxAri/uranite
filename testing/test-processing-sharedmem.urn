@@ -1,14 +1,14 @@
 package testing
 
 from uranite.functions.runtime import {
-    uraniteSharedMemoryCreate, uraniteSharedMemoryPtr,
-    uraniteSharedMemorySize, uraniteSharedMemoryClose,
+    uraniteSharedMemoryClose,
+    uraniteSharedMemoryCreate,
+    uraniteSharedMemoryPtr,
+    uraniteSharedMemorySize,
     uraniteSharedMemoryUnlink
 }
-from uranite.testing.assertions import {
-    assertEqualI64, assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== Processing SharedMemory Tests ===" )
