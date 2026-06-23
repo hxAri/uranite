@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-06 04:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/string/format.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/string/format.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,10 +22,10 @@
 
 package uranite.string.format
 
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
-from uranite.memory.allocator import alloc
-from uranite.functions.builtin import ptrToString
 from uranite.convert.convert import intToString
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc
 
 public function padRight( String source, I64 width ) -> String:
     
@@ -180,34 +180,6 @@ public function formatUtcOffset( I64 offsetSeconds ) -> String:
     I64 minutes = ( absoluteOffset % 3600 ) / 60
     return sign + padZero( hours, 2 ) + ":" + padZero( minutes, 2 )
 
-public function copyBytes( I64 destination, I64 destinationOffset, I64 source, I64 sourceOffset, I64 length ) -> Void:
-    
-    """
-    Copy bytes from source memory to destination memory at the given
-    offsets. Does not handle overlapping regions — if source and
-    destination overlap, behavior is undefined.
-    
-    Parameters:
-        destination (I64):
-            The destination memory base address.
-        destinationOffset (I64):
-            The byte offset into destination where copying begins.
-        source (I64):
-            The source memory base address.
-        sourceOffset (I64):
-            The byte offset into source where reading begins.
-        length (I64):
-            The number of bytes to copy.
-    
-    Complexity:
-        Time: O(length)
-    """
-    
-    I64 index = 0
-    while index < length:
-        writeByteAt( destination, destinationOffset + index, readByteAt( source, sourceOffset + index ) )
-        index = index + 1
-
 public function appendTo( I64 buffer, I64 position, String content ) -> I64:
     
     """
@@ -241,10 +213,9 @@ public function appendTo( I64 buffer, I64 position, String content ) -> I64:
     return position + contentLength
 
 export {
-    padRight,
-    padLeft,
-    padZero,
+    appendTo,
     formatUtcOffset,
-    copyBytes,
-    appendTo
+    padLeft,
+    padRight,
+    padZero
 }
