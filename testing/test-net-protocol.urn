@@ -1,16 +1,28 @@
 package testing
 
-from uranite.net.protocol import {
-    NetworkStack, EthernetFrame, ArpTable,
-    Ipv4Header, RoutingTable,
-    TcpHeader, TcpConnectionTable,
-    UdpHeader, UdpBindTable,
-    SocketTable,
-    ipAddr, ipOctet0, ipOctet1, ipOctet2, ipOctet3, isSameSubnet,
-    ETHERTYPE_IPV4, TCP_SYN, TCP_ACK
-}
-from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
 from uranite.io.console import putsln
+from uranite.net.protocol import {
+    ArpTable,
+    ETHERTYPE_IPV4,
+    EthernetFrame,
+    Ipv4Header,
+    NetworkStack,
+    RoutingTable,
+    SocketTable,
+    TCP_ACK,
+    TCP_SYN,
+    TcpConnectionTable,
+    TcpHeader,
+    UdpBindTable,
+    UdpHeader,
+    ipAddr,
+    ipOctet0,
+    ipOctet1,
+    ipOctet2,
+    ipOctet3,
+    isSameSubnet
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Net Protocol Tests ===" )
