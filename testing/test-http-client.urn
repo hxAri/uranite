@@ -1,15 +1,10 @@
 package testing
 
+from uranite.io.console import putsln
+from uranite.net.http.parser import extractStatusText, parseContentLength, parseResponse, parseStatusCode
 from uranite.net.http.request import HttpRequest
 from uranite.net.http.response import HttpResponse
-from uranite.net.http.parser import {
-    parseStatusCode, extractStatusText,
-    parseContentLength, parseResponse
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualStr
-}
-from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
 
 public function main() -> I32:
     putsln( "=== HTTP Client Tests ===" )
