@@ -1,7 +1,7 @@
 package testing
 
-from uranite.testing.assertions import assertTrue, assertFalse, assertEqualI64, assertEqualStr
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function maybeValue( Boolean give ) -> ?Int:
     if give:
