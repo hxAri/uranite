@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/cpu.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/cpu.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,9 @@
 
 package uranite.os.arch.x86-64.cpu
 
-public class Registers:
+
+
+public struct Registers:
     
     """
     Full x86_64 CPU register context including all general-purpose registers,
@@ -313,19 +315,19 @@ public function readTsc() -> I64:
 
 export {
     Registers,
-    halt,
-    enableInterrupts,
     disableInterrupts,
+    enableInterrupts,
+    halt,
+    invlpg,
     readCr0,
-    writeCr0,
     readCr2,
     readCr3,
-    writeCr3,
     readCr4,
-    writeCr4,
-    invlpg,
     readMsr,
-    writeMsr,
     readRflags,
-    readTsc
+    readTsc,
+    writeCr0,
+    writeCr3,
+    writeCr4,
+    writeMsr
 }
