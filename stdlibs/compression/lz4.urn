@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/compression/lz4.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/compression/lz4.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -27,9 +27,9 @@
 
 package uranite.compression.lz4
 
-from uranite.memory.allocator import alloc, dealloc
-from uranite.io.syscall import readByteAt, writeByteAt
 from uranite.encoding.binary import copyBytes
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 LZ4_HASH_BITS = 16
 const I64 LZ4_HASH_TABLE_SIZE = 65536
@@ -547,7 +547,9 @@ public function lz4FrameDecompress( I64 inputAddress, I64 inputLength, I64 outpu
     return outputOffset
 
 export {
-    lz4CompressBlock, lz4DecompressBlock,
-    lz4FrameCompress, lz4FrameDecompress,
+    lz4CompressBlock,
+    lz4DecompressBlock,
+    lz4FrameCompress,
+    lz4FrameDecompress,
     lz4MaxCompressedSize
 }
