@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/requests/response.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/requests/response.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -83,7 +83,7 @@ public class Response:
             Space: O(1)
         """
         
-        if self.ok == False:
+        if not self.ok:
             raise new HTTPError( "HTTP error", self.statusCode, None )
 
 export {
