@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/file.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/file.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,18 +21,53 @@
 
 package uranite.io.file
 
-from uranite.memory.memory import Memory
-from uranite.io.syscall import {
-    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
-    sysOpen, sysClose, sysRead, sysWrite, sysLseek, sysFsync, sysFtruncate, sysFstat,
-    readI64At, readI32At,
-    O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND,
-    SEEK_SET, SEEK_CUR, SEEK_END
-}
-from uranite.io.stream import InputStream, OutputStream
 from uranite.collection.array-list import ArrayList
-from uranite.io.stat import FileStat, fstatFd
 from uranite.io.errors import IOError
+from uranite.io.stat import FileStat, fstatFd
+from uranite.io.stream import InputStream, OutputStream
+from uranite.io.syscall import {
+    ECHO_FLAG,
+    ICANON_FLAG,
+    LOCK_EX,
+    LOCK_NB,
+    LOCK_SH,
+    LOCK_UN,
+    O_APPEND,
+    O_CREAT,
+    O_RDONLY,
+    O_RDWR,
+    O_TRUNC,
+    O_WRONLY,
+    SEEK_CUR,
+    SEEK_END,
+    SEEK_SET,
+    SYS_FLOCK,
+    TCGETS,
+    TCSETS,
+    memoryToPtr,
+    readByteAt,
+    readI32At,
+    readI64At,
+    stringLen,
+    stringToPtr,
+    sysClose,
+    sysFchmod,
+    sysFchown,
+    sysFlock,
+    sysFstat,
+    sysFsync,
+    sysFtruncate,
+    sysIoctl,
+    sysLseek,
+    sysOpen,
+    sysRead,
+    sysWrite,
+    writeByteAt,
+    writeI32At
+}
+from uranite.memory.memory import Memory
+from uranite.os.syscall.invoke import syscall2
+from uranite.os.syscall.result import SyscallResult
 
 const I64 DEFAULT_FILE_PERMISSIONS = 420
 """Default file permission mode (octal 0644: owner read/write, group/other read)."""
@@ -52,7 +87,7 @@ public class File implements InputStream, OutputStream:
     protect Boolean closed
     """Whether this file has been closed."""
     
-    public function File( self, String path, I64 flags, I64 mode ) -> Void:
+    protect function File( self, String path, I64 flags, I64 mode ) -> Void:
         
         """
         Open a file at the given path with the specified flags and permission mode.
@@ -329,7 +364,7 @@ public class File implements InputStream, OutputStream:
             totalWritten = totalWritten + chunkWritten
         return totalWritten
     
-    public function seek( self, I64 offset, I64 whence ) -> I64:
+    protect function seek( self, I64 offset, I64 whence ) -> I64:
         
         """
         Reposition the file offset within the open file.
@@ -606,6 +641,160 @@ public class File implements InputStream, OutputStream:
         String content = self.readString()
         writeFileString( destinationPath, content )
 
+    public function lockShared( self ) -> Void:
+
+        """
+        Acquire a shared (read) lock on this file. Multiple processes may hold
+        a shared lock simultaneously. Blocks until acquired.
+
+        Raises:
+            IOError:
+                If the lock operation fails.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        sysFlock( self.fd, LOCK_SH )
+
+    public function lockExclusive( self ) -> Void:
+
+        """
+        Acquire an exclusive (write) lock on this file. Only one process may
+        hold an exclusive lock at a time. Blocks until acquired.
+
+        Raises:
+            IOError:
+                If the lock operation fails.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        sysFlock( self.fd, LOCK_EX )
+
+    public function unlock( self ) -> Void:
+
+        """
+        Release any lock (shared or exclusive) held on this file.
+
+        Raises:
+            IOError:
+                If the unlock operation fails.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        sysFlock( self.fd, LOCK_UN )
+
+    public function tryLockExclusive( self ) -> Boolean:
+
+        """
+        Attempt to acquire an exclusive lock without blocking. Returns
+        True if the lock was acquired, False if another process holds
+        a conflicting lock.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        SyscallResult lockResult = syscall2( SYS_FLOCK, self.fd, LOCK_EX + LOCK_NB )
+        return lockResult.isOk()
+
+    public function setRawMode( self ) -> Memory<I64>:
+
+        """
+        Set the terminal associated with this file to raw mode by disabling
+        ECHO and ICANON flags in the termios local flags. Returns saved
+        termios settings that must be passed to restoreMode to undo.
+
+        Returns:
+            Memory<I64>:
+                Saved original termios settings buffer.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        Memory<I64> termios = new Memory<I64>( 8 )
+        I64 termAddress = memoryToPtr( termios )
+        sysIoctl( self.fd, TCGETS, termAddress )
+        Memory<I64> saved = new Memory<I64>( 8 )
+        I64 savedAddress = memoryToPtr( saved )
+        I64 copyOffset = 0
+        while copyOffset < 60:
+            I64 byteValue = readByteAt( termAddress, copyOffset )
+            writeByteAt( savedAddress, copyOffset, byteValue )
+            copyOffset = copyOffset + 1
+        I64 localFlags = readI32At( termAddress, 12 )
+        I64 maskedFlags = localFlags & ( 0 - 1 - ECHO_FLAG - ICANON_FLAG )
+        writeI32At( termAddress, 12, maskedFlags )
+        sysIoctl( self.fd, TCSETS, termAddress )
+        termios.free()
+        return saved
+
+    public function restoreMode( self, Memory<I64> saved ) -> Void:
+
+        """
+        Restore terminal settings from a previously saved termios buffer,
+        undoing the effect of setRawMode. Frees the saved buffer after
+        restoring.
+
+        Parameters:
+            saved (Memory<I64>):
+                The saved termios buffer returned by setRawMode. This buffer
+                is freed after use and must not be used again.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        I64 savedAddress = memoryToPtr( saved )
+        sysIoctl( self.fd, TCSETS, savedAddress )
+        saved.free()
+
+    public function setPermissions( self, I64 mode ) -> Void:
+
+        """
+        Change the permission mode of this file.
+
+        Parameters:
+            mode (I64):
+                The new permission mode bits (e.g. 420 for octal 0644).
+
+        Raises:
+            IOError:
+                If the fchmod operation fails.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        sysFchmod( self.fd, mode )
+
+    public function setOwner( self, I64 uid, I64 gid ) -> Void:
+
+        """
+        Change the owner and group of this file.
+
+        Parameters:
+            uid (I64):
+                The new owner user ID.
+            gid (I64):
+                The new group ID.
+
+        Raises:
+            IOError:
+                If the fchown operation fails.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        sysFchown( self.fd, uid, gid )
+
     public function destroy( self ) -> Void:
 
         """
@@ -657,6 +846,27 @@ public function createFile( String path, I64 mode ) -> File:
     """
     
     return new File( path, O_WRONLY | O_CREAT | O_TRUNC, mode )
+
+public function createFile( String path ) -> File:
+
+    """
+    Create a new file or truncate an existing one with default permissions
+    (0644: owner read/write, group/other read). Opened for writing only.
+
+    Parameters:
+        path (String):
+            The filesystem path of the file to create.
+
+    Returns:
+        File:
+            A File handle opened in write-only mode.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return new File( path, O_WRONLY | O_CREAT | O_TRUNC, DEFAULT_FILE_PERMISSIONS )
 
 public function appendFile( String path ) -> File:
     
@@ -771,13 +981,13 @@ public function openOrCreate( String path, I64 mode ) -> File:
     return new File( path, O_RDWR | O_CREAT, mode )
 
 export {
-    File,
     DEFAULT_FILE_PERMISSIONS,
-    openFile,
-    createFile,
+    File,
     appendFile,
-    readFileString,
-    writeFileString,
+    createFile,
+    openFile,
     openForReadWrite,
-    openOrCreate
+    openOrCreate,
+    readFileString,
+    writeFileString
 }
