@@ -1,9 +1,9 @@
 package testing
 
-from uranite.threading.atomic import AtomicI64
-from uranite.testing.assertions import assertEqualI64
 from uranite.io.console import putsln
 from uranite.sys.process import exit
+from uranite.testing.assertions import assertEqualI64
+from uranite.threading.atomic import AtomicI64
 
 public function main() -> I32:
     putsln( "=== Threading Atomic Basic Tests ===" )
