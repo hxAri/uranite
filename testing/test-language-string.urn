@@ -1,13 +1,8 @@
 package testing
 
-from uranite.language.string import String
-from uranite.testing.assertions import {
-    assertEqualStr,
-    assertEqualI64,
-    assertTrue,
-    assertFalse
-}
 from uranite.io.console import putsln
+from uranite.language.string import String
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public class Greeting:
     protect String message
