@@ -1,12 +1,9 @@
 package testing
 
-from uranite.functions.externs import malloc, free
-from uranite.functions.runtime import {
-    uraniteAtomicLoad, uraniteAtomicStore,
-    uraniteAtomicAdd, uraniteAtomicSub
-}
-from uranite.testing.assertions import assertEqualI64
+from uranite.functions.externs import free, malloc
+from uranite.functions.runtime import uraniteAtomicAdd, uraniteAtomicLoad, uraniteAtomicStore, uraniteAtomicSub
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
     putsln( "=== Threading Atomic Tests ===" )
