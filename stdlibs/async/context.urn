@@ -58,6 +58,6 @@ public function makeContext( I64 stackBase, I64 stackSize, I64 entryFn ) -> I64:
     return base - 48
 
 export {
-    makeContext, 
+    makeContext,
     swapContext
 }
