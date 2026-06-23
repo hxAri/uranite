@@ -1565,9 +1565,32 @@ namespace uranite::codegen {
 				methodFunctionReturnType = llvm::StructType::get( this->context, { llvm::Type::getInt1Ty( this->context ), methodFunctionReturnType } );
 			}
 			std::vector<llvm::Type*> parameterTypes;
+			FunctionParamInfo methodParamInfo;
+			int methodNonSelfParamIndex = 0;
 			for( ast::nodes::FunctionParameterSharedPointer& methodFunctionParameter : methodFunctionDeclaration.parameters ) {
 				if( methodFunctionParameter->isSelf ) {
 					parameterTypes.push_back( llvm::PointerType::getUnqual( this->structTypes[declaration.name] ) );
+				}
+				else if( methodFunctionParameter->isVariadic ) {
+					llvm::Type* variadicElementType = llvm::Type::getInt64Ty( this->context );
+					if( methodFunctionParameter->type && methodFunctionParameter->type->kind == ast::Node::Kind::ArrayType ) {
+						ast::nodes::ArrayTypeNode& arrayNode = static_cast<ast::nodes::ArrayTypeNode&>( *methodFunctionParameter->type );
+						if( arrayNode.elementType ) {
+							variadicElementType = this->resolveAstType( arrayNode.elementType );
+						}
+					}
+					else if( methodFunctionParameter->type ) {
+						variadicElementType = this->resolveAstType( methodFunctionParameter->type );
+					}
+					llvm::StructType* argsStruct = llvm::StructType::get( this->context, {
+						llvm::PointerType::getUnqual( variadicElementType ),
+						llvm::Type::getInt64Ty( this->context ),
+						llvm::Type::getInt64Ty( this->context )
+					});
+					parameterTypes.push_back( llvm::PointerType::getUnqual( argsStruct ) );
+					methodParamInfo.variadicIndex = methodNonSelfParamIndex;
+					methodParamInfo.variadicElementLLVMType = variadicElementType;
+					methodNonSelfParamIndex++;
 				}
 				else if( methodFunctionParameter->type ) {
 					llvm::Type* methodFunctionParameterLLVMType = this->resolveAstType( methodFunctionParameter->type );
@@ -1575,6 +1598,11 @@ namespace uranite::codegen {
 						methodFunctionParameterLLVMType = llvm::PointerType::getUnqual( methodFunctionParameterLLVMType );
 					}
 					parameterTypes.push_back( methodFunctionParameterLLVMType );
+					methodNonSelfParamIndex++;
+				}
+				else {
+					parameterTypes.push_back( llvm::Type::getInt64Ty( this->context ) );
+					methodNonSelfParamIndex++;
 				}
 			}
 			std::string mapKey( fmt::format( "{}::{}", declaration.name, methodFunctionDeclaration.name ) );
@@ -1585,6 +1613,7 @@ namespace uranite::codegen {
 				mapKey+= fmt::format( "#{}", std::to_string( parameterTypes.size() ) );
 			}
 			this->functions[mapKey] = methodFunction;
+			this->functionParamInfos[mapKey] = methodParamInfo;
 		}
 		this->currentClassName.clear();
 	}
@@ -1602,19 +1631,14 @@ namespace uranite::codegen {
 			return false;
 		}
 		semantic::TypeSharedPointer semanticType = this->analyzer.types().lookupType( className );
-		if( semanticType == nullptr || semanticType->kind != semantic::Type::Kind::Class ) {
+		if( semanticType == nullptr ) {
 			return false;
 		}
-		semantic::ClassTypeSharedPointer classType = std::static_pointer_cast<semantic::ClassType>( semanticType );
-		if( classType->astDeclaration == nullptr || classType->astDeclaration->isNative ) {
+		if( semanticType->kind != semantic::Type::Kind::Class && semanticType->kind != semantic::Type::Kind::Struct ) {
 			return false;
 		}
-		if( classType->astDeclaration->genericParameters.empty() == false && className.find( '<' ) == std::string::npos ) {
-			if( this->structTypes.count( className ) == 0 ) {
-				return false;
-			}
-		}
-		this->preRegisteredClasses.insert( className );
+
+		// Save codegen state before lazy registration
 		std::string savedClassName = this->currentClassName;
 		llvm::Function* savedFunction = this->currentFunction;
 		std::unordered_map<std::string, llvm::Value*> savedNamedValues = this->namedValues;
@@ -1630,9 +1654,37 @@ namespace uranite::codegen {
 		std::swap( savedDeferScopeStack, this->deferScopeStack );
 		std::unordered_map<std::string, llvm::Value*> savedAliveFlags;
 		std::swap( savedAliveFlags, this->aliveFlags );
-		this->getOrCreateStructType( className, classType );
-		this->preRegisterClassMethods( *classType->astDeclaration, classType );
-		this->generateClassDeclaration( *classType->astDeclaration );
+
+		if( semanticType->kind == semantic::Type::Kind::Struct ) {
+			semantic::StructTypeSharedPointer structType = std::static_pointer_cast<semantic::StructType>( semanticType );
+			if( structType->astDeclaration == nullptr ) {
+				return false;
+			}
+			if( structType->astDeclaration->genericParameters.empty() == false && className.find( '<' ) == std::string::npos ) {
+				if( this->structTypes.count( className ) == 0 ) {
+					return false;
+				}
+			}
+			this->preRegisteredClasses.insert( className );
+			this->generateStructDeclaration( *structType->astDeclaration );
+		}
+		else {
+			semantic::ClassTypeSharedPointer classType = std::static_pointer_cast<semantic::ClassType>( semanticType );
+			if( classType->astDeclaration == nullptr || classType->astDeclaration->isNative ) {
+				return false;
+			}
+			if( classType->astDeclaration->genericParameters.empty() == false && className.find( '<' ) == std::string::npos ) {
+				if( this->structTypes.count( className ) == 0 ) {
+					return false;
+				}
+			}
+			this->preRegisteredClasses.insert( className );
+			this->getOrCreateStructType( className, classType );
+			this->preRegisterClassMethods( *classType->astDeclaration, classType );
+			this->generateClassDeclaration( *classType->astDeclaration );
+		}
+
+		// Restore codegen state
 		this->currentClassName = savedClassName;
 		this->currentFunction = savedFunction;
 		this->namedValues = savedNamedValues;
@@ -1730,7 +1782,21 @@ namespace uranite::codegen {
 				llvm::AllocaInst* alloca = this->createEntryBlockAllocation( methodFunction, methodFunctionParameterName, methodFunctionParameterLLVM->getType() );
 				this->builder.CreateStore( methodFunctionParameterLLVM, alloca );
 				this->namedValues[methodFunctionParameterName] = alloca;
-				if( methodFunctionParameter->isSelf == false && methodFunctionParameter->type ) {
+				if( methodFunctionParameter->isSelf == false && methodFunctionParameter->isVariadic ) {
+					std::string variadicElementTypeName = "I64";
+					if( methodFunctionParameter->type && methodFunctionParameter->type->kind == ast::Node::Kind::ArrayType ) {
+						ast::nodes::ArrayTypeNode& arrayTypeNode = static_cast<ast::nodes::ArrayTypeNode&>( *methodFunctionParameter->type );
+						if( arrayTypeNode.elementType && arrayTypeNode.elementType->kind == ast::Node::Kind::SimpleType ) {
+							variadicElementTypeName = static_cast<ast::nodes::SimpleTypeNode&>( *arrayTypeNode.elementType ).name;
+						}
+					}
+					else if( methodFunctionParameter->type && methodFunctionParameter->type->kind == ast::Node::Kind::SimpleType ) {
+						variadicElementTypeName = static_cast<ast::nodes::SimpleTypeNode&>( *methodFunctionParameter->type ).name;
+					}
+					std::string argsTypeName( fmt::format( "Args<{}>", variadicElementTypeName ) );
+					this->variableStructType[methodFunctionParameterName] = argsTypeName;
+				}
+				else if( methodFunctionParameter->isSelf == false && methodFunctionParameter->type ) {
 					std::string methodFunctionParameterTypeName;
 					if( methodFunctionParameter->type->kind == ast::Node::Kind::SimpleType ) {
 						methodFunctionParameterTypeName = static_cast<ast::nodes::SimpleTypeNode&>( *methodFunctionParameter->type ).name;
@@ -1801,16 +1867,20 @@ namespace uranite::codegen {
 				}
 			}
 			
+			this->currentFunctionEmittedPushFrame = false;
 			if( methodFunctionDeclaration.source && methodFunctionDeclaration.source->location ) {
 				std::string methodDisplayName = fmt::format( "{}.{}", declaration.name, methodFunctionDeclaration.name );
 				this->emitPushFrame( methodFunctionDeclaration.source->filename, methodFunctionDeclaration.source->location->line, methodFunctionDeclaration.source->location->column, methodDisplayName );
+				this->currentFunctionEmittedPushFrame = true;
 			}
 			for( ast::nodes::StatementSharedPointer& methodFunctionStatement : methodFunctionDeclaration.body ) {
 				this->generateStatement( methodFunctionStatement );
 			}
 			llvm::BasicBlock* methodFunctionLastBasicBlock = this->builder.GetInsertBlock();
 			if( methodFunctionLastBasicBlock && methodFunctionLastBasicBlock->getTerminator() == nullptr ) {
-				this->emitPopFrame();
+				if( this->currentFunctionEmittedPushFrame ) {
+					this->emitPopFrame();
+				}
 				if( methodFunction->getReturnType()->isVoidTy() ) {
 					this->builder.CreateRetVoid();
 				}
@@ -1969,19 +2039,95 @@ namespace uranite::codegen {
 			}
 		}
 		if( constructFunction != this->functions.end() ) {
-			
+
 			// Call constructor: ClassName::ClassName(self, args...)
-			size_t constructFunctionParameterIndex = 1; // skip self
+			std::string resolvedConstructKey = constructFunction->first;
+			std::unordered_map<std::string, FunctionParamInfo>::iterator constructParamInfoIter = this->functionParamInfos.find( resolvedConstructKey );
+			if( constructParamInfoIter == this->functionParamInfos.end() ) {
+				constructParamInfoIter = this->functionParamInfos.find( constructKey );
+			}
+			int constructVariadicIdx = ( constructParamInfoIter != this->functionParamInfos.end() ) ? constructParamInfoIter->second.variadicIndex : -1;
+			size_t constructFixedFieldCount;
+			if( constructVariadicIdx >= 0 ) {
+				constructFixedFieldCount = static_cast<size_t>( constructVariadicIdx );
+			}
+			else {
+				constructFixedFieldCount = expression.fields.size();
+			}
+			size_t constructFunctionParameterIndex = 1;
 			std::vector<llvm::Value*> constructFunctionArguments;
-			constructFunctionArguments.push_back( objectPointer ); // self pointer
-			for( std::pair<std::string,ast::nodes::ExpressionSharedPointer> pair : expression.fields ) {
-				llvm::Value* expressionFieldValue = this->generateExpression( pair.second );
+			constructFunctionArguments.push_back( objectPointer );
+			for( size_t fieldIdx = 0; fieldIdx < expression.fields.size() && fieldIdx < constructFixedFieldCount; fieldIdx++ ) {
+				llvm::Value* expressionFieldValue = this->generateExpression( expression.fields[fieldIdx].second );
 				if( expressionFieldValue == nullptr ) continue;
 				if( constructFunctionParameterIndex < constructFunction->second->arg_size() ) {
 					expressionFieldValue = this->generateImplicitCast( expressionFieldValue, constructFunction->second->getArg( constructFunctionParameterIndex )->getType() );
 				}
 				constructFunctionArguments.push_back( expressionFieldValue );
 				constructFunctionParameterIndex++;
+			}
+			if( constructVariadicIdx >= 0 ) {
+				llvm::Type* int64Type = llvm::Type::getInt64Ty( this->context );
+				size_t constructExtraStart = constructFixedFieldCount;
+				size_t constructExtraCount = ( expression.fields.size() > constructExtraStart ) ? expression.fields.size() - constructExtraStart : 0;
+				bool constructHasForward = false;
+				if( constructExtraCount > 0 ) {
+					ast::nodes::ExpressionSharedPointer& firstExtraField = expression.fields[constructExtraStart].second;
+					if( firstExtraField->kind == ast::Node::Kind::IdentifierExpression ) {
+						ast::nodes::IdentifierExpression& argIdentifier = static_cast<ast::nodes::IdentifierExpression&>( *firstExtraField );
+						std::unordered_map<std::string, std::string>::iterator argStructTypeIter = this->variableStructType.find( argIdentifier.name );
+						if( argStructTypeIter != this->variableStructType.end() && argStructTypeIter->second.find( "Args<" ) == 0 ) {
+							constructHasForward = true;
+						}
+					}
+				}
+				if( constructHasForward ) {
+					llvm::Value* forwardedArgs = this->generateExpression( expression.fields[constructExtraStart].second );
+					if( forwardedArgs && forwardedArgs->getType()->isPointerTy() ) {
+						llvm::Type* forwardedPointeeType = forwardedArgs->getType()->getPointerElementType();
+						if( forwardedPointeeType->isPointerTy() && forwardedPointeeType->getPointerElementType()->isStructTy() ) {
+							forwardedArgs = this->builder.CreateLoad( forwardedPointeeType, forwardedArgs, "cfwd.args.load" );
+						}
+					}
+					constructFunctionArguments.push_back( forwardedArgs );
+				}
+				else {
+					llvm::Type* constructElemType = int64Type;
+					if( constructParamInfoIter != this->functionParamInfos.end() && constructParamInfoIter->second.variadicElementLLVMType ) {
+						constructElemType = constructParamInfoIter->second.variadicElementLLVMType;
+					}
+					llvm::StructType* constructArgsStructType = llvm::StructType::get( this->context, {
+						llvm::PointerType::getUnqual( constructElemType ),
+						int64Type,
+						int64Type
+					});
+					llvm::Type* constructElemPtrType = llvm::PointerType::getUnqual( constructElemType );
+					llvm::AllocaInst* constructArgsAlloca = this->createEntryBlockAllocation( this->currentFunction, "cpack.args", constructArgsStructType );
+					if( constructExtraCount > 0 ) {
+						llvm::ArrayType* dataArrayType = llvm::ArrayType::get( constructElemType, constructExtraCount );
+						llvm::AllocaInst* dataAlloca = this->createEntryBlockAllocation( this->currentFunction, "cpack.args.data", dataArrayType );
+						for( size_t varArgIndex = 0; varArgIndex < constructExtraCount; varArgIndex++ ) {
+							llvm::Value* argVal = this->generateExpression( expression.fields[constructExtraStart + varArgIndex].second );
+							if( argVal ) {
+								argVal = this->generateImplicitCast( argVal, constructElemType );
+								llvm::Value* elemGep = this->builder.CreateConstGEP2_32( dataArrayType, dataAlloca, 0, static_cast<unsigned>( varArgIndex ), "cpack.args.gep" );
+								this->builder.CreateStore( argVal, elemGep );
+							}
+						}
+						llvm::Value* dataPtr = this->builder.CreateBitCast( dataAlloca, constructElemPtrType, "cpack.args.ptr" );
+						llvm::Value* dataFieldPtr = this->builder.CreateStructGEP( constructArgsStructType, constructArgsAlloca, 0, "cpack.args.data.field" );
+						this->builder.CreateStore( dataPtr, dataFieldPtr );
+					}
+					else {
+						llvm::Value* dataFieldPtr = this->builder.CreateStructGEP( constructArgsStructType, constructArgsAlloca, 0, "cpack.args.data.field" );
+						this->builder.CreateStore( llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( constructElemPtrType ) ), dataFieldPtr );
+					}
+					llvm::Value* countFieldPtr = this->builder.CreateStructGEP( constructArgsStructType, constructArgsAlloca, 1, "cpack.args.count.field" );
+					this->builder.CreateStore( llvm::ConstantInt::get( int64Type, constructExtraCount ), countFieldPtr );
+					llvm::Value* posFieldPtr = this->builder.CreateStructGEP( constructArgsStructType, constructArgsAlloca, 2, "cpack.args.pos.field" );
+					this->builder.CreateStore( llvm::ConstantInt::get( int64Type, 0 ), posFieldPtr );
+					constructFunctionArguments.push_back( constructArgsAlloca );
+				}
 			}
 			for( size_t i = constructFunctionArguments.size(); i < constructFunction->second->arg_size(); i++ ) {
 				llvm::Type* parameterType = constructFunction->second->getArg( i )->getType();
@@ -5813,6 +5959,7 @@ namespace uranite::codegen {
 			semantic::TypeSharedPointer semanticType = this->analyzer.types().lookupType( typeName );
 			bool useVirtualDispatch = false;
 			int virtualTableIndex = -1;
+			bool isActuallyStaticMethod = false;
 			if( semanticType && semanticType->kind == semantic::Type::Kind::Class ) {
 				semantic::ClassTypeSharedPointer classType = std::static_pointer_cast<semantic::ClassType>( semanticType );
 				semantic::MethodInfo* methodInfo = classType->findMethod( methodCallExpression.method );
@@ -5822,6 +5969,9 @@ namespace uranite::codegen {
 						virtualTableIndex = methodInfo->virtualTableIndex;
 					}
 				}
+				if( methodInfo && methodInfo->isStatic ) {
+					isActuallyStaticMethod = true;
+				}
 			}
 			std::vector<llvm::Value*> callArguments;
 			if( this->enumTypeNames.count( typeName ) ) {
@@ -5829,8 +5979,12 @@ namespace uranite::codegen {
 				callArguments.push_back( enumTagValue );
 			}
 			else if( isStaticStyleCall ) {
-				llvm::Type* expectedSelfType = targetFunction->getArg( 0 )->getType();
-				callArguments.push_back( llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( expectedSelfType ) ) );
+				if( isActuallyStaticMethod == false && targetFunction->arg_size() > 0 ) {
+					llvm::Type* expectedSelfType = targetFunction->getArg( 0 )->getType();
+					if( expectedSelfType->isPointerTy() ) {
+						callArguments.push_back( llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( expectedSelfType ) ) );
+					}
+				}
 			}
 			else {
 				llvm::Type* expectedSelfType = targetFunction->getArg( 0 )->getType();
@@ -5851,14 +6005,28 @@ namespace uranite::codegen {
 			if( semanticMethodInfo && semanticMethodInfo->type && semanticMethodInfo->type->kind == semantic::Type::Kind::Function ) {
 				semanticFunctionType = std::static_pointer_cast<semantic::FunctionType>( semanticMethodInfo->type );
 			}
-			size_t parameterIndex = 1;
-			for( ast::nodes::ExpressionSharedPointer& argumentNode : methodCallExpression.arguments ) {
+			std::string resolvedMethodKey = functionIterator->first;
+			std::unordered_map<std::string, FunctionParamInfo>::iterator methodParamInfoIter = this->functionParamInfos.find( resolvedMethodKey );
+			if( methodParamInfoIter == this->functionParamInfos.end() ) {
+				methodParamInfoIter = this->functionParamInfos.find( methodName );
+			}
+			int methodVariadicIdx = ( methodParamInfoIter != this->functionParamInfos.end() ) ? methodParamInfoIter->second.variadicIndex : -1;
+			size_t methodFixedParamCount;
+			if( methodVariadicIdx >= 0 ) {
+				methodFixedParamCount = static_cast<size_t>( methodVariadicIdx );
+			}
+			else {
+				methodFixedParamCount = targetFunction->arg_size() - ( isActuallyStaticMethod ? 0 : 1 );
+			}
+			size_t parameterIndex = isActuallyStaticMethod ? 0 : 1;
+			for( size_t argIdx = 0; argIdx < methodCallExpression.arguments.size() && ( argIdx < methodFixedParamCount ); argIdx++ ) {
+				ast::nodes::ExpressionSharedPointer& argumentNode = methodCallExpression.arguments[argIdx];
 				llvm::Value* argumentValue = this->generateExpression( argumentNode );
 				if( argumentValue == nullptr ) continue;
 				if( parameterIndex < targetFunction->arg_size() ) {
 					llvm::Type* expectedArgType = targetFunction->getArg( parameterIndex )->getType();
 					if( expectedArgType == this->getInterfaceFatPointerType() && argumentValue->getType()->isPointerTy() && semanticFunctionType ) {
-						size_t semanticParamIndex = parameterIndex - 1;
+						size_t semanticParamIndex = isActuallyStaticMethod ? parameterIndex : parameterIndex - 1;
 						if( semanticParamIndex < semanticFunctionType->parameterTypes.size() ) {
 							semantic::TypeSharedPointer paramSemanticType = semanticFunctionType->parameterTypes[semanticParamIndex];
 							if( paramSemanticType && ( paramSemanticType->kind == semantic::Type::Kind::Interface || paramSemanticType->kind == semantic::Type::Kind::Trait ) ) {
@@ -5877,6 +6045,81 @@ namespace uranite::codegen {
 				}
 				callArguments.push_back( argumentValue );
 				parameterIndex++;
+			}
+			if( methodVariadicIdx >= 0 ) {
+				llvm::Type* int64Type = llvm::Type::getInt64Ty( this->context );
+				size_t methodExtraArgStart = methodFixedParamCount;
+				size_t methodExtraArgCount = ( methodCallExpression.arguments.size() > methodExtraArgStart ) ? methodCallExpression.arguments.size() - methodExtraArgStart : 0;
+				bool methodHasVariadicForward = false;
+				if( methodExtraArgCount > 0 ) {
+					ast::nodes::ExpressionSharedPointer& firstExtraArg = methodCallExpression.arguments[methodExtraArgStart];
+					if( firstExtraArg->kind == ast::Node::Kind::IdentifierExpression ) {
+						ast::nodes::IdentifierExpression& argIdentifier = static_cast<ast::nodes::IdentifierExpression&>( *firstExtraArg );
+						std::unordered_map<std::string, std::string>::iterator argStructTypeIter = this->variableStructType.find( argIdentifier.name );
+						if( argStructTypeIter != this->variableStructType.end() && argStructTypeIter->second.find( "Args<" ) == 0 ) {
+							methodHasVariadicForward = true;
+						}
+					}
+				}
+				if( methodHasVariadicForward ) {
+					llvm::Value* forwardedArgs = this->generateExpression( methodCallExpression.arguments[methodExtraArgStart] );
+					if( forwardedArgs && forwardedArgs->getType()->isPointerTy() ) {
+						llvm::Type* forwardedPointeeType = forwardedArgs->getType()->getPointerElementType();
+						if( forwardedPointeeType->isPointerTy() && forwardedPointeeType->getPointerElementType()->isStructTy() ) {
+							forwardedArgs = this->builder.CreateLoad( forwardedPointeeType, forwardedArgs, "mfwd.args.load" );
+						}
+					}
+					callArguments.push_back( forwardedArgs );
+				}
+				else {
+					llvm::Type* variadicElemType = int64Type;
+					if( methodParamInfoIter != this->functionParamInfos.end() && methodParamInfoIter->second.variadicElementLLVMType ) {
+						variadicElemType = methodParamInfoIter->second.variadicElementLLVMType;
+					}
+					llvm::StructType* methodArgsStructType = llvm::StructType::get( this->context, {
+						llvm::PointerType::getUnqual( variadicElemType ),
+						int64Type,
+						int64Type
+					});
+					llvm::Type* variadicElemPtrType = llvm::PointerType::getUnqual( variadicElemType );
+					llvm::AllocaInst* methodArgsAlloca = this->createEntryBlockAllocation( this->currentFunction, "mpack.args", methodArgsStructType );
+					if( methodExtraArgCount > 0 ) {
+						llvm::ArrayType* dataArrayType = llvm::ArrayType::get( variadicElemType, methodExtraArgCount );
+						llvm::AllocaInst* dataAlloca = this->createEntryBlockAllocation( this->currentFunction, "mpack.args.data", dataArrayType );
+						for( size_t varArgIndex = 0; varArgIndex < methodExtraArgCount; varArgIndex++ ) {
+							llvm::Value* argVal = this->generateExpression( methodCallExpression.arguments[methodExtraArgStart + varArgIndex] );
+							if( argVal ) {
+								argVal = this->generateImplicitCast( argVal, variadicElemType );
+								llvm::Value* elemGep = this->builder.CreateConstGEP2_32( dataArrayType, dataAlloca, 0, static_cast<unsigned>( varArgIndex ), "mpack.args.gep" );
+								this->builder.CreateStore( argVal, elemGep );
+							}
+						}
+						llvm::Value* dataPtr = this->builder.CreateBitCast( dataAlloca, variadicElemPtrType, "mpack.args.ptr" );
+						llvm::Value* dataFieldPtr = this->builder.CreateStructGEP( methodArgsStructType, methodArgsAlloca, 0, "mpack.args.data.field" );
+						this->builder.CreateStore( dataPtr, dataFieldPtr );
+					}
+					else {
+						llvm::Value* dataFieldPtr = this->builder.CreateStructGEP( methodArgsStructType, methodArgsAlloca, 0, "mpack.args.data.field" );
+						this->builder.CreateStore( llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( variadicElemPtrType ) ), dataFieldPtr );
+					}
+					llvm::Value* countFieldPtr = this->builder.CreateStructGEP( methodArgsStructType, methodArgsAlloca, 1, "mpack.args.count.field" );
+					this->builder.CreateStore( llvm::ConstantInt::get( int64Type, methodExtraArgCount ), countFieldPtr );
+					llvm::Value* posFieldPtr = this->builder.CreateStructGEP( methodArgsStructType, methodArgsAlloca, 2, "mpack.args.pos.field" );
+					this->builder.CreateStore( llvm::ConstantInt::get( int64Type, 0 ), posFieldPtr );
+					callArguments.push_back( methodArgsAlloca );
+				}
+			}
+			else {
+				for( size_t argIdx = methodFixedParamCount; argIdx < methodCallExpression.arguments.size(); argIdx++ ) {
+					llvm::Value* argumentValue = this->generateExpression( methodCallExpression.arguments[argIdx] );
+					if( argumentValue == nullptr ) continue;
+					if( parameterIndex < targetFunction->arg_size() ) {
+						llvm::Type* expectedArgType = targetFunction->getArg( parameterIndex )->getType();
+						argumentValue = this->generateImplicitCast( argumentValue, expectedArgType );
+					}
+					callArguments.push_back( argumentValue );
+					parameterIndex++;
+				}
 			}
 			if( useVirtualDispatch && selfPointer->getType()->isPointerTy() ) {
 				llvm::Type* objectPointerElementType = selfPointer->getType()->getPointerElementType();
@@ -7465,7 +7708,27 @@ namespace uranite::codegen {
 			unsigned int structFieldIndex = 0;
 			semantic::StructTypeSharedPointer semanticStructType = std::static_pointer_cast<semantic::StructType>( type );
 			for( const semantic::FieldInfo& structField : semanticStructType->fields ) {
-				structMemberTypes.push_back( toLLVMType( structField.type ) );
+				bool structFieldIsSelfReference = false;
+				if( structField.type && structField.type->kind == semantic::Type::Kind::Struct && structField.type->name == name ) {
+					structFieldIsSelfReference = true;
+				}
+				else if( structField.type && structField.type->kind == semantic::Type::Kind::Optional ) {
+					semantic::OptionalTypeSharedPointer structOptionalType = std::static_pointer_cast<semantic::OptionalType>( structField.type );
+					if( structOptionalType->inner && structOptionalType->inner->kind == semantic::Type::Kind::Struct && structOptionalType->inner->name == name ) {
+						structFieldIsSelfReference = true;
+					}
+				}
+				if( structFieldIsSelfReference ) {
+					structMemberTypes.push_back( llvm::PointerType::getUnqual( createdStructType ) );
+				}
+				else {
+					llvm::Type* fieldLLVMType = toLLVMType( structField.type );
+					if( structField.type && structField.type->kind == semantic::Type::Kind::Class &&
+						fieldLLVMType->isStructTy() && fieldLLVMType != this->getInterfaceFatPointerType() ) {
+						fieldLLVMType = llvm::PointerType::getUnqual( fieldLLVMType );
+					}
+					structMemberTypes.push_back( fieldLLVMType );
+				}
 				this->structFieldIndices[name][structField.name] = structFieldIndex++;
 			}
 		}
