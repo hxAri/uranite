@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-06 04:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/writer.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/writer.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,7 @@
 
 package uranite.io.writer
 
-from uranite.io.syscall import stringToPtr, stringLen, sysWrite, writeByteAt
+from uranite.io.syscall import stringLen, stringToPtr, sysWrite, writeByteAt
 from uranite.memory.allocator import alloc
 
 public const I64 STDIN_FD = 0
@@ -121,11 +121,11 @@ public function writeRawFd( I64 fileDescriptor, I64 pointer, I64 length ) -> Voi
         written = written + result
 
 export {
+    STDERR_FD,
     STDIN_FD,
     STDOUT_FD,
-    STDERR_FD,
     writeFd,
-    writeNewlineFd,
     writeLineFd,
+    writeNewlineFd,
     writeRawFd
 }
