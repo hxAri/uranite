@@ -1,8 +1,8 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.kernel.power import PowerController
 from uranite.testing.assertions import assertEqualI64
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Kernel Power Tests ===" )
