@@ -1,15 +1,12 @@
 package testing
 
-from uranite.io.directory import makedirs, DirectoryIterator, DirectoryEntry
-from uranite.io.file import writeFileString
-from uranite.io.syscall import sysUnlink, sysRmdir, stringToPtr
-from uranite.io.path import exists
-from uranite.sys.process import exit
-from uranite.testing.assertions import {
-    assertGreaterOrEqual,
-    assertTrue
-}
 from uranite.io.console import putsln
+from uranite.io.directory import DirectoryEntry, DirectoryIterator, makedirs
+from uranite.io.file import writeFileString
+from uranite.io.path import exists
+from uranite.io.syscall import stringToPtr, sysRmdir, sysUnlink
+from uranite.sys.process import exit
+from uranite.testing.assertions import assertGreaterOrEqual, assertTrue
 
 public function main() -> I32:
     putsln( "=== IO Directory Tests ===" )
