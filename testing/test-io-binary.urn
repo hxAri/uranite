@@ -1,11 +1,11 @@
 package testing
 
-from uranite.io.file import File, createFile, openFile
 from uranite.io.binary-reader import BinaryReader
 from uranite.io.binary-writer import BinaryWriter
-from uranite.testing.assertions import assertEqualI64
 from uranite.io.console import putsln
+from uranite.io.file import File, createFile, openFile
 from uranite.sys.process import exit
+from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
     putsln( "=== IO Binary Tests ===" )
