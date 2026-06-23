@@ -1,8 +1,8 @@
 package testing
 
 from uranite.errors.traceback import Traceback
-from uranite.testing.assertions import assertEqualI64, assertEqualStr
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
 
 public function main() -> I32:
     putsln( "=== Traceback Tests ===" )
