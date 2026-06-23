@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,32 +21,101 @@
 
 package uranite.os.arch.x86-64
 
-from uranite.os.arch.x86-64.port import outb, inb, outw, inw, outl, inl, ioWait
 from uranite.os.arch.x86-64.cpu import {
-    Registers, halt, enableInterrupts, disableInterrupts,
-    readCr3, writeCr3, invlpg, readMsr, writeMsr, readTsc
+    Registers,
+    disableInterrupts,
+    enableInterrupts,
+    halt,
+    invlpg,
+    readCr3,
+    readMsr,
+    readTsc,
+    writeCr3,
+    writeMsr
 }
-from uranite.os.arch.x86-64.gdt import GdtEntry, GdtPointer, Gdt, loadGdt
+from uranite.os.arch.x86-64.gdt import Gdt, GdtEntry, GdtPointer, loadGdt
 from uranite.os.arch.x86-64.idt import {
-    IdtEntry, IdtPointer, Idt, loadIdt,
-    GateType, InterruptVector, IRQ_BASE
+    GateType,
+    IRQ_BASE,
+    Idt,
+    IdtEntry,
+    IdtPointer,
+    InterruptVector,
+    loadIdt
 }
 from uranite.os.arch.x86-64.paging import {
-    PageTableEntry, PageTable, flushPage, flushTlb,
-    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER, PAGE_WRITE_THROUGH,
-    PAGE_CACHE_DISABLE, PAGE_ACCESSED, PAGE_DIRTY, PAGE_HUGE,
-    PAGE_GLOBAL, pageNoExecute, PAGE_SIZE, HUGE_PAGE_2MB, HUGE_PAGE_1GB
+    HUGE_PAGE_1GB,
+    HUGE_PAGE_2MB,
+    PAGE_ACCESSED,
+    PAGE_CACHE_DISABLE,
+    PAGE_DIRTY,
+    PAGE_GLOBAL,
+    PAGE_HUGE,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PAGE_WRITE_THROUGH,
+    PageTable,
+    PageTableEntry,
+    flushPage,
+    flushTlb,
+    pageNoExecute
+}
+from uranite.os.arch.x86-64.port import {
+    inb,
+    inl,
+    inw,
+    ioWait,
+    outb,
+    outl,
+    outw
 }
 
 export {
-    outb, inb, outw, inw, outl, inl, ioWait,
-    Registers, halt, enableInterrupts, disableInterrupts,
-    readCr3, writeCr3, invlpg, readMsr, writeMsr, readTsc,
-    GdtEntry, GdtPointer, Gdt, loadGdt,
-    IdtEntry, IdtPointer, Idt, loadIdt,
-    GateType, InterruptVector, IRQ_BASE,
-    PageTableEntry, PageTable, flushPage, flushTlb,
-    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER, PAGE_WRITE_THROUGH,
-    PAGE_CACHE_DISABLE, PAGE_ACCESSED, PAGE_DIRTY, PAGE_HUGE,
-    PAGE_GLOBAL, pageNoExecute, PAGE_SIZE, HUGE_PAGE_2MB, HUGE_PAGE_1GB
+    GateType,
+    Gdt,
+    GdtEntry,
+    GdtPointer,
+    HUGE_PAGE_1GB,
+    HUGE_PAGE_2MB,
+    IRQ_BASE,
+    Idt,
+    IdtEntry,
+    IdtPointer,
+    InterruptVector,
+    PAGE_ACCESSED,
+    PAGE_CACHE_DISABLE,
+    PAGE_DIRTY,
+    PAGE_GLOBAL,
+    PAGE_HUGE,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PAGE_WRITE_THROUGH,
+    PageTable,
+    PageTableEntry,
+    Registers,
+    disableInterrupts,
+    enableInterrupts,
+    flushPage,
+    flushTlb,
+    halt,
+    inb,
+    inl,
+    invlpg,
+    inw,
+    ioWait,
+    loadGdt,
+    loadIdt,
+    outb,
+    outl,
+    outw,
+    pageNoExecute,
+    readCr3,
+    readMsr,
+    readTsc,
+    writeCr3,
+    writeMsr
 }
