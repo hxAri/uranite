@@ -1,11 +1,11 @@
 package testing
 
-from uranite.memory.allocator import alloc
-from uranite.memory.allocator import dealloc
-from uranite.io.syscall import writeByteAt
-from uranite.io.syscall import readByteAt
-from uranite.io.console import putsln
 from uranite.convert.convert import intToString
+from uranite.io.console import putsln
+from uranite.io.syscall import readByteAt
+from uranite.io.syscall import readByteAt
+from uranite.memory.allocator import dealloc
+from uranite.memory.allocator import dealloc
 
 public function main() -> I32:
     putsln( "=== Stress Memory Test: 100K allocations ===" )
