@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/math/errors.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/math/errors.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,8 +22,8 @@
 
 package uranite.math.errors
 
-from uranite.errors.throwable import Throwable
 from uranite.errors.error import Error
+from uranite.errors.throwable import Throwable
 
 public Readonly class ArithmeticError extends Error:
     
@@ -81,7 +81,7 @@ public Readonly class UnderflowError extends ArithmeticError:
 
 export {
     ArithmeticError,
-    ZeroDivisionError,
     OverflowError,
-    UnderflowError
+    UnderflowError,
+    ZeroDivisionError
 }
