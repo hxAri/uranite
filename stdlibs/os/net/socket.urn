@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/socket.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/net/socket.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -363,15 +363,15 @@ public class SocketTable:
         self.backingSlots.free()
 
 export {
-    SOCKET_STREAM,
-    SOCKET_DATAGRAM,
-    SOCKET_RAW,
-    SOCKET_UNBOUND,
-    SOCKET_BOUND,
-    SOCKET_LISTENING,
-    SOCKET_CONNECTED,
-    SOCKET_CLOSED,
     AF_INET,
     AF_INET6,
+    SOCKET_BOUND,
+    SOCKET_CLOSED,
+    SOCKET_CONNECTED,
+    SOCKET_DATAGRAM,
+    SOCKET_LISTENING,
+    SOCKET_RAW,
+    SOCKET_STREAM,
+    SOCKET_UNBOUND,
     SocketTable
 }
