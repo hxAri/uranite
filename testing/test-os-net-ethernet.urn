@@ -1,13 +1,16 @@
 package testing
 
-from uranite.os.net.ethernet import {
-    ETHERTYPE_IPV4, ETHERTYPE_ARP, ETHERTYPE_IPV6,
-    ETH_MTU, ETH_MIN_PAYLOAD, EthernetFrame, ArpTable
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.net.ethernet import {
+    ArpTable,
+    ETHERTYPE_ARP,
+    ETHERTYPE_IPV4,
+    ETHERTYPE_IPV6,
+    ETH_MIN_PAYLOAD,
+    ETH_MTU,
+    EthernetFrame
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Net Ethernet Tests ===" )
