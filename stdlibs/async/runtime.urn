@@ -2,12 +2,12 @@ package uranite.async.runtime
 
 from uranite.async.scheduler import NativeScheduler
 from uranite.async.task import {
-    STATE_COMPLETED, 
-    FIELD_ENTRY_FN, 
-    STATE_FAILED,
+    FIELD_ENTRY_FN,
     FIELD_HAS_ERROR,
     FIELD_RESULT,
-    FIELD_STATE
+    FIELD_STATE,
+    STATE_COMPLETED,
+    STATE_FAILED
 }
 from uranite.io.syscall import readI64At
 
@@ -253,9 +253,18 @@ public function runtimeTaskResult( I64 taskId ) -> I64:
     return readI64At( taskAddr, FIELD_RESULT * 8 )
 
 export {
-    runtimeInit, runtimeSpawn, runtimeAwait,
-    runtimeYield, runtimeRun, runtimeComplete,
-    runtimeError, runtimeHasPending, runtimeAwaitFd,
-    runtimeSleep, runtimeTaskHasError, runtimeTaskGetError,
-    runtimeTaskState, runtimeTaskResult
+    runtimeAwait,
+    runtimeAwaitFd,
+    runtimeComplete,
+    runtimeError,
+    runtimeHasPending,
+    runtimeInit,
+    runtimeRun,
+    runtimeSleep,
+    runtimeSpawn,
+    runtimeTaskGetError,
+    runtimeTaskHasError,
+    runtimeTaskResult,
+    runtimeTaskState,
+    runtimeYield
 }

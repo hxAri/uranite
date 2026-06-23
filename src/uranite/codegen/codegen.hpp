@@ -455,9 +455,9 @@ namespace uranite::codegen {
 			// --- Runtime & Intrinsic Helpers ---
 
 			llvm::Function* getOrCreatePersonalityFunction();
-			llvm::Function* getOrCreateAetherThrow();
-			llvm::Function* getOrCreateAetherBeginCatch();
-			llvm::Function* getOrCreateAetherEndCatch();
+			llvm::Function* getOrCreateUraniteThrow();
+			llvm::Function* getOrCreateUraniteBeginCatch();
+			llvm::Function* getOrCreateUraniteEndCatch();
 			llvm::Function* getOrCreatePushFrame();
 			llvm::Function* getOrCreatePopFrame();
 			void emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName );
@@ -650,6 +650,8 @@ namespace uranite::codegen {
 			
 			/** @brief Set of class names whose methods have been pre-registered. */
 			std::unordered_set<std::string> preRegisteredClasses;
+
+			std::unordered_map<std::string, int> overloadedFunctionCounts;
 
 			/** @brief Pluggable runtime interface for function name/signature resolution. */
 			std::shared_ptr<RuntimeInterface> runtimeInterface_;

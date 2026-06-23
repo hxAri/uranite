@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/router.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/router.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,11 +21,12 @@
 
 package uranite.web.router
 
-from uranite.memory.memory import Memory
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt
 from uranite.functions.builtin import equals, substring
-from uranite.web.route import Route
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr
+from uranite.memory.memory import Memory
 from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
+from uranite.web.route import Route
 
 const I64 MAX_ROUTES = 256
 """ Maximum number of routes that can be registered in a single Router. """
@@ -51,14 +52,14 @@ function addrToRoute( I64 addr ) -> Route:
     asm volatile "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
     return obj
 
-public class MatchResult:
+public struct MatchResult:
     
     """
     Holds the result of a route resolution attempt, containing the matched
     handler address and a flag indicating whether a match was found.
     """
     
-    public I64 handlerAddr
+    protect I64 handlerAddr
     """ The memory address of the matched route handler, or 0 if no match. """
     public Boolean matched
     """ Whether a matching route was found for the request. """
@@ -215,16 +216,17 @@ public class Router:
             ri = ri + 1
         return new MatchResult( 0, False )
 
-    public function get( self, String pattern, I64 handlerAddress ) -> Router:
+    public function get( self, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Router:
 
         """
-        Register a GET route and return this router for method chaining.
+        Register a GET route with a typed handler and return this router
+        for method chaining.
 
         Parameters:
             pattern (String):
                 The URL path pattern (e.g., "/users/:id").
-            handlerAddress (I64):
-                The memory address of the handler function.
+            handler (Callable<Void, <HttpRequest, HttpResponse>>):
+                The handler function invoked when this route matches.
 
         Returns:
             Router:
@@ -234,19 +236,20 @@ public class Router:
             Time: O(s) where s is the number of segments in the pattern
         """
 
-        self.addRoute( new Route( "GET", pattern, handlerAddress ) )
+        self.addRoute( new Route( "GET", pattern, handler ) )
         return self
 
-    public function post( self, String pattern, I64 handlerAddress ) -> Router:
+    public function post( self, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Router:
 
         """
-        Register a POST route and return this router for method chaining.
+        Register a POST route with a typed handler and return this router
+        for method chaining.
 
         Parameters:
             pattern (String):
                 The URL path pattern.
-            handlerAddress (I64):
-                The memory address of the handler function.
+            handler (Callable<Void, <HttpRequest, HttpResponse>>):
+                The handler function invoked when this route matches.
 
         Returns:
             Router:
@@ -256,19 +259,20 @@ public class Router:
             Time: O(s) where s is the number of segments in the pattern
         """
 
-        self.addRoute( new Route( "POST", pattern, handlerAddress ) )
+        self.addRoute( new Route( "POST", pattern, handler ) )
         return self
 
-    public function put( self, String pattern, I64 handlerAddress ) -> Router:
+    public function put( self, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Router:
 
         """
-        Register a PUT route and return this router for method chaining.
+        Register a PUT route with a typed handler and return this router
+        for method chaining.
 
         Parameters:
             pattern (String):
                 The URL path pattern.
-            handlerAddress (I64):
-                The memory address of the handler function.
+            handler (Callable<Void, <HttpRequest, HttpResponse>>):
+                The handler function invoked when this route matches.
 
         Returns:
             Router:
@@ -278,19 +282,20 @@ public class Router:
             Time: O(s) where s is the number of segments in the pattern
         """
 
-        self.addRoute( new Route( "PUT", pattern, handlerAddress ) )
+        self.addRoute( new Route( "PUT", pattern, handler ) )
         return self
 
-    public function del( self, String pattern, I64 handlerAddress ) -> Router:
+    public function del( self, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Router:
 
         """
-        Register a DELETE route and return this router for method chaining.
+        Register a DELETE route with a typed handler and return this
+        router for method chaining.
 
         Parameters:
             pattern (String):
                 The URL path pattern.
-            handlerAddress (I64):
-                The memory address of the handler function.
+            handler (Callable<Void, <HttpRequest, HttpResponse>>):
+                The handler function invoked when this route matches.
 
         Returns:
             Router:
@@ -300,19 +305,20 @@ public class Router:
             Time: O(s) where s is the number of segments in the pattern
         """
 
-        self.addRoute( new Route( "DELETE", pattern, handlerAddress ) )
+        self.addRoute( new Route( "DELETE", pattern, handler ) )
         return self
 
-    public function patch( self, String pattern, I64 handlerAddress ) -> Router:
+    public function patch( self, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Router:
 
         """
-        Register a PATCH route and return this router for method chaining.
+        Register a PATCH route with a typed handler and return this
+        router for method chaining.
 
         Parameters:
             pattern (String):
                 The URL path pattern.
-            handlerAddress (I64):
-                The memory address of the handler function.
+            handler (Callable<Void, <HttpRequest, HttpResponse>>):
+                The handler function invoked when this route matches.
 
         Returns:
             Router:
@@ -322,7 +328,7 @@ public class Router:
             Time: O(s) where s is the number of segments in the pattern
         """
 
-        self.addRoute( new Route( "PATCH", pattern, handlerAddress ) )
+        self.addRoute( new Route( "PATCH", pattern, handler ) )
         return self
 
     public function destroy( self ) -> Void:
@@ -338,7 +344,7 @@ public class Router:
         self.routes.free()
 
 export {
-    Router,
+    MAX_ROUTES,
     MatchResult,
-    MAX_ROUTES
+    Router
 }

@@ -1,11 +1,8 @@
 package testing
 
 from uranite.adelia.hsv import HSV
-from uranite.testing.assertions import {
-    assertEqualF64,
-    assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualF64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Adelia HSV Tests ===" )

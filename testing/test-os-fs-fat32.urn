@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.fs.fat32 import {
-    Fat32Info, Fat32DirEntry, Fat32FileSystem
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.fs.fat32 import Fat32DirEntry, Fat32FileSystem, Fat32Info
+from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
     putsln( "=== OS FS FAT32 Tests ===" )

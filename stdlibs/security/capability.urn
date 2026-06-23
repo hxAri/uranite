@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/security/capability.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/security/capability.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,7 @@
 
 package uranite.security.capability
 
-from uranite.os.security.capability import CapabilityFlag, Capability
+from uranite.os.security.capability import Capability, CapabilityFlag
 
 public class CapabilitySet:
 
@@ -154,6 +154,7 @@ public class CapabilitySet:
         return self.capabilities
 
 export {
-    CapabilitySet,
-    CapabilityFlag, Capability
+    Capability,
+    CapabilityFlag,
+    CapabilitySet
 }

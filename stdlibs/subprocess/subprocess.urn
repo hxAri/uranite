@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/subprocess/subprocess.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/subprocess/subprocess.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,26 +21,32 @@
 
 package uranite.subprocess.subprocess
 
-from uranite.os.syscall.invoke import syscall0, syscall1, syscall2, syscall3, syscall4
-from uranite.os.syscall.result import SyscallResult
-from uranite.memory.memory import Memory
+from uranite.errors.error import Error
+from uranite.functions.builtin import ptrToString
 from uranite.io.syscall import {
     memoryToPtr,
+    readByteAt,
     readI32At,
-    writeI32At,
-    writeI64At,
-    sysRead,
-    sysWrite,
+    stringLen,
+    stringToPtr,
     sysClose,
     sysPipe2,
-    stringToPtr,
-    stringLen,
-    readByteAt,
-    writeByteAt
+    sysRead,
+    sysWrite,
+    writeByteAt,
+    writeI32At,
+    writeI64At
 }
 from uranite.memory.allocator import alloc, dealloc
-from uranite.functions.builtin import ptrToString
-from uranite.errors.error import Error
+from uranite.memory.memory import Memory
+from uranite.os.syscall.invoke import {
+    syscall0,
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4
+}
+from uranite.os.syscall.result import SyscallResult
 
 const I64 SYS_FORK = 57
 """ Linux syscall number for fork. """
@@ -149,18 +155,18 @@ public class Subprocess:
     operations use raw Linux syscalls with zero C runtime dependency.
     """
 
-    public I64 pid
+    protect I64 pid
     """ The process ID of the child subprocess. """
-    public I64 stdinWriteFd
+    protect I64 stdinWriteFd
     """ File descriptor for writing to the child's standard input. """
-    public I64 stdoutReadFd
+    protect I64 stdoutReadFd
     """ File descriptor for reading the child's standard output. """
-    public I64 stderrReadFd
+    protect I64 stderrReadFd
     """ File descriptor for reading the child's standard error. """
     public Boolean running
     """ Flag indicating whether the subprocess is still running. """
 
-    public function Subprocess( self, I64 pid, I64 stdinWriteFd, I64 stdoutReadFd, I64 stderrReadFd ) -> Void:
+    protect function Subprocess( self, I64 pid, I64 stdinWriteFd, I64 stdoutReadFd, I64 stderrReadFd ) -> Void:
 
         """
         Construct a new Subprocess handle for an already-forked child process.
@@ -211,6 +217,23 @@ public class Subprocess:
 
         sysClose( self.stdinWriteFd )
 
+    public function readStdout( self ) -> String:
+
+        """
+        Read all available data from the child's standard output using
+        a 64 KB buffer. Blocks until data is available or EOF.
+
+        Returns:
+            String:
+                The data read from stdout, or an empty string on EOF.
+
+        Complexity:
+            Time: O(n) where n is bytes available
+            Space: O(n)
+        """
+
+        return self.readStdout( 65536 )
+
     public function readStdout( self, I64 maxLen ) -> String:
 
         """
@@ -225,10 +248,10 @@ public class Subprocess:
         Returns:
             String:
                 The data read from stdout, or an empty string on EOF.
-        
+
         Complexity:
             Time: O(1)
-            Space: O(1)
+            Space: O(maxLen)
         """
 
         I64 readBuffer = alloc( maxLen + 1 )
@@ -238,6 +261,23 @@ public class Subprocess:
             return ptrToString( readBuffer )
         writeByteAt( readBuffer, bytesRead, 0 )
         return ptrToString( readBuffer )
+
+    public function readStderr( self ) -> String:
+
+        """
+        Read all available data from the child's standard error using
+        a 64 KB buffer. Blocks until data is available or EOF.
+
+        Returns:
+            String:
+                The data read from stderr, or an empty string on EOF.
+
+        Complexity:
+            Time: O(n) where n is bytes available
+            Space: O(n)
+        """
+
+        return self.readStderr( 65536 )
 
     public function readStderr( self, I64 maxLen ) -> String:
 
@@ -253,10 +293,10 @@ public class Subprocess:
         Returns:
             String:
                 The data read from stderr, or an empty string on EOF.
-        
+
         Complexity:
             Time: O(1)
-            Space: O(1)
+            Space: O(maxLen)
         """
 
         I64 readBuffer = alloc( maxLen + 1 )
@@ -449,8 +489,8 @@ public function run( String command, String arguments ) -> SubprocessResult:
     return process.communicate()
 
 export {
+    Subprocess,
     SubprocessError,
     SubprocessResult,
-    Subprocess,
     run
 }

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-27 19:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/once.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/once.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -65,44 +65,61 @@ public class Once:
         self.state = new AtomicI64( ONCE_NOT_CALLED )
         self.guard = new Spinlock()
     
-    public function callOnce( self, I64 initializerAddr ) -> Void:
-        
+    public function callOnce( self, Callable<Void, <>> initializer ) -> Void:
+
         """
         Execute the initializer function exactly once. If the initializer
         has already completed, this returns immediately. If another thread
         is currently running the initializer, this spins until completion.
         If no thread has started initialization, this thread acquires the
         lock, runs the initializer, and marks initialization as complete.
-        
+
         Parameters:
-            initializerAddr (I64):
-                Raw address of the zero-argument function to call. The
-                function is invoked via inline assembly indirect call.
-        
+            initializer (Callable<Void, <>>):
+                The zero-argument function to call exactly once.
+
         Complexity:
-            Time: O(n)
+            Time: O(1) when already completed
             Space: O(1)
         """
-        
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" initializer ) : clobber()
+        self.callOnceRaw( extractedAddr )
+
+    protect function callOnceRaw( self, I64 initializerAddr ) -> Void:
+
+        """
+        Execute the initializer from a raw function address. Internal use.
+
+        Parameters:
+            initializerAddr (I64):
+                Raw address of the zero-argument function to call.
+
+        Complexity:
+            Time: O(1) when already completed
+            Space: O(1)
+        """
+
         I64 current = self.state.load()
         if current == ONCE_COMPLETED:
             return
-        
+
         self.guard.lock()
         current = self.state.load()
         if current == ONCE_COMPLETED:
             self.guard.unlock()
             return
-        
+
         if current == ONCE_NOT_CALLED:
             self.state.store( ONCE_IN_PROGRESS )
             self.guard.unlock()
-            
+
             asm volatile "callq *$0" : : input( "r" initializerAddr ) : clobber( "memory" )
-            
+
             self.state.store( ONCE_COMPLETED )
             return
-        
+
         self.guard.unlock()
         while self.state.load() != ONCE_COMPLETED:
             asm volatile "pause"

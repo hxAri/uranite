@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/io.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/kernel/io.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,10 +22,14 @@
 package uranite.kernel.io
 
 from uranite.os.io.buffer-cache import {
-    BUFFER_VALID, BUFFER_DIRTY, BUFFER_LOCKED, BufferEntry, BufferCache
+    BUFFER_DIRTY,
+    BUFFER_LOCKED,
+    BUFFER_VALID,
+    BufferCache,
+    BufferEntry
 }
-from uranite.os.io.dma import DmaDirection, DmaDescriptor, DmaChannel
-from uranite.os.io.request import RequestType, RequestStatus, IoRequestQueue
+from uranite.os.io.dma import DmaChannel, DmaDescriptor, DmaDirection
+from uranite.os.io.request import IoRequestQueue, RequestStatus, RequestType
 
 public class BlockIoSubsystem:
 
@@ -100,8 +104,16 @@ public class BlockIoSubsystem:
         self.requestQueue.destroy()
 
 export {
+    BUFFER_DIRTY,
+    BUFFER_LOCKED,
+    BUFFER_VALID,
     BlockIoSubsystem,
-    BUFFER_VALID, BUFFER_DIRTY, BUFFER_LOCKED, BufferEntry, BufferCache,
-    DmaDirection, DmaDescriptor, DmaChannel,
-    RequestType, RequestStatus, IoRequestQueue
+    BufferCache,
+    BufferEntry,
+    DmaChannel,
+    DmaDescriptor,
+    DmaDirection,
+    IoRequestQueue,
+    RequestStatus,
+    RequestType
 }

@@ -90,5 +90,7 @@ public function timerfdClose( I64 fd ) -> Void:
     sysClose( fd )
 
 export {
-    timerfdCreate, timerfdSettime, timerfdClose
+    timerfdClose,
+    timerfdCreate,
+    timerfdSettime
 }

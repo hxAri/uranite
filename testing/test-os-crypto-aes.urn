@@ -1,10 +1,8 @@
 package testing
 
-from uranite.os.crypto.aes import AesContext, AES_128, AES_256, AES_BLOCK_SIZE
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.crypto.aes import AES_128, AES_256, AES_BLOCK_SIZE, AesContext
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Crypto AES Tests ===" )

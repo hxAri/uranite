@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/controller.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/controller.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,6 +23,8 @@
 package uranite.web.controller
 
 from uranite.memory.memory import Memory
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
 from uranite.web.route import Route
 
 const I64 MAX_CONTROLLER_ROUTES = 64
@@ -77,34 +79,33 @@ public class Controller:
         self.prefix = prefix
         return self
     
-    public function route( self, String method, String pattern, I64 handlerAddr ) -> Void:
-        
+    public function route( self, String method, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Void:
+
         """
-        Register a route on this controller. The pattern is combined with the
-        controller's prefix to form the full URL pattern.
-        
+        Register a route on this controller with a typed handler. The pattern
+        is combined with the controller's prefix to form the full URL pattern.
+
         Parameters:
             method (String):
                 The HTTP method this route responds to (e.g., "GET", "POST").
             pattern (String):
                 The URL pattern for this route, which may include path parameters
                 prefixed with a colon (e.g., "/users/:id").
-            handlerAddr (I64):
-                The address of the handler function to invoke when this route matches.
-        
+            handler (Callable<Void, <HttpRequest, HttpResponse>>):
+                The handler function invoked when this route matches.
+
         Complexity:
-            Time: O(1)
-            Space: O(1)
+            Time: O(s) where s is number of segments in pattern
         """
-        
+
         String fullPattern = self.prefix + pattern
-        Route route = new Route( method, fullPattern, handlerAddr )
+        Route route = new Route( method, fullPattern, handler )
         I64 routeAddr = 0
         asm volatile "movq $1, $0" : output( "=r" routeAddr ) : input( "r" route ) : clobber()
         self.controllerRoutes.set( self.controllerRouteCount, routeAddr )
         self.controllerRouteCount = self.controllerRouteCount + 1
-    
-    public function getRoute( self, I64 index ) -> I64:
+
+    protect function getRoute( self, I64 index ) -> I64:
         
         """
         Retrieve the address of the Route object at the given index.

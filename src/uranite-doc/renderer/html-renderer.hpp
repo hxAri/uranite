@@ -111,7 +111,7 @@ namespace uranite::doc {
 			/**
 			 * @brief Emits the embedded CSS stylesheet data stream used to skin the generated web pages.
 			 * * Returns layout instructions, theme configuration styles, and code block styling rules 
-			 * tailored for Aether's documentation visual brand.
+			 * tailored for Uranite's documentation visual brand.
 			 * * @return std::string The complete inline CSS structural code block payload.
 			 */
 			std::string generateStylesheet();

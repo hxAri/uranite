@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/functions/builtin.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/functions/builtin.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,15 +21,10 @@
 
 package uranite.functions.builtin
 
-from uranite.io.syscall import {
-    stringLen, 
-    stringToPtr, 
-    readByteAt, 
-    writeByteAt
-}
+from uranite.collection.array-list import ArrayList
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
 from uranite.memory.allocator import alloc, dealloc
 from uranite.memory.memory import Memory
-from uranite.collection.array-list import ArrayList
 from uranite.string.builder import StringBuilder
 
 public function ptrToString( I64 pointer ) -> String:
@@ -746,31 +741,31 @@ public function replace( String source, String target, String replacement ) -> S
     return builder.build()
 
 export {
-    ptrToString,
-    length,
     charAt,
-    equals,
+    charToString,
+    concat,
     contains,
-    indexOf,
-    lastIndexOf,
-    startsWith,
     endsWith,
-    substring,
-    trim,
-    toUpper,
-    toLower,
-    isDigit,
+    equals,
+    indexOf,
     isAlpha,
     isAlphaNumeric,
+    isDigit,
     isWhitespace,
-    repeat,
-    reverse,
-    concat,
-    charToString,
-    replaceFirst,
-    padStart,
-    padEnd,
-    split,
     join,
-    replace
+    lastIndexOf,
+    length,
+    padEnd,
+    padStart,
+    ptrToString,
+    repeat,
+    replace,
+    replaceFirst,
+    reverse,
+    split,
+    startsWith,
+    substring,
+    toLower,
+    toUpper,
+    trim
 }

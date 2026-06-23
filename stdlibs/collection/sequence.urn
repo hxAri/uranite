@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/collection/sequence.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/sequence.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,10 +21,10 @@
 package uranite.collection.sequence
 
 from uranite.collection.collection import Collection
-from uranite.operators.indexable import Indexable
 from uranite.language.boolean import Boolean
 from uranite.language.callable import Callable
 from uranite.language.void import Void
+from uranite.operators.indexable import Indexable
 
 public interface Sequence<E> extends Collection<E>, Indexable<Int, E>:
     

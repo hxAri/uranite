@@ -1,18 +1,20 @@
 package testing
 
-from uranite.requests.response import Response
-from uranite.requests.errors import {
-    RequestError, RequestConnectionError,
-    RequestTimeoutError, HTTPError
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualStr,
-    assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.requests.errors import HTTPError, RequestConnectionError, RequestError, RequestTimeoutError
+from uranite.requests.response import Response
+from uranite.requests.session import Session
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Requests Tests ===" )
+    
+    Session session = new Session()
+    Response response = session.get( "http://www.google.com" )
+    
+    putsln( "Status: {}".format( response.statusCode ) )
+    putsln( "Headers: {}".format( response.headers ) )
+    putsln( "Contents: {}".format( response.text ) )
 
     # Response 200 — ok=true
     Response res200 = new Response( 200, "Hello World", "Content-Type: text/plain" )

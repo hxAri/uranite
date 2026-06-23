@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-27 19:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/mutex.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/mutex.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,12 +22,12 @@
 
 package uranite.threading.mutex
 
-from uranite.os.sync.mutex import KernelMutex
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.task.task import BlockReason
-from uranite.threading.errors import PoisonError
-from uranite.threading.atomic import AtomicBoolean
 from uranite.language.callable import Callable
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.sync.mutex import KernelMutex
+from uranite.os.task.task import BlockReason
+from uranite.threading.atomic import AtomicBoolean
+from uranite.threading.errors import PoisonError
 
 public class MutexGuard<T>:
     

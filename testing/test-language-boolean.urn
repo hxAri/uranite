@@ -1,8 +1,8 @@
 package testing
 
-from uranite.language.boolean import Boolean
-from uranite.testing.assertions import assertTrue, assertFalse
 from uranite.io.console import putsln
+from uranite.language.boolean import Boolean
+from uranite.testing.assertions import assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Boolean Tests ===" )

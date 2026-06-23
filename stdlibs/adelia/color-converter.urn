@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-11 00:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/adelia/color-converter.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/adelia/color-converter.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -29,11 +29,7 @@ from uranite.adelia.cmyk import CMYK
 from uranite.adelia.hsl import HSL
 from uranite.adelia.hsv import HSV
 from uranite.adelia.rgb import RGB
-from uranite.math.math import {
-    abs, 
-    fmod, 
-    round
-}
+from uranite.math.math import abs, fmod, round
 
 public final class ColorConverter:
     

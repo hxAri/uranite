@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-29 14:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/errors.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/multiprocessing/errors.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,8 +20,8 @@
 
 package uranite.process.errors
 
-from uranite.errors.throwable import Throwable
 from uranite.errors.error import Error
+from uranite.errors.throwable import Throwable
 
 public class ProcessError extends Error:
     
@@ -228,11 +228,11 @@ public class ProcessPoolError extends ProcessError:
         parent( message, code, previous )
 
 export {
-    ProcessError,
-    ProcessCreationError,
-    ProcessCommunicationError,
     ProcessCancellationError,
-    ProcessTimeoutError,
+    ProcessCommunicationError,
     ProcessCrashedError,
-    ProcessPoolError
+    ProcessCreationError,
+    ProcessError,
+    ProcessPoolError,
+    ProcessTimeoutError
 }

@@ -22,25 +22,25 @@
 #include <stdint.h>
 
 // Pipe — unidirectional byte stream between processes/threads
-typedef struct AetherPipe AetherPipe;
+typedef struct UranitePipe UranitePipe;
 
-AetherPipe* uranitePipeCreate(void);
-int64_t uranitePipeRead(AetherPipe* pipe, char* buffer, int64_t maxBytes);
-int64_t uranitePipeWrite(AetherPipe* pipe, const char* data, int64_t length);
-void uranitePipeCloseRead(AetherPipe* pipe);
-void uranitePipeCloseWrite(AetherPipe* pipe);
-void uranitePipeDestroy(AetherPipe* pipe);
-int uranitePipeReadFd(AetherPipe* pipe);
-int uranitePipeWriteFd(AetherPipe* pipe);
+UranitePipe* uranitePipeCreate(void);
+int64_t uranitePipeRead(UranitePipe* pipe, char* buffer, int64_t maxBytes);
+int64_t uranitePipeWrite(UranitePipe* pipe, const char* data, int64_t length);
+void uranitePipeCloseRead(UranitePipe* pipe);
+void uranitePipeCloseWrite(UranitePipe* pipe);
+void uranitePipeDestroy(UranitePipe* pipe);
+int uranitePipeReadFd(UranitePipe* pipe);
+int uranitePipeWriteFd(UranitePipe* pipe);
 
 // Shared Memory — named memory region accessible by multiple processes
-typedef struct AetherSharedMemory AetherSharedMemory;
+typedef struct UraniteSharedMemory UraniteSharedMemory;
 
-AetherSharedMemory* uraniteSharedMemoryCreate(const char* name, int64_t size);
-AetherSharedMemory* uraniteSharedMemoryOpen(const char* name, int64_t size);
-void* uraniteSharedMemoryPtr(AetherSharedMemory* shm);
-int64_t uraniteSharedMemorySize(AetherSharedMemory* shm);
-void uraniteSharedMemoryClose(AetherSharedMemory* shm);
+UraniteSharedMemory* uraniteSharedMemoryCreate(const char* name, int64_t size);
+UraniteSharedMemory* uraniteSharedMemoryOpen(const char* name, int64_t size);
+void* uraniteSharedMemoryPtr(UraniteSharedMemory* shm);
+int64_t uraniteSharedMemorySize(UraniteSharedMemory* shm);
+void uraniteSharedMemoryClose(UraniteSharedMemory* shm);
 void uraniteSharedMemoryUnlink(const char* name);
 
 #endif

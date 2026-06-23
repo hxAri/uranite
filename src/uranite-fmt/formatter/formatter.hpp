@@ -29,7 +29,7 @@ namespace uranite::formatter {
 	
 	/**
 	 * @class Formatter
-	 * @brief Concrete AST visitor engine responsible for pretty-printing and formatting Aether syntax.
+	 * @brief Concrete AST visitor engine responsible for pretty-printing and formatting Uranite syntax.
 	 *
 	 * Inheriting from the master ASTVisitor hierarchy, this engine traverses the complete node tree 
 	 * of a parsed program. It handles code styling rules, dynamic tab stop indentations, and block 

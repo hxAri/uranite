@@ -1,14 +1,17 @@
 package testing
 
-from uranite.os.vfs.file-descriptor import {
-    FLAG_READ, FLAG_WRITE, FLAG_APPEND, FLAG_CREATE, FLAG_TRUNCATE,
-    FileDescriptor, FileDescriptorTable
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.vfs.file-descriptor import {
+    FLAG_APPEND,
+    FLAG_CREATE,
+    FLAG_READ,
+    FLAG_TRUNCATE,
+    FLAG_WRITE,
+    FileDescriptor,
+    FileDescriptorTable
+}
 from uranite.sys.process import exit
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS VFS FileDescriptor Tests ===" )

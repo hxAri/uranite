@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/time/timer.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/time/timer.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,15 +22,20 @@
 
 package uranite.time.timer
 
-from uranite.os.time.timer import {
-    TIMER_ONE_SHOT, TIMER_PERIODIC, TIMER_INACTIVE, TIMER_ACTIVE, TIMER_EXPIRED,
-    TimerEntry, TimerWheel
-}
-from uranite.os.time.clock import SystemClock
+from uranite.io.syscall import memoryToPtr, writeI64At
+from uranite.memory.memory import Memory
 from uranite.os.syscall.invoke import syscall2
 from uranite.os.syscall.result import SyscallResult
-from uranite.memory.memory import Memory
-from uranite.io.syscall import memoryToPtr, writeI64At
+from uranite.os.time.clock import SystemClock
+from uranite.os.time.timer import {
+    TIMER_ACTIVE,
+    TIMER_EXPIRED,
+    TIMER_INACTIVE,
+    TIMER_ONE_SHOT,
+    TIMER_PERIODIC,
+    TimerEntry,
+    TimerWheel
+}
 
 public class Timer:
 
@@ -251,10 +256,15 @@ public function sleepSeconds( I64 seconds ) -> Void:
     sleep( seconds * 1000 )
 
 export {
-    Timer,
-    TIMER_ONE_SHOT, TIMER_PERIODIC, TIMER_INACTIVE, TIMER_ACTIVE, TIMER_EXPIRED,
-    TimerEntry, TimerWheel,
     SystemClock,
+    TIMER_ACTIVE,
+    TIMER_EXPIRED,
+    TIMER_INACTIVE,
+    TIMER_ONE_SHOT,
+    TIMER_PERIODIC,
+    Timer,
+    TimerEntry,
+    TimerWheel,
     sleep,
     sleepSeconds
 }

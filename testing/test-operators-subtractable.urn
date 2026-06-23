@@ -1,8 +1,8 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.operators.subtractable import Subtractable
 from uranite.testing.assertions import assertEqualI64
-from uranite.io.console import putsln
 
 public class Val implements Subtractable<Val>:
     public Int value

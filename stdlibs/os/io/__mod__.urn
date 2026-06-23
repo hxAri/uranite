@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/io/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/io/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,34 +21,26 @@
 
 package uranite.os.io
 
-from uranite.os.io.dma import {
-    DmaDirection,
-    DmaDescriptor,
-    DmaChannel
-}
 from uranite.os.io.buffer-cache import {
-    BUFFER_VALID,
     BUFFER_DIRTY,
     BUFFER_LOCKED,
-    BufferEntry,
-    BufferCache
+    BUFFER_VALID,
+    BufferCache,
+    BufferEntry
 }
-from uranite.os.io.request import {
-    RequestType,
-    RequestStatus,
-    IoRequestQueue
-}
+from uranite.os.io.dma import DmaChannel, DmaDescriptor, DmaDirection
+from uranite.os.io.request import IoRequestQueue, RequestStatus, RequestType
 
 export {
-    DmaDirection,
-    DmaDescriptor,
-    DmaChannel,
-    BUFFER_VALID,
     BUFFER_DIRTY,
     BUFFER_LOCKED,
-    BufferEntry,
+    BUFFER_VALID,
     BufferCache,
-    RequestType,
+    BufferEntry,
+    DmaChannel,
+    DmaDescriptor,
+    DmaDirection,
+    IoRequestQueue,
     RequestStatus,
-    IoRequestQueue
+    RequestType
 }

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-29 14:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process-pool.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/multiprocessing/process-pool.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -24,15 +24,15 @@ package uranite.process.process-pool
 
 from uranite.memory.memory import Memory
 from uranite.os.ipc.signal import Event
+from uranite.os.memory.pmm import PhysicalMemoryManager
 from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.task.task import BlockReason
-from uranite.threading.channel import ChannelInner
-from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.os.time.clock import SystemClock
+from uranite.process.errors import ProcessError, ProcessPoolError
 from uranite.process.process import Process, ProcessRuntime
 from uranite.process.process-handle import ProcessHandle
-from uranite.process.errors import ProcessError, ProcessPoolError
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.time.clock import SystemClock
+from uranite.threading.atomic import AtomicBoolean, AtomicI64
+from uranite.threading.channel import ChannelInner
 
 const I64 POOL_PROC_PENDING = 0
 """ Pool task state: queued but not yet picked up by a worker. """
@@ -515,11 +515,11 @@ public class ProcessPool:
         self.totalSubmitted.destroy()
 
 export {
-    ProcessPoolTask,
-    ProcessPoolHandle,
-    ProcessPool,
+    POOL_PROC_COMPLETED,
+    POOL_PROC_FAILED,
     POOL_PROC_PENDING,
     POOL_PROC_RUNNING,
-    POOL_PROC_COMPLETED,
-    POOL_PROC_FAILED
+    ProcessPool,
+    ProcessPoolHandle,
+    ProcessPoolTask
 }

@@ -1,0 +1,501 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-21 16:00
+# @update 2026-06-21 16:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/address.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Network address parsing utilities. Converts human-readable IPv4 address
+# strings to packed integers and parses "host:port" pairs used throughout
+# the networking stack and application modules.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.address
+
+from uranite.io.syscall import {
+    O_RDONLY,
+    SYS_CLOSE,
+    SYS_OPEN,
+    SYS_READ,
+    readByteAt,
+    stringLen,
+    stringToPtr,
+    writeByteAt
+}
+from uranite.memory.allocator import alloc, dealloc
+from uranite.net.dns import DnsResolver
+from uranite.net.errors import SocketError
+from uranite.net.socket import ipToInt
+from uranite.os.syscall.invoke import syscall1, syscall3
+from uranite.os.syscall.result import SyscallResult
+
+public struct HostAddress:
+
+    """
+    Resolved network endpoint containing the original host string, parsed
+    port number, and the IPv4 address as a packed 32-bit integer ready for
+    socket operations.
+    """
+
+    public String host
+    """The original host string before resolution (e.g., "127.0.0.1")."""
+    
+    public I64 port
+    """The TCP/UDP port number."""
+    
+    public I64 ipAddress
+    """The IPv4 address as a packed 32-bit integer in network byte order."""
+
+    public function HostAddress( self, String host, I64 port, I64 ipAddress ) -> Void:
+
+        """
+        Parameters:
+            host (String):
+                Original host string.
+            port (I64):
+                Port number.
+            ipAddress (I64):
+                Packed IPv4 address integer.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.host = host
+        self.port = port
+        self.ipAddress = ipAddress
+
+public function parseIpv4( String ipString ) -> I64:
+
+    """
+    Parse a dotted-decimal IPv4 address string into a packed 32-bit
+    integer in network byte order suitable for socket operations.
+
+    Parameters:
+        ipString (String):
+            IPv4 address in "A.B.C.D" format (e.g., "192.168.1.100").
+
+    Returns:
+        I64:
+            Packed IPv4 address integer, or 0 if the format is invalid.
+
+    Complexity:
+        Time: O(n) where n is string length
+        Space: O(1)
+    """
+
+    I64 stringAddress = stringToPtr( ipString )
+    I64 stringLength = stringLen( ipString )
+    I64 octet1 = 0
+    I64 octet2 = 0
+    I64 octet3 = 0
+    I64 octet4 = 0
+    I64 currentOctet = 0
+    I64 dotCount = 0
+    I64 charIndex = 0
+
+    while charIndex < stringLength:
+        I64 byteValue = readByteAt( stringAddress, charIndex )
+        if byteValue < 0:
+            byteValue = byteValue + 256
+        if byteValue == 46:
+            if dotCount == 0:
+                octet1 = currentOctet
+            if dotCount == 1:
+                octet2 = currentOctet
+            if dotCount == 2:
+                octet3 = currentOctet
+            currentOctet = 0
+            dotCount = dotCount + 1
+        else:
+            currentOctet = currentOctet * 10 + ( byteValue - 48 )
+        charIndex = charIndex + 1
+
+    octet4 = currentOctet
+
+    if dotCount != 3:
+        return 0
+
+    return ipToInt( octet1, octet2, octet3, octet4 )
+
+public function resolveHostname( String hostname ) -> I64:
+
+    """
+    Resolve a hostname to a packed IPv4 address. First checks /etc/hosts
+    for a local match. If not found, performs a DNS A-record query via UDP
+    to the system nameserver (from /etc/resolv.conf, defaulting to 127.0.0.1).
+
+    Parameters:
+        hostname (String):
+            Hostname to resolve (e.g., "localhost", "www.google.com").
+
+    Returns:
+        I64:
+            Packed IPv4 address, or -1 if resolution fails via both
+            /etc/hosts and DNS.
+
+    Complexity:
+        Time: O(f * h + n) where f is hosts file size, h is hostname
+              length, n is DNS round-trip time
+        Space: O(f)
+    """
+
+    I64 hostsPathBuffer = alloc( 11 )
+    # "/etc/hosts\0"
+    writeByteAt( hostsPathBuffer, 0, 47 )
+    writeByteAt( hostsPathBuffer, 1, 101 )
+    writeByteAt( hostsPathBuffer, 2, 116 )
+    writeByteAt( hostsPathBuffer, 3, 99 )
+    writeByteAt( hostsPathBuffer, 4, 47 )
+    writeByteAt( hostsPathBuffer, 5, 104 )
+    writeByteAt( hostsPathBuffer, 6, 111 )
+    writeByteAt( hostsPathBuffer, 7, 115 )
+    writeByteAt( hostsPathBuffer, 8, 116 )
+    writeByteAt( hostsPathBuffer, 9, 115 )
+    writeByteAt( hostsPathBuffer, 10, 0 )
+
+    SyscallResult openResult = syscall3( SYS_OPEN, hostsPathBuffer, O_RDONLY, 0 )
+    dealloc( hostsPathBuffer )
+    if not openResult.isError():
+        I64 fileDescriptor = openResult.value()
+        I64 fileBufferCapacity = 4096
+        I64 fileBuffer = alloc( fileBufferCapacity )
+
+        SyscallResult readResult = syscall3( SYS_READ, fileDescriptor, fileBuffer, fileBufferCapacity - 1 )
+        syscall1( SYS_CLOSE, fileDescriptor )
+
+        if not readResult.isError():
+            I64 bytesRead = readResult.value()
+
+            I64 hostnameAddress = stringToPtr( hostname )
+            I64 hostnameLength = stringLen( hostname )
+
+            I64 lineStart = 0
+            I64 fileOffset = 0
+
+            while fileOffset <= bytesRead:
+                I64 currentByte = 0
+                if fileOffset < bytesRead:
+                    currentByte = readByteAt( fileBuffer, fileOffset )
+                    if currentByte < 0:
+                        currentByte = currentByte + 256
+                Boolean isEndOfLine = fileOffset == bytesRead or currentByte == 10
+
+                if isEndOfLine:
+                    I64 lineEnd = fileOffset
+                    I64 matchResult = matchHostsLine( fileBuffer, lineStart, lineEnd, hostnameAddress, hostnameLength )
+                    if matchResult >= 0:
+                        dealloc( fileBuffer )
+                        return matchResult
+                    lineStart = fileOffset + 1
+                fileOffset = fileOffset + 1
+
+        dealloc( fileBuffer )
+
+    return DnsResolver.resolve( hostname )
+
+function matchHostsLine( I64 buffer, I64 lineStart, I64 lineEnd, I64 hostnameAddress, I64 hostnameLength ) -> I64:
+
+    """
+    Check a single /etc/hosts line for a hostname match.
+    Returns the packed IPv4 address if matched, -1 otherwise.
+    Skips comment lines (starting with #) and IPv6 addresses.
+
+    Parameters:
+        buffer (I64):
+            Address of the file buffer.
+        lineStart (I64):
+            Start offset of the line in the buffer.
+        lineEnd (I64):
+            End offset (exclusive) of the line.
+        hostnameAddress (I64):
+            Address of the hostname string to match.
+        hostnameLength (I64):
+            Length of the hostname string.
+
+    Returns:
+        I64:
+            Packed IPv4 address on match, -1 otherwise.
+
+    Complexity:
+        Time: O(lineEnd - lineStart)
+        Space: O(1)
+    """
+
+    if lineStart >= lineEnd:
+        return -1
+
+    # skip leading whitespace
+    I64 contentStart = lineStart
+    Boolean foundContent = False
+    while contentStart < lineEnd and not foundContent:
+        I64 leadByte = readByteAt( buffer, contentStart )
+        if leadByte < 0:
+            leadByte = leadByte + 256
+        if leadByte == 32 or leadByte == 9:
+            contentStart = contentStart + 1
+        else:
+            foundContent = True
+
+    if contentStart >= lineEnd:
+        return -1
+
+    # skip comment lines
+    I64 firstByte = readByteAt( buffer, contentStart )
+    if firstByte < 0:
+        firstByte = firstByte + 256
+    if firstByte == 35:
+        return -1
+
+    # extract IP token (first whitespace-delimited token)
+    I64 ipStart = contentStart
+    I64 ipEnd = contentStart
+    Boolean foundIpEnd = False
+    while ipEnd < lineEnd and not foundIpEnd:
+        I64 ipCharByte = readByteAt( buffer, ipEnd )
+        if ipCharByte < 0:
+            ipCharByte = ipCharByte + 256
+        if ipCharByte == 32 or ipCharByte == 9:
+            foundIpEnd = True
+        else:
+            ipEnd = ipEnd + 1
+
+    # skip IPv6 lines (contain colon in IP token)
+    I64 colonCheck = ipStart
+    while colonCheck < ipEnd:
+        I64 colonByte = readByteAt( buffer, colonCheck )
+        if colonByte < 0:
+            colonByte = colonByte + 256
+        if colonByte == 58:
+            return -1
+        colonCheck = colonCheck + 1
+
+    # scan remaining tokens for hostname match
+    I64 scanPosition = ipEnd
+    while scanPosition < lineEnd:
+        # skip whitespace
+        I64 skipByte = readByteAt( buffer, scanPosition )
+        if skipByte < 0:
+            skipByte = skipByte + 256
+        if skipByte == 32 or skipByte == 9:
+            scanPosition = scanPosition + 1
+        else:
+            # found token start
+            I64 tokenStart = scanPosition
+            I64 tokenEnd = scanPosition
+            Boolean scanning = True
+            while tokenEnd < lineEnd and scanning:
+                I64 tokenByte = readByteAt( buffer, tokenEnd )
+                if tokenByte < 0:
+                    tokenByte = tokenByte + 256
+                if tokenByte == 32 or tokenByte == 9 or tokenByte == 35:
+                    scanning = False
+                else:
+                    tokenEnd = tokenEnd + 1
+
+            I64 tokenLength = tokenEnd - tokenStart
+            if tokenLength == hostnameLength:
+                Boolean matched = True
+                I64 compareOffset = 0
+                while compareOffset < hostnameLength and matched:
+                    I64 fileByte = readByteAt( buffer, tokenStart + compareOffset )
+                    if fileByte < 0:
+                        fileByte = fileByte + 256
+                    I64 hostByte = readByteAt( hostnameAddress, compareOffset )
+                    if hostByte < 0:
+                        hostByte = hostByte + 256
+                    if fileByte != hostByte:
+                        matched = False
+                    compareOffset = compareOffset + 1
+
+                if matched:
+                    return parseIpv4Range( buffer, ipStart, ipEnd )
+
+            # if we hit a comment marker, stop scanning this line
+            if tokenEnd < lineEnd:
+                I64 afterByte = readByteAt( buffer, tokenEnd )
+                if afterByte < 0:
+                    afterByte = afterByte + 256
+                if afterByte == 35:
+                    return -1
+
+            scanPosition = tokenEnd
+
+    return -1
+
+function parseIpv4Range( I64 buffer, I64 rangeStart, I64 rangeEnd ) -> I64:
+
+    """
+    Parse a dotted-decimal IPv4 address from a byte range in a buffer
+    into a packed 32-bit integer.
+
+    Parameters:
+        buffer (I64):
+            Address of the buffer containing the IP string.
+        rangeStart (I64):
+            Start offset of the IP string.
+        rangeEnd (I64):
+            End offset (exclusive) of the IP string.
+
+    Returns:
+        I64:
+            Packed IPv4 address, or -1 if the format is invalid.
+
+    Complexity:
+        Time: O(rangeEnd - rangeStart)
+        Space: O(1)
+    """
+
+    I64 octet1 = 0
+    I64 octet2 = 0
+    I64 octet3 = 0
+    I64 octet4 = 0
+    I64 currentOctet = 0
+    I64 dotCount = 0
+    I64 scanIndex = rangeStart
+
+    while scanIndex < rangeEnd:
+        I64 byteValue = readByteAt( buffer, scanIndex )
+        if byteValue < 0:
+            byteValue = byteValue + 256
+        if byteValue == 46:
+            if dotCount == 0:
+                octet1 = currentOctet
+            if dotCount == 1:
+                octet2 = currentOctet
+            if dotCount == 2:
+                octet3 = currentOctet
+            currentOctet = 0
+            dotCount = dotCount + 1
+        else:
+            currentOctet = currentOctet * 10 + ( byteValue - 48 )
+        scanIndex = scanIndex + 1
+
+    octet4 = currentOctet
+
+    if dotCount != 3:
+        return -1
+
+    return ipToInt( octet1, octet2, octet3, octet4 )
+
+public function parseHostPort( String hostPort ) -> HostAddress:
+
+    """
+    Parse a "host:port" string into its components and resolve the host
+    to a packed IPv4 address. The host portion must be a dotted-decimal
+    IPv4 address (DNS resolution is not supported).
+
+    Parameters:
+        hostPort (String):
+            Address string in "host:port" format (e.g., "127.0.0.1:9092").
+
+    Returns:
+        HostAddress:
+            Resolved address with host, port, and packed IP fields.
+
+    Raises:
+        SocketError:
+            If the string does not contain a colon separator, or if the
+            host portion is not a valid IPv4 address.
+
+    Complexity:
+        Time: O(n) where n is string length
+        Space: O(1)
+    """
+
+    I64 stringAddress = stringToPtr( hostPort )
+    I64 stringLength = stringLen( hostPort )
+    I64 colonPosition = -1
+    I64 scanIndex = 0
+
+    while scanIndex < stringLength:
+        I64 byteValue = readByteAt( stringAddress, scanIndex )
+        if byteValue < 0:
+            byteValue = byteValue + 256
+        if byteValue == 58:
+            colonPosition = scanIndex
+        scanIndex = scanIndex + 1
+
+    if colonPosition < 0:
+        raise new SocketError( "invalid host:port format, missing colon separator", -1, None )
+
+    I64 hostLength = colonPosition
+    I64 portStartIndex = colonPosition + 1
+    I64 portValue = 0
+    I64 portIndex = portStartIndex
+
+    while portIndex < stringLength:
+        I64 digitByte = readByteAt( stringAddress, portIndex )
+        if digitByte < 0:
+            digitByte = digitByte + 256
+        portValue = portValue * 10 + ( digitByte - 48 )
+        portIndex = portIndex + 1
+
+    I64 octet1 = 0
+    I64 octet2 = 0
+    I64 octet3 = 0
+    I64 octet4 = 0
+    I64 currentOctet = 0
+    I64 dotCount = 0
+    I64 hostIndex = 0
+
+    while hostIndex < hostLength:
+        I64 hostByte = readByteAt( stringAddress, hostIndex )
+        if hostByte < 0:
+            hostByte = hostByte + 256
+        if hostByte == 46:
+            if dotCount == 0:
+                octet1 = currentOctet
+            if dotCount == 1:
+                octet2 = currentOctet
+            if dotCount == 2:
+                octet3 = currentOctet
+            currentOctet = 0
+            dotCount = dotCount + 1
+        else:
+            currentOctet = currentOctet * 10 + ( hostByte - 48 )
+        hostIndex = hostIndex + 1
+
+    octet4 = currentOctet
+
+    if dotCount != 3:
+        # not dotted-decimal — try hostname resolution via /etc/hosts
+        I64 hostNameBuffer = alloc( hostLength + 1 )
+        I64 hostCopyIndex = 0
+        while hostCopyIndex < hostLength:
+            I64 copyByte = readByteAt( stringAddress, hostCopyIndex )
+            if copyByte < 0:
+                copyByte = copyByte + 256
+            writeByteAt( hostNameBuffer, hostCopyIndex, copyByte )
+            hostCopyIndex = hostCopyIndex + 1
+        writeByteAt( hostNameBuffer, hostLength, 0 )
+
+        String hostString = ""
+        asm volatile "movq $1, $0" : output( "=r" hostString ) : input( "r" hostNameBuffer ) : clobber()
+
+        I64 resolvedIp = resolveHostname( hostString )
+        if resolvedIp >= 0:
+            return new HostAddress( hostPort, portValue, resolvedIp )
+        raise new SocketError( "cannot resolve hostname in host:port string", -1, None )
+
+    I64 resolvedAddress = ipToInt( octet1, octet2, octet3, octet4 )
+
+    return new HostAddress( hostPort, portValue, resolvedAddress )
+
+export {
+    HostAddress,
+    parseHostPort,
+    parseIpv4,
+    resolveHostname
+}

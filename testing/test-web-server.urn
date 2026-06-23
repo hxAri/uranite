@@ -1,19 +1,17 @@
 package testing
 
+from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertTrue
 from uranite.web.application import Application
 from uranite.web.config import ServerConfig
 from uranite.web.controller import Controller
-from uranite.web.router import Router, MatchResult
-from uranite.web.route import Route
+from uranite.web.cors import CorsMiddleware
+from uranite.web.errors import BadRequestError, InternalServerError, NotFoundError
+from uranite.web.middleware import Middleware
 from uranite.web.request import HttpRequest
 from uranite.web.response import HttpResponse, statusCodeText
-from uranite.web.middleware import Middleware
-from uranite.web.cors import CorsMiddleware
-from uranite.web.errors import NotFoundError, BadRequestError, InternalServerError
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualStr, assertTrue
-}
-from uranite.io.console import putsln
+from uranite.web.route import Route
+from uranite.web.router import MatchResult, Router
 
 public function main() -> I32:
     putsln( "=== Web Server Tests ===" )

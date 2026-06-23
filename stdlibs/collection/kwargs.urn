@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-28 01:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/collection/kwargs.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/kwargs.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,19 +23,19 @@
 
 package uranite.collection.kwargs
 
-from uranite.memory.memory import Memory
+from uranite.collection.array-list import ArrayList
 from uranite.collection.collection import Collection
+from uranite.collection.hash-set import HashSet
 from uranite.collection.immutable-mapping import ImmutableMapping
 from uranite.collection.pair import Pair
-from uranite.collection.set import Set
 from uranite.collection.sequence import Sequence
-from uranite.collection.hash-set import HashSet
-from uranite.collection.array-list import ArrayList
+from uranite.collection.set import Set
+from uranite.errors.lookup import KeyError
 from uranite.iterators.iterator import Iterator
 from uranite.language.boolean import Boolean
 from uranite.language.callable import Callable
 from uranite.language.void import Void
-from uranite.errors.lookup import KeyError
+from uranite.memory.memory import Memory
 
 public class Kwargs<T> implements ImmutableMapping<String,T>:
     

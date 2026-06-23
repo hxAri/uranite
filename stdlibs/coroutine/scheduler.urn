@@ -1,22 +1,22 @@
 package uranite.coroutine.scheduler
 
+from uranite.async.context import swapContext
 from uranite.errors.error import Error
-from uranite.memory.memory import Memory
-from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
 from uranite.fiber.fiber import {
-    Fiber,
-    fiberSuspend,
-    fiberTrampoline,
-    gCurrentFiberPtr,
-    gCallerRspPtr,
     FIBER_CREATED,
     FIBER_RUNNING,
     FIBER_SUSPENDED,
     FIBER_TERMINATED,
+    F_CONTEXT_RSP,
     F_STATE,
-    F_CONTEXT_RSP
+    Fiber,
+    fiberSuspend,
+    fiberTrampoline,
+    gCallerRspPtr,
+    gCurrentFiberPtr
 }
-from uranite.async.context import swapContext
+from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.memory.memory import Memory
 
 public class SchedulerError extends Error:
     
@@ -63,6 +63,32 @@ public class CoroutineScheduler implements Scheduler:
         while slotIndex < MAX_COROUTINES:
             self.slots.set( slotIndex, 0 )
             slotIndex = slotIndex + 1
+
+    public function spawn( self, Callable<I64, <>> entryFn ) -> I64:
+
+        """
+        Spawn a new coroutine running the given callable.
+
+        Parameters:
+            entryFn (Callable<I64, <>>):
+                The coroutine entry function.
+
+        Returns:
+            I64:
+                A unique coroutine identifier.
+
+        Raises:
+            SchedulerError:
+                If the maximum coroutine count has been reached.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        return self.spawn( extractedAddr )
 
     public function spawn( self, I64 entryFn ) -> I64:
         if self.count >= MAX_COROUTINES:
@@ -135,8 +161,8 @@ public class CoroutineScheduler implements Scheduler:
         self.mainRspBuf.free()
 
 export {
-    Scheduler,
-    SchedulerError,
     CoroutineScheduler,
-    MAX_COROUTINES
+    MAX_COROUTINES,
+    Scheduler,
+    SchedulerError
 }

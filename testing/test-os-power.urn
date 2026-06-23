@@ -1,15 +1,22 @@
 package testing
 
-from uranite.os.power.power import {
-    CPU_STATE_ACTIVE, CPU_STATE_HALT, CPU_STATE_STOP_CLOCK, CPU_STATE_DEEP_SLEEP,
-    SYSTEM_RUNNING, SYSTEM_STANDBY, SYSTEM_SUSPEND, SYSTEM_OFF,
-    POWER_EVENT_SUSPEND, POWER_EVENT_RESUME, POWER_EVENT_SHUTDOWN, POWER_EVENT_REBOOT,
-    PowerManager
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.power.power import {
+    CPU_STATE_ACTIVE,
+    CPU_STATE_DEEP_SLEEP,
+    CPU_STATE_HALT,
+    CPU_STATE_STOP_CLOCK,
+    POWER_EVENT_REBOOT,
+    POWER_EVENT_RESUME,
+    POWER_EVENT_SHUTDOWN,
+    POWER_EVENT_SUSPEND,
+    PowerManager,
+    SYSTEM_OFF,
+    SYSTEM_RUNNING,
+    SYSTEM_STANDBY,
+    SYSTEM_SUSPEND
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Power Tests ===" )

@@ -1,8 +1,8 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.kernel.io import BlockIoSubsystem
 from uranite.testing.assertions import assertEqualI64
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Kernel IO Tests ===" )

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/functions/runtime.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/functions/runtime.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,6 +21,8 @@
 #
 
 package uranite.functions.runtime
+
+
 
 extern function uraniteAtomicAdd( I64 ptr, I64 val ) -> I64;
 """ Atomically add a value to the 64-bit integer at the given pointer, returning the previous value. """

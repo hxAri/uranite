@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-29 14:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process-future.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/multiprocessing/process-future.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,12 +23,12 @@
 package uranite.process.process-future
 
 from uranite.memory.memory import Memory
-from uranite.os.ipc.signal import Event
 from uranite.os.ipc.shared-memory import SharedRegion
+from uranite.os.ipc.signal import Event
 from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.task.task import BlockReason
+from uranite.process.errors import ProcessCancellationError, ProcessCrashedError, ProcessError
 from uranite.threading.atomic import AtomicI64
-from uranite.process.errors import ProcessError, ProcessCancellationError, ProcessCrashedError
 
 const I64 PFUTURE_PENDING = 0
 """ Future state: task has not yet been picked up by a worker. """
@@ -433,12 +433,12 @@ public class ProcessFuture<R>:
         self.base.destroy()
 
 export {
-    ProcessFutureState,
-    ProcessFutureBase,
-    ProcessFuture,
+    PFUTURE_CANCELLED,
+    PFUTURE_ERROR,
+    PFUTURE_FINISHED,
     PFUTURE_PENDING,
     PFUTURE_RUNNING,
-    PFUTURE_FINISHED,
-    PFUTURE_CANCELLED,
-    PFUTURE_ERROR
+    ProcessFuture,
+    ProcessFutureBase,
+    ProcessFutureState
 }

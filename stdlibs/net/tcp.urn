@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-12 15:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/net/tcp.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/tcp.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,15 +22,26 @@
 
 package uranite.net.tcp
 
-from uranite.net.socket import {
-    createTcpSocket, tcpConnect, tcpListen, socketAccept,
-    socketClose, socketShutdown, sendString, recvString,
-    setReuseAddr, setReusePort, setTcpNoDelay,
-    ipToInt, htons, buildSockaddrIn
-}
-from uranite.net.errors import SocketError
-from uranite.memory.memory import Memory
 from uranite.io.syscall import memoryToPtr, writeI32At
+from uranite.memory.memory import Memory
+from uranite.net.address import HostAddress, parseHostPort, parseIpv4
+from uranite.net.errors import SocketError
+from uranite.net.socket import {
+    buildSockaddrIn,
+    createTcpSocket,
+    htons,
+    ipToInt,
+    recvString,
+    sendString,
+    setReuseAddr,
+    setReusePort,
+    setTcpNoDelay,
+    socketAccept,
+    socketClose,
+    socketShutdown,
+    tcpConnect,
+    tcpListen
+}
 
 public class TcpSocket:
 
@@ -86,20 +97,21 @@ public class TcpSocket:
         self.fileDescriptor = existingFd
         self.connected = True
 
-    public function connect( self, I64 ipAddress, I64 port ) -> Void:
+    public function connect( self, String address ) -> Void:
 
         """
-        Connect this socket to a remote host at the given IP and port.
+        Connect this socket to a remote endpoint specified as a "host:port"
+        string. The host portion is parsed as a dotted-decimal IPv4 address
+        and resolved internally.
 
         Parameters:
-            ipAddress (I64):
-                The IPv4 address as a packed integer (use ipToInt to construct).
-            port (I64):
-                The TCP port number to connect to.
+            address (String):
+                Endpoint in "host:port" format (e.g., "127.0.0.1:8080").
 
         Raises:
             SocketError:
-                If the connection cannot be established.
+                If the socket is already connected, the address format is
+                invalid, or the connection cannot be established.
 
         Complexity:
             Time: O(1) (network latency notwithstanding)
@@ -108,7 +120,62 @@ public class TcpSocket:
 
         if self.connected:
             raise new SocketError( "socket already connected", 0, None )
-        I64 sockaddrPtr = buildSockaddrIn( port, ipAddress )
+        HostAddress resolved = parseHostPort( address )
+        self.fileDescriptor = tcpConnect( resolved.ipAddress, resolved.port )
+        self.connected = True
+
+    public function connect( self, String host, I64 port ) -> Void:
+
+        """
+        Connect this socket to a remote host at the given address and port.
+        The host string is parsed as a dotted-decimal IPv4 address and
+        resolved internally.
+
+        Parameters:
+            host (String):
+                IPv4 address as dotted-decimal string (e.g., "127.0.0.1").
+            port (I64):
+                The TCP port number to connect to.
+
+        Raises:
+            SocketError:
+                If the socket is already connected, the host address is
+                invalid, or the connection cannot be established.
+
+        Complexity:
+            Time: O(1) (network latency notwithstanding)
+            Space: O(1)
+        """
+
+        if self.connected:
+            raise new SocketError( "socket already connected", 0, None )
+        I64 resolvedAddress = parseIpv4( host )
+        self.fileDescriptor = tcpConnect( resolvedAddress, port )
+        self.connected = True
+
+    protect function connectRaw( self, I64 ipAddress, I64 port ) -> Void:
+
+        """
+        Connect using a pre-resolved packed IPv4 address integer.
+        Internal use only — prefer connect(String, I64) for public API.
+
+        Parameters:
+            ipAddress (I64):
+                The IPv4 address as a packed 32-bit integer.
+            port (I64):
+                The TCP port number to connect to.
+
+        Raises:
+            SocketError:
+                If the socket is already connected or connection fails.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.connected:
+            raise new SocketError( "socket already connected", 0, None )
         self.fileDescriptor = tcpConnect( ipAddress, port )
         self.connected = True
 
@@ -319,6 +386,6 @@ public class TcpListener:
         self.close()
 
 export {
-    TcpSocket,
-    TcpListener
+    TcpListener,
+    TcpSocket
 }

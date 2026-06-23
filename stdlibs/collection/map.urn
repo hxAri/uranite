@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/collection/map.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/map.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,13 +22,13 @@
 package uranite.collection.map
 
 from uranite.collection.collection import Collection
-from uranite.collection.set import Set
-from uranite.collection.sequence import Sequence
 from uranite.collection.pair import Pair
-from uranite.operators.indexable import Indexable
+from uranite.collection.sequence import Sequence
+from uranite.collection.set import Set
 from uranite.language.boolean import Boolean
-from uranite.language.void import Void
 from uranite.language.callable import Callable
+from uranite.language.void import Void
+from uranite.operators.indexable import Indexable
 
 public interface Map<K, V> extends Collection<V>, Indexable<K, V>:
     

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/sys/process.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/sys/process.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,12 +21,26 @@
 
 package uranite.sys.process
 
-from uranite.os.syscall.invoke import syscall0, syscall1, syscall2, syscall3, syscall4
-from uranite.os.syscall.result import SyscallResult
 from uranite.errors.error import Error
-from uranite.memory.allocator import alloc
-from uranite.io.syscall import readByteAt, writeByteAt, stringToPtr, SYS_OPEN, SYS_READ, SYS_CLOSE, O_RDONLY
 from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import {
+    O_RDONLY,
+    SYS_CLOSE,
+    SYS_OPEN,
+    SYS_READ,
+    readByteAt,
+    stringToPtr,
+    writeByteAt
+}
+from uranite.memory.allocator import alloc
+from uranite.os.syscall.invoke import {
+    syscall0,
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4
+}
+from uranite.os.syscall.result import SyscallResult
 
 const I64 SYS_EXIT_GROUP = 231
 const I64 SYS_GETPID = 39
@@ -207,6 +221,33 @@ public function kill( I64 processId, I64 signal ) -> Void:
     if result.isError():
         raise new ProcessError( "kill failed", result.errorCode(), None )
 
+public function waitForProcess( I64 processId ) -> I64:
+
+    """
+    Wait for a child process to terminate and return its exit status.
+
+    Parameters:
+        processId (I64):
+            The PID of the child process to wait for.
+
+    Returns:
+        I64:
+            The exit status of the child process.
+
+    Raises:
+        ProcessError:
+            If the wait fails.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 statusAddress = alloc( 8 )
+    wait4( processId, statusAddress, 0, 0 )
+    I64 rawStatus = readByteAt( statusAddress, 1 )
+    return rawStatus
+
 public function wait4( I64 processId, I64 statusPointer, I64 options, I64 rusagePointer ) -> I64:
     
     """
@@ -363,11 +404,35 @@ public function getUsername() -> String:
 
 export {
     ProcessError,
-    SYS_EXIT_GROUP, SYS_GETPID, SYS_GETPPID,
-    SYS_GETUID, SYS_GETGID, SYS_GETEUID, SYS_GETEGID,
-    SYS_FORK, SYS_KILL, SYS_NANOSLEEP, SYS_WAIT4,
-    SIGTERM, SIGKILL, SIGINT, SIGHUP, SIGUSR1, SIGUSR2,
-    exit, getpid, getppid, getuid, getgid, geteuid, getegid,
-    fork, kill, wait4, getpgid, setsid,
-    getUsername
+    SIGHUP,
+    SIGINT,
+    SIGKILL,
+    SIGTERM,
+    SIGUSR1,
+    SIGUSR2,
+    SYS_EXIT_GROUP,
+    SYS_FORK,
+    SYS_GETEGID,
+    SYS_GETEUID,
+    SYS_GETGID,
+    SYS_GETPID,
+    SYS_GETPPID,
+    SYS_GETUID,
+    SYS_KILL,
+    SYS_NANOSLEEP,
+    SYS_WAIT4,
+    exit,
+    fork,
+    getUsername,
+    getegid,
+    geteuid,
+    getgid,
+    getpgid,
+    getpid,
+    getppid,
+    getuid,
+    kill,
+    setsid,
+    wait4,
+    waitForProcess
 }

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/process/pipe.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/process/pipe.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,14 +21,22 @@
 
 package uranite.process.pipe
 
-from uranite.memory.memory import Memory
+from uranite.errors.error import Error
+from uranite.functions.builtin import ptrToString
 from uranite.io.syscall import {
-    memoryToPtr, readI32At, sysPipe2, sysRead, sysWrite,
-    sysClose, readByteAt, writeByteAt, stringToPtr, stringLen
+    memoryToPtr,
+    readByteAt,
+    readI32At,
+    stringLen,
+    stringToPtr,
+    sysClose,
+    sysPipe2,
+    sysRead,
+    sysWrite,
+    writeByteAt
 }
 from uranite.memory.allocator import alloc
-from uranite.functions.builtin import ptrToString
-from uranite.errors.error import Error
+from uranite.memory.memory import Memory
 
 public class PipeError extends Error:
     

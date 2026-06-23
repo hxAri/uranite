@@ -1,16 +1,22 @@
 package testing
 
-from uranite.net.socket import {
-    createTcpSocket, createUdpSocket, socketClose,
-    htons, ntohs, ipToInt, buildSockaddrIn,
-    AF_INET, SOCK_STREAM, SOCK_DGRAM,
-    INADDR_LOOPBACK, SOCKADDR_IN_SIZE
-}
-from uranite.memory.memory import Memory
-from uranite.testing.assertions import {
-    assertEqualI64, assertGreaterThan, assertTrue
-}
 from uranite.io.console import putsln
+from uranite.memory.memory import Memory
+from uranite.net.socket import {
+    AF_INET,
+    INADDR_LOOPBACK,
+    SOCKADDR_IN_SIZE,
+    SOCK_DGRAM,
+    SOCK_STREAM,
+    buildSockaddrIn,
+    createTcpSocket,
+    createUdpSocket,
+    htons,
+    ipToInt,
+    ntohs,
+    socketClose
+}
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan, assertTrue
 
 public function main() -> I32:
     putsln( "=== Net Socket Tests ===" )

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/functions/externs.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/functions/externs.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,6 +20,8 @@
 #
 
 package uranite.functions.externs
+
+
 
 extern function calloc( I64 count, I64 size ) -> *Void;
 """ Allocate memory for an array of count elements each of the given size, initializing all bytes to zero. """

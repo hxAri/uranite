@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.hal.interrupt import {
-    MAX_IRQ_COUNT, IrqEntry, InterruptTable
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.hal.interrupt import InterruptTable, IrqEntry, MAX_IRQ_COUNT
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS HAL Interrupt Tests ===" )

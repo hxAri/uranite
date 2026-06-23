@@ -32,7 +32,7 @@ namespace uranite::formatter::linter {
 	
 	/**
 	 * @class Linter
-	 * @brief Static analysis visitor engine enforcing coding standards and doccomment rules on Aether ASTs.
+	 * @brief Static analysis visitor engine enforcing coding standards and doccomment rules on Uranite ASTs.
 	 *
 	 * This engine traverses the Abstract Syntax Tree selective to structural scopes that impact 
 	 * code metrics, documentation compliance, naming safety, and maximum structural block nesting depths.

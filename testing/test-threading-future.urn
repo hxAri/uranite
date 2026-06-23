@@ -1,14 +1,15 @@
 package testing
 
-from uranite.threading.future import {
-    FutureBase, Future, FutureState,
-    FUTURE_PENDING, FUTURE_FINISHED
-}
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
+from uranite.threading.future import {
+    FUTURE_FINISHED,
+    FUTURE_PENDING,
+    Future,
+    FutureBase,
+    FutureState
+}
 
 public function main() -> I32:
     putsln( "=== Threading Future Tests ===" )

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/sys/syscall.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/sys/syscall.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -25,5 +25,6 @@ from uranite.os.syscall.dispatch import SyscallDispatch
 from uranite.os.syscall.number import SyscallNumber
 
 export {
-    SyscallDispatch, SyscallNumber
+    SyscallDispatch,
+    SyscallNumber
 }

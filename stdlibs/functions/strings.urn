@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-12 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/functions/strings.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/functions/strings.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,7 @@
 package uranite.functions.strings
 
 from uranite.collection.array-list import ArrayList
-from uranite.functions.builtin import indexOf, substring, length
+from uranite.functions.builtin import indexOf, length, substring
 
 public function split( String source, String delimiter ) -> ArrayList<String>:
 
@@ -125,7 +125,7 @@ public function replace( String source, String target, String replacement ) -> S
     return joinStrings( parts, replacement )
 
 export {
-    split,
     joinStrings,
-    replace
+    replace,
+    split
 }

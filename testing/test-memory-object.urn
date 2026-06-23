@@ -1,8 +1,8 @@
 package testing
 
-from uranite.memory.object import ObjectType, KernelObject
-from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
 from uranite.io.console import putsln
+from uranite.memory.object import KernelObject, ObjectType
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Memory Object Tests ===" )

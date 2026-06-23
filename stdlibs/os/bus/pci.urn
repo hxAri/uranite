@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/bus/pci.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/bus/pci.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,7 +21,7 @@
 package uranite.os.bus.pci
 
 from uranite.memory.memory import Memory
-from uranite.os.arch.x86-64.port import outl, inl
+from uranite.os.arch.x86-64.port import inl, outl
 
 public const I64 PCI_CONFIG_ADDRESS = 3320
 """
@@ -492,11 +492,11 @@ export {
     PCI_CONFIG_ADDRESS,
     PCI_CONFIG_DATA,
     PCI_NO_DEVICE,
-    pciAddress,
-    pciRead32,
-    pciRead16,
-    pciRead8,
-    pciWrite32,
+    PciBus,
     PciDevice,
-    PciBus
+    pciAddress,
+    pciRead16,
+    pciRead32,
+    pciRead8,
+    pciWrite32
 }

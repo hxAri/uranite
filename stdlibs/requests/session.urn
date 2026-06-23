@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-15 00:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/requests/session.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/requests/session.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,13 +21,13 @@
 
 package uranite.requests.session
 
+from uranite.collection.array-list import ArrayList
+from uranite.net.http.client import sendRequestRaw
 from uranite.net.http.request import HttpRequest
 from uranite.net.http.response import HttpResponse
-from uranite.net.http.client import sendRequest
-from uranite.requests.response import Response
 from uranite.requests.headers import Headers, parseHeaders
+from uranite.requests.response import Response
 from uranite.requests.url import ParsedURL, parseURL
-from uranite.collection.array-list import ArrayList
 
 public class Session:
 
@@ -54,7 +54,7 @@ public class Session:
 
         self.headers = new Headers()
 
-    public function request( self, String method, String url, String body, String contentType ) -> Response:
+    public function request( self, String method, String url, ?String body=None, ?String contentType=None ) -> Response:
 
         """
         Send an HTTP request using a URL string.
@@ -68,9 +68,9 @@ public class Session:
                 The HTTP method (e.g., "GET", "POST").
             url (String):
                 The full URL (e.g., "http://127.0.0.1:8080/api/users").
-            body (String):
+            body (?String):
                 The request body, or empty string for no body.
-            contentType (String):
+            contentType (?String):
                 The Content-Type header, or empty string to omit.
 
         Returns:
@@ -85,16 +85,16 @@ public class Session:
         ParsedURL parsed = parseURL( url )
         HttpRequest httpRequest = new HttpRequest( method, parsed.path )
 
-        if body != "":
+        if body is not None:
             httpRequest.setBody( body )
-        if contentType != "":
+        if contentType is not None:
             httpRequest.setContentType( contentType )
 
         String sessionHeaderBlock = self.headers.toString()
         if sessionHeaderBlock != "":
             httpRequest.addRawHeaders( sessionHeaderBlock )
 
-        HttpResponse httpResponse = sendRequest( parsed.ipAddress, parsed.port, httpRequest )
+        HttpResponse httpResponse = sendRequestRaw( parsed.ipAddress, parsed.port, httpRequest )
         Headers responseHeaders = parseHeaders( httpResponse.rawHeaders )
         return new Response( httpResponse.statusCode, httpResponse.body, httpResponse.rawHeaders )
 

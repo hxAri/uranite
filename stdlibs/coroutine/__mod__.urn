@@ -1,55 +1,55 @@
 package uranite.coroutine
 
+from uranite.coroutine.channel import AsyncChannel, BufferedChannel, ChannelError
 from uranite.coroutine.coroutine import {
-    Coroutine,
-    CoroutineError,
-    SimpleCoroutine,
+    COROUTINE_COMPLETED,
     COROUTINE_CREATED,
     COROUTINE_RUNNING,
     COROUTINE_SUSPENDED,
-    COROUTINE_COMPLETED,
+    Coroutine,
+    CoroutineError,
+    RESULT_COMPLETED,
     RESULT_YIELD,
-    RESULT_COMPLETED
+    SimpleCoroutine
 }
 from uranite.coroutine.future import {
-    Future,
-    FutureState,
-    FutureError,
-    SimpleFuture,
     FUTURE_PENDING,
+    FUTURE_REJECTED,
     FUTURE_RESOLVED,
-    FUTURE_REJECTED
+    Future,
+    FutureError,
+    FutureState,
+    SimpleFuture
 }
-from uranite.coroutine.task import Task, TaskState, TaskError, SimpleTask
-from uranite.coroutine.scheduler import Scheduler, SchedulerError, CoroutineScheduler, MAX_COROUTINES
-from uranite.coroutine.channel import AsyncChannel, ChannelError, BufferedChannel
+from uranite.coroutine.scheduler import CoroutineScheduler, MAX_COROUTINES, Scheduler, SchedulerError
+from uranite.coroutine.task import SimpleTask, Task, TaskError, TaskState
 
 export {
-    Coroutine,
-    CoroutineError,
-    SimpleCoroutine,
+    AsyncChannel,
+    BufferedChannel,
+    COROUTINE_COMPLETED,
     COROUTINE_CREATED,
     COROUTINE_RUNNING,
     COROUTINE_SUSPENDED,
-    COROUTINE_COMPLETED,
-    RESULT_YIELD,
-    RESULT_COMPLETED,
-    Future,
-    FutureState,
-    FutureError,
-    SimpleFuture,
+    ChannelError,
+    Coroutine,
+    CoroutineError,
+    CoroutineScheduler,
     FUTURE_PENDING,
-    FUTURE_RESOLVED,
     FUTURE_REJECTED,
-    Task,
-    TaskState,
-    TaskError,
-    SimpleTask,
+    FUTURE_RESOLVED,
+    Future,
+    FutureError,
+    FutureState,
+    MAX_COROUTINES,
+    RESULT_COMPLETED,
+    RESULT_YIELD,
     Scheduler,
     SchedulerError,
-    CoroutineScheduler,
-    MAX_COROUTINES,
-    AsyncChannel,
-    ChannelError,
-    BufferedChannel
+    SimpleCoroutine,
+    SimpleFuture,
+    SimpleTask,
+    Task,
+    TaskError,
+    TaskState
 }

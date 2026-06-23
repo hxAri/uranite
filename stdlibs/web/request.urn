@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/request.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/request.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,9 +21,9 @@
 
 package uranite.web.request
 
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
+from uranite.functions.builtin import equals, indexOf, ptrToString, substring
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
 from uranite.memory.allocator import alloc
-from uranite.functions.builtin import ptrToString, substring, indexOf, equals
 
 const I64 MAX_PARAMS = 16
 """ Maximum number of path parameters a single request can hold. """
@@ -215,5 +215,7 @@ public class HttpRequest:
 
 export {
     HttpRequest,
-    MAX_PARAMS, MAX_HEADERS, MAX_QUERY_PARAMS
+    MAX_HEADERS,
+    MAX_PARAMS,
+    MAX_QUERY_PARAMS
 }

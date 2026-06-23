@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/requests/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/requests/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -18,18 +18,39 @@
 
 package uranite.requests
 
-from uranite.requests.requests import request, get, post, put, del, patch, postForm
-from uranite.requests.response import Response
+from uranite.requests.errors import HTTPError, RequestConnectionError, RequestError, RequestTimeoutError
 from uranite.requests.headers import Headers, parseHeaders
+from uranite.requests.requests import {
+    del,
+    get,
+    patch,
+    post,
+    postForm,
+    put,
+    request
+}
+from uranite.requests.response import Response
 from uranite.requests.session import Session
-from uranite.requests.url import ParsedURL, InvalidURLError, parseURL, parseIPv4
-from uranite.requests.errors import RequestError, RequestConnectionError, RequestTimeoutError, HTTPError
+from uranite.requests.url import InvalidURLError, ParsedURL, parseIPv4, parseURL
 
 export {
-    request, get, post, put, del, patch, postForm,
+    HTTPError,
+    Headers,
+    InvalidURLError,
+    ParsedURL,
+    RequestConnectionError,
+    RequestError,
+    RequestTimeoutError,
     Response,
-    Headers, parseHeaders,
     Session,
-    ParsedURL, InvalidURLError, parseURL, parseIPv4,
-    RequestError, RequestConnectionError, RequestTimeoutError, HTTPError
+    del,
+    get,
+    parseHeaders,
+    parseIPv4,
+    parseURL,
+    patch,
+    post,
+    postForm,
+    put,
+    request
 }

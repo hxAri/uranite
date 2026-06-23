@@ -1,12 +1,14 @@
 package testing
 
 from uranite.functions.runtime import {
-    uraniteRWLockCreate, uraniteRWLockReadLock,
-    uraniteRWLockWriteLock, uraniteRWLockUnlock,
-    uraniteRWLockDestroy
+    uraniteRWLockCreate,
+    uraniteRWLockDestroy,
+    uraniteRWLockReadLock,
+    uraniteRWLockUnlock,
+    uraniteRWLockWriteLock
 }
-from uranite.testing.assertions import assertGreaterThan
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== Threading RWLock Tests ===" )

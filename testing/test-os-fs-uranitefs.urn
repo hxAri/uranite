@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.fs.uranitefs import {
-    UraniteFsSuperblock, UraniteFsInode, UraniteFileSystem
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.fs.uranitefs import UraniteFileSystem, UraniteFsInode, UraniteFsSuperblock
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS FS UraniteFS Tests ===" )

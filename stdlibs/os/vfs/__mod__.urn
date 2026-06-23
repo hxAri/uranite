@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/vfs/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/vfs/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,19 +21,19 @@
 
 package uranite.os.vfs
 
-from uranite.os.vfs.vnode import VNodeType, VNode, VNodeCache
 from uranite.os.vfs.file-descriptor import FileDescriptor, FileDescriptorTable
 from uranite.os.vfs.filesystem import FileSystem, FileSystemType
 from uranite.os.vfs.mount import MountEntry, MountTable
+from uranite.os.vfs.vnode import VNode, VNodeCache, VNodeType
 
 export {
-    VNodeType,
-    VNode,
-    VNodeCache,
     FileDescriptor,
     FileDescriptorTable,
     FileSystem,
     FileSystemType,
     MountEntry,
-    MountTable
+    MountTable,
+    VNode,
+    VNodeCache,
+    VNodeType
 }

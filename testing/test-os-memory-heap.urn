@@ -1,11 +1,9 @@
 package testing
 
-from uranite.os.memory.heap import SlabCache
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.memory.heap import SlabCache
 from uranite.sys.process import exit
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Memory Heap Tests ===" )

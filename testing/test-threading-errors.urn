@@ -1,8 +1,8 @@
 package testing
 
-from uranite.threading.errors import ThreadError, ThreadPoisonError, ThreadChannelError
-from uranite.testing.assertions import assertEqualI64, assertEqualStr
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
+from uranite.threading.errors import ThreadChannelError, ThreadError, ThreadPoisonError
 
 public function main() -> I32:
     putsln( "=== Threading Errors Tests ===" )

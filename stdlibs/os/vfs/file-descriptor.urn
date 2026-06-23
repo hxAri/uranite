@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/vfs/file-descriptor.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/vfs/file-descriptor.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -308,11 +308,11 @@ public class FileDescriptorTable:
         self.nextFree.free()
 
 export {
-    FileDescriptor,
-    FileDescriptorTable,
-    FLAG_READ,
-    FLAG_WRITE,
     FLAG_APPEND,
     FLAG_CREATE,
-    FLAG_TRUNCATE
+    FLAG_READ,
+    FLAG_TRUNCATE,
+    FLAG_WRITE,
+    FileDescriptor,
+    FileDescriptorTable
 }

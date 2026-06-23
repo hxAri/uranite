@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/route.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/route.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,8 +21,10 @@
 
 package uranite.web.route
 
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt
 from uranite.functions.builtin import equals, substring
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr
+from uranite.web.request import HttpRequest
+from uranite.web.response import HttpResponse
 
 const I64 MAX_SEGMENTS = 16
 """ Maximum number of URL path segments a single route pattern can contain. """
@@ -42,7 +44,7 @@ public class Route:
     """ The HTTP method this route matches (e.g., "GET", "POST"). """
     public String pattern
     """ The URL pattern string (e.g., "/users/:id"). """
-    public I64 handlerAddr
+    protect I64 handlerAddr
     """ The memory address of the handler function for this route. """
     public I64 segmentCount
     """ The number of parsed URL segments in the pattern. """
@@ -51,27 +53,58 @@ public class Route:
     public Memory<I64> isParam
     """ Flags indicating whether each segment is a parameter (1) or literal (0). """
     
-    public function Route( self, String method, String pattern, I64 handlerAddr ) -> Void:
-        
+    public function Route( self, String method, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Void:
+
         """
-        Construct a new Route and parse the URL pattern into segments.
-        
+        Construct a new Route binding an HTTP method and URL pattern to a
+        typed handler function. The handler receives the parsed HttpRequest
+        and an HttpResponse to populate.
+
         Segments prefixed with ':' (ASCII 58) are marked as path parameters.
         The pattern is split on '/' (ASCII 47) delimiters.
-        
+
         Parameters:
             method (String):
                 The HTTP method to match (e.g., "GET", "POST").
             pattern (String):
                 The URL pattern with optional :param segments.
-            handlerAddr (I64):
-                The memory address of the handler function.
-        
+            handler (Callable<Void, <HttpRequest, HttpResponse>>):
+                The handler function invoked when this route matches.
+
         Complexity:
-            Time: O(1)
-            Space: O(1)
+            Time: O(s) where s is number of segments in pattern
+            Space: O(s)
         """
-        
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" handler ) : clobber()
+        self.method = method
+        self.pattern = pattern
+        self.handlerAddr = extractedAddr
+        self.segmentCount = 0
+        self.segmentPtrs = new Memory<I64>( MAX_SEGMENTS )
+        self.isParam = new Memory<I64>( MAX_SEGMENTS )
+        self.parsePattern()
+
+    protect function Route( self, String method, String pattern, I64 handlerAddr ) -> Void:
+
+        """
+        Construct a Route from a raw handler function address.
+        Internal use by Router and Controller.
+
+        Parameters:
+            method (String):
+                The HTTP method to match.
+            pattern (String):
+                The URL pattern with optional :param segments.
+            handlerAddr (I64):
+                The raw memory address of the handler function.
+
+        Complexity:
+            Time: O(s) where s is number of segments in pattern
+            Space: O(s)
+        """
+
         self.method = method
         self.pattern = pattern
         self.handlerAddr = handlerAddr
@@ -149,6 +182,6 @@ public class Route:
         self.isParam.free()
 
 export {
-    Route,
-    MAX_SEGMENTS
+    MAX_SEGMENTS,
+    Route
 }

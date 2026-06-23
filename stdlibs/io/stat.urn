@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/stat.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/stat.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,12 +21,24 @@
 
 package uranite.io.stat
 
-from uranite.memory.memory import Memory
 from uranite.io.syscall import {
-    stringToPtr, memoryToPtr, readI32At, readI64At,
-    sysStat, sysFstat, sysLstat,
-    S_IFMT, S_IFREG, S_IFDIR, S_IFLNK, S_IFIFO, S_IFSOCK, S_IFCHR, S_IFBLK
+    S_IFBLK,
+    S_IFCHR,
+    S_IFDIR,
+    S_IFIFO,
+    S_IFLNK,
+    S_IFMT,
+    S_IFREG,
+    S_IFSOCK,
+    memoryToPtr,
+    readI32At,
+    readI64At,
+    stringToPtr,
+    sysFstat,
+    sysLstat,
+    sysStat
 }
+from uranite.memory.memory import Memory
 
 public enum FileType:
     
@@ -486,9 +498,9 @@ public function fstatFd( I64 fd ) -> FileStat:
     return result
 
 export {
-    FileType,
     FileStat,
-    statPath,
+    FileType,
+    fstatFd,
     lstatPath,
-    fstatFd
+    statPath
 }

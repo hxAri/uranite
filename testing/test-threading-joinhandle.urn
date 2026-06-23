@@ -1,14 +1,12 @@
 package testing
 
+from uranite.io.console import putsln
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.time.clock import SystemClock
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 from uranite.threading.join-handle import JoinHandle
 from uranite.threading.thread import Thread, ThreadRuntime
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.time.clock import SystemClock
-from uranite.testing.assertions import {
-    assertEqualI64, assertGreaterThan
-}
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Threading JoinHandle Tests ===" )

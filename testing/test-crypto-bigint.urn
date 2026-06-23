@@ -1,13 +1,19 @@
 package testing
 
 from uranite.crypto.bigint import {
-    BigInt, bigintFromI64, bigintFromBytes, bigintToBytes,
-    bigintAdd, bigintSubtract, bigintMultiply, bigintModExp
+    BigInt,
+    bigintAdd,
+    bigintFromBytes,
+    bigintFromI64,
+    bigintModExp,
+    bigintMultiply,
+    bigintSubtract,
+    bigintToBytes
 }
-from uranite.encoding.binary import writeI8, readI8
+from uranite.encoding.binary import readI8, writeI8
+from uranite.io.console import putsln
 from uranite.memory.allocator import alloc, dealloc
 from uranite.testing.assertions import assertEqualI64, assertNotEqualI64, assertTrue
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Crypto BigInt Tests ===" )

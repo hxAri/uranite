@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.io.dma import {
-    DmaDirection, DmaDescriptor, DmaChannel
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.io.dma import DmaChannel, DmaDescriptor, DmaDirection
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS IO DMA Tests ===" )

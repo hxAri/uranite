@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/directory.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/directory.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,19 +21,30 @@
 
 package uranite.io.directory
 
-from uranite.memory.memory import Memory
-from uranite.iterators.iterator import Iterator
 from uranite.collection.array-list import ArrayList
-from uranite.io.syscall import {
-    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
-    readI16At, readI64At,
-    sysOpen, sysClose, sysGetdents64, sysMkdir, sysRmdir, sysUnlink,
-    O_RDONLY, O_DIRECTORY
-}
-from uranite.io.path import join, exists, dirname
-from uranite.io.stat import statPath, FileStat
-from uranite.language.callable import Callable
 from uranite.io.errors import IOError
+from uranite.io.path import dirname, exists, join
+from uranite.io.stat import FileStat, statPath
+from uranite.io.syscall import {
+    O_DIRECTORY,
+    O_RDONLY,
+    memoryToPtr,
+    readByteAt,
+    readI16At,
+    readI64At,
+    stringLen,
+    stringToPtr,
+    sysClose,
+    sysGetdents64,
+    sysMkdir,
+    sysOpen,
+    sysRmdir,
+    sysUnlink,
+    writeByteAt
+}
+from uranite.iterators.iterator import Iterator
+from uranite.language.callable import Callable
+from uranite.memory.memory import Memory
 
 public enum EntryType:
     
@@ -348,6 +359,27 @@ public class DirectoryIterator implements Iterator<DirectoryEntry>:
         
         self.close()
 
+public function mkdir( String path ) -> Void:
+
+    """
+    Create a single directory with default permissions (0755).
+    The parent directory must already exist.
+
+    Parameters:
+        path (String):
+            The filesystem path of the directory to create.
+
+    Raises:
+        IOError:
+            If the directory cannot be created.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    mkdir( path, 493 )
+
 public function mkdir( String path, I64 mode ) -> Void:
     
     """
@@ -366,6 +398,23 @@ public function mkdir( String path, I64 mode ) -> Void:
     
     I64 pathPtr = stringToPtr( path )
     sysMkdir( pathPtr, mode )
+
+public function makedirs( String path ) -> Void:
+
+    """
+    Recursively create a directory tree with default permissions (0755).
+    If the directory already exists, this function is a no-op.
+
+    Parameters:
+        path (String):
+            The filesystem path of the directory tree to create.
+
+    Complexity:
+        Time: O(d) where d is directory depth
+        Space: O(d)
+    """
+
+    makedirs( path, 493 )
 
 public function makedirs( String path, I64 mode ) -> Void:
     
@@ -532,14 +581,14 @@ public function walkDirectory( String path, Callable<Void, <String>> visitor ) -
     entries.destroy()
 
 export {
-    EntryType,
     DirectoryEntry,
     DirectoryIterator,
-    mkdir,
-    makedirs,
-    rmdir,
-    removetree,
-    listdir,
+    EntryType,
     countContents,
+    listdir,
+    makedirs,
+    mkdir,
+    removetree,
+    rmdir,
     walkDirectory
 }

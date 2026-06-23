@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/string-reader.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/string-reader.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,9 +21,11 @@
 
 package uranite.io.string-reader
 
-from uranite.memory.memory import Memory
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt
+from uranite.functions.builtin import ptrToString
 from uranite.io.stream import InputStream
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc
+from uranite.memory.memory import Memory
 
 public class StringReader implements InputStream:
     
@@ -132,13 +134,48 @@ public class StringReader implements InputStream:
         
         return self.dataLength
     
+    public function readString( self, I64 maxLength ) -> String:
+
+        """
+        Read up to maxLength bytes from the current position and return
+        as a String. Advances the read position.
+
+        Parameters:
+            maxLength (I64):
+                Maximum number of bytes to read.
+
+        Returns:
+            String:
+                The bytes read as a string. Empty string if at end.
+
+        Complexity:
+            Time: O(n) where n is bytes read
+            Space: O(n)
+        """
+
+        I64 remaining = self.dataLength - self.position
+        I64 toRead = maxLength
+        if toRead > remaining:
+            toRead = remaining
+        if toRead <= 0:
+            return ""
+        I64 outputBuffer = alloc( toRead + 1 )
+        I64 byteIndex = 0
+        while byteIndex < toRead:
+            I64 byteValue = readByteAt( self.dataPtr, self.position + byteIndex )
+            writeByteAt( outputBuffer, byteIndex, byteValue )
+            byteIndex = byteIndex + 1
+        writeByteAt( outputBuffer, toRead, 0 )
+        self.position = self.position + toRead
+        return ptrToString( outputBuffer )
+
     public function reset( self ) -> Void:
-        
+
         """
         Reset the read position to the beginning of the string,
         allowing the content to be re-read from the start.
         """
-        
+
         self.position = 0
 
 export {

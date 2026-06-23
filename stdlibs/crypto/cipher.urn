@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/cipher.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/crypto/cipher.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,6 +21,7 @@
 
 package uranite.crypto.cipher
 
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr
 from uranite.os.crypto.aes import AES_128, AES_256, AES_BLOCK_SIZE, AesContext
 
 public class AesCipher:
@@ -61,6 +62,66 @@ public class AesCipher:
 
         self.context.init( k0, k1, k2, k3 )
 
+    public function initFromBytes( self, String keyBytes ) -> Void:
+
+        """
+        Initialize the cipher from a raw byte string. For AES-128, the
+        string must be at least 16 bytes; for AES-256, at least 32 bytes.
+        Bytes are packed into 64-bit words in little-endian order.
+
+        Parameters:
+            keyBytes (String):
+                Raw key bytes as a string.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 keyAddress = stringToPtr( keyBytes )
+        I64 keyLength = stringLen( keyBytes )
+        I64 k0 = 0
+        I64 k1 = 0
+        I64 k2 = 0
+        I64 k3 = 0
+        if keyLength >= 8:
+            k0 = readByteAt( keyAddress, 0 )
+            k0 = k0 | ( readByteAt( keyAddress, 1 ) << 8 )
+            k0 = k0 | ( readByteAt( keyAddress, 2 ) << 16 )
+            k0 = k0 | ( readByteAt( keyAddress, 3 ) << 24 )
+            k0 = k0 | ( readByteAt( keyAddress, 4 ) << 32 )
+            k0 = k0 | ( readByteAt( keyAddress, 5 ) << 40 )
+            k0 = k0 | ( readByteAt( keyAddress, 6 ) << 48 )
+            k0 = k0 | ( readByteAt( keyAddress, 7 ) << 56 )
+        if keyLength >= 16:
+            k1 = readByteAt( keyAddress, 8 )
+            k1 = k1 | ( readByteAt( keyAddress, 9 ) << 8 )
+            k1 = k1 | ( readByteAt( keyAddress, 10 ) << 16 )
+            k1 = k1 | ( readByteAt( keyAddress, 11 ) << 24 )
+            k1 = k1 | ( readByteAt( keyAddress, 12 ) << 32 )
+            k1 = k1 | ( readByteAt( keyAddress, 13 ) << 40 )
+            k1 = k1 | ( readByteAt( keyAddress, 14 ) << 48 )
+            k1 = k1 | ( readByteAt( keyAddress, 15 ) << 56 )
+        if keyLength >= 24:
+            k2 = readByteAt( keyAddress, 16 )
+            k2 = k2 | ( readByteAt( keyAddress, 17 ) << 8 )
+            k2 = k2 | ( readByteAt( keyAddress, 18 ) << 16 )
+            k2 = k2 | ( readByteAt( keyAddress, 19 ) << 24 )
+            k2 = k2 | ( readByteAt( keyAddress, 20 ) << 32 )
+            k2 = k2 | ( readByteAt( keyAddress, 21 ) << 40 )
+            k2 = k2 | ( readByteAt( keyAddress, 22 ) << 48 )
+            k2 = k2 | ( readByteAt( keyAddress, 23 ) << 56 )
+        if keyLength >= 32:
+            k3 = readByteAt( keyAddress, 24 )
+            k3 = k3 | ( readByteAt( keyAddress, 25 ) << 8 )
+            k3 = k3 | ( readByteAt( keyAddress, 26 ) << 16 )
+            k3 = k3 | ( readByteAt( keyAddress, 27 ) << 24 )
+            k3 = k3 | ( readByteAt( keyAddress, 28 ) << 32 )
+            k3 = k3 | ( readByteAt( keyAddress, 29 ) << 40 )
+            k3 = k3 | ( readByteAt( keyAddress, 30 ) << 48 )
+            k3 = k3 | ( readByteAt( keyAddress, 31 ) << 56 )
+        self.context.init( k0, k1, k2, k3 )
+
     public function hasHardwareSupport( self ) -> Boolean:
 
         """ Return whether AES-NI hardware acceleration is available. """
@@ -98,6 +159,9 @@ public class AesCipher:
         self.context.destroy()
 
 export {
+    AES_128,
+    AES_256,
+    AES_BLOCK_SIZE,
     AesCipher,
-    AES_128, AES_256, AES_BLOCK_SIZE, AesContext
+    AesContext
 }

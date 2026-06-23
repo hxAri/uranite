@@ -1,7 +1,7 @@
 # 
 # @author hxAri (hxari)
 # @create 2026-05-04 11:00
-# @github https://github.com/uranite-lang/uranite
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/k-nucleotide.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -19,8 +19,8 @@
 
 package main
 
-from uranite.io.console import puts
 from uranite.collection.hash-map import HashMap
+from uranite.io.console import puts
 from uranite.language.int import Int
 from uranite.language.string import String
 from uranite.memory.memory import Memory

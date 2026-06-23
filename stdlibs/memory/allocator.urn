@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/memory/allocator.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/memory/allocator.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,10 +23,10 @@
 
 package uranite.memory.allocator
 
+from uranite.errors.error import Error
+from uranite.io.syscall import readByteAt, readI64At, writeByteAt, writeI64At
 from uranite.os.syscall.invoke import syscall2, syscall6
 from uranite.os.syscall.result import SyscallResult
-from uranite.io.syscall import readI64At, writeI64At, readByteAt, writeByteAt
-from uranite.errors.error import Error
 
 const I64 SYS_MMAP = 9
 """ Linux syscall number for mmap. """
@@ -223,11 +223,11 @@ public function allocZeroed( I64 size ) -> I64:
 
 export {
     AllocationError,
-    alloc,
-    dealloc,
-    realloc,
-    allocZeroed,
-    alignToPage,
     HEADER_SIZE,
-    PAGE_SIZE
+    PAGE_SIZE,
+    alignToPage,
+    alloc,
+    allocZeroed,
+    dealloc,
+    realloc
 }

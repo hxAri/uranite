@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-06 02:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/datetime/timezone.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/datetime/timezone.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,9 +21,9 @@
 
 package uranite.datetime.timezone
 
+from uranite.convert.convert import intToString
 from uranite.datetime.datetime import DateTime, fromTimestamp
 from uranite.datetime.errors import DateTimeError
-from uranite.convert.convert import intToString
 
 public const I64 UTC_OFFSET = 0
 """ UTC offset in seconds (0). """
@@ -642,27 +642,55 @@ public function lookupTimezone( String name ) -> Timezone:
     raise new DateTimeError( "unknown timezone: " + name, -1, None )
 
 export {
+    AEDT_OFFSET,
+    AEST_OFFSET,
+    AKDT_OFFSET,
+    AKST_OFFSET,
+    CDT_OFFSET,
+    CEST_OFFSET,
+    CET_OFFSET,
+    CST_CHINA_OFFSET,
+    CST_OFFSET,
+    EDT_OFFSET,
+    EEST_OFFSET,
+    EET_OFFSET,
+    EST_OFFSET,
+    GMT_OFFSET,
+    HST_OFFSET,
+    IST_OFFSET,
+    JST_OFFSET,
+    KST_OFFSET,
+    MDT_OFFSET,
+    MST_OFFSET,
+    NZDT_OFFSET,
+    NZST_OFFSET,
+    PDT_OFFSET,
+    PST_OFFSET,
     Timezone,
-    utcTimezone, gmtTimezone,
-    estTimezone, edtTimezone,
-    cstTimezone, cdtTimezone,
-    mstTimezone, mdtTimezone,
-    pstTimezone, pdtTimezone,
-    cetTimezone, cestTimezone,
-    eetTimezone, eestTimezone,
-    istTimezone, jstTimezone, kstTimezone,
-    aestTimezone, nzstTimezone, wibTimezone,
-    fromOffset, fromHoursOffset, fromHoursMinutesOffset,
+    UTC_OFFSET,
+    WIB_OFFSET,
+    aestTimezone,
+    cdtTimezone,
+    cestTimezone,
+    cetTimezone,
+    cstTimezone,
+    edtTimezone,
+    eestTimezone,
+    eetTimezone,
+    estTimezone,
+    fromHoursMinutesOffset,
+    fromHoursOffset,
+    fromOffset,
+    gmtTimezone,
+    istTimezone,
+    jstTimezone,
+    kstTimezone,
     lookupTimezone,
-    UTC_OFFSET, GMT_OFFSET,
-    EST_OFFSET, EDT_OFFSET,
-    CST_OFFSET, CDT_OFFSET,
-    MST_OFFSET, MDT_OFFSET,
-    PST_OFFSET, PDT_OFFSET,
-    CET_OFFSET, CEST_OFFSET,
-    EET_OFFSET, EEST_OFFSET,
-    IST_OFFSET, JST_OFFSET, KST_OFFSET,
-    AEST_OFFSET, NZST_OFFSET, WIB_OFFSET,
-    CST_CHINA_OFFSET, AKST_OFFSET, AKDT_OFFSET,
-    HST_OFFSET, AEDT_OFFSET, NZDT_OFFSET
+    mdtTimezone,
+    mstTimezone,
+    nzstTimezone,
+    pdtTimezone,
+    pstTimezone,
+    utcTimezone,
+    wibTimezone
 }

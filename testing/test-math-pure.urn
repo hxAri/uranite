@@ -1,16 +1,28 @@
 package testing
 
-from uranite.math.math import {
-    abs, absI64, sqrt, floor, ceil, round,
-    fmod, pow, min, max, minF64, maxF64,
-    clamp, sign, gcd, lcm, ln, log10, log2
-}
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertEqualF64,
-    assertTrue
-}
 from uranite.io.console import putsln
+from uranite.math.math import {
+    abs,
+    absI64,
+    ceil,
+    clamp,
+    floor,
+    fmod,
+    gcd,
+    lcm,
+    ln,
+    log10,
+    log2,
+    max,
+    maxF64,
+    min,
+    minF64,
+    pow,
+    round,
+    sign,
+    sqrt
+}
+from uranite.testing.assertions import assertEqualF64, assertEqualI64, assertTrue
 
 public function main() -> I32:
     putsln( "=== Pure Uranite Math Tests ===" )

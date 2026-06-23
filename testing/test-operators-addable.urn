@@ -1,8 +1,8 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.operators.addable import Addable
 from uranite.testing.assertions import assertEqualI64
-from uranite.io.console import putsln
 
 public class Number implements Addable<Number>:
     public Int value

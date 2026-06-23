@@ -1,13 +1,13 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/examples/
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
-# Demonstrates the use of properties in Aether classes.
+# Demonstrates the use of properties in Uranite classes.
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

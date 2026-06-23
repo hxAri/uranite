@@ -1,14 +1,21 @@
 package testing
 
-from uranite.testing.assertions import {
-    assertTrue, assertFalse, assertEqualI64, assertNotEqualI64,
-    assertEqualF64, assertEqualStr, assertNotEqualStr,
-    assertGreaterThan, assertLessThan, assertBetween
-}
-from uranite.testing.test-case import TestCase
-from uranite.testing.runner import TestRunner
-from uranite.testing.result import TestResult
 from uranite.io.console import putsln
+from uranite.testing.assertions import {
+    assertBetween,
+    assertEqualF64,
+    assertEqualI64,
+    assertEqualStr,
+    assertFalse,
+    assertGreaterThan,
+    assertLessThan,
+    assertNotEqualI64,
+    assertNotEqualStr,
+    assertTrue
+}
+from uranite.testing.result import TestResult
+from uranite.testing.runner import TestRunner
+from uranite.testing.test-case import TestCase
 
 public function main() -> I32:
     putsln( "=== Testing Framework Tests ===" )

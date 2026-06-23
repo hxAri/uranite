@@ -1,12 +1,9 @@
 package testing
 
-from uranite.subprocess.subprocess import Subprocess, SubprocessResult, SubprocessError
-from uranite.process.pipe import Pipe, PipeError
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualStr,
-    assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.process.pipe import Pipe, PipeError
+from uranite.subprocess.subprocess import Subprocess, SubprocessError, SubprocessResult
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Subprocess Tests ===" )

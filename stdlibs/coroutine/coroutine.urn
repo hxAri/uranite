@@ -2,12 +2,12 @@ package uranite.coroutine.coroutine
 
 from uranite.errors.error import Error
 from uranite.fiber.fiber import {
-    Fiber,
-    fiberSuspend,
-    fiberTrampoline,
     FIBER_SUSPENDED,
     FIBER_TERMINATED,
-    F_STATE
+    F_STATE,
+    Fiber,
+    fiberSuspend,
+    fiberTrampoline
 }
 
 public class CoroutineError extends Error:
@@ -47,7 +47,44 @@ public class SimpleCoroutine implements Coroutine<I64, I64>:
     public Boolean hasYield
     public Boolean hasReturn
     
+    public function SimpleCoroutine( self, Callable<I64, <I64>> entryFn ) -> Void:
+
+        """
+        Create a coroutine that will execute the given callable.
+
+        Parameters:
+            entryFn (Callable<I64, <I64>>):
+                The coroutine body function. Receives a value from resume()
+                and returns a value via fiberSuspend().
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        self.fiber = new Fiber( extractedAddr )
+        self.state = COROUTINE_CREATED
+        self.yieldedValue = 0
+        self.returnValue = 0
+        self.hasYield = False
+        self.hasReturn = False
+
     public function SimpleCoroutine( self, I64 entryFn ) -> Void:
+
+        """
+        Create a coroutine from a raw function address.
+
+        Parameters:
+            entryFn (I64):
+                Raw address of the coroutine body function.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
         self.fiber = new Fiber( entryFn )
         self.state = COROUTINE_CREATED
         self.yieldedValue = 0
@@ -109,13 +146,13 @@ public class SimpleCoroutine implements Coroutine<I64, I64>:
         self.fiber.destroy()
 
 export {
-    Coroutine,
-    CoroutineError,
-    SimpleCoroutine,
+    COROUTINE_COMPLETED,
     COROUTINE_CREATED,
     COROUTINE_RUNNING,
     COROUTINE_SUSPENDED,
-    COROUTINE_COMPLETED,
+    Coroutine,
+    CoroutineError,
+    RESULT_COMPLETED,
     RESULT_YIELD,
-    RESULT_COMPLETED
+    SimpleCoroutine
 }

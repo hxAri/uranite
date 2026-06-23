@@ -1,14 +1,20 @@
 package testing
 
 from uranite.functions.externs import {
-    printf, puts, strlen, strcmp,
-    malloc, free, calloc, realloc,
-    memset, memcpy, clock
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertGreaterThan
+    calloc,
+    clock,
+    free,
+    malloc,
+    memcpy,
+    memset,
+    printf,
+    puts,
+    realloc,
+    strcmp,
+    strlen
 }
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan, assertTrue
 
 public function main() -> I32:
     putsln( "=== Functions Externs Tests ===" )

@@ -1,14 +1,20 @@
 package testing
 
-from uranite.os.net.ipv4 import {
-    PROTO_ICMP, PROTO_TCP, PROTO_UDP,
-    ipAddr, ipOctet0, ipOctet1, ipOctet2, ipOctet3,
-    isSameSubnet, Ipv4Header, RoutingTable
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.net.ipv4 import {
+    Ipv4Header,
+    PROTO_ICMP,
+    PROTO_TCP,
+    PROTO_UDP,
+    RoutingTable,
+    ipAddr,
+    ipOctet0,
+    ipOctet1,
+    ipOctet2,
+    ipOctet3,
+    isSameSubnet
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Net IPv4 Tests ===" )

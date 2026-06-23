@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/collection/collection.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/collection.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,12 +22,12 @@
 
 package uranite.collection
 
-
 from uranite.iterators.iterable import Iterable
 from uranite.iterators.iterator import Iterator
 from uranite.language.boolean import Boolean
 from uranite.language.callable import Callable
 from uranite.language.void import Void
+
 
 public interface Collection<T> extends Iterable<T>:
     

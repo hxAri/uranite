@@ -1,14 +1,11 @@
 package testing
 
-from uranite.errors.lookup import LookupError, IndexError, KeyError
-from uranite.errors.value import ValueError
+from uranite.errors.lookup import IndexError, KeyError, LookupError
+from uranite.errors.state import CapacityError, NotImplementedError, StateError
 from uranite.errors.type import TypeError
-from uranite.errors.state import StateError, CapacityError, NotImplementedError
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualStr,
-    assertTrue, assertFalse
-}
+from uranite.errors.value import ValueError
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== LookupError Hierarchy Tests ===" )

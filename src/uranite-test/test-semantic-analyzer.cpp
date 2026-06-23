@@ -265,3 +265,106 @@ TEST_F( SemanticAnalyzerTest, ValidSimpleProgramWithArgv ) {
     );
     EXPECT_TRUE( result );
 }
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadDifferentParamTypes ) {
+    bool result = this->analyze(
+        "function process( I64 value ) -> Void:\n"
+        "    I64 x = value\n"
+        "function process( String value ) -> Void:\n"
+        "    String s = value\n"
+        "function main() -> I32:\n"
+        "    process( 42 )\n"
+        "    process( \"hello\" )\n"
+        "    return 0\n"
+    );
+    EXPECT_TRUE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadDifferentArity ) {
+    bool result = this->analyze(
+        "function compute( I64 x ) -> I64:\n"
+        "    return x\n"
+        "function compute( I64 x, I64 y ) -> I64:\n"
+        "    return x + y\n"
+        "function main() -> I32:\n"
+        "    I64 a = compute( 1 )\n"
+        "    I64 b = compute( 1, 2 )\n"
+        "    return 0\n"
+    );
+    EXPECT_TRUE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadRejectsDuplicateSignature ) {
+    bool result = this->analyze(
+        "function duplicate() -> Int:\n"
+        "    return 0\n"
+        "function duplicate() -> String:\n"
+        "    return \"String\"\n"
+    );
+    EXPECT_FALSE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadRejectsDuplicateSignatureParameter ) {
+    bool result = this->analyze(
+        "function duplicate( I64 x ) -> Void:\n"
+        "    I64 a = x\n"
+        "function duplicate( I64 y ) -> Void:\n"
+        "    I64 b = y\n"
+    );
+    EXPECT_FALSE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadVariadicParameter ) {
+    bool result = this->analyze(
+        "function collect( I64 items[] ) -> Void:\n"
+        "    I64 count = 0\n"
+        "function collect( String label, I64 items[] ) -> Void:\n"
+        "    I64 count = 0\n"
+        "function main() -> I32:\n"
+        "    collect( 1, 2, 3 )\n"
+        "    collect( \"data\", 1, 2, 3 )\n"
+        "    return 0\n"
+    );
+    EXPECT_TRUE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadMixedFixedAndVariadic ) {
+    bool result = this->analyze(
+        "function format( String template ) -> String:\n"
+        "    return template\n"
+        "function format( String template, I64 values[] ) -> String:\n"
+        "    return template\n"
+        "function main() -> I32:\n"
+        "    String a = format( \"plain\" )\n"
+        "    String b = format( \"nums\", 1, 2 )\n"
+        "    return 0\n"
+    );
+    EXPECT_TRUE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, FunctionOverloadThreeWay ) {
+    bool result = this->analyze(
+        "function describe( I64 value ) -> I64:\n"
+        "    return 1\n"
+        "function describe( String value ) -> I64:\n"
+        "    return 2\n"
+        "function describe( Boolean value ) -> I64:\n"
+        "    return 3\n"
+        "function main() -> I32:\n"
+        "    I64 a = describe( 42 )\n"
+        "    I64 b = describe( \"hi\" )\n"
+        "    I64 c = describe( True )\n"
+        "    return 0\n"
+    );
+    EXPECT_TRUE( result );
+}
+
+TEST_F( SemanticAnalyzerTest, NonFunctionSymbolRejectsOverload ) {
+    bool result = this->analyze(
+        "function main() -> I32:\n"
+        "    I64 x = 10\n"
+        "    I64 x = 20\n"
+        "    return 0\n"
+    );
+    EXPECT_FALSE( result );
+}

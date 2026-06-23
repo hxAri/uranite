@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/sha512.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/crypto/sha512.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,9 +22,10 @@
 
 package uranite.crypto.sha512
 
-from uranite.io.syscall import readByteAt, writeByteAt
-from uranite.memory.allocator import alloc, dealloc
 from uranite.encoding.binary import readI64Be, writeI64Be
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 SHA512_BLOCK_SIZE = 128
 """SHA-512 processes data in 128-byte (1024-bit) blocks."""
@@ -309,6 +310,25 @@ public class Sha512:
                 self.processBlock()
                 self.blockLength = 0
 
+    public function updateString( self, String data ) -> Void:
+
+        """
+        Feed a string into the hash computation. Convenience wrapper that
+        converts the string to a raw address and length internally.
+
+        Parameters:
+            data (String):
+                The string data to hash.
+
+        Complexity:
+            Time: O(n) where n is string length
+            Space: O(1)
+        """
+
+        I64 dataAddress = stringToPtr( data )
+        I64 dataLength = stringLen( data )
+        self.update( dataAddress, dataLength )
+
     public function digest( self, I64 outputAddress ) -> Void:
 
         """
@@ -345,6 +365,46 @@ public class Sha512:
             I64 word = readI64Be( self.stateAddress, stateIndex * 8 )
             writeI64Be( outputAddress, stateIndex * 8, word )
             stateIndex = stateIndex + 1
+
+    public function hexDigest( self ) -> String:
+
+        """
+        Finalize the hash and return the digest as a 128-character lowercase
+        hexadecimal string. Consumes the hasher state — call reset() before
+        reusing.
+
+        Returns:
+            String:
+                The 64-byte digest encoded as 128 hex characters.
+
+        Complexity:
+            Time: O(1)
+            Space: O(128) for hex output buffer
+        """
+
+        I64 rawDigest = alloc( SHA512_DIGEST_SIZE )
+        self.digest( rawDigest )
+        I64 hexBuffer = alloc( 129 )
+        I64 digestIndex = 0
+        while digestIndex < SHA512_DIGEST_SIZE:
+            I64 byteValue = readByteAt( rawDigest, digestIndex )
+            if byteValue < 0:
+                byteValue = byteValue + 256
+            I64 highNibble = byteValue / 16
+            I64 lowNibble = byteValue % 16
+            I64 hexOffset = digestIndex * 2
+            if highNibble < 10:
+                writeByteAt( hexBuffer, hexOffset, 48 + highNibble )
+            else:
+                writeByteAt( hexBuffer, hexOffset, 87 + highNibble )
+            if lowNibble < 10:
+                writeByteAt( hexBuffer, hexOffset + 1, 48 + lowNibble )
+            else:
+                writeByteAt( hexBuffer, hexOffset + 1, 87 + lowNibble )
+            digestIndex = digestIndex + 1
+        writeByteAt( hexBuffer, 128, 0 )
+        dealloc( rawDigest )
+        return ptrToString( hexBuffer )
 
     public function reset( self ) -> Void:
 
@@ -399,9 +459,35 @@ public function sha512( I64 dataAddress, I64 dataLength, I64 outputAddress ) -> 
     hasher.digest( outputAddress )
     hasher.destroy()
 
+public function sha512Digest( String data ) -> String:
+
+    """
+    Compute the SHA-512 hash of a string and return the result as a
+    128-character lowercase hexadecimal string.
+
+    Parameters:
+        data (String):
+            The string to hash.
+
+    Returns:
+        String:
+            The 64-byte digest as 128 hex characters.
+
+    Complexity:
+        Time: O(n) where n is string length
+        Space: O(1)
+    """
+
+    Sha512 hasher = new Sha512()
+    hasher.updateString( data )
+    String result = hasher.hexDigest()
+    hasher.destroy()
+    return result
+
 export {
     SHA512_BLOCK_SIZE,
     SHA512_DIGEST_SIZE,
     Sha512,
-    sha512
+    sha512,
+    sha512Digest
 }

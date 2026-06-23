@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/debug/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/debug/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,40 +20,40 @@
 
 package uranite.os.debug
 
-from uranite.os.debug.panic import {
-    panicGeneral,
-    panicDoubleFault,
-    panicOutOfMemory,
-    panicStackOverflow,
-    panicNullDeref,
-    panicAssertFailed,
-    PanicContext
-}
 from uranite.os.debug.log import {
-    logTrace,
+    EventLog,
     logDebug,
-    logInfo,
-    logWarn,
     logError,
     logFatal,
-    EventLog
+    logInfo,
+    logTrace,
+    logWarn
+}
+from uranite.os.debug.panic import {
+    PanicContext,
+    panicAssertFailed,
+    panicDoubleFault,
+    panicGeneral,
+    panicNullDeref,
+    panicOutOfMemory,
+    panicStackOverflow
 }
 from uranite.os.debug.perf import PerfCounters
 
 export {
-    panicGeneral,
-    panicDoubleFault,
-    panicOutOfMemory,
-    panicStackOverflow,
-    panicNullDeref,
-    panicAssertFailed,
+    EventLog,
     PanicContext,
-    logTrace,
+    PerfCounters,
     logDebug,
-    logInfo,
-    logWarn,
     logError,
     logFatal,
-    EventLog,
-    PerfCounters
+    logInfo,
+    logTrace,
+    logWarn,
+    panicAssertFailed,
+    panicDoubleFault,
+    panicGeneral,
+    panicNullDeref,
+    panicOutOfMemory,
+    panicStackOverflow
 }

@@ -1,8 +1,8 @@
 package testing
 
 from uranite.errors.panic import PanicHandler, PanicReason
-from uranite.testing.assertions import assertEqualI64, assertFalse
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
     putsln( "=== Errors Panic Tests ===" )

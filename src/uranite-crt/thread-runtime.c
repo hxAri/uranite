@@ -26,19 +26,19 @@
 
 #include "uranite-crt/thread-runtime.h"
 
-struct AetherThread {
+struct UraniteThread {
     pthread_t handle;
     int64_t id;
 };
 
-struct AetherMutex {
+struct UraniteMutex {
     pthread_mutex_t handle;
 };
 
 static _Atomic int64_t nextThreadId = 1;
 
-AetherThread* uraniteThreadCreate(void (*entry)(void*), void* arg) {
-    AetherThread* thread = (AetherThread*)malloc(sizeof(AetherThread));
+UraniteThread* uraniteThreadCreate(void (*entry)(void*), void* arg) {
+    UraniteThread* thread = (UraniteThread*)malloc(sizeof(UraniteThread));
     if (!thread) return NULL;
     thread->id = atomic_fetch_add(&nextThreadId, 1);
     int result = pthread_create(&thread->handle, NULL, (void*(*)(void*))entry, arg);
@@ -49,48 +49,48 @@ AetherThread* uraniteThreadCreate(void (*entry)(void*), void* arg) {
     return thread;
 }
 
-void uraniteThreadJoin(AetherThread* thread) {
+void uraniteThreadJoin(UraniteThread* thread) {
     if (thread) {
         pthread_join(thread->handle, NULL);
     }
 }
 
-void uraniteThreadDetach(AetherThread* thread) {
+void uraniteThreadDetach(UraniteThread* thread) {
     if (thread) {
         pthread_detach(thread->handle);
     }
 }
 
-void uraniteThreadDestroy(AetherThread* thread) {
+void uraniteThreadDestroy(UraniteThread* thread) {
     free(thread);
 }
 
-int64_t uraniteThreadId(AetherThread* thread) {
+int64_t uraniteThreadId(UraniteThread* thread) {
     if (!thread) return -1;
     return thread->id;
 }
 
-AetherMutex* uraniteMutexCreate(void) {
-    AetherMutex* mutex = (AetherMutex*)malloc(sizeof(AetherMutex));
+UraniteMutex* uraniteMutexCreate(void) {
+    UraniteMutex* mutex = (UraniteMutex*)malloc(sizeof(UraniteMutex));
     if (!mutex) return NULL;
     pthread_mutex_init(&mutex->handle, NULL);
     return mutex;
 }
 
-void uraniteMutexLock(AetherMutex* mutex) {
+void uraniteMutexLock(UraniteMutex* mutex) {
     if (mutex) pthread_mutex_lock(&mutex->handle);
 }
 
-void uraniteMutexUnlock(AetherMutex* mutex) {
+void uraniteMutexUnlock(UraniteMutex* mutex) {
     if (mutex) pthread_mutex_unlock(&mutex->handle);
 }
 
-int uraniteMutexTryLock(AetherMutex* mutex) {
+int uraniteMutexTryLock(UraniteMutex* mutex) {
     if (!mutex) return 0;
     return pthread_mutex_trylock(&mutex->handle) == 0 ? 1 : 0;
 }
 
-void uraniteMutexDestroy(AetherMutex* mutex) {
+void uraniteMutexDestroy(UraniteMutex* mutex) {
     if (mutex) {
         pthread_mutex_destroy(&mutex->handle);
         free(mutex);
@@ -119,22 +119,22 @@ int uraniteAtomicCompareExchange(int64_t* ptr, int64_t* expected, int64_t desire
 
 // ConditionVariable
 
-struct AetherCondVar {
+struct UraniteCondVar {
     pthread_cond_t handle;
 };
 
-AetherCondVar* uraniteCondVarCreate(void) {
-    AetherCondVar* cv = (AetherCondVar*)malloc(sizeof(AetherCondVar));
+UraniteCondVar* uraniteCondVarCreate(void) {
+    UraniteCondVar* cv = (UraniteCondVar*)malloc(sizeof(UraniteCondVar));
     if (!cv) return NULL;
     pthread_cond_init(&cv->handle, NULL);
     return cv;
 }
 
-void uraniteCondVarWait(AetherCondVar* cv, AetherMutex* mutex) {
+void uraniteCondVarWait(UraniteCondVar* cv, UraniteMutex* mutex) {
     if (cv && mutex) pthread_cond_wait(&cv->handle, &mutex->handle);
 }
 
-int uraniteCondVarTimedWait(AetherCondVar* cv, AetherMutex* mutex, int64_t timeoutMs) {
+int uraniteCondVarTimedWait(UraniteCondVar* cv, UraniteMutex* mutex, int64_t timeoutMs) {
     if (!cv || !mutex) return 0;
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -147,15 +147,15 @@ int uraniteCondVarTimedWait(AetherCondVar* cv, AetherMutex* mutex, int64_t timeo
     return pthread_cond_timedwait(&cv->handle, &mutex->handle, &ts) == 0 ? 1 : 0;
 }
 
-void uraniteCondVarSignal(AetherCondVar* cv) {
+void uraniteCondVarSignal(UraniteCondVar* cv) {
     if (cv) pthread_cond_signal(&cv->handle);
 }
 
-void uraniteCondVarBroadcast(AetherCondVar* cv) {
+void uraniteCondVarBroadcast(UraniteCondVar* cv) {
     if (cv) pthread_cond_broadcast(&cv->handle);
 }
 
-void uraniteCondVarDestroy(AetherCondVar* cv) {
+void uraniteCondVarDestroy(UraniteCondVar* cv) {
     if (cv) {
         pthread_cond_destroy(&cv->handle);
         free(cv);
@@ -164,14 +164,14 @@ void uraniteCondVarDestroy(AetherCondVar* cv) {
 
 // Semaphore (mutex + condvar based for portability)
 
-struct AetherSemaphore {
+struct UraniteSemaphore {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     int64_t count;
 };
 
-AetherSemaphore* uraniteSemaphoreCreate(int64_t initial) {
-    AetherSemaphore* sem = (AetherSemaphore*)malloc(sizeof(AetherSemaphore));
+UraniteSemaphore* uraniteSemaphoreCreate(int64_t initial) {
+    UraniteSemaphore* sem = (UraniteSemaphore*)malloc(sizeof(UraniteSemaphore));
     if (!sem) return NULL;
     pthread_mutex_init(&sem->mutex, NULL);
     pthread_cond_init(&sem->cond, NULL);
@@ -179,7 +179,7 @@ AetherSemaphore* uraniteSemaphoreCreate(int64_t initial) {
     return sem;
 }
 
-void uraniteSemaphoreAcquire(AetherSemaphore* sem) {
+void uraniteSemaphoreAcquire(UraniteSemaphore* sem) {
     if (!sem) return;
     pthread_mutex_lock(&sem->mutex);
     while (sem->count <= 0) {
@@ -189,7 +189,7 @@ void uraniteSemaphoreAcquire(AetherSemaphore* sem) {
     pthread_mutex_unlock(&sem->mutex);
 }
 
-int uraniteSemaphoreTryAcquire(AetherSemaphore* sem) {
+int uraniteSemaphoreTryAcquire(UraniteSemaphore* sem) {
     if (!sem) return 0;
     pthread_mutex_lock(&sem->mutex);
     if (sem->count > 0) {
@@ -201,7 +201,7 @@ int uraniteSemaphoreTryAcquire(AetherSemaphore* sem) {
     return 0;
 }
 
-void uraniteSemaphoreRelease(AetherSemaphore* sem) {
+void uraniteSemaphoreRelease(UraniteSemaphore* sem) {
     if (!sem) return;
     pthread_mutex_lock(&sem->mutex);
     sem->count++;
@@ -209,7 +209,7 @@ void uraniteSemaphoreRelease(AetherSemaphore* sem) {
     pthread_mutex_unlock(&sem->mutex);
 }
 
-void uraniteSemaphoreDestroy(AetherSemaphore* sem) {
+void uraniteSemaphoreDestroy(UraniteSemaphore* sem) {
     if (sem) {
         pthread_mutex_destroy(&sem->mutex);
         pthread_cond_destroy(&sem->cond);
@@ -219,30 +219,30 @@ void uraniteSemaphoreDestroy(AetherSemaphore* sem) {
 
 // ReadWriteLock
 
-struct AetherRWLock {
+struct UraniteRWLock {
     pthread_rwlock_t handle;
 };
 
-AetherRWLock* uraniteRWLockCreate(void) {
-    AetherRWLock* rwl = (AetherRWLock*)malloc(sizeof(AetherRWLock));
+UraniteRWLock* uraniteRWLockCreate(void) {
+    UraniteRWLock* rwl = (UraniteRWLock*)malloc(sizeof(UraniteRWLock));
     if (!rwl) return NULL;
     pthread_rwlock_init(&rwl->handle, NULL);
     return rwl;
 }
 
-void uraniteRWLockReadLock(AetherRWLock* rwl) {
+void uraniteRWLockReadLock(UraniteRWLock* rwl) {
     if (rwl) pthread_rwlock_rdlock(&rwl->handle);
 }
 
-void uraniteRWLockWriteLock(AetherRWLock* rwl) {
+void uraniteRWLockWriteLock(UraniteRWLock* rwl) {
     if (rwl) pthread_rwlock_wrlock(&rwl->handle);
 }
 
-void uraniteRWLockUnlock(AetherRWLock* rwl) {
+void uraniteRWLockUnlock(UraniteRWLock* rwl) {
     if (rwl) pthread_rwlock_unlock(&rwl->handle);
 }
 
-void uraniteRWLockDestroy(AetherRWLock* rwl) {
+void uraniteRWLockDestroy(UraniteRWLock* rwl) {
     if (rwl) {
         pthread_rwlock_destroy(&rwl->handle);
         free(rwl);

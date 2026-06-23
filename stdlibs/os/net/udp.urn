@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/udp.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/net/udp.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -232,6 +232,6 @@ public class UdpBindTable:
 
 export {
     UDP_HEADER_SIZE,
-    UdpHeader,
-    UdpBindTable
+    UdpBindTable,
+    UdpHeader
 }

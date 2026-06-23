@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/fs/fat32.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/fs/fat32.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,8 +20,10 @@
 
 package uranite.io.fs.fat32
 
-from uranite.os.fs.fat32 import Fat32Info, Fat32DirEntry, Fat32FileSystem
+from uranite.os.fs.fat32 import Fat32DirEntry, Fat32FileSystem, Fat32Info
 
 export {
-    Fat32Info, Fat32DirEntry, Fat32FileSystem
+    Fat32DirEntry,
+    Fat32FileSystem,
+    Fat32Info
 }

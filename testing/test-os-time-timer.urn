@@ -1,14 +1,16 @@
 package testing
 
-from uranite.os.time.timer import {
-    TIMER_ONE_SHOT, TIMER_PERIODIC,
-    TIMER_INACTIVE, TIMER_ACTIVE, TIMER_EXPIRED,
-    TimerEntry, TimerWheel
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.time.timer import {
+    TIMER_ACTIVE,
+    TIMER_EXPIRED,
+    TIMER_INACTIVE,
+    TIMER_ONE_SHOT,
+    TIMER_PERIODIC,
+    TimerEntry,
+    TimerWheel
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Time Timer Tests ===" )

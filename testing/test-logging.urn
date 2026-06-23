@@ -1,16 +1,11 @@
 package testing
 
-from uranite.logging.logger import Logger, getLogger, getDebugLogger
-from uranite.logging.level import LogLevel
-from uranite.logging.formatter import LogFormatter, defaultFormatter, simpleFormatter, detailedFormatter
-from uranite.logging.handler import ConsoleHandler, consoleHandler, consoleHandlerWithLevel
-from uranite.testing.assertions import {
-    assertEqualStr,
-    assertTrue,
-    assertFalse,
-    assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.logging.formatter import LogFormatter, defaultFormatter, detailedFormatter, simpleFormatter
+from uranite.logging.handler import ConsoleHandler, consoleHandler, consoleHandlerWithLevel
+from uranite.logging.level import LogLevel
+from uranite.logging.logger import Logger, getDebugLogger, getLogger
+from uranite.testing.assertions import assertEqualStr, assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
     putsln( "=== Logging Tests ===" )

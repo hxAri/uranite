@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/binary.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/encoding/binary.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -548,13 +548,20 @@ public function copyBytes( I64 sourceAddress, I64 sourceOffset, I64 destinationA
             forwardIndex = forwardIndex + 1
 
 export {
-    readI8, writeI8,
-    readI16Be, writeI16Be,
-    readI32Be, writeI32Be,
-    readI64Be, writeI64Be,
-    readVarI32, writeVarI32,
-    readVarI64, writeVarI64,
+    copyBytes,
+    readI16Be,
+    readI32Be,
+    readI64Be,
+    readI8,
+    readUnsignedVarI32,
+    readVarI32,
+    readVarI64,
     readVarI64WithLength,
-    readUnsignedVarI32, writeUnsignedVarI32,
-    copyBytes
+    writeI16Be,
+    writeI32Be,
+    writeI64Be,
+    writeI8,
+    writeUnsignedVarI32,
+    writeVarI32,
+    writeVarI64
 }

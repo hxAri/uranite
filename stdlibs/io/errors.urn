@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 10:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/errors.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/errors.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,8 +21,8 @@
 
 package uranite.io.errors
 
-from uranite.errors.throwable import Throwable
 from uranite.errors.error import Error
+from uranite.errors.throwable import Throwable
 
 public class IOError extends Error:
     
@@ -242,12 +242,12 @@ public class BrokenPipeError extends IOError:
         parent( message, code, previous )
 
 export {
-    IOError,
-    FileNotFoundError,
-    PermissionError,
+    BrokenPipeError,
+    DirectoryNotEmptyError,
     FileExistsError,
+    FileNotFoundError,
+    IOError,
     IsADirectoryError,
     NotADirectoryError,
-    DirectoryNotEmptyError,
-    BrokenPipeError
+    PermissionError
 }

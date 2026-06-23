@@ -2,7 +2,7 @@
 #
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-17 20:03
+# @update 2026-06-21 01:44
 # @github https://github.com/uranite-lang/uranite
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -21,8 +21,8 @@
 
 package main
 
-from uranite.io.console import puts
 from uranite.errors.exception import Exception
+from uranite.io.console import puts
 
 # Basic async function
 async function fetchValue() -> Future<I64>:

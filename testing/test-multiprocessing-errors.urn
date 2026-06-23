@@ -1,12 +1,15 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.process.errors import {
-    ProcessError, ProcessCreationError,
-    ProcessCommunicationError, ProcessCancellationError,
-    ProcessTimeoutError, ProcessCrashedError
+    ProcessCancellationError,
+    ProcessCommunicationError,
+    ProcessCrashedError,
+    ProcessCreationError,
+    ProcessError,
+    ProcessTimeoutError
 }
 from uranite.testing.assertions import assertEqualI64, assertEqualStr
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Multiprocessing Errors Tests ===" )

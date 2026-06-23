@@ -210,15 +210,23 @@ namespace uranite::compiler {
 				moduleInfo.state = ModuleInfo::State::Analyzing;
 				diagnostic::Engine moduleDiagnostic( this->options.maximumErrorCount, -1 );
 				semantic::Analyzer moduleAnalyzer( moduleDiagnostic );
-				for( std::unordered_map<std::string, ModuleInfo>::iterator depIterator = this->modules.begin(); depIterator != this->modules.end(); ++depIterator ) {
-					if( depIterator->second.state == ModuleInfo::State::Analyzed ) {
-						moduleAnalyzer.importModuleTypes( depIterator->second.analyzedTypes );
-						moduleAnalyzer.importModuleSymbols( depIterator->second.analyzedSymbols );
+				moduleAnalyzer.importModuleTypes( this->accumulatedModuleTypes_ );
+				moduleAnalyzer.importModuleSymbols( this->accumulatedModuleSymbols_ );
+				moduleAnalyzer.analyzeModuleRegistration( *moduleProgram );
+				std::unordered_map<std::string, semantic::TypeSharedPointer> allTypes = moduleAnalyzer.getRegisteredTypes();
+				std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>> allSymbols = moduleAnalyzer.getRegisteredSymbols();
+				for( std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator typeIterator = allTypes.begin(); typeIterator != allTypes.end(); ++typeIterator ) {
+					if( this->accumulatedModuleTypes_.find( typeIterator->first ) == this->accumulatedModuleTypes_.end() ) {
+						moduleInfo.analyzedTypes[typeIterator->first] = typeIterator->second;
+						this->accumulatedModuleTypes_[typeIterator->first] = typeIterator->second;
 					}
 				}
-				moduleAnalyzer.analyzeModuleRegistration( *moduleProgram );
-				moduleInfo.analyzedTypes = moduleAnalyzer.getRegisteredTypes();
-				moduleInfo.analyzedSymbols = moduleAnalyzer.getRegisteredSymbols();
+				for( std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>>::iterator symbolIterator = allSymbols.begin(); symbolIterator != allSymbols.end(); ++symbolIterator ) {
+					for( const semantic::SymbolSharedPointer& symbol : symbolIterator->second ) {
+						moduleInfo.analyzedSymbols[symbolIterator->first].push_back( symbol );
+						this->accumulatedModuleSymbols_[symbolIterator->first].push_back( symbol );
+					}
+				}
 				moduleInfo.state = ModuleInfo::State::Analyzed;
 			}
 		}
@@ -281,6 +289,45 @@ namespace uranite::compiler {
 				}
 			}
 		}
+		std::set<std::string> existingDeclarationNames;
+		std::set<std::string> existingFunctionSignatures;
+		for( const ast::nodes::DeclarationSharedPointer& existingDeclaration : targetProgram.declarations ) {
+			if( existingDeclaration == nullptr ) {
+				continue;
+			}
+			std::string existingIdentifier;
+			if( existingDeclaration->kind == ast::Node::Kind::FunctionDeclaration ) {
+				const ast::nodes::FunctionDeclaration& existingFunction = static_cast<const ast::nodes::FunctionDeclaration&>( *existingDeclaration );
+				existingIdentifier = existingFunction.name;
+				std::string sourceFile = ( existingFunction.source != nullptr ) ? existingFunction.source->filename : "";
+				std::string signatureKey = fmt::format( "{}#{}#{}", existingFunction.name, existingFunction.parameters.size(), sourceFile );
+				existingFunctionSignatures.insert( signatureKey );
+			}
+			else if( existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+				existingIdentifier = static_cast<const ast::nodes::ClassDeclaration&>( *existingDeclaration ).name;
+			}
+			else if( existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+				existingIdentifier = static_cast<const ast::nodes::StructDeclaration&>( *existingDeclaration ).name;
+			}
+			else if( existingDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+				existingIdentifier = static_cast<const ast::nodes::EnumDeclaration&>( *existingDeclaration ).name;
+			}
+			else if( existingDeclaration->kind == ast::Node::Kind::InterfaceDeclaration ) {
+				existingIdentifier = static_cast<const ast::nodes::InterfaceDeclaration&>( *existingDeclaration ).name;
+			}
+			else if( existingDeclaration->kind == ast::Node::Kind::ExternDeclaration ) {
+				existingIdentifier = static_cast<const ast::nodes::ExternDeclaration&>( *existingDeclaration ).name;
+			}
+			else if( existingDeclaration->kind == ast::Node::Kind::TypeAliasDeclaration ) {
+				existingIdentifier = static_cast<const ast::nodes::TypeAliasDeclaration&>( *existingDeclaration ).name;
+			}
+			else if( existingDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
+				existingIdentifier = static_cast<const ast::nodes::ConstantDeclaration&>( *existingDeclaration ).name;
+			}
+			if( existingIdentifier.empty() == false ) {
+				existingDeclarationNames.insert( existingIdentifier );
+			}
+		}
 		for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleProgram->declarations ) {
 			if( moduleDeclaration == nullptr ) {
 				continue;
@@ -319,45 +366,20 @@ namespace uranite::compiler {
 					continue;
 				}
 			}
-			bool isDuplicateDeclarationFound = false;
-			// ALWAYS check for duplicates when merging, including functions/externs, to prevent clobbering
-			// if( moduleDeclaration->kind != ast::Node::Kind::FunctionDeclaration && moduleDeclaration->kind != ast::Node::Kind::ExternDeclaration ) {
-				for( ast::nodes::DeclarationSharedPointer& existingDeclaration : targetProgram.declarations ) {
-					if( existingDeclaration == nullptr ) {
-						continue;
-					}
-					std::string existingIdentifier;
-					// Get identifier for comparison based on declaration kind
-					if( existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
-						existingIdentifier = static_cast<ast::nodes::ClassDeclaration&>( *existingDeclaration ).name;
-					}
-					else if( existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
-						existingIdentifier = static_cast<ast::nodes::StructDeclaration&>( *existingDeclaration ).name;
-					}
-					else if( existingDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
-						existingIdentifier = static_cast<ast::nodes::EnumDeclaration&>( *existingDeclaration ).name;
-					}
-					else if( existingDeclaration->kind == ast::Node::Kind::InterfaceDeclaration ) {
-						existingIdentifier = static_cast<ast::nodes::InterfaceDeclaration&>( *existingDeclaration ).name;
-					}
-					else if( existingDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
-						existingIdentifier = static_cast<ast::nodes::ConstantDeclaration&>( *existingDeclaration ).name;
-					}
-					else if( existingDeclaration->kind == ast::Node::Kind::FunctionDeclaration ) {
-						existingIdentifier = static_cast<ast::nodes::FunctionDeclaration&>( *existingDeclaration ).name;
-					}
-					else if( existingDeclaration->kind == ast::Node::Kind::ExternDeclaration ) {
-						existingIdentifier = static_cast<ast::nodes::ExternDeclaration&>( *existingDeclaration ).name;
-					}
-
-					if( existingIdentifier.empty() == false && existingIdentifier == declarationIdentifier ) {
-						isDuplicateDeclarationFound = true;
-						break;
-					}
+			if( moduleDeclaration->kind == ast::Node::Kind::FunctionDeclaration ) {
+				const ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<const ast::nodes::FunctionDeclaration&>( *moduleDeclaration );
+				std::string sourceFile = ( functionDeclaration.source != nullptr ) ? functionDeclaration.source->filename : "";
+				std::string signatureKey = fmt::format( "{}#{}#{}", functionDeclaration.name, functionDeclaration.parameters.size(), sourceFile );
+				if( existingFunctionSignatures.count( signatureKey ) > 0 ) {
+					continue;
 				}
-			// }
-			if( isDuplicateDeclarationFound ) {
+				existingFunctionSignatures.insert( signatureKey );
+			}
+			else if( declarationIdentifier.empty() == false && existingDeclarationNames.count( declarationIdentifier ) > 0 ) {
 				continue;
+			}
+			if( declarationIdentifier.empty() == false ) {
+				existingDeclarationNames.insert( declarationIdentifier );
 			}
 			targetProgram.declarations.push_back( moduleDeclaration );
 		}
@@ -447,6 +469,37 @@ namespace uranite::compiler {
 		return true;
 	}
 	
+	void Driver::resolveIncludePathPrefixes() {
+		if( this->includePathPrefixesCached_ ) {
+			return;
+		}
+		this->includePathPrefixesCached_ = true;
+		for( const std::string& currentIncludePath : this->options.includePaths ) {
+			std::filesystem::path modFilePath = std::filesystem::path( currentIncludePath ) / "__mod__.urn";
+			if( std::filesystem::exists( modFilePath ) == false ) {
+				continue;
+			}
+			std::ifstream modFileStream( modFilePath.string() );
+			if( modFileStream.is_open() == false ) {
+				continue;
+			}
+			std::string currentLine;
+			while( std::getline( modFileStream, currentLine ) ) {
+				size_t packageKeywordPosition = currentLine.find( "package " );
+				if( packageKeywordPosition != std::string::npos ) {
+					std::string packageName = currentLine.substr( packageKeywordPosition + 8 );
+					while( packageName.empty() == false && ( packageName.back() == ' ' || packageName.back() == '\t' || packageName.back() == '\r' || packageName.back() == '\n' ) ) {
+						packageName.pop_back();
+					}
+					if( packageName.empty() == false ) {
+						this->includePathPackagePrefix_[currentIncludePath] = packageName;
+					}
+					break;
+				}
+			}
+		}
+	}
+
 	std::string Driver::resolveModulePath( const std::vector<std::string>& modulePath ) {
 		if( modulePath.empty() ) {
 			return "";
@@ -531,6 +584,50 @@ namespace uranite::compiler {
 				finalResolvedResult = tryAllModuleVariants( std::filesystem::path( currentIncludePath ) );
 				if( finalResolvedResult.empty() == false ) {
 					return finalResolvedResult;
+				}
+			}
+			this->resolveIncludePathPrefixes();
+			if( modulePath.empty() == false ) {
+				std::string firstSegment = modulePath[0];
+				for( const auto& prefixEntry : this->includePathPackagePrefix_ ) {
+					std::string packagePrefix = prefixEntry.second;
+					size_t dotPosition = packagePrefix.find( '.' );
+					std::string rootPackageName = ( dotPosition != std::string::npos ) ? packagePrefix.substr( 0, dotPosition ) : packagePrefix;
+					if( firstSegment == rootPackageName ) {
+						std::vector<std::string> strippedPath( modulePath.begin() + 1, modulePath.end() );
+						if( strippedPath.empty() == false ) {
+							std::string strippedRelativePath;
+							for( size_t segmentIndex = 0; segmentIndex < strippedPath.size(); segmentIndex++ ) {
+								if( segmentIndex > 0 ) {
+									strippedRelativePath = fmt::format( "{}/{}", strippedRelativePath, strippedPath[segmentIndex] );
+								}
+								else {
+									strippedRelativePath = strippedPath[segmentIndex];
+								}
+							}
+							std::string strippedWithExtension = fmt::format( "{}.urn", strippedRelativePath );
+							std::string strippedDirectoryPattern;
+							if( strippedPath.empty() == false ) {
+								std::string lastSegment = strippedPath.back();
+								if( lastSegment.empty() == false ) {
+									lastSegment[0] = static_cast<char>( std::toupper( static_cast<unsigned char>( lastSegment[0] ) ) );
+								}
+								strippedDirectoryPattern = fmt::format( "{}/{}.urn", strippedRelativePath, lastSegment );
+							}
+							std::string strippedModInit = fmt::format( "{}/__mod__.urn", strippedRelativePath );
+							std::filesystem::path includeBasePath( prefixEntry.first );
+							std::string strippedResult = checkPathExists( includeBasePath / strippedWithExtension );
+							if( strippedResult.empty() && strippedDirectoryPattern.empty() == false ) {
+								strippedResult = checkPathExists( includeBasePath / strippedDirectoryPattern );
+							}
+							if( strippedResult.empty() ) {
+								strippedResult = checkPathExists( includeBasePath / strippedModInit );
+							}
+							if( strippedResult.empty() == false ) {
+								return strippedResult;
+							}
+						}
+					}
 				}
 			}
 		}
@@ -707,12 +804,8 @@ namespace uranite::compiler {
 				spdlog::info( "Stage 3: Semantic Analysis + Type System" );
 			}
 			semantic::Analyzer semanticAnalyzer( this->diagnostic );
-			for( std::unordered_map<std::string, ModuleInfo>::iterator moduleIterator = this->modules.begin(); moduleIterator != this->modules.end(); ++moduleIterator ) {
-				if( moduleIterator->second.state == ModuleInfo::State::Analyzed ) {
-					semanticAnalyzer.importModuleTypes( moduleIterator->second.analyzedTypes );
-					semanticAnalyzer.importModuleSymbols( moduleIterator->second.analyzedSymbols );
-				}
-			}
+			semanticAnalyzer.importModuleTypes( this->accumulatedModuleTypes_ );
+			semanticAnalyzer.importModuleSymbols( this->accumulatedModuleSymbols_ );
 			if( semanticAnalyzer.analyze( *programRoot ) == false ) {
 				fmt::print( stderr, "Compilation failed with {} error(s) during semantic analysis.\n", this->diagnostic.errorCount() );
 				return 1;

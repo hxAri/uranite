@@ -1,18 +1,25 @@
 package testing
 
 from uranite.datetime.datetime import {
-    DateTime, now, utc, fromTimestamp,
-    isLeapYear, daysInMonth, daysInYear, nowMonotonic
+    DateTime,
+    daysInMonth,
+    daysInYear,
+    fromTimestamp,
+    isLeapYear,
+    now,
+    nowMonotonic,
+    utc
 }
-from uranite.datetime.duration import Duration, fromSeconds, fromMinutes, fromHours, fromDays
-from uranite.datetime.timezone import Timezone, utcTimezone, jstTimezone
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertTrue,
-    assertFalse,
-    assertGreaterThan
+from uranite.datetime.duration import {
+    Duration,
+    fromDays,
+    fromHours,
+    fromMinutes,
+    fromSeconds
 }
+from uranite.datetime.timezone import Timezone, jstTimezone, utcTimezone
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
     putsln( "=== DateTime Tests ===" )

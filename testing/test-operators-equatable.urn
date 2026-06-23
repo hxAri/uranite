@@ -1,8 +1,8 @@
 package testing
 
-from uranite.operators.equatable import Equatable
-from uranite.testing.assertions import assertTrue, assertFalse
 from uranite.io.console import putsln
+from uranite.operators.equatable import Equatable
+from uranite.testing.assertions import assertFalse, assertTrue
 
 public class Point implements Equatable<Point>:
     public Int x

@@ -27,13 +27,13 @@
 
 // Pipe
 
-struct AetherPipe {
+struct UranitePipe {
     int readFd;
     int writeFd;
 };
 
-AetherPipe* uranitePipeCreate(void) {
-    AetherPipe* p = (AetherPipe*)malloc(sizeof(AetherPipe));
+UranitePipe* uranitePipeCreate(void) {
+    UranitePipe* p = (UranitePipe*)malloc(sizeof(UranitePipe));
     if (!p) return NULL;
     int fds[2];
     if (pipe(fds) < 0) {
@@ -45,25 +45,25 @@ AetherPipe* uranitePipeCreate(void) {
     return p;
 }
 
-int64_t uranitePipeRead(AetherPipe* p, char* buffer, int64_t maxBytes) {
+int64_t uranitePipeRead(UranitePipe* p, char* buffer, int64_t maxBytes) {
     if (!p || p->readFd < 0) return -1;
     return (int64_t)read(p->readFd, buffer, (size_t)maxBytes);
 }
 
-int64_t uranitePipeWrite(AetherPipe* p, const char* data, int64_t length) {
+int64_t uranitePipeWrite(UranitePipe* p, const char* data, int64_t length) {
     if (!p || p->writeFd < 0) return -1;
     return (int64_t)write(p->writeFd, data, (size_t)length);
 }
 
-void uranitePipeCloseRead(AetherPipe* p) {
+void uranitePipeCloseRead(UranitePipe* p) {
     if (p && p->readFd >= 0) { close(p->readFd); p->readFd = -1; }
 }
 
-void uranitePipeCloseWrite(AetherPipe* p) {
+void uranitePipeCloseWrite(UranitePipe* p) {
     if (p && p->writeFd >= 0) { close(p->writeFd); p->writeFd = -1; }
 }
 
-void uranitePipeDestroy(AetherPipe* p) {
+void uranitePipeDestroy(UranitePipe* p) {
     if (p) {
         if (p->readFd >= 0) close(p->readFd);
         if (p->writeFd >= 0) close(p->writeFd);
@@ -71,20 +71,20 @@ void uranitePipeDestroy(AetherPipe* p) {
     }
 }
 
-int uranitePipeReadFd(AetherPipe* p) { return p ? p->readFd : -1; }
-int uranitePipeWriteFd(AetherPipe* p) { return p ? p->writeFd : -1; }
+int uranitePipeReadFd(UranitePipe* p) { return p ? p->readFd : -1; }
+int uranitePipeWriteFd(UranitePipe* p) { return p ? p->writeFd : -1; }
 
 // Shared Memory
 
-struct AetherSharedMemory {
+struct UraniteSharedMemory {
     char* name;
     void* ptr;
     int64_t size;
     int fd;
 };
 
-AetherSharedMemory* uraniteSharedMemoryCreate(const char* name, int64_t size) {
-    AetherSharedMemory* shm = (AetherSharedMemory*)calloc(1, sizeof(AetherSharedMemory));
+UraniteSharedMemory* uraniteSharedMemoryCreate(const char* name, int64_t size) {
+    UraniteSharedMemory* shm = (UraniteSharedMemory*)calloc(1, sizeof(UraniteSharedMemory));
     if (!shm) return NULL;
 
     shm->name = strdup(name);
@@ -109,8 +109,8 @@ AetherSharedMemory* uraniteSharedMemoryCreate(const char* name, int64_t size) {
     return shm;
 }
 
-AetherSharedMemory* uraniteSharedMemoryOpen(const char* name, int64_t size) {
-    AetherSharedMemory* shm = (AetherSharedMemory*)calloc(1, sizeof(AetherSharedMemory));
+UraniteSharedMemory* uraniteSharedMemoryOpen(const char* name, int64_t size) {
+    UraniteSharedMemory* shm = (UraniteSharedMemory*)calloc(1, sizeof(UraniteSharedMemory));
     if (!shm) return NULL;
 
     shm->name = strdup(name);
@@ -129,15 +129,15 @@ AetherSharedMemory* uraniteSharedMemoryOpen(const char* name, int64_t size) {
     return shm;
 }
 
-void* uraniteSharedMemoryPtr(AetherSharedMemory* shm) {
+void* uraniteSharedMemoryPtr(UraniteSharedMemory* shm) {
     return shm ? shm->ptr : NULL;
 }
 
-int64_t uraniteSharedMemorySize(AetherSharedMemory* shm) {
+int64_t uraniteSharedMemorySize(UraniteSharedMemory* shm) {
     return shm ? shm->size : 0;
 }
 
-void uraniteSharedMemoryClose(AetherSharedMemory* shm) {
+void uraniteSharedMemoryClose(UraniteSharedMemory* shm) {
     if (shm) {
         if (shm->ptr && shm->ptr != MAP_FAILED) munmap(shm->ptr, shm->size);
         if (shm->fd >= 0) close(shm->fd);

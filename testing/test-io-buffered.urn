@@ -1,10 +1,10 @@
 package testing
 
-from uranite.io.file import File, createFile, openFile
 from uranite.io.buffered-reader import BufferedReader
-from uranite.testing.assertions import assertEqualStr
 from uranite.io.console import putsln
+from uranite.io.file import File, createFile, openFile
 from uranite.sys.process import exit
+from uranite.testing.assertions import assertEqualStr
 
 public function main() -> I32:
     putsln( "=== IO Buffered Tests ===" )

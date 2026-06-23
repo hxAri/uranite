@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/logging/kernel-handler.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/logging/kernel-handler.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,7 @@
 
 package uranite.logging.kernel-handler
 
-from uranite.os.debug.log import KernelLogLevel, EventLog
+from uranite.os.debug.log import EventLog, KernelLogLevel
 
 public class KernelLogHandler:
 
@@ -193,6 +193,7 @@ public class KernelLogHandler:
         self.eventLog.destroy()
 
 export {
+    EventLog,
     KernelLogHandler,
-    KernelLogLevel, EventLog
+    KernelLogLevel
 }

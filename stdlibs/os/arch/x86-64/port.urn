@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/port.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/port.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,6 +21,8 @@
 #
 
 package uranite.os.arch.x86-64.port
+
+
 
 public function outb( I64 port, I64 value ) -> Void:
     
@@ -157,11 +159,11 @@ public function ioWait() -> Void:
     asm volatile "outb $0, $$0x80" : : input( "{ax}" 0 as I8 )
 
 export {
-    outb,
     inb,
-    outw,
-    inw,
-    outl,
     inl,
-    ioWait
+    inw,
+    ioWait,
+    outb,
+    outl,
+    outw
 }

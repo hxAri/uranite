@@ -2,8 +2,8 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/mandelbrot.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,10 +22,10 @@
 package main
 
 from uranite.io.console import puts
-from uranite.memory.memory import Memory
 from uranite.language.double import Double
 from uranite.language.int import Int
 from uranite.language.u8 import U8
+from uranite.memory.memory import Memory
 
 extern function clock() -> I64;
 extern function putchar( I32 c ) -> I32;

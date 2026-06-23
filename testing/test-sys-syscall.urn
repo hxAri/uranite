@@ -1,7 +1,7 @@
 package testing
 
-from uranite.sys.syscall import SyscallDispatch, SyscallNumber
 from uranite.io.console import putsln
+from uranite.sys.syscall import SyscallDispatch, SyscallNumber
 
 public function main() -> I32:
     putsln( "=== Sys Syscall Tests ===" )

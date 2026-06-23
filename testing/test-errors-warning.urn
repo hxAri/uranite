@@ -1,13 +1,9 @@
 package testing
 
-from uranite.errors.warning import Warning
 from uranite.errors.throwable import Throwable
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertEqualStr,
-    assertTrue
-}
+from uranite.errors.warning import Warning
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertTrue
 
 public function main() -> I32:
     putsln( "=== Warning Tests ===" )

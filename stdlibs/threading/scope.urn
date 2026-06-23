@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-27 19:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/scope.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/scope.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,9 +22,9 @@
 package uranite.threading.scope
 
 from uranite.memory.memory import Memory
-from uranite.threading.thread import Thread, ThreadRuntime, DEFAULT_STACK_PAGES, DEFAULT_PRIORITY
+from uranite.threading.errors import PoisonError, ThreadError
 from uranite.threading.join-handle import JoinHandle
-from uranite.threading.errors import ThreadError, PoisonError
+from uranite.threading.thread import DEFAULT_PRIORITY, DEFAULT_STACK_PAGES, Thread, ThreadRuntime
 
 const I64 MAX_SCOPED_THREADS = 256
 """Maximum number of threads that can be spawned within a single scope."""

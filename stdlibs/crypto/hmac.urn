@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/hmac.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/crypto/hmac.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,10 +22,11 @@
 
 package uranite.crypto.hmac
 
-from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.crypto.sha256 import SHA256_BLOCK_SIZE, SHA256_DIGEST_SIZE, Sha256
+from uranite.crypto.sha512 import SHA512_BLOCK_SIZE, SHA512_DIGEST_SIZE, Sha512
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
 from uranite.memory.allocator import alloc, dealloc
-from uranite.crypto.sha256 import Sha256, SHA256_BLOCK_SIZE, SHA256_DIGEST_SIZE
-from uranite.crypto.sha512 import Sha512, SHA512_BLOCK_SIZE, SHA512_DIGEST_SIZE
 
 const I64 IPAD_BYTE = 54
 """Inner padding byte 0x36."""
@@ -165,7 +166,113 @@ public function hmacSha512( I64 keyAddress, I64 keyLength, I64 dataAddress, I64 
     if hashedKeyAddress != 0:
         dealloc( hashedKeyAddress )
 
+function bytesToHex( I64 dataAddress, I64 dataLength ) -> String:
+
+    """
+    Convert raw bytes to a lowercase hexadecimal string.
+
+    Parameters:
+        dataAddress (I64):
+            Address of the byte data.
+        dataLength (I64):
+            Number of bytes.
+
+    Returns:
+        String:
+            Hex-encoded string (2 characters per byte).
+
+    Complexity:
+        Time: O(n) where n is dataLength
+        Space: O(2n)
+    """
+
+    I64 hexLength = dataLength * 2
+    I64 hexBuffer = alloc( hexLength + 1 )
+    I64 byteIndex = 0
+    while byteIndex < dataLength:
+        I64 byteValue = readByteAt( dataAddress, byteIndex )
+        if byteValue < 0:
+            byteValue = byteValue + 256
+        I64 highNibble = byteValue / 16
+        I64 lowNibble = byteValue % 16
+        I64 hexOffset = byteIndex * 2
+        if highNibble < 10:
+            writeByteAt( hexBuffer, hexOffset, 48 + highNibble )
+        else:
+            writeByteAt( hexBuffer, hexOffset, 87 + highNibble )
+        if lowNibble < 10:
+            writeByteAt( hexBuffer, hexOffset + 1, 48 + lowNibble )
+        else:
+            writeByteAt( hexBuffer, hexOffset + 1, 87 + lowNibble )
+        byteIndex = byteIndex + 1
+    writeByteAt( hexBuffer, hexLength, 0 )
+    return ptrToString( hexBuffer )
+
+public function hmacSha256Digest( String key, String data ) -> String:
+
+    """
+    Compute HMAC-SHA-256 over string inputs and return the result as
+    a 64-character lowercase hexadecimal string.
+
+    Parameters:
+        key (String):
+            The HMAC key.
+        data (String):
+            The message to authenticate.
+
+    Returns:
+        String:
+            The 32-byte MAC as 64 hex characters.
+
+    Complexity:
+        Time: O(n) where n is key + data length
+        Space: O(1)
+    """
+
+    I64 keyAddress = stringToPtr( key )
+    I64 keyLength = stringLen( key )
+    I64 dataAddress = stringToPtr( data )
+    I64 dataLength = stringLen( data )
+    I64 outputAddress = alloc( SHA256_DIGEST_SIZE )
+    hmacSha256( keyAddress, keyLength, dataAddress, dataLength, outputAddress )
+    String result = bytesToHex( outputAddress, SHA256_DIGEST_SIZE )
+    dealloc( outputAddress )
+    return result
+
+public function hmacSha512Digest( String key, String data ) -> String:
+
+    """
+    Compute HMAC-SHA-512 over string inputs and return the result as
+    a 128-character lowercase hexadecimal string.
+
+    Parameters:
+        key (String):
+            The HMAC key.
+        data (String):
+            The message to authenticate.
+
+    Returns:
+        String:
+            The 64-byte MAC as 128 hex characters.
+
+    Complexity:
+        Time: O(n) where n is key + data length
+        Space: O(1)
+    """
+
+    I64 keyAddress = stringToPtr( key )
+    I64 keyLength = stringLen( key )
+    I64 dataAddress = stringToPtr( data )
+    I64 dataLength = stringLen( data )
+    I64 outputAddress = alloc( SHA512_DIGEST_SIZE )
+    hmacSha512( keyAddress, keyLength, dataAddress, dataLength, outputAddress )
+    String result = bytesToHex( outputAddress, SHA512_DIGEST_SIZE )
+    dealloc( outputAddress )
+    return result
+
 export {
     hmacSha256,
-    hmacSha512
+    hmacSha256Digest,
+    hmacSha512,
+    hmacSha512Digest
 }

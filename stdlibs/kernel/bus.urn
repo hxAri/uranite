@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/bus.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/kernel/bus.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,9 +22,16 @@
 package uranite.kernel.bus
 
 from uranite.os.bus.pci import {
-    PCI_CONFIG_ADDRESS, PCI_CONFIG_DATA, PCI_NO_DEVICE,
-    pciAddress, pciRead32, pciRead16, pciRead8, pciWrite32,
-    PciDevice, PciBus
+    PCI_CONFIG_ADDRESS,
+    PCI_CONFIG_DATA,
+    PCI_NO_DEVICE,
+    PciBus,
+    PciDevice,
+    pciAddress,
+    pciRead16,
+    pciRead32,
+    pciRead8,
+    pciWrite32
 }
 
 public class PciScanner:
@@ -95,8 +102,15 @@ public class PciScanner:
         self.bus.destroy()
 
 export {
+    PCI_CONFIG_ADDRESS,
+    PCI_CONFIG_DATA,
+    PCI_NO_DEVICE,
+    PciBus,
+    PciDevice,
     PciScanner,
-    PciBus, PciDevice,
-    PCI_CONFIG_ADDRESS, PCI_CONFIG_DATA, PCI_NO_DEVICE,
-    pciAddress, pciRead32, pciRead16, pciRead8, pciWrite32
+    pciAddress,
+    pciRead16,
+    pciRead32,
+    pciRead8,
+    pciWrite32
 }

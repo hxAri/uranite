@@ -1,17 +1,23 @@
 package testing
 
 from uranite.encoding.binary import {
-    readI8, writeI8,
-    readI16Be, writeI16Be,
-    readI32Be, writeI32Be,
-    readI64Be, writeI64Be,
-    readVarI32, writeVarI32,
-    readUnsignedVarI32, writeUnsignedVarI32,
-    copyBytes
+    copyBytes,
+    readI16Be,
+    readI32Be,
+    readI64Be,
+    readI8,
+    readUnsignedVarI32,
+    readVarI32,
+    writeI16Be,
+    writeI32Be,
+    writeI64Be,
+    writeI8,
+    writeUnsignedVarI32,
+    writeVarI32
 }
+from uranite.io.console import putsln
 from uranite.memory.allocator import alloc, dealloc
 from uranite.testing.assertions import assertEqualI64, assertTrue
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Encoding Binary Tests ===" )
