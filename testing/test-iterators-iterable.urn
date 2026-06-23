@@ -1,12 +1,9 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.iterators.iterable import Iterable
 from uranite.iterators.iterator import Iterator
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertFalse
-}
-from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public class CounterIterator implements Iterator<Int>:
     private Int current
