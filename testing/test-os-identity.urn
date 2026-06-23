@@ -1,13 +1,14 @@
 package testing
 
-from uranite.os.identity.identity import {
-    ProcessIdentity, ROOT_UID, ROOT_GID,
-    NOBODY_UID, NOBODY_GID
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.identity.identity import {
+    NOBODY_GID,
+    NOBODY_UID,
+    ProcessIdentity,
+    ROOT_GID,
+    ROOT_UID
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Identity Tests ===" )
