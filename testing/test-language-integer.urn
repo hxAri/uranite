@@ -1,12 +1,9 @@
 package testing
 
-from uranite.language.integer import Integer
-from uranite.language.int import Int
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertTrue
-}
 from uranite.io.console import putsln
+from uranite.language.int import Int
+from uranite.language.integer import Integer
+from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
     putsln( "=== Integer Tests ===" )
