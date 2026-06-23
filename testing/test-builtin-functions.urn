@@ -1,16 +1,29 @@
 package testing
 
 from uranite.functions.builtin import {
-    length, charAt, equals, contains, indexOf, lastIndexOf,
-    startsWith, endsWith, substring, trim, toUpper, toLower,
-    isDigit, isAlpha, isAlphaNumeric, isWhitespace,
-    repeat, reverse, concat, charToString
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualStr,
-    assertTrue, assertFalse
+    charAt,
+    charToString,
+    concat,
+    contains,
+    endsWith,
+    equals,
+    indexOf,
+    isAlpha,
+    isAlphaNumeric,
+    isDigit,
+    isWhitespace,
+    lastIndexOf,
+    length,
+    repeat,
+    reverse,
+    startsWith,
+    substring,
+    toLower,
+    toUpper,
+    trim
 }
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Builtin String Functions Tests ===" )
