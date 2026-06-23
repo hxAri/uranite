@@ -1,13 +1,14 @@
 package testing
 
 from uranite.functions.runtime import {
-    uraniteMutexCreate, uraniteMutexLock, uraniteMutexUnlock,
-    uraniteMutexTryLock, uraniteMutexDestroy
-}
-from uranite.testing.assertions import {
-    assertGreaterThan, assertEqualI64
+    uraniteMutexCreate,
+    uraniteMutexDestroy,
+    uraniteMutexLock,
+    uraniteMutexTryLock,
+    uraniteMutexUnlock
 }
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== Threading Mutex Tests ===" )
