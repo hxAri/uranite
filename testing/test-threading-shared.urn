@@ -1,8 +1,8 @@
 package testing
 
-from uranite.threading.shared import Shared
-from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
+from uranite.threading.shared import Shared
 
 public function main() -> I32:
     putsln( "=== Threading Shared Tests ===" )
