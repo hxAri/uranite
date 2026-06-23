@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/session.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/session.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,11 +21,11 @@
 
 package uranite.web.session
 
-from uranite.memory.memory import Memory
-from uranite.io.syscall import stringToPtr, stringLen
-from uranite.functions.builtin import equals, ptrToString
 from uranite.convert.convert import intToHex
 from uranite.datetime.datetime import nowMonotonic
+from uranite.functions.builtin import equals, ptrToString
+from uranite.io.syscall import stringLen, stringToPtr
+from uranite.memory.memory import Memory
 
 const I64 MAX_SESSION_ENTRIES = 64
 """ Maximum number of key-value entries a single session can hold. """
@@ -291,8 +291,8 @@ public class SessionStore:
         self.sessions.free()
 
 export {
-    Session,
-    SessionStore,
+    MAX_SESSIONS,
     MAX_SESSION_ENTRIES,
-    MAX_SESSIONS
+    Session,
+    SessionStore
 }
