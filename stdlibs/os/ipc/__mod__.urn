@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/ipc/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/ipc/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,13 +22,13 @@
 package uranite.os.ipc
 
 from uranite.os.ipc.message import Message, Port
-from uranite.os.ipc.shared-memory import SharedRegion, SharedMemoryRegistry
+from uranite.os.ipc.shared-memory import SharedMemoryRegistry, SharedRegion
 from uranite.os.ipc.signal import Event
 
 export {
+    Event,
     Message,
     Port,
-    SharedRegion,
     SharedMemoryRegistry,
-    Event
+    SharedRegion
 }
