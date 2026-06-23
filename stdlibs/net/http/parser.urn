@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/net/http/parser.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/http/parser.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,11 +21,11 @@
 
 package uranite.net.http.parser
 
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
-from uranite.memory.allocator import alloc
 from uranite.functions.builtin import ptrToString, substring, trim
-from uranite.net.http.response import HttpResponse
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc
 from uranite.net.http.errors import HttpParseError
+from uranite.net.http.response import HttpResponse
 
 public function findCRLF( I64 dataPointer, I64 startOffset, I64 dataLength ) -> I64:
     """
@@ -231,9 +231,9 @@ public function parseResponse( String rawData ) -> HttpResponse:
     return response
 
 export {
-    parseResponse,
-    parseStatusCode,
     extractStatusText,
+    findCRLF,
     parseContentLength,
-    findCRLF
+    parseResponse,
+    parseStatusCode
 }
