@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/math/math.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/math/math.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,8 +23,8 @@
 
 package uranite.math.math
 
-from uranite.math.errors import ArithmeticError
 from uranite.errors.value import ValueError
+from uranite.math.errors import ArithmeticError
 
 public const F64 PI = 3.14159265358979323846
 public const F64 E = 2.71828182845904523536
@@ -463,39 +463,39 @@ public function powI64( I64 base, I64 exponent ) -> I64:
     return result
 
 export {
-    PI,
     E,
-    TAU,
-    SQRT2,
-    LN2,
-    LN10,
-    POSITIVE_INF,
-    NEGATIVE_INF,
     I64_MAX,
     I64_MIN,
+    LN10,
+    LN2,
+    NEGATIVE_INF,
+    PI,
+    POSITIVE_INF,
+    SQRT2,
+    TAU,
     abs,
     absI64,
-    sqrt,
-    floor,
     ceil,
-    round,
-    fmod,
-    fabs,
-    pow,
-    powF64,
-    ln,
-    expF64,
-    log10,
-    log2,
-    min,
-    max,
-    minF64,
-    maxF64,
     clamp,
     clampF64,
-    sign,
-    signF64,
+    expF64,
+    fabs,
+    floor,
+    fmod,
     gcd,
     lcm,
-    powI64
+    ln,
+    log10,
+    log2,
+    max,
+    maxF64,
+    min,
+    minF64,
+    pow,
+    powF64,
+    powI64,
+    round,
+    sign,
+    signF64,
+    sqrt
 }
