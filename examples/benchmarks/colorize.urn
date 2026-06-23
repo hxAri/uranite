@@ -2,8 +2,8 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/colorize.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,11 +21,7 @@
 
 package uranite.examples.benchmarks.colorize
 
-from uranite.io.console import puts
-from uranite.adelia import Adelia, ColorConverter
+
 
 public function main() -> Void:
-	Adelia adelia = new Adelia( 0xf8f8ff )
-	ColorConverter converter = new ColorConverter
-	puts( converter.toString() ) # Bugs in `toString()`
-	puts( adelia )
+	pass
