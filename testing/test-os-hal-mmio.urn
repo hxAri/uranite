@@ -1,8 +1,8 @@
 package testing
 
-from uranite.os.hal.mmio import memoryFence, storeFence, loadFence
-from uranite.testing.assertions import assertEqualI64
 from uranite.io.console import putsln
+from uranite.os.hal.mmio import loadFence, memoryFence, storeFence
+from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
     putsln( "=== OS HAL MMIO Tests ===" )
