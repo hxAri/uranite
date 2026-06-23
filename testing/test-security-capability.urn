@@ -1,8 +1,8 @@
 package testing
 
-from uranite.security.capability import CapabilitySet, Capability
-from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
 from uranite.io.console import putsln
+from uranite.security.capability import Capability, CapabilitySet
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Security Capability Tests ===" )

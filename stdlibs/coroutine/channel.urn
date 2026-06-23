@@ -1,8 +1,8 @@
 package uranite.coroutine.channel
 
+from uranite.coroutine.scheduler import CoroutineScheduler
 from uranite.errors.error import Error
 from uranite.memory.memory import Memory
-from uranite.coroutine.scheduler import CoroutineScheduler
 
 public class ChannelError extends Error:
     
@@ -89,6 +89,6 @@ public class BufferedChannel implements AsyncChannel<I64>:
 
 export {
     AsyncChannel,
-    ChannelError,
-    BufferedChannel
+    BufferedChannel,
+    ChannelError
 }

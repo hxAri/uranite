@@ -1,13 +1,14 @@
 package testing
 
-from uranite.os.vfs.mount import {
-    MOUNT_READ_ONLY, MOUNT_NO_EXEC, MOUNT_NO_SUID,
-    MountEntry, MountTable
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.vfs.mount import {
+    MOUNT_NO_EXEC,
+    MOUNT_NO_SUID,
+    MOUNT_READ_ONLY,
+    MountEntry,
+    MountTable
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS VFS Mount Tests ===" )

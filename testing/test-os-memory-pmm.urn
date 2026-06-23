@@ -1,11 +1,9 @@
 package testing
 
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue
-}
 from uranite.io.console import putsln
+from uranite.os.memory.pmm import PhysicalMemoryManager
 from uranite.sys.process import exit
+from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Memory PMM Tests ===" )

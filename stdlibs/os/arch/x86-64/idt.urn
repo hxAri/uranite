@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/idt.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/idt.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -117,7 +117,7 @@ public class IdtEntry:
         
         return self.offsetLow | ( self.offsetMiddle << 16 ) | ( self.offsetHigh << 32 )
 
-public class IdtPointer:
+public struct IdtPointer:
     
     """
     Descriptor for the IDTR register, loaded by the lidt instruction. Contains
@@ -388,11 +388,11 @@ public function loadIdt( IdtPointer ptr ) -> Void:
     asm volatile "lidt ($0)" : : input( "r" ptr ) : clobber( "memory" )
 
 export {
+    GateType,
+    IRQ_BASE,
+    Idt,
     IdtEntry,
     IdtPointer,
-    Idt,
-    loadIdt,
-    GateType,
     InterruptVector,
-    IRQ_BASE
+    loadIdt
 }

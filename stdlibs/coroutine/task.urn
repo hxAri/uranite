@@ -2,14 +2,14 @@ package uranite.coroutine.task
 
 from uranite.errors.error import Error
 from uranite.fiber.fiber import {
-    Fiber,
-    fiberTrampoline,
     FIBER_CREATED,
     FIBER_RUNNING,
     FIBER_SUSPENDED,
     FIBER_TERMINATED,
+    F_ERROR,
     F_STATE,
-    F_ERROR
+    Fiber,
+    fiberTrampoline
 }
 
 public class TaskError extends Error:
@@ -48,7 +48,44 @@ public class SimpleTask implements Task<I64>:
     public I64 taskId
     public Boolean started
     
+    public function SimpleTask( self, I64 taskId, Callable<I64, <>> entryFn ) -> Void:
+
+        """
+        Create a task with the given identifier and callable entry function.
+
+        Parameters:
+            taskId (I64):
+                Unique identifier for this task.
+            entryFn (Callable<I64, <>>):
+                The callable to execute as the task body.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        self.fiber = new Fiber( extractedAddr )
+        self.taskId = taskId
+        self.started = False
+
     public function SimpleTask( self, I64 taskId, I64 entryFn ) -> Void:
+
+        """
+        Create a task from a raw function address.
+
+        Parameters:
+            taskId (I64):
+                Unique identifier for this task.
+            entryFn (I64):
+                Raw address of the entry function.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
         self.fiber = new Fiber( entryFn )
         self.taskId = taskId
         self.started = False
@@ -102,8 +139,8 @@ public class SimpleTask implements Task<I64>:
         self.fiber.destroy()
 
 export {
+    SimpleTask,
     Task,
-    TaskState,
     TaskError,
-    SimpleTask
+    TaskState
 }

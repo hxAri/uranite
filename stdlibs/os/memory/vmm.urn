@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/memory/vmm.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/memory/vmm.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,12 +21,18 @@
 package uranite.os.memory.vmm
 
 from uranite.memory.memory import Memory
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.arch.x86-64.cpu import writeCr3, invlpg
+from uranite.os.arch.x86-64.cpu import invlpg, writeCr3
 from uranite.os.arch.x86-64.paging import {
-    PageTable, PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER,
-    pml4Index, pdptIndex, pdIndex, ptIndex
+    PAGE_PRESENT,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PageTable,
+    pdIndex,
+    pdptIndex,
+    pml4Index,
+    ptIndex
 }
+from uranite.os.memory.pmm import PhysicalMemoryManager
 
 public function protReadOnly() -> I64:
     

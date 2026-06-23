@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/compression/snappy.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/compression/snappy.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -27,9 +27,9 @@
 
 package uranite.compression.snappy
 
-from uranite.memory.allocator import alloc, dealloc
-from uranite.io.syscall import readByteAt, writeByteAt
 from uranite.encoding.binary import copyBytes
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 SNAPPY_LITERAL = 0
 const I64 SNAPPY_COPY_1 = 1
@@ -660,7 +660,9 @@ public function snappyXerialDecompress( I64 inputAddress, I64 inputLength, I64 o
     return outputOffset
 
 export {
-    snappyCompress, snappyDecompress,
-    snappyXerialCompress, snappyXerialDecompress,
-    snappyMaxCompressedLength
+    snappyCompress,
+    snappyDecompress,
+    snappyMaxCompressedLength,
+    snappyXerialCompress,
+    snappyXerialDecompress
 }

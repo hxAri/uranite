@@ -1,13 +1,13 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/examples/
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
-# A comprehensive showcase of Aether language syntax and features.
+# A comprehensive showcase of Uranite language syntax and features.
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@
 
 package main
 
-from uranite.io.console import puts
 from uranite.errors.exception import Exception
+from uranite.io.console import puts
 
 # =======================================================================================================
 # Forward Declaration
@@ -303,7 +303,7 @@ public function direction_value( Direction d ) -> I32:
 public function main() -> I32:
     
     """
-    The main entry point demonstrating various Aether language features.
+    The main entry point demonstrating various Uranite language features.
     
     Returns:
         I32 exit code.

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-12 03:30
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/errors/lookup.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/errors/lookup.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,8 +21,8 @@
 
 package uranite.errors.lookup
 
-from uranite.errors.error import Error
 from uranite.convert.convert import intToString
+from uranite.errors.error import Error
 
 public class LookupError extends Error:
 
@@ -150,7 +150,7 @@ public class KeyError extends LookupError:
         parent( errorMessage, 0, None )
 
 export {
-    LookupError,
     IndexError,
-    KeyError
+    KeyError,
+    LookupError
 }

@@ -1,13 +1,13 @@
 package uranite.ffi
 
+from uranite.ffi.errors import FfiError, LibraryLoadError, SymbolNotFoundError
 from uranite.ffi.library import DynamicLibrary
 from uranite.ffi.symbol import ForeignSymbol
-from uranite.ffi.errors import FfiError, LibraryLoadError, SymbolNotFoundError
 
 export {
     DynamicLibrary,
-    ForeignSymbol,
     FfiError,
+    ForeignSymbol,
     LibraryLoadError,
     SymbolNotFoundError
 }

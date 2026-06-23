@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/console.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/console.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,25 +21,32 @@
 
 package uranite.io.console
 
-from uranite.memory.memory import Memory
+from uranite.convert.convert import intToString
 from uranite.io.stream import Stream
-from uranite.io.writer import STDIN_FD, STDOUT_FD, STDERR_FD, writeFd, writeNewlineFd, writeRawFd
 from uranite.io.syscall import {
-    stringToPtr,
-    stringLen,
-    memoryToPtr,
-    readByteAt,
-    writeByteAt,
-    readI32At,
-    writeI32At,
-    sysRead,
-    sysWrite,
-    sysIoctl,
+    ECHO_FLAG,
     TCGETS,
     TCSETS,
-    ECHO_FLAG
+    memoryToPtr,
+    readByteAt,
+    readI32At,
+    stringLen,
+    stringToPtr,
+    sysIoctl,
+    sysRead,
+    sysWrite,
+    writeByteAt,
+    writeI32At
 }
-from uranite.convert.convert import intToString
+from uranite.io.writer import {
+    STDERR_FD,
+    STDIN_FD,
+    STDOUT_FD,
+    writeFd,
+    writeNewlineFd,
+    writeRawFd
+}
+from uranite.memory.memory import Memory
 
 function writeArgsToFd( I64 targetFileDescriptor, Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
 
@@ -349,15 +356,15 @@ public function putsI64( I64 args[], ?String separator=" ", ?String endline="\n"
     writeI64ArgsToFd( STDOUT_FD, args, separator, endline, stream, flush )
 
 export {
+    STDERR_FD,
     STDIN_FD,
     STDOUT_FD,
-    STDERR_FD,
     Stream,
+    getpass,
+    input,
     puts,
-    putsln,
+    putsI64,
     putserr,
     putserrln,
-    input,
-    getpass,
-    putsI64
+    putsln
 }

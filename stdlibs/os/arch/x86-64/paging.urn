@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/paging.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/paging.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -336,25 +336,25 @@ public function flushTlb() -> Void:
     writeCr3( cr3 )
 
 export {
-    PAGE_PRESENT,
-    PAGE_WRITABLE,
-    PAGE_USER,
-    PAGE_WRITE_THROUGH,
-    PAGE_CACHE_DISABLE,
-    PAGE_ACCESSED,
-    PAGE_DIRTY,
-    PAGE_HUGE,
-    PAGE_GLOBAL,
-    pageNoExecute,
-    PageTableEntry,
-    PageTable,
-    pml4Index,
-    pdptIndex,
-    pdIndex,
-    ptIndex,
-    PAGE_SIZE,
-    HUGE_PAGE_2MB,
     HUGE_PAGE_1GB,
+    HUGE_PAGE_2MB,
+    PAGE_ACCESSED,
+    PAGE_CACHE_DISABLE,
+    PAGE_DIRTY,
+    PAGE_GLOBAL,
+    PAGE_HUGE,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PAGE_WRITE_THROUGH,
+    PageTable,
+    PageTableEntry,
     flushPage,
-    flushTlb
+    flushTlb,
+    pageNoExecute,
+    pdIndex,
+    pdptIndex,
+    pml4Index,
+    ptIndex
 }

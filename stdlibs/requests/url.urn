@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-15 00:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/requests/url.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/requests/url.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,13 +22,19 @@
 
 package uranite.requests.url
 
-from uranite.functions.builtin import {
-    indexOf, substring, length, charAt, startsWith, isDigit
-}
 from uranite.convert.convert import stringToInt
+from uranite.functions.builtin import {
+    charAt,
+    indexOf,
+    isDigit,
+    length,
+    startsWith,
+    substring
+}
+from uranite.net.address import resolveHostname
 from uranite.requests.errors import InvalidURLError
 
-public class ParsedURL:
+public struct ParsedURL:
 
     """
     Holds the parsed components of an HTTP URL: scheme, host, port, path,
@@ -198,12 +204,26 @@ public function parseURL( String url ) -> ParsedURL:
     if length( host ) == 0:
         raise new InvalidURLError( "URL host cannot be empty", 12, None )
 
-    I64 ipAddress = parseIPv4( host )
+    # determine if host is a dotted-decimal IPv4 or a hostname
+    Boolean looksLikeIpv4 = True
+    I64 hostLength = length( host )
+    I64 charIndex = 0
+    while charIndex < hostLength and looksLikeIpv4:
+        I64 charCode = charAt( host, charIndex )
+        if not isDigit( charCode ) and charCode != 46:
+            looksLikeIpv4 = False
+        charIndex = charIndex + 1
+
+    I64 ipAddress = -1
+    if looksLikeIpv4:
+        ipAddress = parseIPv4( host )
+    else:
+        ipAddress = resolveHostname( host )
 
     return new ParsedURL( scheme, host, port, path, ipAddress )
 
 export {
     ParsedURL,
-    parseURL,
-    parseIPv4
+    parseIPv4,
+    parseURL
 }

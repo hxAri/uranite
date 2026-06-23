@@ -28,7 +28,7 @@ namespace uranite::formatter::comments {
 	/**
 	 * @enum CommentKind
 	 * @brief Classifies the structural type of a captured comment token.
-	 * * Distinguishes between normal code descriptions and structured api documentation metadata within Aether.
+	 * * Distinguishes between normal code descriptions and structured api documentation metadata within Uranite.
 	 */
 	enum class CommentKind {
 		SingleLine, ///< A standard C++ style single-line comment (e.g., `// ...`).

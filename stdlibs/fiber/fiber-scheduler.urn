@@ -1,23 +1,23 @@
 package uranite.fiber.fiber-scheduler
 
-from uranite.memory.memory import Memory
-from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.async.context import swapContext
+from uranite.coroutine.scheduler import Scheduler
 from uranite.fiber.fiber import {
-    FiberError,
-    Fiber,
-    fiberSuspend,
-    fiberTrampoline,
-    gCurrentFiberPtr,
-    gCallerRspPtr,
     FIBER_CREATED,
     FIBER_RUNNING,
     FIBER_SUSPENDED,
     FIBER_TERMINATED,
+    F_CONTEXT_RSP,
     F_STATE,
-    F_CONTEXT_RSP
+    Fiber,
+    FiberError,
+    fiberSuspend,
+    fiberTrampoline,
+    gCallerRspPtr,
+    gCurrentFiberPtr
 }
-from uranite.async.context import swapContext
-from uranite.coroutine.scheduler import Scheduler
+from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
+from uranite.memory.memory import Memory
 
 const I64 MAX_FIBERS = 256
 """Maximum number of fibers that can be managed by a single scheduler."""
@@ -72,31 +72,59 @@ public class FiberScheduler implements Scheduler:
             self.fiberSlots.set( slotIndex, 0 )
             slotIndex = slotIndex + 1
 
-    public function spawn( self, I64 entryFn ) -> I64:
-        
+    public function spawn( self, Callable<I64, <>> entryFn ) -> I64:
+
         """
-        Create a new fiber and register it in the scheduler's slot array.
-        The fiber is created in the Created state and will be picked up
-        by the next runOnce call.
-        
+        Create a new fiber running the given callable and register it in
+        the scheduler's slot array.
+
         Parameters:
-            entryFn (I64):
-                Raw address of the entry function for the fiber.
-        
+            entryFn (Callable<I64, <>>):
+                The entry function for the fiber.
+
         Returns:
             I64:
                 A unique fiber identifier assigned to the new fiber.
-        
+
         Raises:
             FiberError:
                 If the maximum fiber count has been reached or no free
                 slot is available.
-        
+
         Complexity:
             Time: O(n)
             Space: O(n)
         """
-        
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        return self.spawn( extractedAddr )
+
+    public function spawn( self, I64 entryFn ) -> I64:
+
+        """
+        Create a new fiber from a raw function address and register it in
+        the scheduler's slot array. The fiber is created in the Created
+        state and will be picked up by the next runOnce call.
+
+        Parameters:
+            entryFn (I64):
+                Raw address of the entry function for the fiber.
+
+        Returns:
+            I64:
+                A unique fiber identifier assigned to the new fiber.
+
+        Raises:
+            FiberError:
+                If the maximum fiber count has been reached or no free
+                slot is available.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
         if self.fiberCount >= MAX_FIBERS:
             raise new FiberError( "maximum fiber count reached" )
         Fiber fiber = new Fiber( entryFn )
@@ -234,5 +262,6 @@ public class FiberScheduler implements Scheduler:
         self.mainRspBuf.free()
 
 export {
-    FiberScheduler, MAX_FIBERS
+    FiberScheduler,
+    MAX_FIBERS
 }

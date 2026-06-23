@@ -21,39 +21,39 @@
 
 #include <stdint.h>
 
-typedef struct AetherProcess AetherProcess;
+typedef struct UraniteProcess UraniteProcess;
 
 typedef struct {
     int64_t exitCode;
     char* standardOutput;
     char* standardError;
-} AetherProcessResult;
+} UraniteProcessResult;
 
 // Execute command and wait for completion, capturing output
-AetherProcessResult* uraniteProcessRun(const char* command);
+UraniteProcessResult* uraniteProcessRun(const char* command);
 
 // Execute command without capturing output
 int64_t uraniteProcessExec(const char* command);
 
 // Spawn a background process
-AetherProcess* uraniteProcessSpawn(const char* command);
+UraniteProcess* uraniteProcessSpawn(const char* command);
 
 // Wait for spawned process to finish
-int64_t uraniteProcessWait(AetherProcess* process);
+int64_t uraniteProcessWait(UraniteProcess* process);
 
 // Kill a spawned process
-void uraniteProcessKill(AetherProcess* process);
+void uraniteProcessKill(UraniteProcess* process);
 
 // Check if process is still running
-int uraniteProcessIsRunning(AetherProcess* process);
+int uraniteProcessIsRunning(UraniteProcess* process);
 
 // Get PID of spawned process
-int64_t uraniteProcessPid(AetherProcess* process);
+int64_t uraniteProcessPid(UraniteProcess* process);
 
 // Free result struct
-void uraniteProcessResultFree(AetherProcessResult* result);
+void uraniteProcessResultFree(UraniteProcessResult* result);
 
 // Free process struct
-void uraniteProcessFree(AetherProcess* process);
+void uraniteProcessFree(UraniteProcess* process);
 
 #endif

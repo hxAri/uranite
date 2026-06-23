@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/pbkdf2.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/crypto/pbkdf2.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,12 +22,13 @@
 
 package uranite.crypto.pbkdf2
 
-from uranite.io.syscall import readByteAt, writeByteAt
-from uranite.memory.allocator import alloc, dealloc
-from uranite.encoding.binary import writeI32Be
 from uranite.crypto.hmac import hmacSha256, hmacSha512
 from uranite.crypto.sha256 import SHA256_DIGEST_SIZE
 from uranite.crypto.sha512 import SHA512_DIGEST_SIZE
+from uranite.encoding.binary import writeI32Be
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 public function pbkdf2HmacSha256( I64 passwordAddress, I64 passwordLength, I64 saltAddress, I64 saltLength, I64 iterations, I64 outputAddress, I64 outputLength ) -> Void:
 
@@ -188,7 +189,121 @@ public function pbkdf2HmacSha512( I64 passwordAddress, I64 passwordLength, I64 s
     dealloc( currentUAddress )
     dealloc( xorAccumulatorAddress )
 
+function bytesToHex( I64 dataAddress, I64 dataLength ) -> String:
+
+    """
+    Convert raw bytes to a lowercase hexadecimal string.
+
+    Parameters:
+        dataAddress (I64):
+            Address of the byte data.
+        dataLength (I64):
+            Number of bytes.
+
+    Returns:
+        String:
+            Hex-encoded string (2 characters per byte).
+
+    Complexity:
+        Time: O(n) where n is dataLength
+        Space: O(2n)
+    """
+
+    I64 hexLength = dataLength * 2
+    I64 hexBuffer = alloc( hexLength + 1 )
+    I64 byteIndex = 0
+    while byteIndex < dataLength:
+        I64 byteValue = readByteAt( dataAddress, byteIndex )
+        if byteValue < 0:
+            byteValue = byteValue + 256
+        I64 highNibble = byteValue / 16
+        I64 lowNibble = byteValue % 16
+        I64 hexOffset = byteIndex * 2
+        if highNibble < 10:
+            writeByteAt( hexBuffer, hexOffset, 48 + highNibble )
+        else:
+            writeByteAt( hexBuffer, hexOffset, 87 + highNibble )
+        if lowNibble < 10:
+            writeByteAt( hexBuffer, hexOffset + 1, 48 + lowNibble )
+        else:
+            writeByteAt( hexBuffer, hexOffset + 1, 87 + lowNibble )
+        byteIndex = byteIndex + 1
+    writeByteAt( hexBuffer, hexLength, 0 )
+    return ptrToString( hexBuffer )
+
+public function pbkdf2Sha256Derive( String password, String salt, I64 iterations, I64 outputLength ) -> String:
+
+    """
+    Derive a key from a password using PBKDF2-HMAC-SHA-256 and return
+    the result as a lowercase hexadecimal string.
+
+    Parameters:
+        password (String):
+            The password to derive from.
+        salt (String):
+            The salt value.
+        iterations (I64):
+            Number of HMAC iterations (typically 4096+).
+        outputLength (I64):
+            Desired derived key length in bytes.
+
+    Returns:
+        String:
+            The derived key as a hex string (2 * outputLength characters).
+
+    Complexity:
+        Time: O(iterations * ceil(outputLength / 32))
+        Space: O(outputLength)
+    """
+
+    I64 passwordAddress = stringToPtr( password )
+    I64 passwordLength = stringLen( password )
+    I64 saltAddress = stringToPtr( salt )
+    I64 saltLength = stringLen( salt )
+    I64 outputAddress = alloc( outputLength )
+    pbkdf2HmacSha256( passwordAddress, passwordLength, saltAddress, saltLength, iterations, outputAddress, outputLength )
+    String result = bytesToHex( outputAddress, outputLength )
+    dealloc( outputAddress )
+    return result
+
+public function pbkdf2Sha512Derive( String password, String salt, I64 iterations, I64 outputLength ) -> String:
+
+    """
+    Derive a key from a password using PBKDF2-HMAC-SHA-512 and return
+    the result as a lowercase hexadecimal string.
+
+    Parameters:
+        password (String):
+            The password to derive from.
+        salt (String):
+            The salt value.
+        iterations (I64):
+            Number of HMAC iterations.
+        outputLength (I64):
+            Desired derived key length in bytes.
+
+    Returns:
+        String:
+            The derived key as a hex string (2 * outputLength characters).
+
+    Complexity:
+        Time: O(iterations * ceil(outputLength / 64))
+        Space: O(outputLength)
+    """
+
+    I64 passwordAddress = stringToPtr( password )
+    I64 passwordLength = stringLen( password )
+    I64 saltAddress = stringToPtr( salt )
+    I64 saltLength = stringLen( salt )
+    I64 outputAddress = alloc( outputLength )
+    pbkdf2HmacSha512( passwordAddress, passwordLength, saltAddress, saltLength, iterations, outputAddress, outputLength )
+    String result = bytesToHex( outputAddress, outputLength )
+    dealloc( outputAddress )
+    return result
+
 export {
     pbkdf2HmacSha256,
-    pbkdf2HmacSha512
+    pbkdf2HmacSha512,
+    pbkdf2Sha256Derive,
+    pbkdf2Sha512Derive
 }

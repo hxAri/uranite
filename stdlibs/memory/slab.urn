@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/memory/slab.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/memory/slab.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,7 @@
 
 package uranite.memory.slab
 
-from uranite.os.memory.heap import SlabCache, KernelHeap
+from uranite.os.memory.heap import KernelHeap, SlabCache
 
 public class SlabAllocator:
 
@@ -107,6 +107,7 @@ public class SlabAllocator:
         self.cache.destroy()
 
 export {
+    KernelHeap,
     SlabAllocator,
-    SlabCache, KernelHeap
+    SlabCache
 }

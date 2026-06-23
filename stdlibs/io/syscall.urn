@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 10:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/syscall.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/syscall.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,16 +22,25 @@
 
 package uranite.io.syscall
 
+from uranite.io.errors import {
+    BrokenPipeError,
+    DirectoryNotEmptyError,
+    FileExistsError,
+    FileNotFoundError,
+    IOError,
+    IsADirectoryError,
+    NotADirectoryError,
+    PermissionError
+}
+from uranite.memory.memory import Memory
 from uranite.os.syscall.invoke import {
-    syscall0, syscall1, syscall2, syscall3, syscall4
+    syscall0,
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4
 }
 from uranite.os.syscall.result import SyscallResult
-from uranite.memory.memory import Memory
-from uranite.io.errors import {
-    IOError, FileNotFoundError, PermissionError,
-    FileExistsError, IsADirectoryError, NotADirectoryError,
-    DirectoryNotEmptyError, BrokenPipeError
-}
 
 const I64 SYS_READ = 0
 """Linux x86_64 syscall number for read (0)."""
@@ -1108,32 +1117,107 @@ public function sysPipe2( I64 pipefdPtr, I64 flags ) -> Void:
         raiseFromErrno( syscallResult.errorCode(), "pipe2 failed" )
 
 export {
-    SYS_READ, SYS_WRITE, SYS_OPEN, SYS_CLOSE,
-    SYS_STAT, SYS_FSTAT, SYS_LSTAT, SYS_LSEEK,
-    SYS_IOCTL, SYS_ACCESS, SYS_PIPE2,
-    SYS_FTRUNCATE, SYS_GETCWD, SYS_CHDIR,
-    SYS_RENAME, SYS_MKDIR, SYS_RMDIR,
-    SYS_LINK, SYS_UNLINK, SYS_SYMLINK, SYS_READLINK,
-    SYS_CHMOD, SYS_FCHMOD, SYS_CHOWN, SYS_FCHOWN,
-    SYS_FSYNC, SYS_FLOCK, SYS_GETDENTS64, SYS_STATFS,
-    O_RDONLY, O_WRONLY, O_RDWR,
-    O_CREAT, O_EXCL, O_TRUNC, O_APPEND, O_CLOEXEC, O_DIRECTORY,
-    SEEK_SET, SEEK_CUR, SEEK_END,
-    LOCK_SH, LOCK_EX, LOCK_UN, LOCK_NB,
-    F_OK, R_OK, W_OK, X_OK,
-    S_IFMT, S_IFREG, S_IFDIR, S_IFLNK, S_IFIFO, S_IFSOCK, S_IFCHR, S_IFBLK,
-    TCGETS, TCSETS, TIOCGWINSZ, ECHO_FLAG, ICANON_FLAG,
-    stringToPtr, stringLen, memoryToPtr,
-    readByteAt, readI16At, readI32At, readI64At,
-    writeByteAt, writeI16At, writeI32At, writeI64At,
+    ECHO_FLAG,
+    F_OK,
+    ICANON_FLAG,
+    LOCK_EX,
+    LOCK_NB,
+    LOCK_SH,
+    LOCK_UN,
+    O_APPEND,
+    O_CLOEXEC,
+    O_CREAT,
+    O_DIRECTORY,
+    O_EXCL,
+    O_RDONLY,
+    O_RDWR,
+    O_TRUNC,
+    O_WRONLY,
+    R_OK,
+    SEEK_CUR,
+    SEEK_END,
+    SEEK_SET,
+    SYS_ACCESS,
+    SYS_CHDIR,
+    SYS_CHMOD,
+    SYS_CHOWN,
+    SYS_CLOSE,
+    SYS_FCHMOD,
+    SYS_FCHOWN,
+    SYS_FLOCK,
+    SYS_FSTAT,
+    SYS_FSYNC,
+    SYS_FTRUNCATE,
+    SYS_GETCWD,
+    SYS_GETDENTS64,
+    SYS_IOCTL,
+    SYS_LINK,
+    SYS_LSEEK,
+    SYS_LSTAT,
+    SYS_MKDIR,
+    SYS_OPEN,
+    SYS_PIPE2,
+    SYS_READ,
+    SYS_READLINK,
+    SYS_RENAME,
+    SYS_RMDIR,
+    SYS_STAT,
+    SYS_STATFS,
+    SYS_SYMLINK,
+    SYS_UNLINK,
+    SYS_WRITE,
+    S_IFBLK,
+    S_IFCHR,
+    S_IFDIR,
+    S_IFIFO,
+    S_IFLNK,
+    S_IFMT,
+    S_IFREG,
+    S_IFSOCK,
+    TCGETS,
+    TCSETS,
+    TIOCGWINSZ,
+    W_OK,
+    X_OK,
+    memoryToPtr,
     raiseFromErrno,
-    sysOpen, sysClose, sysRead, sysWrite, sysLseek,
-    sysStat, sysFstat, sysLstat,
-    sysFtruncate, sysFsync,
-    sysMkdir, sysRmdir, sysUnlink,
-    sysRename, sysLink, sysSymlink, sysReadlink,
-    sysChmod, sysFchmod, sysChown, sysFchown,
-    sysAccess, sysGetcwd, sysChdir,
-    sysGetdents64, sysStatfs,
-    sysFlock, sysIoctl, sysPipe2
+    readByteAt,
+    readI16At,
+    readI32At,
+    readI64At,
+    stringLen,
+    stringToPtr,
+    sysAccess,
+    sysChdir,
+    sysChmod,
+    sysChown,
+    sysClose,
+    sysFchmod,
+    sysFchown,
+    sysFlock,
+    sysFstat,
+    sysFsync,
+    sysFtruncate,
+    sysGetcwd,
+    sysGetdents64,
+    sysIoctl,
+    sysLink,
+    sysLseek,
+    sysLstat,
+    sysMkdir,
+    sysOpen,
+    sysPipe2,
+    sysRead,
+    sysReadlink,
+    sysRename,
+    sysRmdir,
+    sysStat,
+    sysStatfs,
+    sysSymlink,
+    sysUnlink,
+    sysWrite,
+    writeByteAt,
+    writeI16At,
+    writeI32At,
+    writeI64At
 }

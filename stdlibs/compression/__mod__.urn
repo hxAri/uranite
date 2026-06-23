@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/compression/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/compression/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,38 +20,51 @@
 
 package uranite.compression
 
-from uranite.compression.snappy import {
-    snappyCompress, snappyDecompress,
-    snappyXerialCompress, snappyXerialDecompress,
-    snappyMaxCompressedLength
+from uranite.compression.gzip import {
+    BitReader,
+    BitWriter,
+    HuffmanTable,
+    deflateFixed,
+    gzipCompress,
+    gzipDecompress,
+    inflate
 }
 from uranite.compression.lz4 import {
-    lz4CompressBlock, lz4DecompressBlock,
-    lz4FrameCompress, lz4FrameDecompress,
+    lz4CompressBlock,
+    lz4DecompressBlock,
+    lz4FrameCompress,
+    lz4FrameDecompress,
     lz4MaxCompressedSize
 }
-from uranite.compression.gzip import {
-    inflate, deflateFixed,
-    gzipCompress, gzipDecompress,
-    BitReader, BitWriter, HuffmanTable
+from uranite.compression.snappy import {
+    snappyCompress,
+    snappyDecompress,
+    snappyMaxCompressedLength,
+    snappyXerialCompress,
+    snappyXerialDecompress
 }
-from uranite.compression.zstd import {
-    zstdCompress, zstdDecompress,
-    zstdMaxCompressedSize,
-    parseFrameHeader
-}
+from uranite.compression.zstd import parseFrameHeader, zstdCompress, zstdDecompress, zstdMaxCompressedSize
 
 export {
-    snappyCompress, snappyDecompress,
-    snappyXerialCompress, snappyXerialDecompress,
-    snappyMaxCompressedLength,
-    lz4CompressBlock, lz4DecompressBlock,
-    lz4FrameCompress, lz4FrameDecompress,
+    BitReader,
+    BitWriter,
+    HuffmanTable,
+    deflateFixed,
+    gzipCompress,
+    gzipDecompress,
+    inflate,
+    lz4CompressBlock,
+    lz4DecompressBlock,
+    lz4FrameCompress,
+    lz4FrameDecompress,
     lz4MaxCompressedSize,
-    inflate, deflateFixed,
-    gzipCompress, gzipDecompress,
-    BitReader, BitWriter, HuffmanTable,
-    zstdCompress, zstdDecompress,
-    zstdMaxCompressedSize,
-    parseFrameHeader
+    parseFrameHeader,
+    snappyCompress,
+    snappyDecompress,
+    snappyMaxCompressedLength,
+    snappyXerialCompress,
+    snappyXerialDecompress,
+    zstdCompress,
+    zstdDecompress,
+    zstdMaxCompressedSize
 }

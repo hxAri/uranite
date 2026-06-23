@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/arch/x86-64/gdt.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/gdt.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -24,7 +24,7 @@ package uranite.os.arch.x86-64.gdt
 
 from uranite.memory.memory import Memory
 
-public class GdtEntry:
+public struct GdtEntry:
     
     """
     Single 8-byte segment descriptor entry in the Global Descriptor Table.
@@ -74,7 +74,7 @@ public class GdtEntry:
         self.granularity = ( ( limit >> 16 ) & 15 ) | ( ( flags << 4 ) & 240 )
         self.baseHigh = ( base >> 24 ) & 255
 
-public class GdtPointer:
+public struct GdtPointer:
     
     """
     Descriptor for the GDTR register, loaded by the lgdt instruction. Contains
@@ -289,13 +289,13 @@ public function userDataSelector() -> I64:
     return 32 | 3
 
 export {
+    Gdt,
     GdtEntry,
     GdtPointer,
-    Gdt,
-    loadGdt,
-    reloadSegments,
     KERNEL_CODE_SELECTOR,
     KERNEL_DATA_SELECTOR,
+    loadGdt,
+    reloadSegments,
     userCodeSelector,
     userDataSelector
 }

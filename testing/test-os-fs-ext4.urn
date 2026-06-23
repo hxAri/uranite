@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.fs.ext4 import {
-    Ext4Superblock, Ext4Inode, Ext4FileSystem
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.fs.ext4 import Ext4FileSystem, Ext4Inode, Ext4Superblock
+from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
     putsln( "=== OS FS Ext4 Tests ===" )

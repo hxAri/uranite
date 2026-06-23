@@ -1,10 +1,8 @@
 package testing
 
-from uranite.os.sync.read-write-lock import ReadWriteLock
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.sync.read-write-lock import ReadWriteLock
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Sync RWLock Tests ===" )

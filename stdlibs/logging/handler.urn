@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-06 02:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/logging/handler.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/logging/handler.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,9 +21,10 @@
 
 package uranite.logging.handler
 
-from uranite.logging.level import LogLevel
+from uranite.io.file import File
+from uranite.io.writer import STDERR_FD, STDOUT_FD, writeFd, writeNewlineFd
 from uranite.logging.formatter import LogFormatter, defaultFormatter
-from uranite.io.writer import STDOUT_FD, STDERR_FD, writeFd, writeNewlineFd
+from uranite.logging.level import LogLevel
 
 public class ConsoleHandler:
     
@@ -99,7 +100,25 @@ public class FileHandler:
     public I64 fileDescriptor
     """ The file descriptor to write log output to. """
     
-    public function FileHandler( self, LogFormatter formatter, LogLevel minimumLevel, I64 fileDescriptor ) -> Void:
+    public function FileHandler( self, LogFormatter formatter, LogLevel minimumLevel, File file ) -> Void:
+
+        """
+        Create a new FileHandler with the given formatter, level, and File handle.
+
+        Parameters:
+            formatter (LogFormatter):
+                The formatter used to render log records.
+            minimumLevel (LogLevel):
+                The minimum log level threshold.
+            file (File):
+                The file to write log output to.
+        """
+
+        self.formatter = formatter
+        self.minimumLevel = minimumLevel
+        self.fileDescriptor = file.getFd()
+
+    protect function FileHandler( self, LogFormatter formatter, LogLevel minimumLevel, I64 fileDescriptor ) -> Void:
         
         """
         Create a new FileHandler with the given formatter, level, and file descriptor.
@@ -177,6 +196,26 @@ public function consoleHandlerWithLevel( LogLevel level ) -> ConsoleHandler:
     
     return new ConsoleHandler( defaultFormatter(), level )
 
+public function fileHandler( File file ) -> FileHandler:
+
+    """
+    Create a new FileHandler for a File with default formatter and Trace level.
+
+    Parameters:
+        file (File):
+            The file to write log output to.
+
+    Returns:
+        FileHandler:
+            A new file handler accepting all log levels.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return new FileHandler( defaultFormatter(), LogLevel.Trace, file )
+
 public function fileHandler( I64 fileDescriptor ) -> FileHandler:
     
     """
@@ -196,6 +235,28 @@ public function fileHandler( I64 fileDescriptor ) -> FileHandler:
     """
     
     return new FileHandler( defaultFormatter(), LogLevel.Trace, fileDescriptor )
+
+public function fileHandlerWithLevel( File file, LogLevel level ) -> FileHandler:
+
+    """
+    Create a new FileHandler for a File with the given minimum level.
+
+    Parameters:
+        file (File):
+            The file to write log output to.
+        level (LogLevel):
+            The minimum log level threshold.
+
+    Returns:
+        FileHandler:
+            A new file handler filtering by the given level.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return new FileHandler( defaultFormatter(), level, file )
 
 public function fileHandlerWithLevel( I64 fileDescriptor, LogLevel level ) -> FileHandler:
     

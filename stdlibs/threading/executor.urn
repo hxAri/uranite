@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-28 20:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/executor.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/executor.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -30,16 +30,23 @@
 
 package uranite.threading.executor
 
+from uranite.language.callable import Callable
 from uranite.memory.memory import Memory
 from uranite.os.ipc.signal import Event
 from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.task.task import Task, BlockReason
-from uranite.threading.thread import Thread, ThreadRuntime, DEFAULT_STACK_PAGES, DEFAULT_PRIORITY
+from uranite.os.task.task import BlockReason, Task
+from uranite.threading.atomic import AtomicBoolean, AtomicI64
 from uranite.threading.channel import ChannelInner
-from uranite.threading.atomic import AtomicI64, AtomicBoolean
 from uranite.threading.errors import ThreadError
-from uranite.threading.future import { FutureBase, Future, FUTURE_PENDING, FUTURE_RUNNING, FUTURE_FINISHED, FUTURE_ERROR }
-from uranite.language.callable import Callable
+from uranite.threading.future import {
+    FUTURE_ERROR,
+    FUTURE_FINISHED,
+    FUTURE_PENDING,
+    FUTURE_RUNNING,
+    Future,
+    FutureBase
+}
+from uranite.threading.thread import DEFAULT_PRIORITY, DEFAULT_STACK_PAGES, Thread, ThreadRuntime
 
 const I64 DEFAULT_QUEUE_CAPACITY = 256
 """Default capacity for the executor's internal task channel queue."""
@@ -216,7 +223,7 @@ public class ThreadPoolExecutor:
             self.workers.set( workerIndex, worker )
             workerIndex = workerIndex + 1
     
-    public function run( self, I64 fnAddr ) -> FutureBase:
+    protect function run( self, I64 fnAddr ) -> FutureBase:
         
         """
         Submit a zero-argument function for execution on a worker thread.
@@ -263,7 +270,7 @@ public class ThreadPoolExecutor:
         
         return base
     
-    public function submit1( self, I64 fnAddr, I64 arg ) -> FutureBase:
+    protect function submit1( self, I64 fnAddr, I64 arg ) -> FutureBase:
         
         """
         Submit a one-argument function for execution on a worker thread.
@@ -309,7 +316,7 @@ public class ThreadPoolExecutor:
         
         return base
     
-    public function submit2( self, I64 fnAddr, I64 arg1, I64 arg2 ) -> FutureBase:
+    protect function submit2( self, I64 fnAddr, I64 arg1, I64 arg2 ) -> FutureBase:
         
         """
         Submit a two-argument function for execution on a worker thread.
@@ -357,7 +364,7 @@ public class ThreadPoolExecutor:
         
         return base
     
-    public function submit3( self, I64 fnAddr, I64 arg1, I64 arg2, I64 arg3 ) -> FutureBase:
+    protect function submit3( self, I64 fnAddr, I64 arg1, I64 arg2, I64 arg3 ) -> FutureBase:
         
         """
         Submit a three-argument function for execution on a worker thread.
@@ -737,9 +744,9 @@ public class TaskSubmitter3<R, A, B, C>:
         return new Future<R>( base )
 
 export {
-    ThreadPoolExecutor,
     TaskSubmitter0,
     TaskSubmitter1,
     TaskSubmitter2,
-    TaskSubmitter3
+    TaskSubmitter3,
+    ThreadPoolExecutor
 }

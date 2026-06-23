@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/application.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/application.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,15 +22,15 @@
 
 package uranite.web.application
 
+from uranite.io.console import putsln
 from uranite.memory.memory import Memory
 from uranite.web.config import ServerConfig
-from uranite.web.server import HttpServer
-from uranite.web.router import Router
-from uranite.web.route import Route
 from uranite.web.controller import Controller
-from uranite.web.middleware import Middleware
 from uranite.web.exception-handler import ExceptionHandler
-from uranite.io.console import putsln
+from uranite.web.middleware import Middleware
+from uranite.web.route import Route
+from uranite.web.router import Router
+from uranite.web.server import HttpServer
 
 const I64 MAX_CONTROLLERS = 32
 """Maximum number of controllers that can be registered with an Application."""
@@ -234,5 +234,6 @@ public class Application:
 
 export {
     Application,
-    MAX_CONTROLLERS, MAX_MIDDLEWARE
+    MAX_CONTROLLERS,
+    MAX_MIDDLEWARE
 }

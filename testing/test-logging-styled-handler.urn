@@ -1,9 +1,9 @@
 package testing
 
-from uranite.logging.styled-handler import StyledConsoleHandler
-from uranite.logging.level import LogLevel
-from uranite.logging.formatter import LogFormatter, simpleFormatter
 from uranite.io.console import putsln
+from uranite.logging.formatter import LogFormatter, simpleFormatter
+from uranite.logging.level import LogLevel
+from uranite.logging.styled-handler import StyledConsoleHandler
 
 public function main() -> I32:
     putsln( "=== Logging Styled Handler Tests ===" )

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/vfs/mount.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/vfs/mount.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -291,9 +291,9 @@ public class MountTable:
         self.mountFlags.free()
 
 export {
-    MountEntry,
-    MountTable,
-    MOUNT_READ_ONLY,
     MOUNT_NO_EXEC,
-    MOUNT_NO_SUID
+    MOUNT_NO_SUID,
+    MOUNT_READ_ONLY,
+    MountEntry,
+    MountTable
 }

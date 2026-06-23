@@ -1,13 +1,14 @@
 package testing
 
-from uranite.os.bus.pci import {
-    PciDevice, PCI_CONFIG_ADDRESS, PCI_CONFIG_DATA,
-    PCI_NO_DEVICE, pciAddress
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.bus.pci import {
+    PCI_CONFIG_ADDRESS,
+    PCI_CONFIG_DATA,
+    PCI_NO_DEVICE,
+    PciDevice,
+    pciAddress
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
     putsln( "=== OS Bus PCI Tests ===" )

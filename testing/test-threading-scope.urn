@@ -1,13 +1,13 @@
 package testing
 
+from uranite.io.console import putsln
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.time.clock import SystemClock
+from uranite.sys.process import exit
+from uranite.testing.assertions import assertEqualI64
 from uranite.threading.scope import ScopedThread
 from uranite.threading.thread import ThreadRuntime
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.time.clock import SystemClock
-from uranite.testing.assertions import assertEqualI64
-from uranite.sys.process import exit
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Threading Scope Tests ===" )

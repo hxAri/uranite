@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/fs/ext4.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/fs/ext4.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,8 +20,10 @@
 
 package uranite.io.fs.ext4
 
-from uranite.os.fs.ext4 import Ext4Superblock, Ext4Inode, Ext4FileSystem
+from uranite.os.fs.ext4 import Ext4FileSystem, Ext4Inode, Ext4Superblock
 
 export {
-    Ext4Superblock, Ext4Inode, Ext4FileSystem
+    Ext4FileSystem,
+    Ext4Inode,
+    Ext4Superblock
 }

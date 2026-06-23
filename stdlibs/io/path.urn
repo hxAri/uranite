@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/path.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/path.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,12 +21,19 @@
 
 package uranite.io.path
 
-from uranite.memory.memory import Memory
+from uranite.io.stat import FileStat, lstatPath, statPath
 from uranite.io.syscall import {
-    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
-    sysAccess, sysGetcwd, sysReadlink, F_OK
+    F_OK,
+    memoryToPtr,
+    readByteAt,
+    stringLen,
+    stringToPtr,
+    sysAccess,
+    sysGetcwd,
+    sysReadlink,
+    writeByteAt
 }
-from uranite.io.stat import statPath, lstatPath, FileStat
+from uranite.memory.memory import Memory
 
 public function join( String basePath, String childPath ) -> String:
 
@@ -465,17 +472,17 @@ public function resolve( String basePath, String child ) -> String:
     return join( basePath, child )
 
 export {
-    join,
-    dirname,
-    basename,
-    extension,
-    stem,
-    exists,
-    isFile,
-    isDir,
-    isSymlink,
-    readlink,
     absolute,
+    basename,
+    dirname,
+    exists,
+    extension,
+    isDir,
+    isFile,
+    isSymlink,
+    join,
     parentDir,
-    resolve
+    readlink,
+    resolve,
+    stem
 }

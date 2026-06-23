@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/regexp/regexp.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/regexp/regexp.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -26,11 +26,11 @@
 
 package uranite.regexp.regexp
 
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt
-from uranite.functions.builtin import substring
-from uranite.regexp.match import Match, noMatch
-from uranite.regexp.errors import RegexSyntaxError
 from uranite.collection.array-list import ArrayList
+from uranite.functions.builtin import substring
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr
+from uranite.regexp.errors import RegexSyntaxError
+from uranite.regexp.match import Match, noMatch
 
 function isWordChar( I64 codePoint ) -> Boolean:
     

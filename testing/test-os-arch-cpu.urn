@@ -1,10 +1,8 @@
 package testing
 
-from uranite.os.arch.x86-64.cpu import Registers, readTsc
-from uranite.testing.assertions import {
-    assertEqualI64, assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.os.arch.x86-64.cpu import Registers, readTsc
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== OS Arch CPU Tests ===" )

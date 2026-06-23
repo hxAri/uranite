@@ -1,12 +1,9 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.language.u32 import U32
 from uranite.language.uint import UInt
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertTrue
-}
-from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
     putsln( "=== U32 Tests ===" )

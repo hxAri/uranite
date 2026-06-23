@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/regexp/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/regexp/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -18,11 +18,14 @@
 
 package uranite.regexp
 
-from uranite.regexp.regexp import RegExp
+from uranite.regexp.errors import RegexRuntimeError, RegexSyntaxError
 from uranite.regexp.match import Match, noMatch
-from uranite.regexp.errors import RegexSyntaxError, RegexRuntimeError
+from uranite.regexp.regexp import RegExp
 
 export {
-    RegExp, Match, noMatch,
-    RegexSyntaxError, RegexRuntimeError
+    Match,
+    RegExp,
+    RegexRuntimeError,
+    RegexSyntaxError,
+    noMatch
 }

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/encoding/buffer.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/encoding/buffer.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,20 +23,27 @@
 
 package uranite.encoding.buffer
 
-from uranite.memory.allocator import alloc, dealloc, realloc
-from uranite.io.syscall import readByteAt, writeByteAt
 from uranite.encoding.binary import {
-    readI8, writeI8,
-    readI16Be, writeI16Be,
-    readI32Be, writeI32Be,
-    readI64Be, writeI64Be,
-    readVarI32, writeVarI32,
-    readVarI64, writeVarI64,
+    copyBytes,
+    readI16Be,
+    readI32Be,
+    readI64Be,
+    readI8,
+    readUnsignedVarI32,
+    readVarI32,
+    readVarI64,
     readVarI64WithLength,
-    readUnsignedVarI32, writeUnsignedVarI32,
-    copyBytes
+    writeI16Be,
+    writeI32Be,
+    writeI64Be,
+    writeI8,
+    writeUnsignedVarI32,
+    writeVarI32,
+    writeVarI64
 }
 from uranite.errors.error import Error
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc, realloc
 
 const I64 BUFFER_DEFAULT_CAPACITY = 1024
 """Default initial capacity in bytes for new buffers."""
@@ -674,6 +681,38 @@ public class BinaryBuffer:
 
         self.bufferLimit = newLimit
 
+    public function advanceWritePosition( self, I64 byteCount ) -> Void:
+
+        """
+        Advance the write position by the given byte count without
+        writing data. Used after raw memory copy into the buffer's
+        backing address to synchronize the write cursor.
+
+        Parameters:
+            byteCount (I64):
+                Number of bytes to advance.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        self.writePosition = self.writePosition + byteCount
+
+    public function flipForReading( self ) -> Void:
+
+        """
+        Prepare the buffer for reading from the start. Sets the buffer
+        limit to the current write position and resets the read position
+        to zero. After this call, remaining() returns the number of
+        bytes written.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        self.bufferLimit = self.writePosition
+        self.readPosition = 0
+
     public function destroy( self ) -> Void:
 
         """
@@ -695,6 +734,6 @@ public class BinaryBuffer:
 export {
     BUFFER_DEFAULT_CAPACITY,
     BUFFER_GROWTH_FACTOR,
-    BufferOverflowError,
-    BinaryBuffer
+    BinaryBuffer,
+    BufferOverflowError
 }

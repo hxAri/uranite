@@ -1,12 +1,15 @@
 package testing
 
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt, memoryToPtr
-from uranite.memory.memory import Memory
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.io.syscall import {
+    memoryToPtr,
+    readByteAt,
+    stringLen,
+    stringToPtr,
+    writeByteAt
+}
+from uranite.memory.memory import Memory
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== IO Syscall Tests ===" )

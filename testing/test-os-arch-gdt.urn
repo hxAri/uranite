@@ -1,14 +1,16 @@
 package testing
 
-from uranite.os.arch.x86-64.gdt import {
-    GdtEntry, GdtPointer, Gdt,
-    KERNEL_CODE_SELECTOR, KERNEL_DATA_SELECTOR,
-    userCodeSelector, userDataSelector
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.os.arch.x86-64.gdt import {
+    Gdt,
+    GdtEntry,
+    GdtPointer,
+    KERNEL_CODE_SELECTOR,
+    KERNEL_DATA_SELECTOR,
+    userCodeSelector,
+    userDataSelector
+}
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== OS Arch GDT Tests ===" )

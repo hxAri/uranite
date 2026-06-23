@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/driver.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/kernel/driver.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,7 +21,7 @@
 
 package uranite.kernel.driver
 
-from uranite.os.driver.driver import DriverState, Driver, DriverDescriptor, DriverRegistry
+from uranite.os.driver.driver import Driver, DriverDescriptor, DriverRegistry, DriverState
 
 public class DeviceDriverManager:
 
@@ -105,5 +105,8 @@ public class DeviceDriverManager:
 
 export {
     DeviceDriverManager,
-    DriverState, Driver, DriverDescriptor, DriverRegistry
+    Driver,
+    DriverDescriptor,
+    DriverRegistry,
+    DriverState
 }

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/fs/fat32.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/fs/fat32.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -287,7 +287,7 @@ public class Fat32FileSystem implements FileSystem:
         return self.info.rootCluster
 
 export {
-    Fat32Info,
     Fat32DirEntry,
-    Fat32FileSystem
+    Fat32FileSystem,
+    Fat32Info
 }

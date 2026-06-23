@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-29 14:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/scope.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/multiprocessing/scope.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,9 +22,9 @@
 package uranite.process.scope
 
 from uranite.memory.memory import Memory
-from uranite.process.process import Process, ProcessRuntime, DEFAULT_PROCESS_STACK_PAGES, DEFAULT_PROCESS_PRIORITY
-from uranite.process.process-handle import ProcessHandle
 from uranite.process.errors import ProcessError
+from uranite.process.process import DEFAULT_PROCESS_PRIORITY, DEFAULT_PROCESS_STACK_PAGES, Process, ProcessRuntime
+from uranite.process.process-handle import ProcessHandle
 
 const I64 MAX_SCOPED_PROCESSES = 256
 """ Maximum number of processes that can be spawned within a single scope. """

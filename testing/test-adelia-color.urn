@@ -1,15 +1,12 @@
 package testing
 
+from uranite.adelia.cmyk import CMYK
 from uranite.adelia.color import Color
-from uranite.adelia.rgb import RGB
 from uranite.adelia.hsl import HSL
 from uranite.adelia.hsv import HSV
-from uranite.adelia.cmyk import CMYK
-from uranite.testing.assertions import {
-    assertEqualI64, assertEqualF64,
-    assertTrue, assertFalse
-}
+from uranite.adelia.rgb import RGB
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualF64, assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Adelia Color Tests ===" )

@@ -26,14 +26,14 @@
 
 #include "uranite-crt/subprocess-runtime.h"
 
-struct AetherProcess {
+struct UraniteProcess {
     pid_t pid;
     int finished;
     int exitCode;
 };
 
-AetherProcessResult* uraniteProcessRun(const char* command) {
-    AetherProcessResult* result = (AetherProcessResult*)calloc(1, sizeof(AetherProcessResult));
+UraniteProcessResult* uraniteProcessRun(const char* command) {
+    UraniteProcessResult* result = (UraniteProcessResult*)calloc(1, sizeof(UraniteProcessResult));
     if (!result) return NULL;
 
     int stdoutPipe[2], stderrPipe[2];
@@ -105,8 +105,8 @@ int64_t uraniteProcessExec(const char* command) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
-AetherProcess* uraniteProcessSpawn(const char* command) {
-    AetherProcess* proc = (AetherProcess*)calloc(1, sizeof(AetherProcess));
+UraniteProcess* uraniteProcessSpawn(const char* command) {
+    UraniteProcess* proc = (UraniteProcess*)calloc(1, sizeof(UraniteProcess));
     if (!proc) return NULL;
 
     pid_t pid = fork();
@@ -125,7 +125,7 @@ AetherProcess* uraniteProcessSpawn(const char* command) {
     return proc;
 }
 
-int64_t uraniteProcessWait(AetherProcess* process) {
+int64_t uraniteProcessWait(UraniteProcess* process) {
     if (!process || process->finished) {
         return process ? process->exitCode : -1;
     }
@@ -136,13 +136,13 @@ int64_t uraniteProcessWait(AetherProcess* process) {
     return process->exitCode;
 }
 
-void uraniteProcessKill(AetherProcess* process) {
+void uraniteProcessKill(UraniteProcess* process) {
     if (process && !process->finished) {
         kill(process->pid, SIGTERM);
     }
 }
 
-int uraniteProcessIsRunning(AetherProcess* process) {
+int uraniteProcessIsRunning(UraniteProcess* process) {
     if (!process || process->finished) return 0;
     int status;
     pid_t result = waitpid(process->pid, &status, WNOHANG);
@@ -152,11 +152,11 @@ int uraniteProcessIsRunning(AetherProcess* process) {
     return 0;
 }
 
-int64_t uraniteProcessPid(AetherProcess* process) {
+int64_t uraniteProcessPid(UraniteProcess* process) {
     return process ? (int64_t)process->pid : -1;
 }
 
-void uraniteProcessResultFree(AetherProcessResult* result) {
+void uraniteProcessResultFree(UraniteProcessResult* result) {
     if (result) {
         free(result->standardOutput);
         free(result->standardError);
@@ -164,6 +164,6 @@ void uraniteProcessResultFree(AetherProcessResult* result) {
     }
 }
 
-void uraniteProcessFree(AetherProcess* process) {
+void uraniteProcessFree(UraniteProcess* process) {
     free(process);
 }

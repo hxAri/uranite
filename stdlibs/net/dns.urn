@@ -1,0 +1,515 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-23 19:45
+# @update 2026-06-23 19:45
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/dns.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# DNS stub resolver for hostname-to-IPv4 resolution over UDP. Reads the
+# system nameserver from /etc/resolv.conf, constructs DNS A-record queries,
+# and parses response packets. Pure Uranite, zero C runtime.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.net.dns
+
+from uranite.io.syscall import {
+    O_RDONLY,
+    SYS_CLOSE,
+    SYS_OPEN,
+    SYS_READ,
+    readByteAt,
+    stringLen,
+    stringToPtr,
+    writeByteAt
+}
+from uranite.memory.allocator import alloc, dealloc
+from uranite.net.socket import {
+    AF_INET,
+    IPPROTO_UDP,
+    SOCK_DGRAM,
+    SYS_RECVFROM,
+    SYS_SENDTO,
+    buildSockaddrIn,
+    ipToInt,
+    socketClose,
+    socketCreate
+}
+from uranite.os.syscall.invoke import syscall1, syscall3, syscall6
+from uranite.os.syscall.result import SyscallResult
+
+const I64 DNS_PORT = 53
+"""Standard DNS service port number."""
+
+const I64 DNS_HEADER_SIZE = 12
+"""Fixed size in bytes of a DNS message header."""
+
+const I64 DNS_MAX_RESPONSE_SIZE = 512
+"""Maximum size in bytes of a standard DNS UDP response (RFC 1035)."""
+
+const I64 DNS_QUERY_ID = 0x1234
+"""Fixed transaction ID used for DNS queries."""
+
+const I64 DNS_FLAGS_STANDARD_QUERY = 0x0100
+"""DNS header flags for a standard recursive query (QR=0, RD=1)."""
+
+const I64 DNS_QTYPE_A = 1
+"""DNS query type for IPv4 address (A record)."""
+
+const I64 DNS_QCLASS_IN = 1
+"""DNS query class for Internet addresses."""
+
+const I64 DNS_LABEL_COMPRESSION_MASK = 192
+"""Bitmask identifying a DNS label compression pointer (0xC0)."""
+
+const I64 DNS_A_RECORD_RDLENGTH = 4
+"""Expected RDATA length in bytes for an A record (IPv4 = 4 bytes)."""
+
+public class DnsResolver:
+
+    """
+    Stateless DNS stub resolver providing hostname-to-IPv4 resolution
+    via standard DNS A-record queries over UDP. All methods are static
+    and operate without instance state — the class serves purely as a
+    namespace for DNS resolution operations.
+
+    The resolver reads /etc/resolv.conf for the system nameserver address,
+    constructs RFC 1035 compliant query packets, sends them via UDP to
+    port 53, and parses the response for the first A-record answer.
+    """
+
+    public function DnsResolver( self ) -> Void:
+        """No-op constructor — all methods are static."""
+
+    public static function readNameserver() -> I64:
+
+        """
+        Parse /etc/resolv.conf to extract the first nameserver IPv4 address.
+        Scans each line for the "nameserver" directive followed by a
+        dotted-decimal IPv4 address, ignoring comments and IPv6 entries.
+
+        Returns:
+            I64:
+                Packed IPv4 address of the first nameserver found, or
+                the loopback address 127.0.0.1 (0x7F000001) if the file
+                is unreadable or contains no valid nameserver entries.
+
+        Complexity:
+            Time: O(f) where f is file size
+            Space: O(f)
+        """
+
+        I64 resolvPathBuffer = alloc( 17 )
+        # "/etc/resolv.conf\0"
+        writeByteAt( resolvPathBuffer, 0, 47 )
+        writeByteAt( resolvPathBuffer, 1, 101 )
+        writeByteAt( resolvPathBuffer, 2, 116 )
+        writeByteAt( resolvPathBuffer, 3, 99 )
+        writeByteAt( resolvPathBuffer, 4, 47 )
+        writeByteAt( resolvPathBuffer, 5, 114 )
+        writeByteAt( resolvPathBuffer, 6, 101 )
+        writeByteAt( resolvPathBuffer, 7, 115 )
+        writeByteAt( resolvPathBuffer, 8, 111 )
+        writeByteAt( resolvPathBuffer, 9, 108 )
+        writeByteAt( resolvPathBuffer, 10, 118 )
+        writeByteAt( resolvPathBuffer, 11, 46 )
+        writeByteAt( resolvPathBuffer, 12, 99 )
+        writeByteAt( resolvPathBuffer, 13, 111 )
+        writeByteAt( resolvPathBuffer, 14, 110 )
+        writeByteAt( resolvPathBuffer, 15, 102 )
+        writeByteAt( resolvPathBuffer, 16, 0 )
+
+        SyscallResult openResult = syscall3( SYS_OPEN, resolvPathBuffer, O_RDONLY, 0 )
+        dealloc( resolvPathBuffer )
+        if openResult.isError():
+            return ipToInt( 127, 0, 0, 1 )
+
+        I64 fileDescriptor = openResult.value()
+        I64 bufferCapacity = 2048
+        I64 fileBuffer = alloc( bufferCapacity )
+        SyscallResult readResult = syscall3( SYS_READ, fileDescriptor, fileBuffer, bufferCapacity - 1 )
+        syscall1( SYS_CLOSE, fileDescriptor )
+
+        if readResult.isError():
+            dealloc( fileBuffer )
+            return ipToInt( 127, 0, 0, 1 )
+
+        I64 bytesRead = readResult.value()
+        I64 lineStart = 0
+        I64 scanOffset = 0
+
+        while scanOffset <= bytesRead:
+            I64 currentByte = 0
+            if scanOffset < bytesRead:
+                currentByte = readByteAt( fileBuffer, scanOffset )
+                if currentByte < 0:
+                    currentByte = currentByte + 256
+            Boolean isEndOfLine = scanOffset == bytesRead or currentByte == 10
+
+            if isEndOfLine:
+                I64 lineLength = scanOffset - lineStart
+                # "nameserver " is 11 characters
+                if lineLength > 11:
+                    I64 matchByte0 = readByteAt( fileBuffer, lineStart )
+                    I64 matchByte1 = readByteAt( fileBuffer, lineStart + 1 )
+                    if matchByte0 < 0:
+                        matchByte0 = matchByte0 + 256
+                    if matchByte1 < 0:
+                        matchByte1 = matchByte1 + 256
+                    # check 'n' 'a' prefix to avoid scanning every line
+                    if matchByte0 == 110 and matchByte1 == 97:
+                        # verify full "nameserver " prefix (11 bytes)
+                        Boolean prefixMatches = True
+                        # "nameserver " = 110 97 109 101 115 101 114 118 101 114 32
+                        I64 expectedBytes = alloc( 11 )
+                        writeByteAt( expectedBytes, 0, 110 )
+                        writeByteAt( expectedBytes, 1, 97 )
+                        writeByteAt( expectedBytes, 2, 109 )
+                        writeByteAt( expectedBytes, 3, 101 )
+                        writeByteAt( expectedBytes, 4, 115 )
+                        writeByteAt( expectedBytes, 5, 101 )
+                        writeByteAt( expectedBytes, 6, 114 )
+                        writeByteAt( expectedBytes, 7, 118 )
+                        writeByteAt( expectedBytes, 8, 101 )
+                        writeByteAt( expectedBytes, 9, 114 )
+                        writeByteAt( expectedBytes, 10, 32 )
+                        I64 prefixIndex = 0
+                        while prefixIndex < 11 and prefixMatches:
+                            I64 fileByte = readByteAt( fileBuffer, lineStart + prefixIndex )
+                            if fileByte < 0:
+                                fileByte = fileByte + 256
+                            I64 expectByte = readByteAt( expectedBytes, prefixIndex )
+                            if expectByte < 0:
+                                expectByte = expectByte + 256
+                            if fileByte != expectByte:
+                                prefixMatches = False
+                            prefixIndex = prefixIndex + 1
+                        dealloc( expectedBytes )
+                        if prefixMatches:
+                            I64 ipStart = lineStart + 11
+                            # skip IPv6 (contains ':')
+                            Boolean isIpv6 = False
+                            I64 checkIndex = ipStart
+                            while checkIndex < scanOffset and not isIpv6:
+                                I64 checkByte = readByteAt( fileBuffer, checkIndex )
+                                if checkByte < 0:
+                                    checkByte = checkByte + 256
+                                if checkByte == 58:
+                                    isIpv6 = True
+                                checkIndex = checkIndex + 1
+                            if not isIpv6:
+                                I64 octet1 = 0
+                                I64 octet2 = 0
+                                I64 octet3 = 0
+                                I64 octet4 = 0
+                                I64 currentOctet = 0
+                                I64 dotCount = 0
+                                I64 parseIndex = ipStart
+                                while parseIndex < scanOffset:
+                                    I64 parseByte = readByteAt( fileBuffer, parseIndex )
+                                    if parseByte < 0:
+                                        parseByte = parseByte + 256
+                                    if parseByte == 46:
+                                        if dotCount == 0:
+                                            octet1 = currentOctet
+                                        if dotCount == 1:
+                                            octet2 = currentOctet
+                                        if dotCount == 2:
+                                            octet3 = currentOctet
+                                        currentOctet = 0
+                                        dotCount = dotCount + 1
+                                    elif parseByte >= 48 and parseByte <= 57:
+                                        currentOctet = currentOctet * 10 + ( parseByte - 48 )
+                                    parseIndex = parseIndex + 1
+                                octet4 = currentOctet
+                                if dotCount == 3:
+                                    dealloc( fileBuffer )
+                                    return ipToInt( octet1, octet2, octet3, octet4 )
+                lineStart = scanOffset + 1
+            scanOffset = scanOffset + 1
+
+        dealloc( fileBuffer )
+        return ipToInt( 127, 0, 0, 1 )
+
+    public static function resolve( String hostname ) -> I64:
+
+        """
+        Resolve a hostname to an IPv4 address via DNS over UDP. Reads the
+        system nameserver from /etc/resolv.conf, constructs a standard DNS
+        A-record query, sends it to the nameserver on port 53, and parses
+        the first A-record from the response.
+
+        Parameters:
+            hostname (String):
+                The domain name to resolve (e.g., "www.google.com").
+
+        Returns:
+            I64:
+                Packed IPv4 address from the first A-record in the response,
+                or -1 if the query fails or no A-record is found.
+
+        Complexity:
+            Time: O(n) where n is hostname length + response size
+            Space: O(n)
+        """
+
+        I64 nameserverIp = DnsResolver.readNameserver()
+        return DnsResolver.resolveWith( hostname, nameserverIp )
+
+    public static function resolveWith( String hostname, I64 nameserverIp ) -> I64:
+
+        """
+        Resolve a hostname to an IPv4 address via DNS over UDP using a
+        specific nameserver. Constructs an RFC 1035 compliant A-record
+        query, sends it via UDP, and parses the first A-record answer.
+
+        Parameters:
+            hostname (String):
+                The domain name to resolve (e.g., "www.google.com").
+            nameserverIp (I64):
+                Packed IPv4 address of the DNS nameserver to query.
+
+        Returns:
+            I64:
+                Packed IPv4 address from the first A-record in the response,
+                or -1 if the query fails or no A-record is found.
+
+        Complexity:
+            Time: O(n) where n is hostname length + response size
+            Space: O(n)
+        """
+
+        I64 hostnameAddress = stringToPtr( hostname )
+        I64 hostnameLength = stringLen( hostname )
+
+        I64 queryCapacity = DNS_HEADER_SIZE + hostnameLength + 2 + 4
+        I64 queryBuffer = alloc( queryCapacity )
+
+        # DNS header: ID, flags=standard query+recursion desired,
+        # QDCOUNT=1, ANCOUNT=0, NSCOUNT=0, ARCOUNT=0
+        writeByteAt( queryBuffer, 0, DNS_QUERY_ID / 256 )
+        writeByteAt( queryBuffer, 1, DNS_QUERY_ID % 256 )
+        writeByteAt( queryBuffer, 2, DNS_FLAGS_STANDARD_QUERY / 256 )
+        writeByteAt( queryBuffer, 3, DNS_FLAGS_STANDARD_QUERY % 256 )
+        writeByteAt( queryBuffer, 4, 0x00 )
+        writeByteAt( queryBuffer, 5, 0x01 )
+        writeByteAt( queryBuffer, 6, 0x00 )
+        writeByteAt( queryBuffer, 7, 0x00 )
+        writeByteAt( queryBuffer, 8, 0x00 )
+        writeByteAt( queryBuffer, 9, 0x00 )
+        writeByteAt( queryBuffer, 10, 0x00 )
+        writeByteAt( queryBuffer, 11, 0x00 )
+
+        # encode hostname as DNS labels: "www.google.com" -> \3www\6google\3com\0
+        I64 writeOffset = DNS_HEADER_SIZE
+        I64 labelStart = 0
+        I64 readOffset = 0
+
+        while readOffset <= hostnameLength:
+            Boolean isEnd = readOffset == hostnameLength
+            I64 charByte = 0
+            if not isEnd:
+                charByte = readByteAt( hostnameAddress, readOffset )
+                if charByte < 0:
+                    charByte = charByte + 256
+            if isEnd or charByte == 46:
+                I64 labelLength = readOffset - labelStart
+                writeByteAt( queryBuffer, writeOffset, labelLength )
+                writeOffset = writeOffset + 1
+                I64 copyIndex = labelStart
+                while copyIndex < readOffset:
+                    I64 copyByte = readByteAt( hostnameAddress, copyIndex )
+                    if copyByte < 0:
+                        copyByte = copyByte + 256
+                    writeByteAt( queryBuffer, writeOffset, copyByte )
+                    writeOffset = writeOffset + 1
+                    copyIndex = copyIndex + 1
+                labelStart = readOffset + 1
+            readOffset = readOffset + 1
+
+        writeByteAt( queryBuffer, writeOffset, 0 )
+        writeOffset = writeOffset + 1
+
+        # QTYPE = A, QCLASS = IN
+        writeByteAt( queryBuffer, writeOffset, 0x00 )
+        writeByteAt( queryBuffer, writeOffset + 1, DNS_QTYPE_A )
+        writeByteAt( queryBuffer, writeOffset + 2, 0x00 )
+        writeByteAt( queryBuffer, writeOffset + 3, DNS_QCLASS_IN )
+        writeOffset = writeOffset + 4
+
+        I64 querySize = writeOffset
+
+        I64 socketFd = socketCreate( AF_INET, SOCK_DGRAM, IPPROTO_UDP )
+        I64 serverAddr = buildSockaddrIn( DNS_PORT, nameserverIp )
+        I64 addrSize = 16
+
+        SyscallResult sendResult = syscall6( SYS_SENDTO, socketFd, queryBuffer, querySize, 0, serverAddr, addrSize )
+        dealloc( serverAddr )
+        dealloc( queryBuffer )
+
+        if sendResult.isError():
+            socketClose( socketFd )
+            return -1
+
+        I64 responseBuffer = alloc( DNS_MAX_RESPONSE_SIZE )
+        SyscallResult recvResult = syscall6( SYS_RECVFROM, socketFd, responseBuffer, DNS_MAX_RESPONSE_SIZE, 0, 0, 0 )
+        socketClose( socketFd )
+
+        if recvResult.isError():
+            dealloc( responseBuffer )
+            return -1
+
+        I64 responseSize = recvResult.value()
+        if responseSize < DNS_HEADER_SIZE:
+            dealloc( responseBuffer )
+            return -1
+
+        I64 resolvedAddress = DnsResolver.parseResponse( responseBuffer, responseSize )
+        dealloc( responseBuffer )
+        return resolvedAddress
+
+    public static function parseResponse( I64 responseBuffer, I64 responseSize ) -> I64:
+
+        """
+        Parse a DNS response packet and extract the first A-record IPv4
+        address. Validates the answer count, skips the question section,
+        then iterates answer resource records looking for type A with
+        4-byte RDATA.
+
+        Parameters:
+            responseBuffer (I64):
+                Memory address of the raw DNS response packet.
+            responseSize (I64):
+                Total size in bytes of the response packet.
+
+        Returns:
+            I64:
+                Packed IPv4 address from the first A-record, or -1 if
+                no valid A-record is found in the response.
+
+        Complexity:
+            Time: O(r) where r is response size
+            Space: O(1)
+        """
+
+        I64 answerCountHigh = readByteAt( responseBuffer, 6 )
+        I64 answerCountLow = readByteAt( responseBuffer, 7 )
+        if answerCountHigh < 0:
+            answerCountHigh = answerCountHigh + 256
+        if answerCountLow < 0:
+            answerCountLow = answerCountLow + 256
+        I64 answerCount = answerCountHigh * 256 + answerCountLow
+
+        if answerCount == 0:
+            return -1
+
+        # skip question section: after header, skip name then 4 bytes
+        I64 parseOffset = DNS_HEADER_SIZE
+        parseOffset = DnsResolver.skipName( responseBuffer, responseSize, parseOffset )
+
+        # skip QTYPE (2) + QCLASS (2)
+        parseOffset = parseOffset + 4
+
+        I64 answerIndex = 0
+        while answerIndex < answerCount and parseOffset < responseSize:
+            parseOffset = DnsResolver.skipName( responseBuffer, responseSize, parseOffset )
+
+            if parseOffset + 10 > responseSize:
+                return -1
+
+            # TYPE (2 bytes)
+            I64 typeHigh = readByteAt( responseBuffer, parseOffset )
+            I64 typeLow = readByteAt( responseBuffer, parseOffset + 1 )
+            if typeHigh < 0:
+                typeHigh = typeHigh + 256
+            if typeLow < 0:
+                typeLow = typeLow + 256
+            I64 recordType = typeHigh * 256 + typeLow
+
+            # skip CLASS (2) + TTL (4), read RDLENGTH (2 bytes at offset +8)
+            I64 rdLenHigh = readByteAt( responseBuffer, parseOffset + 8 )
+            I64 rdLenLow = readByteAt( responseBuffer, parseOffset + 9 )
+            if rdLenHigh < 0:
+                rdLenHigh = rdLenHigh + 256
+            if rdLenLow < 0:
+                rdLenLow = rdLenLow + 256
+            I64 rdLength = rdLenHigh * 256 + rdLenLow
+
+            parseOffset = parseOffset + 10
+
+            if recordType == DNS_QTYPE_A and rdLength == DNS_A_RECORD_RDLENGTH:
+                I64 byte1 = readByteAt( responseBuffer, parseOffset )
+                I64 byte2 = readByteAt( responseBuffer, parseOffset + 1 )
+                I64 byte3 = readByteAt( responseBuffer, parseOffset + 2 )
+                I64 byte4 = readByteAt( responseBuffer, parseOffset + 3 )
+                if byte1 < 0:
+                    byte1 = byte1 + 256
+                if byte2 < 0:
+                    byte2 = byte2 + 256
+                if byte3 < 0:
+                    byte3 = byte3 + 256
+                if byte4 < 0:
+                    byte4 = byte4 + 256
+                return ipToInt( byte1, byte2, byte3, byte4 )
+
+            parseOffset = parseOffset + rdLength
+            answerIndex = answerIndex + 1
+
+        return -1
+
+    public static function skipName( I64 buffer, I64 bufferSize, I64 offset ) -> I64:
+
+        """
+        Advance past a DNS domain name in a packet, handling both inline
+        labels and compression pointers (RFC 1035 Section 4.1.4).
+
+        Parameters:
+            buffer (I64):
+                Memory address of the DNS packet.
+            bufferSize (I64):
+                Total size in bytes of the packet.
+            offset (I64):
+                Current byte offset pointing to the start of the name.
+
+        Returns:
+            I64:
+                Byte offset immediately after the name field.
+
+        Complexity:
+            Time: O(n) where n is encoded name length
+            Space: O(1)
+        """
+
+        I64 currentOffset = offset
+        while currentOffset < bufferSize:
+            I64 labelByte = readByteAt( buffer, currentOffset )
+            if labelByte < 0:
+                labelByte = labelByte + 256
+            if labelByte == 0:
+                return currentOffset + 1
+            if labelByte >= DNS_LABEL_COMPRESSION_MASK:
+                return currentOffset + 2
+            currentOffset = currentOffset + 1 + labelByte
+        return currentOffset
+
+export {
+    DNS_A_RECORD_RDLENGTH,
+    DNS_FLAGS_STANDARD_QUERY,
+    DNS_HEADER_SIZE,
+    DNS_LABEL_COMPRESSION_MASK,
+    DNS_MAX_RESPONSE_SIZE,
+    DNS_PORT,
+    DNS_QCLASS_IN,
+    DNS_QTYPE_A,
+    DNS_QUERY_ID,
+    DnsResolver
+}

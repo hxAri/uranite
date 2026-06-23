@@ -115,9 +115,9 @@ namespace uranite::semantic {
 			}
 			
 			void importModuleTypes( const std::unordered_map<std::string, TypeSharedPointer>& types );
-			void importModuleSymbols( const std::unordered_map<std::string, SymbolSharedPointer>& symbols );
+			void importModuleSymbols( const std::unordered_map<std::string, std::vector<SymbolSharedPointer>>& symbols );
 			std::unordered_map<std::string, TypeSharedPointer> getRegisteredTypes() const;
-			std::unordered_map<std::string, SymbolSharedPointer> getRegisteredSymbols() const;
+			std::unordered_map<std::string, std::vector<SymbolSharedPointer>> getRegisteredSymbols() const;
 			bool analyzeModuleRegistration( ast::nodes::Program& program );
 			
 			/**

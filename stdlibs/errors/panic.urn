@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/errors/panic.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/errors/panic.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,7 +22,7 @@
 
 package uranite.errors.panic
 
-from uranite.os.debug.panic import PanicReason, PanicContext
+from uranite.os.debug.panic import PanicContext, PanicReason
 
 public class PanicHandler:
 
@@ -120,6 +120,7 @@ public class PanicHandler:
         self.context.destroy()
 
 export {
+    PanicContext,
     PanicHandler,
-    PanicReason, PanicContext
+    PanicReason
 }

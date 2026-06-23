@@ -1,8 +1,8 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.operators.stringable import Stringable
 from uranite.testing.assertions import assertEqualStr
-from uranite.io.console import putsln
 
 public class Label implements Stringable:
     public String text

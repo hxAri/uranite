@@ -1,13 +1,8 @@
 package testing
 
-from uranite.language.float import Float
-from uranite.testing.assertions import {
-    assertEqualF64,
-    assertEqualI64,
-    assertTrue,
-    assertFalse
-}
 from uranite.io.console import putsln
+from uranite.language.float import Float
+from uranite.testing.assertions import assertEqualF64, assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Float Tests ===" )

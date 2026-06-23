@@ -23,6 +23,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "uranite/semantic/symbol.hpp"
 #include "uranite/semantic/typeref.hpp"
@@ -109,17 +110,31 @@ namespace uranite::semantic {
 			/**
 			 * @brief Performs a recursive lookup for a symbol by name.
 			 * @param name The identifier name to search for.
-			 * @return The SymbolSharedPointer if found in this or parent scopes, otherwise nullptr.
+			 * @return The first SymbolSharedPointer if found in this or parent scopes, otherwise nullptr.
 			 */
 			SymbolSharedPointer lookup( const std::string& name ) const;
-			
+
 			/**
 			 * @brief Searches for a symbol only within the current local scope.
 			 * @param name The identifier name to search for.
-			 * @return The SymbolSharedPointer if found locally, otherwise nullptr.
+			 * @return The first SymbolSharedPointer if found locally, otherwise nullptr.
 			 */
 			SymbolSharedPointer lookupLocal( const std::string& name ) const;
-			
+
+			/**
+			 * @brief Performs a recursive lookup for all symbols with the given name (overload set).
+			 * @param name The identifier name to search for.
+			 * @return A vector of all matching symbols from this scope or parent scopes.
+			 */
+			std::vector<SymbolSharedPointer> lookupAll( const std::string& name ) const;
+
+			/**
+			 * @brief Searches for all symbols with the given name only within the current local scope.
+			 * @param name The identifier name to search for.
+			 * @return A vector of all matching symbols defined locally.
+			 */
+			std::vector<SymbolSharedPointer> lookupAllLocal( const std::string& name ) const;
+
 			/**
 			 * @brief Gets the parent scope.
 			 * @return A shared pointer to the parent Scope.
@@ -127,20 +142,20 @@ namespace uranite::semantic {
 			std::shared_ptr<Scope> parent() const {
 				return this->parentT;
 			}
-			
+
 			/**
 			 * @brief Retrieves the map of all symbols defined in this scope.
-			 * @return A constant reference to the symbols map.
+			 * @return A constant reference to the symbols map (vector-per-key for overload support).
 			 */
-			const std::unordered_map<std::string,SymbolSharedPointer>& symbols() const {
+			const std::unordered_map<std::string, std::vector<SymbolSharedPointer>>& symbols() const {
 				return this->symbolsT;
 			}
-		
+
 		private:
-			
+
 			Kind kindT;
 			std::shared_ptr<Scope> parentT;
-			std::unordered_map<std::string, SymbolSharedPointer> symbolsT;
+			std::unordered_map<std::string, std::vector<SymbolSharedPointer>> symbolsT;
 		
 	};
 	

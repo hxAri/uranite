@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/string/builder.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/string/builder.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,12 +22,12 @@
 
 package uranite.string.builder
 
-from uranite.io.syscall import stringToPtr, stringLen, readByteAt, writeByteAt
-from uranite.memory.allocator import alloc, dealloc, realloc
-from uranite.functions.builtin import ptrToString
-from uranite.convert.convert import intToString, floatToString
+from uranite.convert.convert import floatToString, intToString
 from uranite.errors.lookup import IndexError
 from uranite.errors.value import ValueError
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.memory.allocator import alloc, dealloc, realloc
 
 const I64 INITIAL_CAPACITY = 64
 """ The default initial buffer capacity in bytes. """
@@ -570,6 +570,6 @@ public class StringBuilder:
         self.cap = 0
 
 export {
-    StringBuilder,
-    INITIAL_CAPACITY
+    INITIAL_CAPACITY,
+    StringBuilder
 }

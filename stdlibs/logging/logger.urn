@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/logging/logger.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/logging/logger.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,15 +21,16 @@
 
 package uranite.logging.logger
 
-from uranite.logging.level import LogLevel
-from uranite.io.writer import STDOUT_FD, STDERR_FD, writeFd, writeNewlineFd
-from uranite.string.format import padRight, padZero, formatUtcOffset
-from uranite.datetime.datetime import now, DateTime
-from uranite.convert.convert import intToString
-from uranite.sys.process import getpid, getUsername
+from uranite.collection.array-list import ArrayList
 from uranite.collection.hash-map import HashMap
 from uranite.collection.hash-set import HashSet
-from uranite.collection.array-list import ArrayList
+from uranite.convert.convert import intToString
+from uranite.datetime.datetime import DateTime, now
+from uranite.io.file import File
+from uranite.io.writer import STDERR_FD, STDOUT_FD, writeFd, writeNewlineFd
+from uranite.logging.level import LogLevel
+from uranite.string.format import formatUtcOffset, padRight, padZero
+from uranite.sys.process import getUsername, getpid
 
 public class Logger:
     
@@ -93,16 +94,28 @@ public class Logger:
         
         self.level = level
     
+    public function setOutput( self, File file ) -> Void:
+
+        """
+        Set the output to a File handle for log messages.
+
+        Parameters:
+            file (File):
+                The target file to write log output to.
+        """
+
+        self.outputFileDescriptor = file.getFd()
+
     public function setOutput( self, I64 fileDescriptor ) -> Void:
-        
+
         """
         Set the output file descriptor for log messages.
-        
+
         Parameters:
             fileDescriptor (I64):
                 The target file descriptor (e.g., STDOUT_FD, STDERR_FD).
         """
-        
+
         self.outputFileDescriptor = fileDescriptor
     
     public function setUsername( self, String username ) -> Void:
@@ -315,6 +328,6 @@ public function getDebugLogger( String name ) -> Logger:
 
 export {
     Logger,
-    getLogger,
-    getDebugLogger
+    getDebugLogger,
+    getLogger
 }

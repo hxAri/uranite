@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-15 00:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/requests/headers.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/requests/headers.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,10 +21,14 @@
 
 package uranite.requests.headers
 
-from uranite.collection.hash-map import HashMap
 from uranite.collection.array-list import ArrayList
+from uranite.collection.hash-map import HashMap
 from uranite.functions.builtin import {
-    toLower, indexOf, substring, length, trim
+    indexOf,
+    length,
+    substring,
+    toLower,
+    trim
 }
 from uranite.functions.strings import split
 
@@ -131,8 +135,10 @@ public class Headers:
             Space: O(n)
         """
 
+        if self.entries.empty:
+            return ""
         String result = ""
-        ArrayList<String> headerKeys = self.entries.keys()
+        ArrayList<String> headerKeys = self.entries.keys().toList()
         I64 keyIndex = 0
         while keyIndex < headerKeys.length:
             String headerName = headerKeys.get( keyIndex )

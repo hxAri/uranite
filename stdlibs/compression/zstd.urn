@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/compression/zstd.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/compression/zstd.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -35,9 +35,9 @@
 
 package uranite.compression.zstd
 
-from uranite.memory.allocator import alloc, dealloc
-from uranite.io.syscall import readByteAt, writeByteAt
 from uranite.encoding.binary import copyBytes
+from uranite.io.syscall import readByteAt, writeByteAt
+from uranite.memory.allocator import alloc, dealloc
 
 const I64 ZSTD_MAGIC = 4247762216
 const I64 ZSTD_FRAME_HEADER_MIN = 4
@@ -423,7 +423,8 @@ public function zstdMaxCompressedSize( I64 inputLength ) -> I64:
     return inputLength + 32 + ( inputLength / 131072 + 1 ) * 3
 
 export {
-    zstdCompress, zstdDecompress,
-    zstdMaxCompressedSize,
-    parseFrameHeader
+    parseFrameHeader,
+    zstdCompress,
+    zstdDecompress,
+    zstdMaxCompressedSize
 }

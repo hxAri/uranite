@@ -1,15 +1,20 @@
 package testing
 
-from uranite.os.arch.x86-64.paging import {
-    PageTableEntry, PageTable,
-    PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER,
-    PAGE_SIZE, HUGE_PAGE_2MB,
-    pml4Index, pdptIndex, pdIndex, ptIndex
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.arch.x86-64.paging import {
+    HUGE_PAGE_2MB,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PageTable,
+    PageTableEntry,
+    pdIndex,
+    pdptIndex,
+    pml4Index,
+    ptIndex
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Arch Paging Tests ===" )

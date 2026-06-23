@@ -20,8 +20,8 @@
 
 package main
 
-from uranite.io.console import puts
 from uranite.collection.hash-set import HashSet
+from uranite.io.console import puts
 
 
 public function main() -> I32:

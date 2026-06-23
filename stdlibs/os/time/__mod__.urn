@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/time/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/time/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,22 +23,22 @@ package uranite.os.time
 
 from uranite.os.time.clock import SystemClock
 from uranite.os.time.timer import {
-    TIMER_ONE_SHOT,
-    TIMER_PERIODIC,
-    TIMER_INACTIVE,
     TIMER_ACTIVE,
     TIMER_EXPIRED,
+    TIMER_INACTIVE,
+    TIMER_ONE_SHOT,
+    TIMER_PERIODIC,
     TimerEntry,
     TimerWheel
 }
 
 export {
     SystemClock,
-    TIMER_ONE_SHOT,
-    TIMER_PERIODIC,
-    TIMER_INACTIVE,
     TIMER_ACTIVE,
     TIMER_EXPIRED,
+    TIMER_INACTIVE,
+    TIMER_ONE_SHOT,
+    TIMER_PERIODIC,
     TimerEntry,
     TimerWheel
 }

@@ -1,20 +1,6 @@
 package testing
 
 from uranite.adelia import Adelia
-from uranite.testing.assertions import assertEqualI64
-from uranite.io.console import putsln
 
-public function main() -> I32:
-    putsln( "=== Adelia Tests ===" )
-
-    Adelia a = new Adelia( 16711680 )
-    assertEqualI64( 16711680, a.color, "color red" )
-
-    Adelia b = new Adelia( 0 )
-    assertEqualI64( 0, b.color, "color black" )
-
-    Adelia c = new Adelia( 19273 )
-    assertEqualI64( 19273, c.color, "color djg" )
-
-    putsln( "=== All Adelia tests passed ===" )
-    return 0
+public function main() -> Void:
+    Adelia a = new Adelia

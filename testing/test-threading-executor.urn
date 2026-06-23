@@ -1,19 +1,17 @@
 package testing
 
-from uranite.threading.executor import ThreadPoolExecutor, TaskSubmitter0, TaskSubmitter1
-from uranite.threading.future import FutureBase, Future, FutureState
-from uranite.threading.future import FUTURE_PENDING, FUTURE_FINISHED
-from uranite.threading.channel import ChannelInner
-from uranite.threading.thread import ThreadRuntime
-from uranite.threading.atomic import AtomicI64
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.time.clock import SystemClock
-from uranite.memory.memory import Memory
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse, assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.memory.memory import Memory
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.time.clock import SystemClock
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertGreaterThan, assertTrue
+from uranite.threading.atomic import AtomicI64
+from uranite.threading.channel import ChannelInner
+from uranite.threading.executor import TaskSubmitter0, TaskSubmitter1, ThreadPoolExecutor
+from uranite.threading.future import FUTURE_FINISHED, FUTURE_PENDING
+from uranite.threading.future import FUTURE_FINISHED, FUTURE_PENDING
+from uranite.threading.thread import ThreadRuntime
 
 function computeSquare( I64 x ) -> I64:
     return x * x

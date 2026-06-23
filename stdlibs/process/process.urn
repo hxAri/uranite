@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-29 14:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/multiprocessing/process.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/multiprocessing/process.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -23,16 +23,16 @@
 package uranite.process.process
 
 from uranite.memory.memory import Memory
-from uranite.os.task.task import Task, TaskState, BlockReason
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.memory.vmm import AddressSpace, protUser, protReadWrite
-from uranite.os.ipc.shared-memory import SharedRegion, SharedMemoryRegistry
+from uranite.os.ipc.shared-memory import SharedMemoryRegistry, SharedRegion
 from uranite.os.ipc.signal import Event
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.memory.vmm import AddressSpace, protReadWrite, protUser
+from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.sync.spinlock import Spinlock
+from uranite.os.task.task import BlockReason, Task, TaskState
 from uranite.os.time.clock import SystemClock
-from uranite.threading.atomic import AtomicI64, AtomicBoolean
-from uranite.process.errors import ProcessError, ProcessCreationError
+from uranite.process.errors import ProcessCreationError, ProcessError
+from uranite.threading.atomic import AtomicBoolean, AtomicI64
 
 const I64 DEFAULT_PROCESS_STACK_PAGES = 16
 """ Default number of pages allocated for a process stack (64 KiB at 4096 bytes per page). """
@@ -456,20 +456,34 @@ public class Process:
         
         runtime.registerTask( taskId, 0 )
     
-    public function start( self, I64 entryAddr ) -> Void:
-        
+    public function start( self, Callable<Void, <>> entry ) -> Void:
+
         """
         Start the process by setting its entry point and enqueuing it.
-        
-        Sets the instruction pointer to the provided function address,
-        passes the process ID as the first argument (rdi), transitions
-        to running state, and enqueues the backing task on the scheduler.
-        
+
+        Extracts the function address from the callable, sets the instruction
+        pointer, passes the process ID as the first argument (rdi),
+        transitions to running state, and enqueues the backing task.
+
+        Parameters:
+            entry (Callable<Void, <>>):
+                The function to execute as the process entry point.
+        """
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entry ) : clobber()
+        self.startRaw( extractedAddr )
+
+    protect function startRaw( self, I64 entryAddr ) -> Void:
+
+        """
+        Start the process from a raw function address. Internal use.
+
         Parameters:
             entryAddr (I64):
-                The address of the function to execute as the process entry point.
+                The address of the function to execute.
         """
-        
+
         self.task.setEntryPoint( entryAddr, self.task.registers.rsp )
         self.task.registers.rdi = self.processId
         self.state.store( PROCESS_STATE_RUNNING )
@@ -646,15 +660,15 @@ public class Process:
         self.crashed.destroy()
 
 export {
-    ProcessRuntime,
-    Process,
-    DEFAULT_PROCESS_STACK_PAGES,
     DEFAULT_PROCESS_PRIORITY,
+    DEFAULT_PROCESS_STACK_PAGES,
     PAGE_SIZE,
-    PROCESS_STATE_NEW,
-    PROCESS_STATE_RUNNING,
-    PROCESS_STATE_FINISHED,
     PROCESS_STATE_CRASHED,
     PROCESS_STATE_DETACHED,
+    PROCESS_STATE_FINISHED,
+    PROCESS_STATE_NEW,
+    PROCESS_STATE_RUNNING,
+    Process,
+    ProcessRuntime,
     SHARED_MEM_FLAGS_RW
 }

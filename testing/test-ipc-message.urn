@@ -1,8 +1,8 @@
 package testing
 
-from uranite.ipc.message import MessageChannel, Message
-from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
 from uranite.io.console import putsln
+from uranite.ipc.message import Message, MessageChannel
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== IPC Message Tests ===" )

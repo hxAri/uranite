@@ -1,11 +1,14 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.os.arch.x86-64.idt import {
-    IdtEntry, Idt,
-    GateType, InterruptVector, IRQ_BASE
+    GateType,
+    IRQ_BASE,
+    Idt,
+    IdtEntry,
+    InterruptVector
 }
 from uranite.testing.assertions import assertEqualI64
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== OS Arch IDT Tests ===" )

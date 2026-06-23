@@ -1,8 +1,8 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.os.sync.spinlock import Spinlock
 from uranite.testing.assertions import assertFalse
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== OS Sync Spinlock Tests ===" )

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/filesystem.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/filesystem.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,34 +22,92 @@
 
 package uranite.io.filesystem
 
-from uranite.memory.memory import Memory
+from uranite.collection.array-list import ArrayList
+from uranite.io.errors import IOError
+from uranite.io.file import File
+from uranite.io.path import join
 from uranite.io.syscall import {
-    stringToPtr, stringLen, memoryToPtr, readByteAt, writeByteAt,
-    readI32At, writeI32At, readI64At,
-    sysOpen, sysClose, sysRead, sysWrite, sysRename, sysUnlink, sysLink,
-    sysSymlink, sysReadlink, sysChmod, sysFchmod, sysChown, sysFchown,
-    sysGetcwd, sysChdir, sysStatfs, sysFlock, sysIoctl, sysPipe2, sysMkdir, sysGetdents64,
-    O_RDONLY, O_WRONLY, O_CREAT, O_EXCL, O_TRUNC, O_CLOEXEC, O_RDWR,
-    LOCK_SH, LOCK_EX, LOCK_UN, LOCK_NB,
-    TCGETS, TCSETS, TIOCGWINSZ, ECHO_FLAG, ICANON_FLAG,
-    SYS_RENAME, SYS_FLOCK, SYS_OPEN, SYS_MKDIR, SYS_GETDENTS64
+    ECHO_FLAG,
+    ICANON_FLAG,
+    LOCK_EX,
+    LOCK_NB,
+    LOCK_SH,
+    LOCK_UN,
+    O_CLOEXEC,
+    O_CREAT,
+    O_EXCL,
+    O_RDONLY,
+    O_RDWR,
+    O_TRUNC,
+    O_WRONLY,
+    SYS_FLOCK,
+    SYS_GETDENTS64,
+    SYS_MKDIR,
+    SYS_OPEN,
+    SYS_RENAME,
+    TCGETS,
+    TCSETS,
+    TIOCGWINSZ,
+    memoryToPtr,
+    readByteAt,
+    readI32At,
+    readI64At,
+    stringLen,
+    stringToPtr,
+    sysChdir,
+    sysChmod,
+    sysChown,
+    sysClose,
+    sysFchmod,
+    sysFchown,
+    sysFlock,
+    sysGetcwd,
+    sysGetdents64,
+    sysIoctl,
+    sysLink,
+    sysMkdir,
+    sysOpen,
+    sysPipe2,
+    sysRead,
+    sysReadlink,
+    sysRename,
+    sysStatfs,
+    sysSymlink,
+    sysUnlink,
+    sysWrite,
+    writeByteAt,
+    writeI32At
 }
+from uranite.memory.memory import Memory
 from uranite.os.syscall.invoke import syscall0, syscall2, syscall3
 from uranite.os.syscall.result import SyscallResult
-from uranite.os.vfs.vnode import {
-    VNodeType, VNode, VNodeCache,
-    PERM_READ, PERM_WRITE, PERM_EXECUTE,
-    PERM_OWNER_READ, PERM_OWNER_WRITE, PERM_OWNER_EXECUTE
-}
 from uranite.os.vfs.file-descriptor import {
-    FileDescriptor, FileDescriptorTable,
-    FLAG_READ, FLAG_WRITE, FLAG_APPEND, FLAG_CREATE, FLAG_TRUNCATE
+    FLAG_APPEND,
+    FLAG_CREATE,
+    FLAG_READ,
+    FLAG_TRUNCATE,
+    FLAG_WRITE,
+    FileDescriptor,
+    FileDescriptorTable
 }
-from uranite.os.vfs.mount import MountEntry, MountTable, MOUNT_READ_ONLY, MOUNT_NO_EXEC, MOUNT_NO_SUID
-from uranite.io.file import File
-from uranite.io.errors import IOError
-from uranite.collection.array-list import ArrayList
-from uranite.io.path import join
+from uranite.os.vfs.mount import {
+    MOUNT_NO_EXEC,
+    MOUNT_NO_SUID,
+    MOUNT_READ_ONLY,
+    MountEntry,
+    MountTable
+}
+from uranite.os.vfs.vnode import {
+    PERM_EXECUTE,
+    PERM_OWNER_EXECUTE,
+    PERM_OWNER_READ,
+    PERM_OWNER_WRITE,
+    PERM_READ,
+    PERM_WRITE,
+    VNode,
+    VNodeCache,
+    VNodeType
+}
 
 const I64 SYS_GETPID = 39
 
@@ -1165,39 +1223,54 @@ public function makeDirectories( String path, I64 mode ) -> Void:
             componentBuffer.free()
 
 export {
-    copy,
-    moveFile,
-    rename,
-    remove,
-    symlink,
-    hardlink,
-    readlink,
-    lockShared,
-    lockExclusive,
-    unlock,
-    tryLockExclusive,
-    Pipe,
-    getTerminalSize,
-    getTerminalRows,
-    getTerminalCols,
-    setRawMode,
-    restoreMode,
-    chmod,
-    fchmod,
-    chown,
-    fchown,
+    FLAG_APPEND,
+    FLAG_CREATE,
+    FLAG_READ,
+    FLAG_TRUNCATE,
+    FLAG_WRITE,
+    FileDescriptor,
+    FileDescriptorTable,
     FilesystemInfo,
-    statfs,
-    getcwd,
+    MOUNT_NO_EXEC,
+    MOUNT_NO_SUID,
+    MOUNT_READ_ONLY,
+    MountEntry,
+    MountTable,
+    PERM_EXECUTE,
+    PERM_OWNER_EXECUTE,
+    PERM_OWNER_READ,
+    PERM_OWNER_WRITE,
+    PERM_READ,
+    PERM_WRITE,
+    Pipe,
+    VNode,
+    VNodeCache,
+    VNodeType,
     chdir,
-    tempFile,
-    tempDir,
+    chmod,
+    chown,
+    copy,
+    fchmod,
+    fchown,
+    getTerminalCols,
+    getTerminalRows,
+    getTerminalSize,
+    getcwd,
+    hardlink,
     listDirectory,
+    lockExclusive,
+    lockShared,
     makeDirectories,
-    VNodeType, VNode, VNodeCache,
-    PERM_READ, PERM_WRITE, PERM_EXECUTE,
-    PERM_OWNER_READ, PERM_OWNER_WRITE, PERM_OWNER_EXECUTE,
-    FileDescriptor, FileDescriptorTable,
-    FLAG_READ, FLAG_WRITE, FLAG_APPEND, FLAG_CREATE, FLAG_TRUNCATE,
-    MountEntry, MountTable, MOUNT_READ_ONLY, MOUNT_NO_EXEC, MOUNT_NO_SUID
+    moveFile,
+    readlink,
+    remove,
+    rename,
+    restoreMode,
+    setRawMode,
+    statfs,
+    symlink,
+    tempDir,
+    tempFile,
+    tryLockExclusive,
+    unlock
 }

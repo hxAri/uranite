@@ -1,9 +1,9 @@
 package testing
 
-from uranite.threading.atomic import AtomicI64
-from uranite.os.sync.spinlock import Spinlock
-from uranite.testing.assertions import assertFalse, assertEqualI64
 from uranite.io.console import putsln
+from uranite.os.sync.spinlock import Spinlock
+from uranite.testing.assertions import assertEqualI64, assertFalse
+from uranite.threading.atomic import AtomicI64
 
 class SimpleOnce:
 

@@ -1,8 +1,8 @@
 package testing
 
-from uranite.crypto.cipher import AesCipher, AES_128, AES_256
-from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
+from uranite.crypto.cipher import AES_128, AES_256, AesCipher
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Crypto Cipher Tests ===" )

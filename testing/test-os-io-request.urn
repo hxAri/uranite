@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.io.request import {
-    RequestType, RequestStatus, IoRequestQueue
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.io.request import IoRequestQueue, RequestStatus, RequestType
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS IO Request Tests ===" )

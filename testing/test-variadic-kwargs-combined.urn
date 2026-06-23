@@ -1,8 +1,8 @@
 package testing
 
-from uranite.testing.assertions import assertEqualI64
 from uranite.collection.pair import Pair
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64
 
 function process( String label, I64 values[], String opts{} ) -> I64:
     I64 total = 0

@@ -1,8 +1,8 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.kernel.arch import CpuContext, DescriptorTables, PageMapper
 from uranite.testing.assertions import assertEqualI64, assertTrue
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== Kernel Arch Tests ===" )

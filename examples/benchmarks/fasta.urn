@@ -1,7 +1,7 @@
 # 
 # @author hxAri (hxari)
 # @create 2026-05-04 10:45
-# @github https://github.com/uranite-lang/uranite
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/fasta.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -20,11 +20,11 @@
 package main
 
 from uranite.io.console import puts
-from uranite.memory.memory import Memory
-from uranite.language.int import Int
 from uranite.language.double import Double
-from uranite.language.u8 import U8
+from uranite.language.int import Int
 from uranite.language.string import String
+from uranite.language.u8 import U8
+from uranite.memory.memory import Memory
 
 extern function clock() -> I64;
 extern function fwrite( Memory<U8> ptr, Int size, Int nmemb, Int stream ) -> Int;

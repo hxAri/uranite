@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-27 19:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/thread.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/thread.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,13 +22,13 @@
 package uranite.threading.thread
 
 from uranite.memory.memory import Memory
-from uranite.os.task.task import Task, TaskState, BlockReason
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.sync.spinlock import Spinlock
 from uranite.os.ipc.signal import Event
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.sync.spinlock import Spinlock
+from uranite.os.task.task import BlockReason, Task, TaskState
 from uranite.os.time.clock import SystemClock
-from uranite.threading.atomic import AtomicI64, AtomicBoolean
+from uranite.threading.atomic import AtomicBoolean, AtomicI64
 from uranite.threading.errors import ThreadError
 
 const I64 DEFAULT_STACK_PAGES = 8
@@ -609,14 +609,14 @@ public class Thread:
         self.panicked.destroy()
 
 export {
-    ThreadRuntime,
-    ThreadConfig,
-    Thread,
-    DEFAULT_STACK_PAGES,
     DEFAULT_PRIORITY,
+    DEFAULT_STACK_PAGES,
     PAGE_SIZE,
+    STATE_DETACHED,
+    STATE_FINISHED,
     STATE_NEW,
     STATE_RUNNING,
-    STATE_FINISHED,
-    STATE_DETACHED
+    Thread,
+    ThreadConfig,
+    ThreadRuntime
 }

@@ -1,7 +1,13 @@
 package uranite.coroutine.future
 
 from uranite.errors.error import Error
-from uranite.fiber.fiber import Fiber, fiberTrampoline, FIBER_TERMINATED, F_STATE, F_ERROR
+from uranite.fiber.fiber import {
+    FIBER_TERMINATED,
+    F_ERROR,
+    F_STATE,
+    Fiber,
+    fiberTrampoline
+}
 
 public class FutureError extends Error:
     
@@ -48,7 +54,41 @@ public class SimpleFuture implements Future<I64>:
     public I64 resolvedValue
     public Boolean evaluated
     
+    public function SimpleFuture( self, Callable<I64, <>> entryFn ) -> Void:
+
+        """
+        Create a future that will lazily evaluate the given callable.
+
+        Parameters:
+            entryFn (Callable<I64, <>>):
+                The callable to execute when the future is evaluated.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 extractedAddr = 0
+        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        self.fiber = new Fiber( extractedAddr )
+        self.futureState = FUTURE_PENDING
+        self.resolvedValue = 0
+        self.evaluated = False
+
     public function SimpleFuture( self, I64 entryFn ) -> Void:
+
+        """
+        Create a future from a raw function address.
+
+        Parameters:
+            entryFn (I64):
+                Raw address of the entry function.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
         self.fiber = new Fiber( entryFn )
         self.futureState = FUTURE_PENDING
         self.resolvedValue = 0
@@ -104,11 +144,11 @@ public class SimpleFuture implements Future<I64>:
         self.fiber.destroy()
 
 export {
-    Future,
-    FutureState,
-    FutureError,
-    SimpleFuture,
     FUTURE_PENDING,
+    FUTURE_REJECTED,
     FUTURE_RESOLVED,
-    FUTURE_REJECTED
+    Future,
+    FutureError,
+    FutureState,
+    SimpleFuture
 }

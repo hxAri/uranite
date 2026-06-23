@@ -205,7 +205,7 @@ public function main() -> I32:
     puts( "=== Hierarchy Test ===" )
 
     # Part 1: Basic interface
-    Name n = new Name( "Aether" )
+    Name n = new Name( "Uranite" )
     puts( "Name: ", n.toString() )
 
     # Part 2: Extended interface

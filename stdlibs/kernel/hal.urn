@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/kernel/hal.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/kernel/hal.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,12 +21,20 @@
 
 package uranite.kernel.hal
 
+from uranite.os.hal.interrupt import InterruptTable, IrqEntry, MAX_IRQ_COUNT
 from uranite.os.hal.mmio import {
-    mmioRead8, mmioWrite8, mmioRead16, mmioWrite16,
-    mmioRead32, mmioWrite32, mmioRead64, mmioWrite64,
-    memoryFence, storeFence, loadFence
+    loadFence,
+    memoryFence,
+    mmioRead16,
+    mmioRead32,
+    mmioRead64,
+    mmioRead8,
+    mmioWrite16,
+    mmioWrite32,
+    mmioWrite64,
+    mmioWrite8,
+    storeFence
 }
-from uranite.os.hal.interrupt import MAX_IRQ_COUNT, IrqEntry, InterruptTable
 
 public class HardwareAbstraction:
 
@@ -106,8 +114,18 @@ public class HardwareAbstraction:
 
 export {
     HardwareAbstraction,
-    mmioRead8, mmioWrite8, mmioRead16, mmioWrite16,
-    mmioRead32, mmioWrite32, mmioRead64, mmioWrite64,
-    memoryFence, storeFence, loadFence,
-    MAX_IRQ_COUNT, IrqEntry, InterruptTable
+    InterruptTable,
+    IrqEntry,
+    MAX_IRQ_COUNT,
+    loadFence,
+    memoryFence,
+    mmioRead16,
+    mmioRead32,
+    mmioRead64,
+    mmioRead8,
+    mmioWrite16,
+    mmioWrite32,
+    mmioWrite64,
+    mmioWrite8,
+    storeFence
 }

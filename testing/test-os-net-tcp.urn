@@ -1,13 +1,18 @@
 package testing
 
-from uranite.os.net.tcp import {
-    TCP_FIN, TCP_SYN, TCP_RST, TCP_PSH, TCP_ACK, TCP_URG,
-    TCP_HEADER_SIZE, TcpHeader, TcpConnectionTable
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.net.tcp import {
+    TCP_ACK,
+    TCP_FIN,
+    TCP_HEADER_SIZE,
+    TCP_PSH,
+    TCP_RST,
+    TCP_SYN,
+    TCP_URG,
+    TcpConnectionTable,
+    TcpHeader
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Net TCP Tests ===" )

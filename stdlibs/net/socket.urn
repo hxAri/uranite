@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/net/socket.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/socket.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,19 +22,33 @@
 
 package uranite.net.socket
 
-from uranite.os.syscall.invoke import {
-    syscall1, syscall2, syscall3, syscall4, syscall5, syscall6
-}
-from uranite.os.syscall.result import SyscallResult
-from uranite.memory.memory import Memory
+from uranite.functions.builtin import ptrToString
 from uranite.io.syscall import {
-    memoryToPtr, writeByteAt, writeI16At, writeI32At, writeI64At,
-    readByteAt, readI16At, readI32At, readI64At,
-    stringToPtr, stringLen, SYS_CLOSE
+    SYS_CLOSE,
+    memoryToPtr,
+    readByteAt,
+    readI16At,
+    readI32At,
+    readI64At,
+    stringLen,
+    stringToPtr,
+    writeByteAt,
+    writeI16At,
+    writeI32At,
+    writeI64At
 }
 from uranite.memory.allocator import alloc, dealloc
-from uranite.functions.builtin import ptrToString
-from uranite.net.errors import SocketError, ConnectionError, ConnectionRefusedError, AddressInUseError
+from uranite.memory.memory import Memory
+from uranite.net.errors import AddressInUseError, ConnectionError, ConnectionRefusedError, SocketError
+from uranite.os.syscall.invoke import {
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4,
+    syscall5,
+    syscall6
+}
+from uranite.os.syscall.result import SyscallResult
 
 const I64 SYS_SOCKET = 41
 """Linux x86_64 syscall number for socket(2)."""
@@ -222,7 +236,10 @@ public function buildSockaddrIn( I64 port, I64 addr ) -> I64:
     I64 buf = alloc( SOCKADDR_IN_SIZE )
     writeI16At( buf, 0, AF_INET )
     writeI16At( buf, 2, htons( port ) )
-    writeI32At( buf, 4, addr )
+    writeByteAt( buf, 4, ( addr >> 24 ) & 255 )
+    writeByteAt( buf, 5, ( addr >> 16 ) & 255 )
+    writeByteAt( buf, 6, ( addr >> 8 ) & 255 )
+    writeByteAt( buf, 7, addr & 255 )
     writeI64At( buf, 8, 0 )
     return buf
 
@@ -707,20 +724,58 @@ public function tcpConnect( I64 ip, I64 port ) -> I64:
     return fd
 
 export {
-    SYS_SOCKET, SYS_CONNECT, SYS_ACCEPT, SYS_SENDTO, SYS_RECVFROM,
-    SYS_BIND, SYS_LISTEN, SYS_SETSOCKOPT, SYS_SHUTDOWN, SYS_CLOSE,
-    AF_INET, AF_INET6, SOCK_STREAM, SOCK_DGRAM, SOCK_NONBLOCK,
-    IPPROTO_TCP, IPPROTO_UDP,
-    SOL_SOCKET, SO_REUSEADDR, SO_REUSEPORT, SO_KEEPALIVE,
-    SO_RCVTIMEO, SO_SNDTIMEO, TCP_NODELAY, SOL_TCP,
-    SHUT_RD, SHUT_WR, SHUT_RDWR,
-    SOCKADDR_IN_SIZE, INADDR_ANY, INADDR_LOOPBACK,
-    htons, ntohs, ipToInt, buildSockaddrIn,
-    socketCreate, socketBind, socketListen, socketAccept,
-    socketConnect, socketSend, socketRecv, socketClose,
-    socketSetOpt, socketShutdown,
-    setReuseAddr, setReusePort, setTcpNoDelay,
-    sendString, recvString,
-    createTcpSocket, createUdpSocket,
-    tcpListen, tcpConnect
+    AF_INET,
+    AF_INET6,
+    INADDR_ANY,
+    INADDR_LOOPBACK,
+    IPPROTO_TCP,
+    IPPROTO_UDP,
+    SHUT_RD,
+    SHUT_RDWR,
+    SHUT_WR,
+    SOCKADDR_IN_SIZE,
+    SOCK_DGRAM,
+    SOCK_NONBLOCK,
+    SOCK_STREAM,
+    SOL_SOCKET,
+    SOL_TCP,
+    SO_KEEPALIVE,
+    SO_RCVTIMEO,
+    SO_REUSEADDR,
+    SO_REUSEPORT,
+    SO_SNDTIMEO,
+    SYS_ACCEPT,
+    SYS_BIND,
+    SYS_CLOSE,
+    SYS_CONNECT,
+    SYS_LISTEN,
+    SYS_RECVFROM,
+    SYS_SENDTO,
+    SYS_SETSOCKOPT,
+    SYS_SHUTDOWN,
+    SYS_SOCKET,
+    TCP_NODELAY,
+    buildSockaddrIn,
+    createTcpSocket,
+    createUdpSocket,
+    htons,
+    ipToInt,
+    ntohs,
+    recvString,
+    sendString,
+    setReuseAddr,
+    setReusePort,
+    setTcpNoDelay,
+    socketAccept,
+    socketBind,
+    socketClose,
+    socketConnect,
+    socketCreate,
+    socketListen,
+    socketRecv,
+    socketSend,
+    socketSetOpt,
+    socketShutdown,
+    tcpConnect,
+    tcpListen
 }

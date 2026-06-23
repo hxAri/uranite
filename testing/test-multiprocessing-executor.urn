@@ -1,18 +1,16 @@
 package testing
 
-from uranite.process.executor import ProcessPoolExecutor, ProcessSubmitter0, ProcessSubmitter1
-from uranite.process.process-future import ProcessFutureBase, ProcessFuture, ProcessFutureState
-from uranite.process.process-future import PFUTURE_PENDING, PFUTURE_FINISHED
-from uranite.process.process import ProcessRuntime
-from uranite.os.scheduler.scheduler import Scheduler
-from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.time.clock import SystemClock
-from uranite.os.ipc.shared-memory import SharedRegion
-from uranite.memory.memory import Memory
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse, assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.memory.memory import Memory
+from uranite.os.ipc.shared-memory import SharedRegion
+from uranite.os.memory.pmm import PhysicalMemoryManager
+from uranite.os.scheduler.scheduler import Scheduler
+from uranite.os.time.clock import SystemClock
+from uranite.process.executor import ProcessPoolExecutor, ProcessSubmitter0, ProcessSubmitter1
+from uranite.process.process import ProcessRuntime
+from uranite.process.process-future import PFUTURE_FINISHED, PFUTURE_PENDING
+from uranite.process.process-future import PFUTURE_FINISHED, PFUTURE_PENDING
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertGreaterThan, assertTrue
 
 function computeSquare( I64 x ) -> I64:
     return x * x

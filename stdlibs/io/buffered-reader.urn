@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/buffered-reader.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/buffered-reader.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -22,10 +22,15 @@
 
 package uranite.io.buffered-reader
 
-from uranite.memory.memory import Memory
+from uranite.io.file import File
 from uranite.io.syscall import {
-    memoryToPtr, readByteAt, writeByteAt, sysRead, sysClose
+    memoryToPtr,
+    readByteAt,
+    sysClose,
+    sysRead,
+    writeByteAt
 }
+from uranite.memory.memory import Memory
 
 public class BufferedReader:
     
@@ -55,7 +60,59 @@ public class BufferedReader:
     protect Boolean ownsFd
     """Whether this reader owns the file descriptor and should close it on cleanup."""
     
-    public function BufferedReader( self, I64 fd, I64 bufferSize, Boolean ownsFd ) -> Void:
+    public function BufferedReader( self, File file ) -> Void:
+
+        """
+        Construct a BufferedReader wrapping a File handle with default
+        buffer size (4096 bytes). The reader does not own the file descriptor.
+
+        Parameters:
+            file (File):
+                The File to read from.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.fd = file.getFd()
+        self.bufferCapacity = 4096
+        self.rawBuffer = new Memory<I64>( 4096 )
+        self.rawAddr = memoryToPtr( self.rawBuffer )
+        self.bytesInBuffer = 0
+        self.readPosition = 0
+        self.closed = False
+        self.eof = False
+        self.ownsFd = False
+
+    public function BufferedReader( self, File file, I64 bufferSize ) -> Void:
+
+        """
+        Construct a BufferedReader wrapping a File handle with a specified
+        buffer size. The reader does not own the file descriptor.
+
+        Parameters:
+            file (File):
+                The File to read from.
+            bufferSize (I64):
+                The size in bytes of the internal read-ahead buffer.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.fd = file.getFd()
+        self.bufferCapacity = bufferSize
+        self.rawBuffer = new Memory<I64>( bufferSize )
+        self.rawAddr = memoryToPtr( self.rawBuffer )
+        self.bytesInBuffer = 0
+        self.readPosition = 0
+        self.closed = False
+        self.eof = False
+        self.ownsFd = False
+
+    protect function BufferedReader( self, I64 fd, I64 bufferSize, Boolean ownsFd ) -> Void:
         
         """
         Construct a new BufferedReader wrapping the given file descriptor.

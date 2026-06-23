@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/time/timer.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/time/timer.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -38,7 +38,7 @@ public const I64 TIMER_ACTIVE = 1
 public const I64 TIMER_EXPIRED = 2
 """ Timer state for expired one-shot. Fired and awaiting drain (slot reclaim). """
 
-public class TimerEntry:
+public struct TimerEntry:
     
     """
     Represents a single timer entry with its identifier, deadline tick, repeat interval,
@@ -292,11 +292,11 @@ public class TimerWheel:
         self.callbackIds.free()
 
 export {
-    TIMER_ONE_SHOT,
-    TIMER_PERIODIC,
-    TIMER_INACTIVE,
     TIMER_ACTIVE,
     TIMER_EXPIRED,
+    TIMER_INACTIVE,
+    TIMER_ONE_SHOT,
+    TIMER_PERIODIC,
     TimerEntry,
     TimerWheel
 }

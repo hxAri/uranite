@@ -1,8 +1,8 @@
 package testing
 
 from uranite.crypto.random import SecureRandom
-from uranite.testing.assertions import assertTrue
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertTrue
 
 public function main() -> I32:
     putsln( "=== Crypto Random Tests ===" )

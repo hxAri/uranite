@@ -40,7 +40,7 @@ namespace uranite::compiler {
 		std::set<std::string> exportedEntities;
 		std::unordered_map<std::string, ast::AccessModifier> entityAccessMap;
 		std::unordered_map<std::string, semantic::TypeSharedPointer> analyzedTypes;
-		std::unordered_map<std::string, semantic::SymbolSharedPointer> analyzedSymbols;
+		std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>> analyzedSymbols;
 		enum class State { Parsed, Analyzing, Analyzed };
 		State state = State::Parsed;
 	};
@@ -131,10 +131,22 @@ namespace uranite::compiler {
 			mutable bool modulesDirectoryCached_ = false;
 			
 			std::unordered_map<std::string, ModuleInfo> modules;
-			
+
+			std::unordered_map<std::string, semantic::TypeSharedPointer> accumulatedModuleTypes_;
+			std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>> accumulatedModuleSymbols_;
+
+			/** @brief Maps include paths to their root package name from __mod__.urn. */
+			std::unordered_map<std::string, std::string> includePathPackagePrefix_;
+
+			/** @brief Whether include path package prefixes have been resolved. */
+			bool includePathPrefixesCached_ = false;
+
+			/** @brief Resolves and caches package prefixes for all include paths. */
+			void resolveIncludePathPrefixes();
+
 			/** @brief Local copy of the configuration settings for the current driver session. */
 			Options options;
-			
+
 			/** @brief The primary source content file being compiled. */
 			std::string source;
 		

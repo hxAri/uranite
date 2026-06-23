@@ -65,7 +65,7 @@ namespace uranite::formatter::linter {
 	
 	/**
 	 * @struct LintRuleConfig
-	 * @brief Aggregates the absolute parameter controls and rule switches that calibrate Aether's Linter subsystem.
+	 * @brief Aggregates the absolute parameter controls and rule switches that calibrate Uranite's Linter subsystem.
 	 * * This configuration structure manages thresholds for function lengths, nesting depths, identifier constraints, 
 	 * and structural doccomment documentation rules.
 	 */

@@ -1,14 +1,17 @@
 package testing
 
 from uranite.functions.runtime import {
-    uranitePipeCreate, uranitePipeWrite, uranitePipeRead,
-    uranitePipeCloseRead, uranitePipeCloseWrite, uranitePipeDestroy,
-    uranitePipeReadFd, uranitePipeWriteFd
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertGreaterThan
+    uranitePipeCloseRead,
+    uranitePipeCloseWrite,
+    uranitePipeCreate,
+    uranitePipeDestroy,
+    uranitePipeRead,
+    uranitePipeReadFd,
+    uranitePipeWrite,
+    uranitePipeWriteFd
 }
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== Processing Pipe Tests ===" )

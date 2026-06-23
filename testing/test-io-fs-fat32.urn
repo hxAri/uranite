@@ -1,7 +1,7 @@
 package testing
 
-from uranite.io.fs.fat32 import Fat32Info, Fat32DirEntry, Fat32FileSystem
 from uranite.io.console import putsln
+from uranite.io.fs.fat32 import Fat32DirEntry, Fat32FileSystem, Fat32Info
 
 public function main() -> I32:
     putsln( "=== IO FS FAT32 Tests ===" )

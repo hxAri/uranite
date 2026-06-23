@@ -1,8 +1,8 @@
 package testing
 
-from uranite.logging.kernel-handler import KernelLogHandler
-from uranite.testing.assertions import assertEqualI64, assertTrue, assertFalse
 from uranite.io.console import putsln
+from uranite.logging.kernel-handler import KernelLogHandler
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== Logging Kernel Handler Tests ===" )

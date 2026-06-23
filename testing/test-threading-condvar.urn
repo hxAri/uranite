@@ -1,11 +1,8 @@
 package testing
 
-from uranite.functions.runtime import {
-    uraniteCondVarCreate, uraniteCondVarSignal,
-    uraniteCondVarBroadcast, uraniteCondVarDestroy
-}
-from uranite.testing.assertions import assertGreaterThan
+from uranite.functions.runtime import uraniteCondVarBroadcast, uraniteCondVarCreate, uraniteCondVarDestroy, uraniteCondVarSignal
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== Threading CondVar Tests ===" )

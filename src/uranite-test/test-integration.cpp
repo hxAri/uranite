@@ -27,7 +27,7 @@
 
 /**
  * @class IntegrationTest
- * @brief Test fixture for end-to-end integration testing of the Aether compiler.
+ * @brief Test fixture for end-to-end integration testing of the Uranite compiler.
  * * This fixture manages the lifecycle of compilation testing by creating an isolated 
  * temporary directory, executing the compiler binary via shell commands, capturing standard 
  * outputs/errors, and ensuring proper sandbox cleanup after each test case.

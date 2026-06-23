@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.ipc.shared-memory import {
-    SharedRegion, SharedMemoryRegistry
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.ipc.shared-memory import SharedMemoryRegistry, SharedRegion
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS IPC SharedMemory Tests ===" )

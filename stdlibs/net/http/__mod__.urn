@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/net/http/__mod__.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/http/__mod__.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -18,17 +18,35 @@
 
 package uranite.net.http
 
+from uranite.net.http.client import {
+    del,
+    get,
+    head,
+    options,
+    patch,
+    post,
+    put,
+    sendRequest
+}
+from uranite.net.http.errors import HttpConnectionError, HttpError, HttpParseError, HttpTimeoutError
+from uranite.net.http.parser import parseResponse
 from uranite.net.http.request import HttpRequest
 from uranite.net.http.response import HttpResponse
-from uranite.net.http.client import {
-    sendRequest, get, post, put, del, patch, head, options
-}
-from uranite.net.http.parser import parseResponse
-from uranite.net.http.errors import HttpError, HttpTimeoutError, HttpConnectionError, HttpParseError
 
 export {
-    HttpRequest, HttpResponse,
-    sendRequest, get, post, put, del, patch, head, options,
+    HttpConnectionError,
+    HttpError,
+    HttpParseError,
+    HttpRequest,
+    HttpResponse,
+    HttpTimeoutError,
+    del,
+    get,
+    head,
+    options,
     parseResponse,
-    HttpError, HttpTimeoutError, HttpConnectionError, HttpParseError
+    patch,
+    post,
+    put,
+    sendRequest
 }

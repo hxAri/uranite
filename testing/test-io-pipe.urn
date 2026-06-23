@@ -1,12 +1,9 @@
 package testing
 
-from uranite.memory.memory import Memory
-from uranite.io.filesystem import Pipe
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertGreaterThan
-}
 from uranite.io.console import putsln
+from uranite.io.filesystem import Pipe
+from uranite.memory.memory import Memory
+from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
     putsln( "=== IO Pipe Tests ===" )

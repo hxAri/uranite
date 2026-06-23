@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/net/tcp.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/net/tcp.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -411,14 +411,14 @@ public class TcpConnectionTable:
         self.windows.free()
 
 export {
-    TCP_FIN,
-    TCP_SYN,
-    TCP_RST,
-    TCP_PSH,
     TCP_ACK,
-    TCP_URG,
-    TcpState,
+    TCP_FIN,
     TCP_HEADER_SIZE,
+    TCP_PSH,
+    TCP_RST,
+    TCP_SYN,
+    TCP_URG,
+    TcpConnectionTable,
     TcpHeader,
-    TcpConnectionTable
+    TcpState
 }

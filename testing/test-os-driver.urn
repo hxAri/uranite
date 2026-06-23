@@ -1,12 +1,8 @@
 package testing
 
-from uranite.os.driver.driver import {
-    DriverState, DriverDescriptor, DriverRegistry
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.driver.driver import DriverDescriptor, DriverRegistry, DriverState
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Driver Tests ===" )

@@ -1,15 +1,20 @@
 package testing
 
-from uranite.os.net.socket import {
-    SOCKET_STREAM, SOCKET_DATAGRAM, SOCKET_RAW,
-    SOCKET_UNBOUND, SOCKET_BOUND, SOCKET_LISTENING,
-    SOCKET_CONNECTED, SOCKET_CLOSED,
-    AF_INET, AF_INET6, SocketTable
-}
-from uranite.testing.assertions import {
-    assertEqualI64, assertTrue, assertFalse
-}
 from uranite.io.console import putsln
+from uranite.os.net.socket import {
+    AF_INET,
+    AF_INET6,
+    SOCKET_BOUND,
+    SOCKET_CLOSED,
+    SOCKET_CONNECTED,
+    SOCKET_DATAGRAM,
+    SOCKET_LISTENING,
+    SOCKET_RAW,
+    SOCKET_STREAM,
+    SOCKET_UNBOUND,
+    SocketTable
+}
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== OS Net Socket Tests ===" )

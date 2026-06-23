@@ -1,13 +1,10 @@
 package testing
 
-from uranite.memory.memory import Memory
+from uranite.io.console import putsln
 from uranite.io.string-reader import StringReader
 from uranite.io.string-writer import StringWriter
-from uranite.testing.assertions import {
-    assertEqualStr,
-    assertEqualI64
-}
-from uranite.io.console import putsln
+from uranite.memory.memory import Memory
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
 
 public function main() -> I32:
     putsln( "=== IO String Stream Tests ===" )

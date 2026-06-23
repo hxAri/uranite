@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-11 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/crypto/random.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/crypto/random.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,8 +21,17 @@
 
 package uranite.crypto.random
 
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import {
+    readByteAt,
+    stringToPtr,
+    sysClose,
+    sysOpen,
+    sysRead,
+    writeByteAt
+}
+from uranite.memory.allocator import alloc, dealloc
 from uranite.os.crypto.rng import Csprng
-from uranite.io.syscall import writeByteAt
 
 public class SecureRandom:
 
@@ -133,8 +142,313 @@ public function randomBytes( I64 bufferAddress, I64 byteCount ) -> Void:
             tailValue = tailValue >> 8
             writeOffset = writeOffset + 1
 
+const I64 O_RDONLY = 0
+"""Read-only flag for open syscall."""
+
+public class DevRandom:
+
+    """
+    Reads from /dev/random, the blocking true-entropy device. On modern
+    Linux kernels (5.6+), /dev/random blocks only until the entropy pool
+    is initialized, then behaves like /dev/urandom. On older kernels it
+    may block when the entropy pool is depleted.
+
+    Use for key generation, seeding, and scenarios requiring maximum
+    entropy guarantees.
+    """
+
+    protect I64 fileDescriptor
+
+    public function DevRandom( self ) -> Void:
+
+        """
+        Open /dev/random for reading.
+
+        Raises:
+            Error:
+                If /dev/random cannot be opened.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 pathAddress = stringToPtr( "/dev/random" )
+        self.fileDescriptor = sysOpen( pathAddress, O_RDONLY, 0 )
+
+    public function readBytes( self, I64 byteCount ) -> I64:
+
+        """
+        Read exactly byteCount bytes of entropy and return the buffer address.
+        Caller owns the returned memory and must deallocate it.
+
+        Parameters:
+            byteCount (I64):
+                Number of random bytes to read.
+
+        Returns:
+            I64:
+                Address of allocated buffer containing random bytes.
+
+        Complexity:
+            Time: O(n) where n is byteCount
+            Space: O(n)
+        """
+
+        I64 bufferAddress = alloc( byteCount )
+        I64 totalRead = 0
+        while totalRead < byteCount:
+            I64 bytesRead = sysRead( self.fileDescriptor, bufferAddress + totalRead, byteCount - totalRead )
+            if bytesRead <= 0:
+                totalRead = byteCount
+            else:
+                totalRead = totalRead + bytesRead
+        return bufferAddress
+
+    public function readI64( self ) -> I64:
+
+        """
+        Read 8 bytes of entropy and return as a single I64 value.
+
+        Returns:
+            I64:
+                A random 64-bit integer from /dev/random.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 bufferAddress = alloc( 8 )
+        I64 totalRead = 0
+        while totalRead < 8:
+            I64 bytesRead = sysRead( self.fileDescriptor, bufferAddress + totalRead, 8 - totalRead )
+            if bytesRead <= 0:
+                totalRead = 8
+            else:
+                totalRead = totalRead + bytesRead
+        I64 result = readByteAt( bufferAddress, 0 )
+        result = result | ( readByteAt( bufferAddress, 1 ) << 8 )
+        result = result | ( readByteAt( bufferAddress, 2 ) << 16 )
+        result = result | ( readByteAt( bufferAddress, 3 ) << 24 )
+        result = result | ( readByteAt( bufferAddress, 4 ) << 32 )
+        result = result | ( readByteAt( bufferAddress, 5 ) << 40 )
+        result = result | ( readByteAt( bufferAddress, 6 ) << 48 )
+        result = result | ( readByteAt( bufferAddress, 7 ) << 56 )
+        dealloc( bufferAddress )
+        return result
+
+    public function fillBuffer( self, I64 destinationAddress, I64 byteCount ) -> Void:
+
+        """
+        Read exactly byteCount bytes into the provided buffer.
+
+        Parameters:
+            destinationAddress (I64):
+                Address of the buffer to fill.
+            byteCount (I64):
+                Number of random bytes to write.
+
+        Complexity:
+            Time: O(n) where n is byteCount
+            Space: O(1)
+        """
+
+        I64 totalRead = 0
+        while totalRead < byteCount:
+            I64 bytesRead = sysRead( self.fileDescriptor, destinationAddress + totalRead, byteCount - totalRead )
+            if bytesRead <= 0:
+                totalRead = byteCount
+            else:
+                totalRead = totalRead + bytesRead
+
+    public function close( self ) -> Void:
+
+        """
+        Close the /dev/random file descriptor.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        sysClose( self.fileDescriptor )
+
+public class DevUrandom:
+
+    """
+    Reads from /dev/urandom, the non-blocking CSPRNG device. Never blocks
+    after the kernel entropy pool is initialized (which happens very early
+    in boot). Suitable for most cryptographic use cases including session
+    tokens, nonces, and general random data.
+    """
+
+    protect I64 fileDescriptor
+
+    public function DevUrandom( self ) -> Void:
+
+        """
+        Open /dev/urandom for reading.
+
+        Raises:
+            Error:
+                If /dev/urandom cannot be opened.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 pathAddress = stringToPtr( "/dev/urandom" )
+        self.fileDescriptor = sysOpen( pathAddress, O_RDONLY, 0 )
+
+    public function readBytes( self, I64 byteCount ) -> I64:
+
+        """
+        Read exactly byteCount bytes of random data and return the buffer
+        address. Caller owns the returned memory and must deallocate it.
+
+        Parameters:
+            byteCount (I64):
+                Number of random bytes to read.
+
+        Returns:
+            I64:
+                Address of allocated buffer containing random bytes.
+
+        Complexity:
+            Time: O(n) where n is byteCount
+            Space: O(n)
+        """
+
+        I64 bufferAddress = alloc( byteCount )
+        I64 totalRead = 0
+        while totalRead < byteCount:
+            I64 bytesRead = sysRead( self.fileDescriptor, bufferAddress + totalRead, byteCount - totalRead )
+            if bytesRead <= 0:
+                totalRead = byteCount
+            else:
+                totalRead = totalRead + bytesRead
+        return bufferAddress
+
+    public function readI64( self ) -> I64:
+
+        """
+        Read 8 bytes of random data and return as a single I64 value.
+
+        Returns:
+            I64:
+                A random 64-bit integer from /dev/urandom.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 bufferAddress = alloc( 8 )
+        I64 totalRead = 0
+        while totalRead < 8:
+            I64 bytesRead = sysRead( self.fileDescriptor, bufferAddress + totalRead, 8 - totalRead )
+            if bytesRead <= 0:
+                totalRead = 8
+            else:
+                totalRead = totalRead + bytesRead
+        I64 result = readByteAt( bufferAddress, 0 )
+        result = result | ( readByteAt( bufferAddress, 1 ) << 8 )
+        result = result | ( readByteAt( bufferAddress, 2 ) << 16 )
+        result = result | ( readByteAt( bufferAddress, 3 ) << 24 )
+        result = result | ( readByteAt( bufferAddress, 4 ) << 32 )
+        result = result | ( readByteAt( bufferAddress, 5 ) << 40 )
+        result = result | ( readByteAt( bufferAddress, 6 ) << 48 )
+        result = result | ( readByteAt( bufferAddress, 7 ) << 56 )
+        dealloc( bufferAddress )
+        return result
+
+    public function fillBuffer( self, I64 destinationAddress, I64 byteCount ) -> Void:
+
+        """
+        Read exactly byteCount bytes into the provided buffer.
+
+        Parameters:
+            destinationAddress (I64):
+                Address of the buffer to fill.
+            byteCount (I64):
+                Number of random bytes to write.
+
+        Complexity:
+            Time: O(n) where n is byteCount
+            Space: O(1)
+        """
+
+        I64 totalRead = 0
+        while totalRead < byteCount:
+            I64 bytesRead = sysRead( self.fileDescriptor, destinationAddress + totalRead, byteCount - totalRead )
+            if bytesRead <= 0:
+                totalRead = byteCount
+            else:
+                totalRead = totalRead + bytesRead
+
+    public function close( self ) -> Void:
+
+        """
+        Close the /dev/urandom file descriptor.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        sysClose( self.fileDescriptor )
+
+public function randomHexString( I64 byteCount ) -> String:
+
+    """
+    Generate a cryptographically secure random hex string using hardware
+    CSPRNG. Returns a lowercase hexadecimal string of length byteCount * 2.
+
+    Parameters:
+        byteCount (I64):
+            Number of random bytes (output string is 2x this length).
+
+    Returns:
+        String:
+            Lowercase hex string of random data.
+
+    Complexity:
+        Time: O(n) where n is byteCount
+        Space: O(n)
+    """
+
+    I64 bufferAddress = alloc( byteCount )
+    randomBytes( bufferAddress, byteCount )
+    I64 hexLength = byteCount * 2
+    I64 hexBuffer = alloc( hexLength + 1 )
+    I64 byteIndex = 0
+    while byteIndex < byteCount:
+        I64 byteValue = readByteAt( bufferAddress, byteIndex )
+        if byteValue < 0:
+            byteValue = byteValue + 256
+        I64 highNibble = byteValue / 16
+        I64 lowNibble = byteValue % 16
+        I64 hexOffset = byteIndex * 2
+        if highNibble < 10:
+            writeByteAt( hexBuffer, hexOffset, 48 + highNibble )
+        else:
+            writeByteAt( hexBuffer, hexOffset, 87 + highNibble )
+        if lowNibble < 10:
+            writeByteAt( hexBuffer, hexOffset + 1, 48 + lowNibble )
+        else:
+            writeByteAt( hexBuffer, hexOffset + 1, 87 + lowNibble )
+        byteIndex = byteIndex + 1
+    writeByteAt( hexBuffer, hexLength, 0 )
+    dealloc( bufferAddress )
+    return ptrToString( hexBuffer )
+
 export {
-    SecureRandom,
     Csprng,
-    randomBytes
+    DevRandom,
+    DevUrandom,
+    SecureRandom,
+    randomBytes,
+    randomHexString
 }

@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/os/vfs/vnode.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/vfs/vnode.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -336,13 +336,13 @@ public class VNodeCache:
         self.pointers.free()
 
 export {
-    VNodeType,
-    VNode,
-    VNodeCache,
-    PERM_READ,
-    PERM_WRITE,
     PERM_EXECUTE,
+    PERM_OWNER_EXECUTE,
     PERM_OWNER_READ,
     PERM_OWNER_WRITE,
-    PERM_OWNER_EXECUTE
+    PERM_READ,
+    PERM_WRITE,
+    VNode,
+    VNodeCache,
+    VNodeType
 }

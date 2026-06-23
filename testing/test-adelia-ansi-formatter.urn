@@ -1,8 +1,8 @@
 package testing
 
 from uranite.adelia.ansi-formatter import AnsiFormatter
-from uranite.testing.assertions import assertTrue, assertEqualStr
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualStr, assertTrue
 
 public function main() -> I32:
     putsln( "=== Adelia AnsiFormatter Tests ===" )

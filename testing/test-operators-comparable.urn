@@ -1,12 +1,8 @@
 package testing
 
-from uranite.operators.comparable import Comparable
-from uranite.testing.assertions import {
-    assertEqualI64,
-    assertTrue,
-    assertFalse
-}
 from uranite.io.console import putsln
+from uranite.operators.comparable import Comparable
+from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public class Score implements Comparable<Score>:
     public Int value

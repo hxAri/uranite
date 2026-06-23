@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-28 20:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/threading/future.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/threading/future.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -27,7 +27,7 @@ from uranite.os.ipc.signal import Event
 from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.task.task import BlockReason
 from uranite.threading.atomic import AtomicI64
-from uranite.threading.errors import ThreadError, ThreadCancellationError
+from uranite.threading.errors import ThreadCancellationError, ThreadError
 
 const I64 FUTURE_PENDING = 0
 """State value indicating the future has not yet started execution."""
@@ -421,12 +421,12 @@ public class Future<R>:
         self.base.destroy()
 
 export {
-    FutureState,
-    FutureBase,
-    Future,
+    FUTURE_CANCELLED,
+    FUTURE_ERROR,
+    FUTURE_FINISHED,
     FUTURE_PENDING,
     FUTURE_RUNNING,
-    FUTURE_FINISHED,
-    FUTURE_CANCELLED,
-    FUTURE_ERROR
+    Future,
+    FutureBase,
+    FutureState
 }

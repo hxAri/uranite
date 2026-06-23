@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-05 18:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/web/static-files.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/web/static-files.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,9 +21,18 @@
 
 package uranite.web.static-files
 
-from uranite.io.syscall import { sysOpen, sysRead, sysClose, stringToPtr, stringLen, readByteAt, writeByteAt, O_RDONLY }
+from uranite.functions.builtin import endsWith, ptrToString
+from uranite.io.syscall import {
+    O_RDONLY,
+    readByteAt,
+    stringLen,
+    stringToPtr,
+    sysClose,
+    sysOpen,
+    sysRead,
+    writeByteAt
+}
 from uranite.memory.allocator import alloc
-from uranite.functions.builtin import ptrToString, endsWith
 from uranite.web.request import HttpRequest
 from uranite.web.response import HttpResponse
 

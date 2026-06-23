@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-06-20 06:00
-# @update 2026-06-20 06:00
-# @github https://github.com/uranite-lang/uranite/stdlibs/net/tls.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/net/tls.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -31,18 +31,19 @@
 
 package uranite.net.tls
 
-from uranite.memory.allocator import alloc, dealloc
-from uranite.io.syscall import readByteAt, writeByteAt, writeI32At, readI32At
-from uranite.encoding.binary import {
-    writeI16Be, readI16Be, copyBytes
-}
-from uranite.net.socket import socketSend, socketRecv, socketClose
-from uranite.crypto.sha256 import sha256, Sha256
 from uranite.crypto.hmac import hmacSha256
 from uranite.crypto.random import randomBytes
-from uranite.crypto.rsa import RsaPublicKey, rsaPublicKeyFromDer, rsaEncryptPkcs1v15
-from uranite.encoding.der import DerElement, derParseElement, derParseSequence, derIterateSequence
+from uranite.crypto.rsa import RsaPublicKey, rsaEncryptPkcs1v15, rsaPublicKeyFromDer
+from uranite.crypto.sha256 import Sha256, sha256
+from uranite.encoding.binary import copyBytes, readI16Be, writeI16Be
+from uranite.encoding.der import DerElement, derIterateSequence, derParseElement, derParseSequence
 from uranite.encoding.pem import PemBlock, pemDecode
+from uranite.functions.builtin import ptrToString
+from uranite.io.syscall import stringLen, stringToPtr
+from uranite.io.syscall import stringLen, stringToPtr
+from uranite.memory.allocator import alloc, dealloc
+from uranite.net.socket import socketClose, socketRecv, socketSend
+from uranite.net.tcp import TcpSocket
 
 # ──────────────────────────────────────────────────────────────
 # TLS Constants
@@ -1471,12 +1472,39 @@ public class TlsSocket:
     protect I64 serverSequenceNumber
     protect Boolean handshakeComplete
 
-    public function TlsSocket( self, I64 socketFd ) -> Void:
+    public function TlsSocket( self, TcpSocket socket ) -> Void:
 
         """
-        Create a TLS socket over an existing connected TCP file descriptor.
+        Create a TLS socket wrapping an already-connected TcpSocket.
         Does NOT perform the handshake — call performHandshake() after
         construction.
+
+        Parameters:
+            socket (TcpSocket):
+                A connected TcpSocket instance. The TlsSocket takes
+                ownership of the underlying file descriptor.
+
+        Complexity:
+            Time: O(1)
+            Space: O(AES key schedule + S-box + IVs)
+        """
+
+        self.socketFd = socket.fileDescriptor
+        self.clientExpandedKeyAddress = alloc( 176 )
+        self.serverExpandedKeyAddress = alloc( 176 )
+        self.sboxAddress = buildAesSbox()
+        self.clientIvAddress = alloc( 4 )
+        self.serverIvAddress = alloc( 4 )
+        self.masterSecretAddress = alloc( TLS_MASTER_SECRET_SIZE )
+        self.clientSequenceNumber = 0
+        self.serverSequenceNumber = 0
+        self.handshakeComplete = False
+
+    protect function TlsSocket( self, I64 socketFd ) -> Void:
+
+        """
+        Create a TLS socket over a raw file descriptor. Internal use only —
+        prefer the TcpSocket-accepting constructor for public API.
 
         Parameters:
             socketFd (I64):
@@ -1654,11 +1682,63 @@ public class TlsSocket:
 
         return 0
 
-    public function send( self, I64 dataAddress, I64 dataLength ) -> I64:
+    public function send( self, String data ) -> I64:
 
         """
-        Send application data over the encrypted TLS connection.
-        Fragments into TLS_MAX_RECORD_SIZE chunks if needed.
+        Send a string over the encrypted TLS connection. The string is
+        automatically converted to bytes and fragmented into TLS records
+        if needed.
+
+        Parameters:
+            data (String):
+                The data to send.
+
+        Returns:
+            I64:
+                Total bytes of plaintext sent, or -1 if not connected.
+
+        Complexity:
+            Time: O(n) where n is string length
+            Space: O(min(n, TLS_MAX_RECORD_SIZE))
+        """
+
+        I64 dataAddress = stringToPtr( data )
+        I64 dataLength = stringLen( data )
+        return self.sendRaw( dataAddress, dataLength )
+
+    public function receive( self, I64 maxLength ) -> String:
+
+        """
+        Receive and decrypt application data from the TLS connection,
+        returning the result as a String.
+
+        Parameters:
+            maxLength (I64):
+                Maximum number of bytes to receive.
+
+        Returns:
+            String:
+                Decrypted data as a string, or empty string on
+                connection close or error.
+
+        Complexity:
+            Time: O(received data length)
+            Space: O(maxLength)
+        """
+
+        I64 outputBuffer = alloc( maxLength + 1 )
+        I64 bytesReceived = self.receiveRaw( outputBuffer, maxLength )
+        if bytesReceived <= 0:
+            writeByteAt( outputBuffer, 0, 0 )
+            return ptrToString( outputBuffer )
+        writeByteAt( outputBuffer, bytesReceived, 0 )
+        return ptrToString( outputBuffer )
+
+    public function sendRaw( self, I64 dataAddress, I64 dataLength ) -> I64:
+
+        """
+        Send raw bytes over the encrypted TLS connection. Use send(String)
+        for ergonomic API; this method is for callers needing byte-level control.
 
         Parameters:
             dataAddress (I64):
@@ -1690,10 +1770,12 @@ public class TlsSocket:
 
         return sentTotal
 
-    public function receive( self, I64 outputAddress, I64 outputCapacity ) -> I64:
+    public function receiveRaw( self, I64 outputAddress, I64 outputCapacity ) -> I64:
 
         """
-        Receive and decrypt application data from the TLS connection.
+        Receive and decrypt raw bytes from the TLS connection. Use
+        receive(I64) for ergonomic API; this method is for callers
+        needing byte-level control.
 
         Parameters:
             outputAddress (I64):
@@ -1822,8 +1904,11 @@ public class TlsSocket:
         return self.socketFd
 
 export {
-    TlsSocket,
-    TLS_VERSION_10, TLS_VERSION_12,
-    CONTENT_TYPE_CHANGE_CIPHER_SPEC, CONTENT_TYPE_ALERT,
-    CONTENT_TYPE_HANDSHAKE, CONTENT_TYPE_APPLICATION_DATA
+    CONTENT_TYPE_ALERT,
+    CONTENT_TYPE_APPLICATION_DATA,
+    CONTENT_TYPE_CHANGE_CIPHER_SPEC,
+    CONTENT_TYPE_HANDSHAKE,
+    TLS_VERSION_10,
+    TLS_VERSION_12,
+    TlsSocket
 }

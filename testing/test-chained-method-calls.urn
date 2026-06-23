@@ -1,7 +1,7 @@
 package testing
 
-from uranite.testing.assertions import assertEqualI64
 from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64
 
 public class Builder:
     public I64 value
