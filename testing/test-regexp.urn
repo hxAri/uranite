@@ -1,12 +1,9 @@
 package testing
 
-from uranite.regexp.regexp import RegExp
-from uranite.regexp.match import Match
-from uranite.testing.assertions import {
-    assertTrue, assertFalse,
-    assertEqualStr, assertEqualI64
-}
 from uranite.io.console import putsln
+from uranite.regexp.match import Match
+from uranite.regexp.regexp import RegExp
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "=== RegExp Tests ===" )
