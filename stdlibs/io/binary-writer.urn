@@ -1,8 +1,8 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 12:00
-# @update 2026-06-17 20:03
-# @github https://github.com/uranite-lang/uranite/stdlibs/io/binary-writer.urn
+# @update 2026-06-21 01:44
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/binary-writer.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
@@ -21,10 +21,15 @@
 
 package uranite.io.binary-writer
 
-from uranite.memory.memory import Memory
+from uranite.io.file import File
 from uranite.io.syscall import {
-    memoryToPtr, writeByteAt, sysWrite, sysClose, sysFsync
+    memoryToPtr,
+    sysClose,
+    sysFsync,
+    sysWrite,
+    writeByteAt
 }
+from uranite.memory.memory import Memory
 
 public class BinaryWriter:
     
@@ -45,7 +50,28 @@ public class BinaryWriter:
     protect Boolean ownsFd
     """Whether this writer owns the file descriptor and should close it on cleanup."""
     
-    public function BinaryWriter( self, I64 fd, Boolean ownsFd ) -> Void:
+    public function BinaryWriter( self, File file ) -> Void:
+
+        """
+        Construct a BinaryWriter wrapping a File handle. The writer does not
+        own the file descriptor — the File handle retains ownership.
+
+        Parameters:
+            file (File):
+                The File to write binary data to.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.fd = file.getFd()
+        self.tmpBuf = new Memory<I64>( 1 )
+        self.tmpAddr = memoryToPtr( self.tmpBuf )
+        self.closed = False
+        self.ownsFd = False
+
+    protect function BinaryWriter( self, I64 fd, Boolean ownsFd ) -> Void:
         
         """
         Construct a new BinaryWriter wrapping the given file descriptor.
