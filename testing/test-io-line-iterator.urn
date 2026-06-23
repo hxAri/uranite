@@ -1,9 +1,9 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.io.file import writeFileString
 from uranite.io.line-iterator import LineIterator
 from uranite.testing.assertions import assertEqualI64, assertEqualStr
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== IO Line Iterator Tests ===" )
