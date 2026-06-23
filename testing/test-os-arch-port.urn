@@ -1,10 +1,16 @@
 package testing
 
+from uranite.io.console import putsln
 from uranite.os.arch.x86-64.port import {
-    outb, inb, outw, inw, outl, inl, ioWait
+    inb,
+    inl,
+    inw,
+    ioWait,
+    outb,
+    outl,
+    outw
 }
 from uranite.testing.assertions import assertEqualI64
-from uranite.io.console import putsln
 
 public function main() -> I32:
     putsln( "=== OS Arch Port Tests ===" )
