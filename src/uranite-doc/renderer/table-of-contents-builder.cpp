@@ -126,8 +126,8 @@ namespace uranite::doc {
 				relativePath = canonicalSourcePath;
 			}
 		}
-		if( relativePath.size() >= 3 && relativePath.substr( relativePath.size() - 3 ) == ".urn" ) {
-			relativePath = relativePath.substr( 0, relativePath.size() - 3 );
+		if( relativePath.size() >= 4 && relativePath.substr( relativePath.size() - 4 ) == ".urn" ) {
+			relativePath = relativePath.substr( 0, relativePath.size() - 4 );
 		}
 		std::string stem = relativePath;
 		size_t lastSlashInResult = stem.rfind( '/' );
