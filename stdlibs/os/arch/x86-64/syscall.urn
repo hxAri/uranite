@@ -1,0 +1,195 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-25 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/syscall.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# x86-64 Linux syscall layer: raw syscall0..6 invocation via the `syscall`
+# instruction, syscall numbers, and operation wrappers for filesystem calls.
+# Selected automatically via the compiler's "native" arch token
+# (uranite.os.arch.native.syscall). The aarch64 variant mirrors this API,
+# translating legacy calls (open, stat, ...) to their *at equivalents.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.x86-64.syscall
+
+from uranite.os.syscall.result import SyscallResult
+
+# --- Raw syscall invocation: number in RAX, args in RDI/RSI/RDX/R10/R8/R9 ---
+
+public function syscall0( I64 number ) -> SyscallResult:
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall1( I64 number, I64 arg1 ) -> SyscallResult:
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall2( I64 number, I64 arg1, I64 arg2 ) -> SyscallResult:
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall3( I64 number, I64 arg1, I64 arg2, I64 arg3 ) -> SyscallResult:
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall4( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4 ) -> SyscallResult:
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3, "{r10}" arg4 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall5( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4, I64 arg5 ) -> SyscallResult:
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3, "{r10}" arg4, "{r8}" arg5 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+public function syscall6( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4, I64 arg5, I64 arg6 ) -> SyscallResult:
+    I64 result = 0
+    asm "syscall" : output( "={rax}" result ) : input( "{rax}" number, "{rdi}" arg1, "{rsi}" arg2, "{rdx}" arg3, "{r10}" arg4, "{r8}" arg5, "{r9}" arg6 ) : clobber( "rcx", "r11", "memory" )
+    return new SyscallResult( result )
+
+# --- Arity-stable syscall numbers (shared wrapper shape across architectures) ---
+
+const I64 SYS_READ = 0
+const I64 SYS_WRITE = 1
+const I64 SYS_MMAP = 9
+const I64 SYS_MUNMAP = 11
+const I64 SYS_CLOSE = 3
+const I64 SYS_LSEEK = 8
+const I64 SYS_FSTAT = 5
+const I64 SYS_FTRUNCATE = 77
+const I64 SYS_FSYNC = 74
+const I64 SYS_FCHMOD = 91
+const I64 SYS_FCHOWN = 93
+const I64 SYS_GETCWD = 79
+const I64 SYS_CHDIR = 80
+const I64 SYS_GETDENTS64 = 217
+const I64 SYS_STATFS = 137
+const I64 SYS_FLOCK = 73
+const I64 SYS_IOCTL = 16
+const I64 SYS_PIPE2 = 293
+
+# --- Legacy syscall numbers (still present on x86-64) ---
+
+const I64 SYS_OPEN = 2
+const I64 SYS_STAT = 4
+const I64 SYS_LSTAT = 6
+const I64 SYS_ACCESS = 21
+const I64 SYS_MKDIR = 83
+const I64 SYS_RMDIR = 84
+const I64 SYS_LINK = 86
+const I64 SYS_UNLINK = 87
+const I64 SYS_SYMLINK = 88
+const I64 SYS_READLINK = 89
+const I64 SYS_CHMOD = 90
+const I64 SYS_CHOWN = 92
+const I64 SYS_RENAME = 82
+
+# --- Operation wrappers for calls whose signature differs on aarch64 ---
+
+public function scOpen( I64 pathPtr, I64 flags, I64 mode ) -> SyscallResult:
+    return syscall3( SYS_OPEN, pathPtr, flags, mode )
+
+public function scStat( I64 pathPtr, I64 statBufPtr ) -> SyscallResult:
+    return syscall2( SYS_STAT, pathPtr, statBufPtr )
+
+public function scLstat( I64 pathPtr, I64 statBufPtr ) -> SyscallResult:
+    return syscall2( SYS_LSTAT, pathPtr, statBufPtr )
+
+public function scAccess( I64 pathPtr, I64 mode ) -> SyscallResult:
+    return syscall2( SYS_ACCESS, pathPtr, mode )
+
+public function scMkdir( I64 pathPtr, I64 mode ) -> SyscallResult:
+    return syscall2( SYS_MKDIR, pathPtr, mode )
+
+public function scRmdir( I64 pathPtr ) -> SyscallResult:
+    return syscall1( SYS_RMDIR, pathPtr )
+
+public function scUnlink( I64 pathPtr ) -> SyscallResult:
+    return syscall1( SYS_UNLINK, pathPtr )
+
+public function scRename( I64 oldPtr, I64 newPtr ) -> SyscallResult:
+    return syscall2( SYS_RENAME, oldPtr, newPtr )
+
+public function scLink( I64 oldPtr, I64 newPtr ) -> SyscallResult:
+    return syscall2( SYS_LINK, oldPtr, newPtr )
+
+public function scSymlink( I64 targetPtr, I64 linkPtr ) -> SyscallResult:
+    return syscall2( SYS_SYMLINK, targetPtr, linkPtr )
+
+public function scReadlink( I64 pathPtr, I64 bufPtr, I64 bufSize ) -> SyscallResult:
+    return syscall3( SYS_READLINK, pathPtr, bufPtr, bufSize )
+
+public function scChmod( I64 pathPtr, I64 mode ) -> SyscallResult:
+    return syscall2( SYS_CHMOD, pathPtr, mode )
+
+public function scChown( I64 pathPtr, I64 uid, I64 gid ) -> SyscallResult:
+    return syscall3( SYS_CHOWN, pathPtr, uid, gid )
+
+export {
+    SYS_ACCESS,
+    SYS_CHDIR,
+    SYS_CHMOD,
+    SYS_CHOWN,
+    SYS_CLOSE,
+    SYS_FCHMOD,
+    SYS_FCHOWN,
+    SYS_FLOCK,
+    SYS_FSTAT,
+    SYS_FSYNC,
+    SYS_FTRUNCATE,
+    SYS_GETCWD,
+    SYS_GETDENTS64,
+    SYS_IOCTL,
+    SYS_LINK,
+    SYS_LSEEK,
+    SYS_LSTAT,
+    SYS_MKDIR,
+    SYS_MMAP,
+    SYS_MUNMAP,
+    SYS_OPEN,
+    SYS_PIPE2,
+    SYS_READ,
+    SYS_READLINK,
+    SYS_RENAME,
+    SYS_RMDIR,
+    SYS_STAT,
+    SYS_STATFS,
+    SYS_SYMLINK,
+    SYS_UNLINK,
+    SYS_WRITE,
+    scAccess,
+    scChmod,
+    scChown,
+    scLink,
+    scLstat,
+    scMkdir,
+    scOpen,
+    scReadlink,
+    scRename,
+    scRmdir,
+    scStat,
+    scSymlink,
+    scUnlink,
+    syscall0,
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4,
+    syscall5,
+    syscall6
+}
