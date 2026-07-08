@@ -22,28 +22,10 @@
 package uranite.functions.builtin
 
 from uranite.collection.array-list import ArrayList
-from uranite.io.syscall import readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.io.syscall import ptrToString, readByteAt, stringLen, stringToPtr, writeByteAt
 from uranite.memory.allocator import alloc, dealloc
 from uranite.memory.memory import Memory
 from uranite.string.builder import StringBuilder
-
-public function ptrToString( I64 pointer ) -> String:
-    
-    """
-    Reinterpret a raw memory pointer as a String via inline assembly.
-    The pointer must reference a valid null-terminated byte sequence.
-
-    Parameters:
-        pointer (I64):
-            Raw pointer to a null-terminated byte buffer.
-
-    Returns:
-        The bytes at the pointer interpreted as a String.
-    """
-    
-    String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" pointer ) : clobber()
-    return result
 
 public function length( String content ) -> I64:
     
