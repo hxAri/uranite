@@ -2,7 +2,7 @@
 <!--
 @author hxAri (hxari)
 @create 2025-02-24 15:15
-@update 17-06-2026
+@update 10-07-2026
 @github https://github.com/uranite-lang/uranite
 
 Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -25,7 +25,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 **Accelerated Execution Through Quantum Precision**
 
-A low-level, high-productivity system programming language built on top of a C++17 and LLVM 14 backend.
+A low-level, high-productivity system programming language built on top of a C++17 and LLVM 19 backend.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -35,33 +35,33 @@ A low-level, high-productivity system programming language built on top of a C++
 
 ## Table of Contents
 - [Uranite](#uranite)
-	- [Table of Contents](#table-of-contents)
-	- [Language Overview \& Philosophy](#language-overview--philosophy)
-	- [Concrete Language Features (Fully Implemented)](#concrete-language-features-fully-implemented)
-		- [Smart Memory Management](#smart-memory-management)
-		- [Object-Oriented Architecture](#object-oriented-architecture)
-		- [Ergonomic Standard Library](#ergonomic-standard-library)
-		- [Unified Error Hierarchy](#unified-error-hierarchy)
-		- [Additional Language Capabilities](#additional-language-capabilities)
-	- [Compiler Architecture \& Pipeline State](#compiler-architecture--pipeline-state)
-		- [Active Compilation Pipeline](#active-compilation-pipeline)
-		- [HIR and MIR Pipeline](#hir-and-mir-pipeline)
-	- [Verification \& Testing Status](#verification--testing-status)
-		- [GoogleTest Suite](#googletest-suite)
-		- [Module Integration Tests](#module-integration-tests)
-	- [Repository Development Infrastructure](#repository-development-infrastructure)
-		- [Building from Source](#building-from-source)
-		- [CLI Usage](#cli-usage)
-	- [Language Comparison Matrix](#language-comparison-matrix)
-	- [Key Architectural Distinctions](#key-architectural-distinctions)
-	- [Warning](#warning)
-	- [Issues](#issues)
-	- [Support](#support)
-	- [Licence](#licence)
+  - [Table of Contents](#table-of-contents)
+  - [Language Overview \& Philosophy](#language-overview--philosophy)
+  - [Concrete Language Features (Fully Implemented)](#concrete-language-features-fully-implemented)
+    - [Smart Memory Management](#smart-memory-management)
+    - [Object-Oriented Architecture](#object-oriented-architecture)
+    - [Ergonomic Standard Library](#ergonomic-standard-library)
+    - [Unified Error Hierarchy](#unified-error-hierarchy)
+    - [Additional Language Capabilities](#additional-language-capabilities)
+  - [Compiler Architecture \& Pipeline State](#compiler-architecture--pipeline-state)
+    - [Active Compilation Pipeline](#active-compilation-pipeline)
+    - [HIR and MIR Pipeline](#hir-and-mir-pipeline)
+  - [Verification \& Testing Status](#verification--testing-status)
+    - [GoogleTest Suite](#googletest-suite)
+    - [Module Integration Tests](#module-integration-tests)
+  - [Repository Development Infrastructure](#repository-development-infrastructure)
+    - [Building from Source](#building-from-source)
+    - [CLI Usage](#cli-usage)
+  - [Language Comparison Matrix](#language-comparison-matrix)
+  - [Key Architectural Distinctions](#key-architectural-distinctions)
+  - [Warning](#warning)
+  - [Issues](#issues)
+  - [Support](#support)
+  - [Licence](#licence)
 
 ## Language Overview & Philosophy
 
-Uranite is a statically typed, ahead-of-time compiled language that generates native machine code through LLVM 14. It targets the design space between Python's readability and C's performance: code reads like a high-level scripting language but compiles to bare-metal executables with no interpreter, virtual machine, or garbage collector in the execution path.
+Uranite is a statically typed, ahead-of-time compiled language that generates native machine code through LLVM 19. It targets the design space between Python's readability and C's performance: code reads like a high-level scripting language but compiles to bare-metal executables with no interpreter, virtual machine, or garbage collector in the execution path.
 
 The two defining syntax decisions are:
 
@@ -209,21 +209,21 @@ Source (.urn)
   Optimizer  AST-level: constant folding, DCE, strength reduction, tail-call optimization
     |
     v
-  Codegen -- LLVM IR generation (~8220 lines)
+  Codegen -- LLVM IR generation (~9320 lines)
     |
     v
   Linker --- Links runtime libraries, produces native executable
 ```
 
-The pipeline is orchestrated by `compiler::Driver` in `src/uranite/compiler/driver.cpp`. Five static C11 runtime libraries link automatically: exception handling (shadow call stack, unhandled exception reporting), async event loop (legacy, kept for backwards compatibility), thread spawning (pthread), subprocess management (fork/exec), and IPC (shared memory).
+The pipeline is orchestrated by `compiler::Driver` in `src/uranite/compiler/driver.cpp`. Six static C11 runtime libraries link automatically: exception handling (shadow call stack, unhandled exception reporting), async event loop (legacy, kept for backwards compatibility), thread spawning (pthread), subprocess management (fork/exec), IPC (shared memory), and FFI (dynamic library loading).
 
 | Binary | Purpose |
 |--------|---------|
 | `uranite` | Compiler: `.urn` source to native executable |
-| `uranite-tests` | GoogleTest suite for compiler internals and LSP |
-| `uranite-lsp` | Language Server Protocol server (15 capabilities: completion, diagnostics, hover, definition, references, rename, document symbols, workspace symbols, semantic tokens, signature help, code actions, folding ranges, document links, inlay hints) |
+| `uranite-tests` | GoogleTest suite for compiler internals |
 | `uranite-fmt` | Code formatter with comment preservation and style linting |
 | `uranite-doc` | Documentation generator from `"""..."""` doccomments |
+| `uranite-pkg` | Package manager with dependency resolution and semantic versioning |
 
 ### HIR and MIR Pipeline
 
@@ -248,12 +248,12 @@ The repository maintains a rigorous two-tier testing strategy. Both tiers achiev
 
 ### GoogleTest Suite
 
-229 unit tests across 24 test suites covering lexer, parser, semantic analysis, type system, borrow checker, optimizer, generics, integration, HIR lowering, MIR lowering, MIR analysis, and LSP (protocol, document, code actions, workspace, semantic tokens, diagnostics, definition, dot-completion, hover, inlay hints). All 229 tests pass.
+152 unit tests across 12 test suites covering lexer, parser, semantic analysis, type system, borrow checker, optimizer, generics, integration, HIR lowering, MIR lowering, and MIR analysis. All 152 tests pass.
 
 ```bash
 ./build/uranite-tests
-# [==========] 229 tests from 24 test suites ran.
-# [  PASSED  ] 229 tests.
+# [==========] 152 tests from 12 test suites ran.
+# [  PASSED  ] 152 tests.
 
 # Run a single test
 ./build/uranite-tests --gtest_filter="HIRLoweringTest.LowersSimpleFunction"
@@ -261,16 +261,16 @@ The repository maintains a rigorous two-tier testing strategy. Both tiers achiev
 
 ### Module Integration Tests
 
-203 `.urn` source files in `examples/testing/modules/` exercise every major language feature end-to-end: control flow, object dispatch, enums, generics, collections, borrow-checker validations, exception handling, inline assembly, async/await, and module imports. All 203 compile successfully, completely clearing all legacy regressions including baseline control flows, object dispatch, enums, and borrow-checker validations.
+212 `.urn` source files in `testing/` exercise every major language feature end-to-end: control flow, object dispatch, enums, generics, collections, borrow-checker validations, exception handling, inline assembly, async/await, module imports, CLI argument handling, HTTP networking, cryptography, threading, and subprocess management. All 212 compile and run successfully with zero runtime failures, completely clearing all legacy regressions.
 
 ```bash
 # Compile all module tests
-for f in examples/testing/modules/*.urn; do
+for f in testing/test-*.urn; do
     timeout 10 ./build/uranite "$f" 2>&1 | tail -1
 done
 
 # Runtime verification (compile + execute + check exit code)
-for f in examples/testing/modules/test-*.urn; do
+for f in testing/test-*.urn; do
     name=$(basename "$f" .urn)
     timeout 10 ./build/uranite "$f" -o /tmp/ae_test 2>/dev/null
     if [ $? -ne 0 ]; then echo "COMPILE FAIL: $name"; continue; fi
@@ -285,18 +285,18 @@ done
 
 ### Building from Source
 
-**Prerequisites:** C++17 compiler (GCC 12+ or Clang 14+), LLVM 14 (via `llvm-config`), CMake 3.25+, fmt, spdlog, argparse, GoogleTest, pthread (thread runtime), rt (IPC runtime).
+**Prerequisites:** C++17 compiler (GCC 12+ or Clang 19+), LLVM 19 (via `llvm-config`), CMake 3.22+, fmt, spdlog, argparse, GoogleTest, pthread (thread runtime), rt (IPC runtime), dl (FFI runtime).
 
 ```bash
 # Debian/Ubuntu
-sudo apt-get install -y llvm-14-dev libfmt-dev libspdlog-dev libgtest-dev cmake g++
+sudo apt-get install -y llvm-19-dev libfmt-dev libspdlog-dev libgtest-dev cmake g++
 
 # Build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 make -C build -j$(nproc)
 ```
 
-Produces `./build/uranite`, `./build/uranite-tests`, `./build/uranite-lsp`, `./build/uranite-fmt`, and `./build/uranite-doc`.
+Produces `./build/uranite`, `./build/uranite-tests`, `./build/uranite-fmt`, `./build/uranite-doc`, and `./build/uranite-pkg`.
 
 ### CLI Usage
 
@@ -328,7 +328,7 @@ To understand where Uranite stands in the modern engineering landscape, here is 
 
 | Language | Compilation / Runtime Type | Memory Management Model | Syntax Style | Error Handling Paradigm | Type System Safety | Developer Ergonomics |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Uranite** | **AOT Native (LLVM 14)** | **Ownership & Move (No GC, No Lifetime Tags)** | **Indentation-Based** | **Strict Exception Hierarchy (`LookupError`)** | **Static (Fully Qualified Name Check)** | **High (Pythonic/Frictionless)** |
+| **Uranite** | **AOT Native (LLVM 19)** | **Ownership & Move (No GC, No Lifetime Tags)** | **Indentation-Based** | **Strict Exception Hierarchy (`LookupError`)** | **Static (Fully Qualified Name Check)** | **High (Pythonic/Frictionless)** |
 | **C / C++** | AOT Native | Manual / RAII | Curly Braces | Error Codes / Uncaught Exceptions | Static (Weak Name Resolution Danger) | Low to Medium (Verbose) |
 | **C#** | Managed (CLR VM / JIT) | Garbage Collection (GC) | Curly Braces | Structured Exceptions | Static | High |
 | **Go** | AOT Native | Garbage Collection (GC) | Curly Braces | Explicit Multi-Value Returns | Static | Medium to High |
