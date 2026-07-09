@@ -28,8 +28,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <llvm/ADT/Triple.h>
-#include <llvm/Support/Host.h>
+#include <llvm/TargetParser/Triple.h>
+#include <llvm/TargetParser/Host.h>
 
 #include "uranite/codegen/codegen.hpp"
 #include "uranite/compiler/driver.hpp"
