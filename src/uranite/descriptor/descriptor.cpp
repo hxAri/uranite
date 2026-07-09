@@ -21,12 +21,23 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/Module.h>
 
 #include "uranite/descriptor/descriptor.hpp"
 
 #include "fmt/format.h"
 
 namespace uranite::descriptor {
+
+	static llvm::Type* getPointeeType( llvm::Value* value ) {
+		if( auto* alloca = llvm::dyn_cast<llvm::AllocaInst>( value ) )
+			return alloca->getAllocatedType();
+		if( auto* gep = llvm::dyn_cast<llvm::GetElementPtrInst>( value ) )
+			return gep->getResultElementType();
+		if( auto* global = llvm::dyn_cast<llvm::GlobalVariable>( value ) )
+			return global->getValueType();
+		return llvm::PointerType::getUnqual( value->getContext() );
+	}
 	
 	struct FormatPlaceholder {
 		size_t startPos;
@@ -49,6 +60,9 @@ namespace uranite::descriptor {
 		}
 		else if( llvm::GetElementPtrInst* gep = llvm::dyn_cast<llvm::GetElementPtrInst>( value ) ) {
 			gv = llvm::dyn_cast<llvm::GlobalVariable>( gep->getPointerOperand() );
+		}
+		else if( llvm::GlobalVariable* globalVar = llvm::dyn_cast<llvm::GlobalVariable>( value ) ) {
+			gv = globalVar;
 		}
 		if( gv && gv->hasInitializer() ) {
 			if( llvm::ConstantDataSequential* cds = llvm::dyn_cast<llvm::ConstantDataSequential>( gv->getInitializer() ) ) {
@@ -222,10 +236,10 @@ namespace uranite::descriptor {
 				llvm::Type* argType = arg->getType();
 				char typeChar = ph.type;
 				if( typeChar == 0 ) {
-					if( argType == llvm::Type::getInt8PtrTy( arg->getContext() ) ) {
+					if( argType == llvm::PointerType::getUnqual( arg->getContext() ) ) {
 						typeChar = 's';
 					}
-					else if( argType->isPointerTy() && argType->getPointerElementType()->isStructTy() ) {
+					else if( argType->isPointerTy() ) {
 						typeChar = 'O';
 					}
 					else if( argType->isDoubleTy() || argType->isFloatTy() ) {
@@ -304,7 +318,7 @@ namespace uranite::descriptor {
 	}
 	
 	static llvm::Value* coerceToString( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* arg ) {
-		llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+		llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 		llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 		llvm::Module* mod = builder.GetInsertBlock()->getParent()->getParent();
 		
@@ -317,7 +331,7 @@ namespace uranite::descriptor {
 			return builder.CreateSelect( arg, trueStr, falseStr, "bool.str" );
 		}
 		if( arg->getType()->isPointerTy() ) {
-			llvm::Type* pointee = arg->getType()->getPointerElementType();
+			llvm::Type* pointee = getPointeeType( arg );
 			if( pointee->isStructTy() ) {
 				llvm::StructType* structType = llvm::cast<llvm::StructType>( pointee );
 				if( structType->hasName() ) {
@@ -412,7 +426,7 @@ namespace uranite::descriptor {
 	 */
 	static llvm::FunctionCallee getMalloc( llvm::Module* module, llvm::LLVMContext& context ) {
 		return module->getOrInsertFunction( "malloc", llvm::FunctionType::get(
-			llvm::Type::getInt8PtrTy( context ),
+			llvm::PointerType::getUnqual( context ),
 			{
 				llvm::Type::getInt64Ty( context )
 			},
@@ -435,9 +449,9 @@ namespace uranite::descriptor {
 		return module->getOrInsertFunction( "snprintf", llvm::FunctionType::get(
 			llvm::Type::getInt32Ty( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
+				llvm::PointerType::getUnqual( context ),
 				llvm::Type::getInt64Ty( context ),
-				llvm::Type::getInt8PtrTy( context )
+				llvm::PointerType::getUnqual( context )
 			},
 			true
 		));
@@ -1495,7 +1509,7 @@ namespace uranite::descriptor {
 			"I64",
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
-				llvm::FunctionType* strlenType = llvm::FunctionType::get( llvm::Type::getInt64Ty( context ), { llvm::Type::getInt8PtrTy( context ) }, false );
+				llvm::FunctionType* strlenType = llvm::FunctionType::get( llvm::Type::getInt64Ty( context ), { llvm::PointerType::getUnqual( context ) }, false );
 				llvm::FunctionCallee strlenFunction = builder.GetInsertBlock()->getParent()->getParent()->getOrInsertFunction( "strlen", strlenType );
 				return builder.CreateCall( strlenFunction, { self }, "strlen" );
 			}
@@ -1505,7 +1519,7 @@ namespace uranite::descriptor {
 			"Boolean",
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
-				llvm::FunctionType* strlenType = llvm::FunctionType::get( llvm::Type::getInt64Ty( context ), { llvm::Type::getInt8PtrTy( context ) }, false );
+				llvm::FunctionType* strlenType = llvm::FunctionType::get( llvm::Type::getInt64Ty( context ), { llvm::PointerType::getUnqual( context ) }, false );
 				llvm::FunctionCallee strlenFunction = builder.GetInsertBlock()->getParent()->getParent()->getOrInsertFunction( "strlen", strlenType );
 				llvm::Value* stringLength = builder.CreateCall( strlenFunction, { self }, "strlen" );
 				return builder.CreateICmpEQ( stringLength, llvm::ConstantInt::get( llvm::Type::getInt64Ty( context ), 0 ), "isempty" );
@@ -1517,7 +1531,7 @@ namespace uranite::descriptor {
 			std::vector<MethodParameter>({ MethodParameter { "other", "String" } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.empty() == false ) {
-					llvm::FunctionType* strcmpType = llvm::FunctionType::get( llvm::Type::getInt32Ty( context ), { llvm::Type::getInt8PtrTy( context ), llvm::Type::getInt8PtrTy( context ) }, false );
+					llvm::FunctionType* strcmpType = llvm::FunctionType::get( llvm::Type::getInt32Ty( context ), { llvm::PointerType::getUnqual( context ), llvm::PointerType::getUnqual( context ) }, false );
 					llvm::FunctionCallee strcmpFunction = builder.GetInsertBlock()->getParent()->getParent()->getOrInsertFunction( "strcmp", strcmpType );
 					llvm::Value* comparisonResult = builder.CreateCall( strcmpFunction, { self, arguments[0] }, "strcmp" );
 					return builder.CreateICmpEQ( comparisonResult, llvm::ConstantInt::get( llvm::Type::getInt32Ty( context ), 0 ), "streq" );
@@ -1531,7 +1545,7 @@ namespace uranite::descriptor {
 			std::vector<MethodParameter>({ MethodParameter { "other", "String" } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.empty() == false ) {
-					llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+					llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 					llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 					llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
 					llvm::FunctionType* strlenType = llvm::FunctionType::get( i64Type, { i8PtrType }, false );
@@ -1562,7 +1576,7 @@ namespace uranite::descriptor {
 					return nullptr;
 				}
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 				llvm::Type* i32Type = llvm::Type::getInt32Ty( context );
 				llvm::FunctionCallee strlenFunction = currentModule->getOrInsertFunction( "strlen", llvm::FunctionType::get( i64Type, { i8PtrType }, false ) );
@@ -1581,7 +1595,7 @@ namespace uranite::descriptor {
 					return nullptr;
 				}
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::Type* i8Type = llvm::Type::getInt8Ty( context );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 				llvm::Type* i32Type = llvm::Type::getInt32Ty( context );
@@ -1607,7 +1621,7 @@ namespace uranite::descriptor {
 					return nullptr;
 				}
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::FunctionCallee strstrFunction = currentModule->getOrInsertFunction( "strstr", llvm::FunctionType::get( i8PtrType, { i8PtrType, i8PtrType }, false ) );
 				llvm::Value* found = builder.CreateCall( strstrFunction, { self, arguments[0] }, "strstr" );
 				return builder.CreateICmpNE( found, llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( i8PtrType ) ), "contains" );
@@ -1619,7 +1633,7 @@ namespace uranite::descriptor {
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::Type* i8Type = llvm::Type::getInt8Ty( context );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 				llvm::Function* helperFunction = currentModule->getFunction( "_uranite_str_toUpper" );
@@ -1671,7 +1685,7 @@ namespace uranite::descriptor {
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::Type* i8Type = llvm::Type::getInt8Ty( context );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 				llvm::Function* helperFunction = currentModule->getFunction( "_uranite_str_toLower" );
@@ -1723,7 +1737,7 @@ namespace uranite::descriptor {
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::Type* i8Type = llvm::Type::getInt8Ty( context );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 				llvm::Function* helperFunction = currentModule->getFunction( "_uranite_str_trim" );
@@ -1807,7 +1821,7 @@ namespace uranite::descriptor {
 					return nullptr;
 				}
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::Type* i8Type = llvm::Type::getInt8Ty( context );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 				llvm::Function* helperFunction = currentModule->getFunction( "_uranite_str_replace" );
@@ -1905,7 +1919,7 @@ namespace uranite::descriptor {
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
-				llvm::Type* i8PtrType = llvm::Type::getInt8PtrTy( context );
+				llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 				llvm::FunctionCallee mallocFn = currentModule->getOrInsertFunction( "malloc", llvm::FunctionType::get( i8PtrType, { i64Type }, false ) );
 				llvm::FunctionCallee snprintfFn = currentModule->getOrInsertFunction( "snprintf", llvm::FunctionType::get( llvm::Type::getInt32Ty( context ), { i8PtrType, i64Type, i8PtrType }, true ) );
@@ -1971,7 +1985,7 @@ namespace uranite::descriptor {
 						for( int idx : argOrder ) {
 							if( idx >= 0 && idx < static_cast<int>( arguments.size() ) ) {
 								llvm::Type* at = arguments[idx]->getType();
-								if( at == i8PtrType || ( at->isPointerTy() && at->getPointerElementType()->isStructTy() ) ) {
+								if( at == i8PtrType || at->isPointerTy() ) {
 									hasStringArgs = true;
 									break;
 								}
@@ -2005,7 +2019,7 @@ namespace uranite::descriptor {
 						for( int idx : argOrder ) {
 							if( idx >= 0 && idx < static_cast<int>( arguments.size() ) ) {
 								llvm::Value* arg = arguments[idx];
-								if( arg->getType()->isPointerTy() && arg->getType() != i8PtrType && arg->getType()->getPointerElementType()->isStructTy() ) {
+								if( arg->getType()->isPointerTy() && getPointeeType( arg )->isStructTy() ) {
 									arg = coerceToString( builder, context, arg );
 								}
 								else if( arg->getType()->isIntegerTy( 1 ) ) {
@@ -2114,11 +2128,11 @@ namespace uranite::descriptor {
 									piece = builder.CreateSelect( wasBinZero, tmpBuf, binStart, "bin.piece" );
 									pieceLen = builder.CreateSelect( wasBinZero, llvm::ConstantInt::get( i64Type, 1 ), binLen, "bin.plen" );
 								}
-								else if( arg->getType()->isPointerTy() && arg->getType() != i8PtrType && arg->getType()->getPointerElementType()->isStructTy() ) {
+								else if( arg->getType()->isPointerTy() && getPointeeType( arg )->isStructTy() ) {
 									piece = coerceToString( builder, context, arg );
 									pieceLen = builder.CreateCall( strlenFn, { piece }, "obj.len" );
 								}
-								else if( arg->getType() == i8PtrType ) {
+								else if( arg->getType()->isPointerTy() ) {
 									piece = arg;
 									pieceLen = builder.CreateCall( strlenFn, { arg }, "s.len" );
 								}
@@ -2268,7 +2282,7 @@ namespace uranite::descriptor {
 			"",
 			std::move( methods ),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
-				return llvm::Type::getInt8PtrTy( context );
+				return llvm::PointerType::getUnqual( context );
 			}
 		});
 	}
