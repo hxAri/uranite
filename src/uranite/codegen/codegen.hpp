@@ -43,7 +43,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Support/FileSystem.h>
-#include <llvm/Support/Host.h>
+#include <llvm/TargetParser/Host.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
@@ -533,7 +533,7 @@ namespace uranite::codegen {
 			);
 			
 			
-			llvm::Value* unwrapOOPWrapperValue( llvm::Value* value );
+			llvm::Value* unwrapOOPWrapperValue( llvm::Value* value, const std::string& wrapperTypeHint = "" );
 
 			bool isThrowableClass( const std::string& typeName );
 			void injectTracebackInfo( llvm::Value* objectPointer, const std::string& typeName, const lookup::SourceSharedPointer& source, bool overwriteFileAndLine = true );
@@ -647,6 +647,9 @@ namespace uranite::codegen {
 			
 			/** @brief Mapping of variable names to their respective struct type names. */
 			std::unordered_map<std::string, std::string> variableStructType;
+
+			std::string lastConstructedClassName;
+			std::string lastTargetInterfaceName;
 			
 			/** @brief Set of class names whose methods have been pre-registered. */
 			std::unordered_set<std::string> preRegisteredClasses;
