@@ -785,11 +785,7 @@ namespace uranite::parser {
 			isVolatile = true;
 			this->advance();
 		}
-		std::string asmTemplate = this->current().value;
-		this->expect( token::Type::LiteralString, "expected assembly template string" );
-		std::vector<ast::nodes::InlineAssemblyOperand> outputs;
-		std::vector<ast::nodes::InlineAssemblyOperand> inputs;
-		std::vector<std::string> clobbers;
+
 		std::function<std::vector<ast::nodes::InlineAssemblyOperand>()> parseOperandList = [&]() -> std::vector<ast::nodes::InlineAssemblyOperand> {
 			std::vector<ast::nodes::InlineAssemblyOperand> operands;
 			this->expect( token::Type::LeftParenthesis, "expected '(' after output/input" );
@@ -806,35 +802,92 @@ namespace uranite::parser {
 			this->expect( token::Type::RightParenthesis, "expected ')'" );
 			return operands;
 		};
-		if( this->check( token::Type::Colon ) ) {
-			this->advance();
-			if( this->check( token::Type::Identifier ) && this->current().value == "output" ) {
-				this->advance();
-				outputs = parseOperandList();
-			}
+
+		std::function<void( std::vector<ast::nodes::InlineAssemblyOperand>&, std::vector<ast::nodes::InlineAssemblyOperand>&, std::vector<std::string>& )> parseAsmOperands =
+			[&]( std::vector<ast::nodes::InlineAssemblyOperand>& outputs, std::vector<ast::nodes::InlineAssemblyOperand>& inputs, std::vector<std::string>& clobbers ) {
 			if( this->check( token::Type::Colon ) ) {
 				this->advance();
-				if( this->check( token::Type::Identifier ) && this->current().value == "input" ) {
+				if( this->check( token::Type::Identifier ) && this->current().value == "output" ) {
 					this->advance();
-					inputs = parseOperandList();
+					outputs = parseOperandList();
 				}
 				if( this->check( token::Type::Colon ) ) {
 					this->advance();
-					if( this->check( token::Type::Identifier ) && this->current().value == "clobber" ) {
+					if( this->check( token::Type::Identifier ) && this->current().value == "input" ) {
 						this->advance();
-						this->expect( token::Type::LeftParenthesis, "expected '(' after clobber" );
-						while( this->check( token::Type::RightParenthesis ) == false && this->isAtEnd() == false ) {
-							clobbers.push_back( this->current().value );
-							this->expect( token::Type::LiteralString, "expected clobber register name" );
-							if( this->check( token::Type::Comma ) ) {
-								this->advance();
+						inputs = parseOperandList();
+					}
+					if( this->check( token::Type::Colon ) ) {
+						this->advance();
+						if( this->check( token::Type::Identifier ) && this->current().value == "clobber" ) {
+							this->advance();
+							this->expect( token::Type::LeftParenthesis, "expected '(' after clobber" );
+							while( this->check( token::Type::RightParenthesis ) == false && this->isAtEnd() == false ) {
+								clobbers.push_back( this->current().value );
+								this->expect( token::Type::LiteralString, "expected clobber register name" );
+								if( this->check( token::Type::Comma ) ) {
+									this->advance();
+								}
 							}
+							this->expect( token::Type::RightParenthesis, "expected ')'" );
 						}
-						this->expect( token::Type::RightParenthesis, "expected ')'" );
 					}
 				}
 			}
+		};
+
+		// Arch block form: asm [volatile]:
+		//     <arch> "<template>" [: operands...]
+		//     <arch> "<template>" [: operands...]
+		if( this->check( token::Type::Colon ) ) {
+			this->advance();
+			this->expectNewline( "asm arch block" );
+			this->match( token::Type::Indent );
+
+			std::vector<ast::nodes::InlineAssemblyArchVariant> archVariants;
+
+			while( this->check( { token::Type::Dedent, token::Type::Eof }, false ) ) {
+				this->skipNewline();
+				if( this->check( token::Type::Dedent ) ) {
+					break;
+				}
+
+				ast::nodes::InlineAssemblyArchVariant variant;
+
+				std::string archName = this->current().value;
+				this->expect( token::Type::Identifier, "expected architecture name (x86-64, aarch64, ...)" );
+				if( archName == "x86" && this->check( token::Type::Minus ) ) {
+					this->advance();
+					archName += "-" + this->current().value;
+					this->expect( token::Type::LiteralInteger, "expected architecture suffix after 'x86-'" );
+				}
+				variant.targetArch = archName;
+
+				variant.asmTemplate = this->current().value;
+				this->expect( token::Type::LiteralString, "expected assembly template string" );
+
+				parseAsmOperands( variant.outputs, variant.inputs, variant.clobbers );
+
+				archVariants.push_back( std::move( variant ) );
+				this->skipNewline();
+			}
+
+			this->match( token::Type::Dedent );
+
+			return std::make_shared<ast::nodes::InlineAssemblyStatement>(
+				isVolatile,
+				std::move( archVariants ),
+				source
+			);
 		}
+
+		// Universal form: asm [volatile] "<template>" [: operands...]
+		std::string asmTemplate = this->current().value;
+		this->expect( token::Type::LiteralString, "expected assembly template string" );
+		std::vector<ast::nodes::InlineAssemblyOperand> outputs;
+		std::vector<ast::nodes::InlineAssemblyOperand> inputs;
+		std::vector<std::string> clobbers;
+		parseAsmOperands( outputs, inputs, clobbers );
 		this->expectNewline( "inline assembly" );
 		return std::make_shared<ast::nodes::InlineAssemblyStatement>(
 			isVolatile,
