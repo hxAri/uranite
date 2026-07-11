@@ -818,6 +818,49 @@ namespace uranite::codegen {
 			}
 		}
 		
+		// Operator overloading: class/struct types dispatch to methods
+		// Checked before string operations because LLVM 19 opaque pointers
+		// make all pointer types indistinguishable at the LLVM level
+		if( expressionLeftLLVMValue->getType()->isPointerTy() ) {
+			std::string operatorTypeName( this->resolveStructTypeName( expression.left ) );
+			if( operatorTypeName.empty() == false ) {
+				size_t operatorGenericPos = operatorTypeName.find( '<' );
+				if( operatorGenericPos != std::string::npos ) {
+					operatorTypeName = operatorTypeName.substr( 0, operatorGenericPos );
+				}
+				std::unordered_map<std::string, llvm::StructType*>::iterator operatorStructIt = this->structTypes.find( operatorTypeName );
+				if( operatorStructIt != this->structTypes.end() ) {
+					static const std::unordered_map<int, std::string> operatorMethodMaps = {
+						{ ( int ) token::Type::Plus,             "add" },
+						{ ( int ) token::Type::Slash,            "divide" },
+						{ ( int ) token::Type::Equal,            "equals" },
+						{ ( int ) token::Type::GreaterThan,      "greaterThan" },
+						{ ( int ) token::Type::LessThan,         "lessThan" },
+						{ ( int ) token::Type::Percent,          "modulo" },
+						{ ( int ) token::Type::Star,             "multiply" },
+						{ ( int ) token::Type::NotEqual,         "notEquals" },
+						{ ( int ) token::Type::Minus,            "subtract" }
+					};
+					std::unordered_map<int, std::string>::const_iterator operatorMethodIterator = operatorMethodMaps.find( ( int ) expression.operation );
+					if( operatorMethodIterator != operatorMethodMaps.end() ) {
+						std::string methodName( fmt::format( "{}::{}", operatorTypeName, operatorMethodIterator->second ) );
+						std::unordered_map<std::string, llvm::Function*>::iterator functionIterator = this->functions.find( methodName );
+						if( functionIterator != this->functions.end() ) {
+							llvm::Value* selfPointer = this->resolveObjectPointer( expression.left );
+							if( selfPointer ) {
+								std::vector<llvm::Value*> args = { selfPointer, expressionRightLLVMValue };
+								if( functionIterator->second->getReturnType()->isVoidTy() ) {
+									this->builder.CreateCall( functionIterator->second, args );
+									return nullptr;
+								}
+								return this->builder.CreateCall( functionIterator->second, args, fmt::format( "op.{}", operatorMethodIterator->second ) );
+							}
+						}
+					}
+				}
+			}
+		}
+
 		// String operations (both operands are i8* pointers)
 		bool isString =
 			expressionLeftLLVMValue->getType()->isPointerTy() &&
@@ -899,40 +942,6 @@ namespace uranite::codegen {
 			this->builder.CreateCall( strcatfunction, { resultBuffer, convBuffer } );
 			
 			return resultBuffer;
-		}
-		
-		// Operator overloading: class/struct types dispatch to interface methods
-		if( expressionLeftLLVMValue->getType()->isPointerTy() && isString == false ) {
-			std::string typeName( resolveStructTypeName( expression.left ) );
-			if( typeName.empty() == false ) {
-				static const std::unordered_map<int, std::string> operatorMethodMaps = {
-					{ ( int ) token::Type::Plus,             "add" },
-					{ ( int ) token::Type::Slash,            "divide" },
-					{ ( int ) token::Type::Equal,            "equals" },
-					{ ( int ) token::Type::GreaterThan,      "greaterThan" },
-					{ ( int ) token::Type::LessThan,         "lessThan" },
-					{ ( int ) token::Type::Percent,          "modulo" },
-					{ ( int ) token::Type::Star,             "multiply" },
-					{ ( int ) token::Type::NotEqual,         "notEquals" },
-					{ ( int ) token::Type::Minus,            "subtract" }
-				};
-				std::unordered_map<int,std::string>::const_iterator operatorMethodIterator = operatorMethodMaps.find( ( int ) expression.operation );
-				if( operatorMethodIterator != operatorMethodMaps.end() ) {
-					std::string methodName( fmt::format( "{}::{}", typeName, operatorMethodIterator->second ) );
-					std::unordered_map<std::string,llvm::Function*>::iterator functionIterator = this->functions.find( methodName );
-					if( functionIterator != this->functions.end() ) {
-						llvm::Value* selfPointer = this->resolveObjectPointer( expression.left );
-						if( selfPointer ) {
-							std::vector<llvm::Value*> args = { selfPointer, expressionRightLLVMValue };
-							if( functionIterator->second->getReturnType()->isVoidTy() ) {
-								this->builder.CreateCall( functionIterator->second, args );
-								return nullptr;
-							}
-							return this->builder.CreateCall( functionIterator->second, args, fmt::format( "op.{}", operatorMethodIterator->second ) );
-						}
-					}
-				}
-			}
 		}
 		
 		// Type alignment
@@ -1408,8 +1417,18 @@ namespace uranite::codegen {
 			return nullptr;
 		}
 		
-		// Look up function's sema type for interface param detection
-		semantic::FunctionTypeSharedPointer functionSemantic = std::dynamic_pointer_cast<semantic::FunctionType>( this->analyzer.types().lookupType( functionName ) );
+		// Look up function's sema type for interface param and union param detection
+		semantic::FunctionTypeSharedPointer functionSemantic;
+		if( expression.callee->kind == ast::Node::Kind::IdentifierExpression ) {
+			ast::nodes::IdentifierExpression& calleIdent = static_cast<ast::nodes::IdentifierExpression&>( *expression.callee );
+			if( calleIdent.resolvedSymbol && calleIdent.resolvedSymbol->typeref &&
+				calleIdent.resolvedSymbol->typeref->kind == semantic::Type::Kind::Function ) {
+				functionSemantic = std::static_pointer_cast<semantic::FunctionType>( calleIdent.resolvedSymbol->typeref );
+			}
+		}
+		if( functionSemantic == nullptr ) {
+			functionSemantic = std::dynamic_pointer_cast<semantic::FunctionType>( this->analyzer.types().lookupType( functionName ) );
+		}
 		
 		std::vector<llvm::Value*> arguments;
 		llvm::Function* functionLLVM = functionIterator->second;
@@ -1492,6 +1511,39 @@ namespace uranite::codegen {
 							}
 						}
 					}
+				}
+				else if( expectedType->isPointerTy() && valueLLVM->getType()->isPointerTy() == false &&
+					functionSemantic && parameterIndex < functionSemantic->parameterTypes.size() &&
+					functionSemantic->parameterTypes[parameterIndex]->kind == semantic::Type::Kind::Union ) {
+					semantic::UnionTypeSharedPointer unionParamType = std::static_pointer_cast<semantic::UnionType>( functionSemantic->parameterTypes[parameterIndex] );
+					uint64_t unionMaxSize = 0;
+					llvm::Type* unionWidestLLVMType = llvm::Type::getInt64Ty( this->context );
+					for( semantic::TypeSharedPointer& unionMemberType : unionParamType->types ) {
+						llvm::Type* unionMemberLLVMType = this->toLLVMType( unionMemberType );
+						uint64_t unionMemberSize = this->module->getDataLayout().getTypeAllocSize( unionMemberLLVMType );
+						if( unionMemberSize > unionMaxSize ) {
+							unionMaxSize = unionMemberSize;
+							unionWidestLLVMType = unionMemberLLVMType;
+						}
+					}
+					llvm::StructType* unionStructType = llvm::StructType::get( this->context, {
+						llvm::Type::getInt32Ty( this->context ),
+						unionWidestLLVMType
+					});
+					int unionTag = 0;
+					for( size_t unionIdx = 0; unionIdx < unionParamType->types.size(); unionIdx++ ) {
+						llvm::Type* unionMemberLLVMType = this->toLLVMType( unionParamType->types[unionIdx] );
+						if( unionMemberLLVMType == valueLLVM->getType() ) {
+							unionTag = static_cast<int>( unionIdx );
+							break;
+						}
+					}
+					llvm::Value* unionAlloca = this->createEntryBlockAllocation( this->currentFunction, "union.box", unionStructType );
+					llvm::Value* unionTagPtr = this->builder.CreateStructGEP( unionStructType, unionAlloca, 0, "union.tag.ptr" );
+					this->builder.CreateStore( llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->context ), unionTag ), unionTagPtr );
+					llvm::Value* unionValPtr = this->builder.CreateStructGEP( unionStructType, unionAlloca, 1, "union.val.ptr" );
+					this->builder.CreateStore( valueLLVM, unionValPtr );
+					valueLLVM = unionAlloca;
 				}
 				else {
 					std::string argTypeName = this->resolveStructTypeName( argument );
@@ -3018,6 +3070,7 @@ namespace uranite::codegen {
 					this->builder.CreateStore( this->builder.CreateAdd( expressionIncVar, llvm::ConstantInt::get( expressionI64, 1 ) ), expressionVarAlloca );
 					this->builder.CreateBr( expressionConditionBasicBlock );
 					this->builder.SetInsertPoint( exprEndBasicBlock );
+					this->lastMemoryElementType = expressionCompElemType;
 					return expressionArrayPointer;
 				}
 				return llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->context ) );
@@ -5020,6 +5073,22 @@ namespace uranite::codegen {
 			return this->builder.CreateLoad( arrayElementType, arrayInlineGetElementPointer, "inline.array.value" );
 		}
 		
+		// Inline ComprehensionExpression indexing: [expr for ...][idx] → GEP + load
+		if( indexExpression.object->kind == ast::Node::Kind::ComprehensionExpression ) {
+			llvm::Value* compPointer = this->generateExpression( indexExpression.object );
+			llvm::Type* compElementType = this->lastMemoryElementType;
+			if( compElementType == nullptr ) {
+				compElementType = llvm::Type::getInt64Ty( this->context );
+			}
+			llvm::Value* compIndexValue = this->generateExpression( indexExpression.index );
+			if( compPointer == nullptr || compIndexValue == nullptr ) {
+				return nullptr;
+			}
+			compIndexValue = this->generateImplicitCast( compIndexValue, llvm::Type::getInt64Ty( this->context ) );
+			llvm::Value* compGep = this->builder.CreateGEP( compElementType, compPointer, compIndexValue, "comp.index.gep" );
+			return this->builder.CreateLoad( compElementType, compGep, "comp.index.value" );
+		}
+
 		llvm::Value* objectValue = this->generateExpression( indexExpression.object );
 		llvm::Value* indexValue = this->generateExpression( indexExpression.index );
 		if( objectValue != nullptr && indexValue != nullptr ) {
