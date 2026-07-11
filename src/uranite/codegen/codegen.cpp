@@ -7913,6 +7913,57 @@ namespace uranite::codegen {
 	}
 	
 	void LLVMCodegen::generateInlineAssemblyStatement( ast::nodes::InlineAssemblyStatement& statement ) {
+		// Arch block form: select variant matching compile target
+		if( statement.archVariants.empty() == false ) {
+			llvm::Triple triple( this->module->getTargetTriple() );
+			std::string targetArch;
+			switch( triple.getArch() ) {
+				case llvm::Triple::x86_64:
+					targetArch = "x86-64";
+					break;
+				case llvm::Triple::aarch64:
+				case llvm::Triple::aarch64_be:
+					targetArch = "aarch64";
+					break;
+				case llvm::Triple::riscv64:
+					targetArch = "riscv64";
+					break;
+				case llvm::Triple::arm:
+				case llvm::Triple::armeb:
+					targetArch = "arm";
+					break;
+				default:
+					targetArch = triple.getArchName().str();
+					break;
+			}
+			for( ast::nodes::InlineAssemblyArchVariant& variant : statement.archVariants ) {
+				if( variant.targetArch == targetArch ) {
+					ast::nodes::InlineAssemblyStatement resolvedStatement(
+						statement.isVolatile,
+						variant.asmTemplate,
+						variant.outputs,
+						variant.inputs,
+						variant.clobbers,
+						statement.source
+					);
+					this->generateInlineAssemblyStatement( resolvedStatement );
+					return;
+				}
+			}
+			std::string availableArchs;
+			for( ast::nodes::InlineAssemblyArchVariant& variant : statement.archVariants ) {
+				if( availableArchs.empty() == false ) {
+					availableArchs += ", ";
+				}
+				availableArchs += variant.targetArch;
+			}
+			this->diagnostic.error(
+				statement.source,
+				fmt::format( "no inline assembly variant for target architecture '{}' (available: {})", targetArch, availableArchs )
+			);
+			return;
+		}
+
 		std::string constraintString;
 		std::vector<llvm::Type*> outputTypes;
 		std::vector<llvm::Value*> outputPointers;
