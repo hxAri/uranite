@@ -224,7 +224,9 @@ public class HuffmanTable:
         I64 clearIdx = 0
         while clearIdx <= DEFLATE_MAX_BITS:
             I64 slot = self.countsAddress + clearIdx * 8
-            asm volatile "movq $1, ($0)" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
+            asm volatile:
+                x86-64 "movq $1, ($0)" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
+                aarch64 "str $1, [$0]" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
             clearIdx = clearIdx + 1
 
     public function build( self, I64 lengthsAddress, I64 symbolCount ) -> Boolean:
@@ -250,7 +252,9 @@ public class HuffmanTable:
         I64 clearIdx = 0
         while clearIdx <= DEFLATE_MAX_BITS:
             I64 slot = self.countsAddress + clearIdx * 8
-            asm volatile "movq $1, ($0)" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
+            asm volatile:
+                x86-64 "movq $1, ($0)" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
+                aarch64 "str $1, [$0]" : output() : input( "r" slot, "r" 0 ) : clobber( "memory" )
             clearIdx = clearIdx + 1
 
         I64 symbolIdx = 0
@@ -264,9 +268,13 @@ public class HuffmanTable:
             if codeLength > 0 and codeLength <= DEFLATE_MAX_BITS:
                 I64 countSlot = self.countsAddress + codeLength * 8
                 I64 currentCount = 0
-                asm volatile "movq ($1), $0" : output( "=r" currentCount ) : input( "r" countSlot ) : clobber()
+                asm volatile:
+                    x86-64 "movq ($1), $0" : output( "=r" currentCount ) : input( "r" countSlot ) : clobber()
+                    aarch64 "ldr $0, [$1]" : output( "=r" currentCount ) : input( "r" countSlot ) : clobber()
                 currentCount = currentCount + 1
-                asm volatile "movq $1, ($0)" : output() : input( "r" countSlot, "r" currentCount ) : clobber( "memory" )
+                asm volatile:
+                    x86-64 "movq $1, ($0)" : output() : input( "r" countSlot, "r" currentCount ) : clobber( "memory" )
+                    aarch64 "str $1, [$0]" : output() : input( "r" countSlot, "r" currentCount ) : clobber( "memory" )
             symbolIdx = symbolIdx + 1
 
         I64 offsetsAddress = alloc( ( DEFLATE_MAX_BITS + 1 ) * 8 )
@@ -274,10 +282,14 @@ public class HuffmanTable:
         I64 bitLen = 1
         while bitLen <= DEFLATE_MAX_BITS:
             I64 offsetSlot = offsetsAddress + bitLen * 8
-            asm volatile "movq $1, ($0)" : output() : input( "r" offsetSlot, "r" totalOffset ) : clobber( "memory" )
+            asm volatile:
+                x86-64 "movq $1, ($0)" : output() : input( "r" offsetSlot, "r" totalOffset ) : clobber( "memory" )
+                aarch64 "str $1, [$0]" : output() : input( "r" offsetSlot, "r" totalOffset ) : clobber( "memory" )
             I64 countSlot = self.countsAddress + bitLen * 8
             I64 bitCount = 0
-            asm volatile "movq ($1), $0" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
+            asm volatile:
+                x86-64 "movq ($1), $0" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
+                aarch64 "ldr $0, [$1]" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
             totalOffset = totalOffset + bitCount
             bitLen = bitLen + 1
 
@@ -289,12 +301,16 @@ public class HuffmanTable:
             if codeLength > 0:
                 I64 offsetSlot = offsetsAddress + codeLength * 8
                 I64 symOffset = 0
-                asm volatile "movq ($1), $0" : output( "=r" symOffset ) : input( "r" offsetSlot ) : clobber()
+                asm volatile:
+                    x86-64 "movq ($1), $0" : output( "=r" symOffset ) : input( "r" offsetSlot ) : clobber()
+                    aarch64 "ldr $0, [$1]" : output( "=r" symOffset ) : input( "r" offsetSlot ) : clobber()
                 I64 symSlot = self.symbolsAddress + symOffset * 4
                 writeByteAt( symSlot, 0, symbolIdx & 255 )
                 writeByteAt( symSlot, 1, ( symbolIdx >> 8 ) & 255 )
                 symOffset = symOffset + 1
-                asm volatile "movq $1, ($0)" : output() : input( "r" offsetSlot, "r" symOffset ) : clobber( "memory" )
+                asm volatile:
+                    x86-64 "movq $1, ($0)" : output() : input( "r" offsetSlot, "r" symOffset ) : clobber( "memory" )
+                    aarch64 "str $1, [$0]" : output() : input( "r" offsetSlot, "r" symOffset ) : clobber( "memory" )
             symbolIdx = symbolIdx + 1
 
         dealloc( offsetsAddress )
@@ -331,7 +347,9 @@ public class HuffmanTable:
 
             I64 countSlot = self.countsAddress + bitLen * 8
             I64 bitCount = 0
-            asm volatile "movq ($1), $0" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
+            asm volatile:
+                x86-64 "movq ($1), $0" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
+                aarch64 "ldr $0, [$1]" : output( "=r" bitCount ) : input( "r" countSlot ) : clobber()
 
             I64 reversedCode = 0
             I64 reverseIdx = 0

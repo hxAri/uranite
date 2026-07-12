@@ -26,7 +26,7 @@ from uranite.memory.memory import Memory
 from uranite.os.ipc.shared-memory import SharedMemoryRegistry, SharedRegion
 from uranite.os.ipc.signal import Event
 from uranite.os.memory.pmm import PhysicalMemoryManager
-from uranite.os.memory.vmm import AddressSpace, protReadWrite, protUser
+from uranite.os.memory.address-space import AddressSpace, protReadWrite, protUser
 from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.sync.spinlock import Spinlock
 from uranite.os.task.task import BlockReason, Task, TaskState
@@ -216,7 +216,9 @@ public class ProcessRuntime:
         I64 regionId = self.sharedRegistry.allocateRegionId()
         SharedRegion region = new SharedRegion( regionId, ownerTaskId, physBase, pageCount, SHARED_MEM_FLAGS_RW )
         I64 regionPtr = 0
-        asm volatile "movq $1, $0" : output( "=r" regionPtr ) : input( "r" region ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" regionPtr ) : input( "r" region ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" regionPtr ) : input( "r" region ) : clobber()
         self.sharedRegistry.addRegion( regionId, regionPtr )
         return region
     
@@ -471,7 +473,9 @@ public class Process:
         """
 
         I64 extractedAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entry ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entry ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" extractedAddr ) : input( "r" entry ) : clobber()
         self.startRaw( extractedAddr )
 
     protect function startRaw( self, I64 entryAddr ) -> Void:

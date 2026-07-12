@@ -64,7 +64,9 @@ public class PhysicalMemoryManager:
         self.usedFrames = 0
         self.pool = new Memory<I64>( memorySize / 8 )
         self.poolBase = 0
-        asm volatile "movq $1, $0" : output( "=r" self.poolBase ) : input( "r" self.pool ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" self.poolBase ) : input( "r" self.pool ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" self.poolBase ) : input( "r" self.pool ) : clobber()
     
     public function allocFrame( self ) -> I64:
         

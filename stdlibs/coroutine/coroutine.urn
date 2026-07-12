@@ -63,7 +63,9 @@ public class SimpleCoroutine implements Coroutine<I64, I64>:
         """
 
         I64 extractedAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
         self.fiber = new Fiber( extractedAddr )
         self.state = COROUTINE_CREATED
         self.yieldedValue = 0

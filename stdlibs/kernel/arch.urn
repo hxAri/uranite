@@ -22,8 +22,7 @@
 
 package uranite.kernel.arch
 
-from uranite.os.arch.x86-64.cpu import {
-    Registers,
+from uranite.os.arch.cpu import {
     disableInterrupts,
     enableInterrupts,
     halt,
@@ -40,7 +39,8 @@ from uranite.os.arch.x86-64.cpu import {
     writeCr4,
     writeMsr
 }
-from uranite.os.arch.x86-64.gdt import {
+from uranite.os.arch.registers import Registers
+from uranite.os.arch.gdt import {
     Gdt,
     GdtEntry,
     GdtPointer,
@@ -51,7 +51,7 @@ from uranite.os.arch.x86-64.gdt import {
     userCodeSelector,
     userDataSelector
 }
-from uranite.os.arch.x86-64.idt import {
+from uranite.os.arch.idt import {
     GateType,
     IRQ_BASE,
     Idt,
@@ -60,7 +60,7 @@ from uranite.os.arch.x86-64.idt import {
     InterruptVector,
     loadIdt
 }
-from uranite.os.arch.x86-64.paging import {
+from uranite.os.arch.paging import {
     HUGE_PAGE_1GB,
     HUGE_PAGE_2MB,
     PAGE_ACCESSED,
@@ -83,7 +83,7 @@ from uranite.os.arch.x86-64.paging import {
     pml4Index,
     ptIndex
 }
-from uranite.os.arch.x86-64.port import {
+from uranite.os.arch.port import {
     inb,
     inl,
     inw,
@@ -158,9 +158,9 @@ public class DescriptorTables:
     public Gdt gdt
     public Idt idt
 
-    public function DescriptorTables( self, I64 gdtCapacity, I64 idtCapacity ) -> Void:
-        self.gdt = new Gdt( gdtCapacity )
-        self.idt = new Idt( idtCapacity )
+    public function DescriptorTables( self ) -> Void:
+        self.gdt = new Gdt()
+        self.idt = new Idt()
 
     public function install( self ) -> Void:
 
@@ -196,33 +196,29 @@ public class PageMapper:
         """
         Map a single 4KB page from virtualAddress to physicalAddress with
         the given flags (PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER etc.).
-        
+        Uses the L3/PT index to write into the root table directly — caller
+        must ensure intermediate tables are walked.
+
         Complexity:
             Time: O(1)
             Space: O(1)
         """
 
-        I64 pml4Idx = pml4Index( virtualAddress )
-        I64 pdptIdx = pdptIndex( virtualAddress )
-        I64 pdIdx = pdIndex( virtualAddress )
         I64 ptIdx = ptIndex( virtualAddress )
-        self.rootTable.mapEntry( pml4Idx, pdptIdx, pdIdx, ptIdx, physicalAddress, flags )
+        self.rootTable.setEntry( ptIdx, ( physicalAddress & 4503599627366400 ) | flags )
 
     public function unmapPage( self, I64 virtualAddress ) -> Void:
 
         """
         Unmap a single 4KB page and invalidate its TLB entry.
-        
+
         Complexity:
             Time: O(1)
             Space: O(1)
         """
 
-        I64 pml4Idx = pml4Index( virtualAddress )
-        I64 pdptIdx = pdptIndex( virtualAddress )
-        I64 pdIdx = pdIndex( virtualAddress )
         I64 ptIdx = ptIndex( virtualAddress )
-        self.rootTable.unmapEntry( pml4Idx, pdptIdx, pdIdx, ptIdx )
+        self.rootTable.clearEntry( ptIdx )
         invlpg( virtualAddress )
 
 export {

@@ -46,15 +46,17 @@ public class SecureRandom:
     public function SecureRandom( self ) -> Void:
 
         """
-        Construct and seed the random generator from hardware entropy.
-        
+        Construct and seed the random generator from the kernel entropy pool
+        via the getrandom syscall. Works on any Linux kernel >= 3.17 regardless
+        of hardware RNG support.
+
         Complexity:
             Time: O(1)
             Space: O(1)
         """
 
         self.generator = new Csprng()
-        self.generator.seedFromHardware()
+        self.generator.seedFromGetrandom()
 
     public function nextI64( self ) -> I64:
 
@@ -120,7 +122,7 @@ public function randomBytes( I64 bufferAddress, I64 byteCount ) -> Void:
     """
 
     Csprng generator = new Csprng()
-    generator.seedFromHardware()
+    generator.seedFromGetrandom()
 
     I64 writeOffset = 0
     while writeOffset + 8 <= byteCount:

@@ -59,15 +59,16 @@ fi
 
 function main() {
 	local dependencies=(
-		llvm-14-dev
+		llvm-19-dev
+		libargparse-dev
 		libfmt-dev
 		libspdlog-dev
 		libgtest-dev
 		cmake
 		g++
 	)
-	# sudo apt update -y
-	# sudo apt install -y ${dependencies[@]}
+	sudo apt update -y
+	sudo apt install -y ${dependencies[@]}
 	if [[ $? -eq 0 ]]; then
 		cmake -B build -DCMAKE_BUILD_TYPE=Release
 		make -C build -j$(nproc)

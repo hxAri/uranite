@@ -1,0 +1,338 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/aarch64/paging.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# AArch64 translation table infrastructure for 4KB granule 4-level paging.
+# Provides API-compatible types and constants matching the x86-64 paging module.
+# AArch64 uses TTBR0/TTBR1 (equivalent to CR3) with 4 levels: L0, L1, L2, L3
+# (equivalent to PML4, PDPT, PD, PT). Each level has 512 entries (9 bits each).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.aarch64.paging
+
+from uranite.memory.memory import Memory
+from uranite.os.arch.aarch64.cpu import invlpg, readTtbr0, writeTtbr0
+
+public const I64 PAGE_PRESENT = 1
+
+""" Valid bit (bit 0): the translation table entry is valid. """
+
+public const I64 PAGE_WRITABLE = 2
+
+"""
+Read/Write flag (bit 1): maps to AP[2]=0 (read-write). On AArch64, AP bits in
+the descriptor control access permissions. This constant provides x86-compatible
+flag semantics.
+"""
+
+public const I64 PAGE_USER = 4
+
+""" User flag (bit 2): maps to AP[1]=1 (EL0 accessible). """
+
+public const I64 PAGE_WRITE_THROUGH = 8
+
+""" Write-through caching attribute (maps to MAIR index selection). """
+
+public const I64 PAGE_CACHE_DISABLE = 16
+
+""" Cache disable attribute (maps to device-nGnRnE MAIR index). """
+
+public const I64 PAGE_ACCESSED = 32
+
+""" Access flag (bit 10 in ARM descriptor): set on first access. """
+
+public const I64 PAGE_DIRTY = 64
+
+""" Dirty bit (DBM): set automatically on write if hardware dirty management enabled. """
+
+public const I64 PAGE_HUGE = 128
+
+""" Block descriptor flag: creates a 2MB block at L2 or 1GB block at L1. """
+
+public const I64 PAGE_GLOBAL = 256
+
+""" Non-Global bit inverted: nG=0 means global (not flushed on ASID switch). """
+
+public function pageNoExecute() -> I64:
+
+    """
+    Return the execute-never flag (UXN/PXN). On AArch64 this is bit 54 (UXN)
+    which prevents user-space execution from this page.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return 1 << 54
+
+public class PageTableEntry:
+
+    """
+    Single 8-byte translation table descriptor. On AArch64 with 4KB granule,
+    bits 47:12 hold the output address (physical page frame), and bits 11:0
+    plus upper bits hold attributes (valid, table/block, AP, SH, AF, etc.).
+    This class uses the same flag layout as x86-64 for API compatibility.
+    """
+
+    public I64 raw
+
+    public function PageTableEntry( self, I64 raw ) -> Void:
+
+        """
+        Construct a page table entry from a raw descriptor value.
+
+        Parameters:
+            raw (I64):
+                The raw descriptor value with output address and attribute bits.
+        """
+
+        self.raw = raw
+
+    public function isPresent( self ) -> Boolean:
+
+        """ Check if the valid bit (bit 0) is set, indicating this descriptor is active. """
+
+        return ( self.raw & 1 ) != 0
+
+    public function isWritable( self ) -> Boolean:
+
+        """ Check if the writable flag (bit 1) is set. """
+
+        return ( self.raw & 2 ) != 0
+
+    public function isUser( self ) -> Boolean:
+
+        """ Check if the user-accessible flag (bit 2) is set. """
+
+        return ( self.raw & 4 ) != 0
+
+    public function isHuge( self ) -> Boolean:
+
+        """ Check if this is a block descriptor (huge page). """
+
+        return ( self.raw & 128 ) != 0
+
+    public function address( self ) -> I64:
+
+        """
+        Extract the output address (physical page frame) from this descriptor.
+        Masks bits 47:12, yielding the 4KB-aligned physical address.
+
+        Returns:
+            I64:
+                The physical address of the referenced page frame or next-level table.
+        """
+
+        return self.raw & 4503599627366400
+
+    public function set( self, I64 physAddr, I64 flags ) -> Void:
+
+        """
+        Set this descriptor to map to the given physical address with flags.
+
+        Parameters:
+            physAddr (I64):
+                The 4KB-aligned physical address.
+            flags (I64):
+                The descriptor attribute flags.
+        """
+
+        self.raw = ( physAddr & 4503599627366400 ) | flags
+
+    public function clear( self ) -> Void:
+
+        """ Clear this descriptor, marking it as invalid. """
+
+        self.raw = 0
+
+    public function flags( self ) -> I64:
+
+        """
+        Extract the attribute flag bits (bits 0-11) from this descriptor.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.raw & 4095
+
+public class PageTable:
+
+    """
+    Array of 512 translation table descriptors occupying one 4KB page.
+    Used at all four levels of AArch64 4KB-granule translation: L0 (equivalent
+    to PML4), L1 (PDPT), L2 (PD), and L3 (PT).
+    """
+
+    protect Memory<I64> entries
+
+    public function PageTable( self ) -> Void:
+
+        """
+        Construct a translation table with all 512 entries zeroed (invalid).
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        self.entries = new Memory<I64>( 512 )
+        I64 entryIndex = 0
+        while entryIndex < 512:
+            self.entries.set( entryIndex, 0 )
+            entryIndex = entryIndex + 1
+
+    public function getEntry( self, I64 index ) -> PageTableEntry:
+
+        """
+        Return the descriptor at the given index as a PageTableEntry object.
+
+        Parameters:
+            index (I64):
+                The entry index (0-511).
+
+        Returns:
+            PageTableEntry:
+                A wrapper around the raw descriptor value.
+        """
+
+        return new PageTableEntry( self.entries.get( index ) )
+
+    public function setEntry( self, I64 index, I64 value ) -> Void:
+
+        """
+        Write a raw descriptor value at the given index.
+
+        Parameters:
+            index (I64):
+                The entry index (0-511).
+            value (I64):
+                The raw descriptor value.
+        """
+
+        self.entries.set( index, value )
+
+    public function clearEntry( self, I64 index ) -> Void:
+
+        """
+        Clear the entry at the given index (mark invalid).
+
+        Parameters:
+            index (I64):
+                The entry index (0-511).
+        """
+
+        self.entries.set( index, 0 )
+
+    public function destroy( self ) -> Void:
+
+        """ Free the underlying memory allocation for this translation table. """
+
+        self.entries.free()
+
+public function pml4Index( I64 virtualAddr ) -> I64:
+
+    """ Extract the L0 table index (bits 39-47) from a virtual address. """
+
+    return ( virtualAddr >> 39 ) & 511
+
+public function pdptIndex( I64 virtualAddr ) -> I64:
+
+    """ Extract the L1 table index (bits 30-38) from a virtual address. """
+
+    return ( virtualAddr >> 30 ) & 511
+
+public function pdIndex( I64 virtualAddr ) -> I64:
+
+    """ Extract the L2 table index (bits 21-29) from a virtual address. """
+
+    return ( virtualAddr >> 21 ) & 511
+
+public function ptIndex( I64 virtualAddr ) -> I64:
+
+    """
+    Extract the L3 table index (bits 12-20) from a virtual address.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return ( virtualAddr >> 12 ) & 511
+
+public const I64 PAGE_SIZE = 4096
+
+""" Standard 4KB page size (smallest AArch64 granule). """
+
+public const I64 HUGE_PAGE_2MB = 2097152
+
+""" 2MB block descriptor size at L2. """
+
+public const I64 HUGE_PAGE_1GB = 1073741824
+
+""" 1GB block descriptor size at L1. """
+
+public function flushPage( I64 virtualAddr ) -> Void:
+
+    """
+    Invalidate a single TLB entry for the specified virtual address via
+    TLBI VAE1IS + DSB + ISB.
+
+    Parameters:
+        virtualAddr (I64):
+            The virtual address whose TLB entry should be invalidated.
+    """
+
+    invlpg( virtualAddr )
+
+public function flushTlb() -> Void:
+
+    """
+    Invalidate the entire TLB via TLBI VMALLE1IS + DSB + ISB. This is
+    expensive but necessary when multiple page table entries change.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    asm volatile "tlbi vmalle1is; dsb sy; isb" : : : clobber( "memory" )
+
+export {
+    HUGE_PAGE_1GB,
+    HUGE_PAGE_2MB,
+    PAGE_ACCESSED,
+    PAGE_CACHE_DISABLE,
+    PAGE_DIRTY,
+    PAGE_GLOBAL,
+    PAGE_HUGE,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PAGE_WRITE_THROUGH,
+    PageTable,
+    PageTableEntry,
+    flushPage,
+    flushTlb,
+    pageNoExecute,
+    pdIndex,
+    pdptIndex,
+    pml4Index,
+    ptIndex
+}

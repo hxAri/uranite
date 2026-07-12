@@ -1,0 +1,316 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/idt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cross-platform interrupt/exception vector table. On x86-64 this is the IDT
+# loaded via lidt. On AArch64 this maps to the exception vector table loaded
+# via VBAR_EL1. Data structures are architecture-neutral; only the load
+# instruction uses arch-block asm.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.idt
+
+from uranite.memory.memory import Memory
+
+public class IdtEntry:
+
+    """
+    Interrupt/exception gate descriptor entry. Stores the handler address split
+    across three offset fields (x86-64 legacy layout) plus selector, IST index,
+    and gate type attributes.
+    """
+
+    public I64 offsetLow
+    public I64 selector
+    public I64 ist
+    public I64 typeAttr
+    public I64 offsetMiddle
+    public I64 offsetHigh
+    public I64 reserved
+
+    public function IdtEntry( self ) -> Void:
+
+        """
+        Construct a zeroed entry with no handler installed.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.offsetLow = 0
+        self.selector = 0
+        self.ist = 0
+        self.typeAttr = 0
+        self.offsetMiddle = 0
+        self.offsetHigh = 0
+        self.reserved = 0
+
+    public function setHandler( self, I64 handler, I64 selector, I64 typeAttr, I64 ist ) -> Void:
+
+        """
+        Configure this entry with a handler address and attributes.
+
+        Parameters:
+            handler (I64):
+                The 64-bit virtual address of the handler function.
+            selector (I64):
+                The code segment selector (x86-64) or unused (AArch64).
+            typeAttr (I64):
+                Gate type and attribute byte.
+            ist (I64):
+                IST index for dedicated stack switching (1-7), or 0 for none.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.offsetLow = handler & 65535
+        self.offsetMiddle = ( handler >> 16 ) & 65535
+        self.offsetHigh = ( handler >> 32 ) & 4294967295
+        self.selector = selector
+        self.typeAttr = typeAttr
+        self.ist = ist
+        self.reserved = 0
+
+    public function getHandler( self ) -> I64:
+
+        """
+        Reconstruct and return the full 64-bit handler address.
+
+        Returns:
+            I64:
+                The handler function address.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.offsetLow | ( self.offsetMiddle << 16 ) | ( self.offsetHigh << 32 )
+
+public struct IdtPointer:
+
+    """
+    Table pointer for the interrupt descriptor table. On x86-64 this is the
+    IDTR structure. On AArch64 the base is written to VBAR_EL1.
+    """
+
+    public I64 limit
+    public I64 base
+
+    public function IdtPointer( self, I64 limit, I64 base ) -> Void:
+
+        """
+        Construct an IDT pointer with the given size limit and base address.
+
+        Parameters:
+            limit (I64):
+                The table size in bytes minus one.
+            base (I64):
+                The base address of the first entry.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.limit = limit
+        self.base = base
+
+public enum GateType backed I64:
+
+    """
+    Gate type attribute values encoding the gate type, DPL, and present bit.
+    On AArch64 these map to exception routing configuration.
+    """
+
+    unit InterruptGateKernel 142
+
+    """ Kernel-mode interrupt gate (0x8E). Masks IRQ on entry, DPL 0. """
+
+    unit TrapGateKernel 143
+
+    """ Kernel-mode trap gate (0x8F). Preserves IRQ state, DPL 0. """
+
+    unit InterruptGateUser 238
+
+    """ User-mode interrupt gate (0xEE). Masks IRQ on entry, DPL 3. """
+
+public enum InterruptVector backed I64:
+
+    """
+    CPU exception vector numbers. Vectors 0-31 are processor-reserved exceptions.
+    On AArch64 these map to ESR_EL1 syndrome codes conceptually.
+    """
+
+    unit DivideError 0
+    unit Debug 1
+    unit Nmi 2
+    unit Breakpoint 3
+    unit Overflow 4
+    unit BoundRange 5
+    unit InvalidOpcode 6
+    unit DeviceNotAvail 7
+    unit DoubleFault 8
+    unit InvalidTss 10
+    unit SegmentNotPresent 11
+    unit StackSegment 12
+    unit GeneralProtection 13
+    unit PageFault 14
+    unit X87Fpu 16
+    unit AlignCheck 17
+    unit MachineCheck 18
+    unit SimdFp 19
+
+public const I64 IRQ_BASE = 32
+
+""" Base vector number where hardware IRQs start. """
+
+public class Idt:
+
+    """
+    Interrupt/exception vector table containing 256 gate descriptor entries.
+    Covers all interrupt vector numbers on x86-64. On AArch64 the fixed 16-entry
+    vector table is abstracted behind this 256-entry interface for compatibility.
+    """
+
+    protect Memory<IdtEntry> entries
+    protect I64 count
+
+    public function Idt( self ) -> Void:
+
+        """
+        Construct a full table with 256 zeroed entries.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        self.entries = new Memory<IdtEntry>( 256 )
+        self.count = 256
+        I64 vectorIndex = 0
+        while vectorIndex < 256:
+            self.entries.set( vectorIndex, new IdtEntry() )
+            vectorIndex = vectorIndex + 1
+
+    public function setGate( self, I64 vector, I64 handler, I64 selector, I64 typeAttr ) -> Void:
+
+        """
+        Install a handler for the specified vector number using IST 0.
+
+        Parameters:
+            vector (I64):
+                The vector number (0-255).
+            handler (I64):
+                The handler function address.
+            selector (I64):
+                The code segment selector.
+            typeAttr (I64):
+                Gate type and attribute byte.
+        """
+
+        if vector >= 0 and vector < 256:
+            IdtEntry entry = self.entries.get( vector )
+            entry.setHandler( handler, selector, typeAttr, 0 )
+            self.entries.set( vector, entry )
+
+    public function setGateWithIst( self, I64 vector, I64 handler, I64 selector, I64 typeAttr, I64 ist ) -> Void:
+
+        """
+        Install a handler with a dedicated stack index.
+
+        Parameters:
+            vector (I64):
+                The vector number (0-255).
+            handler (I64):
+                The handler function address.
+            selector (I64):
+                The code segment selector.
+            typeAttr (I64):
+                Gate type and attribute byte.
+            ist (I64):
+                Stack index (1-7) or 0 for none.
+        """
+
+        if vector >= 0 and vector < 256:
+            IdtEntry entry = self.entries.get( vector )
+            entry.setHandler( handler, selector, typeAttr, ist )
+            self.entries.set( vector, entry )
+
+    public function getEntry( self, I64 vector ) -> IdtEntry:
+
+        """
+        Return the entry for the specified vector number.
+
+        Parameters:
+            vector (I64):
+                The vector number (0-255).
+
+        Returns:
+            IdtEntry:
+                The gate descriptor entry.
+        """
+
+        return self.entries.get( vector )
+
+    public function getPointer( self ) -> IdtPointer:
+
+        """
+        Construct a table pointer for loading into the CPU.
+
+        Returns:
+            IdtPointer:
+                A pointer with limit = (count * 16) - 1 and base = entry storage address.
+        """
+
+        I64 limit = ( self.count * 16 ) - 1
+        I64 base = addressof self.entries
+        return new IdtPointer( limit, base )
+
+    public function destroy( self ) -> Void:
+
+        """ Free the underlying memory allocation for the vector table. """
+
+        self.entries.free()
+
+public function loadIdt( IdtPointer ptr ) -> Void:
+
+    """
+    Load the interrupt vector table into the CPU. On x86-64 this executes lidt.
+    On AArch64 this writes VBAR_EL1.
+
+    Parameters:
+        ptr (IdtPointer):
+            The table pointer containing the base address and size limit.
+    """
+
+    I64 baseAddr = ptr.base
+    asm volatile:
+        x86-64 "lidt ($0)" : : input( "r" ptr ) : clobber( "memory" )
+        aarch64 "msr VBAR_EL1, $0; isb" : : input( "r" baseAddr ) : clobber( "memory" )
+
+export {
+    GateType,
+    IRQ_BASE,
+    Idt,
+    IdtEntry,
+    IdtPointer,
+    InterruptVector,
+    loadIdt
+}

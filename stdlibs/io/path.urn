@@ -86,7 +86,9 @@ public function join( String basePath, String childPath ) -> String:
         secondCopyIndex = secondCopyIndex + 1
     writeByteAt( resultAddress, writePosition, 0 )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
     return result
 
 public function dirname( String path ) -> String:
@@ -132,7 +134,9 @@ public function dirname( String path ) -> String:
         copyIndex = copyIndex + 1
     writeByteAt( resultAddress, resultLength, 0 )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
     return result
 
 public function basename( String path ) -> String:
@@ -177,7 +181,9 @@ public function basename( String path ) -> String:
         copyIndex = copyIndex + 1
     writeByteAt( resultAddress, resultLength, 0 )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
     return result
 
 public function extension( String path ) -> String:
@@ -228,7 +234,9 @@ public function extension( String path ) -> String:
         copyIndex = copyIndex + 1
     writeByteAt( resultAddress, resultLength, 0 )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
     return result
 
 public function stem( String path ) -> String:
@@ -273,7 +281,9 @@ public function stem( String path ) -> String:
         copyIndex = copyIndex + 1
     writeByteAt( resultAddress, resultLength, 0 )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" resultAddress ) : clobber()
     return result
 
 public function exists( String path ) -> Boolean:
@@ -382,7 +392,9 @@ public function readlink( String path ) -> String:
     I64 bytesRead = sysReadlink( pathPointer, readBufferAddress, readBufferSize )
     writeByteAt( readBufferAddress, bytesRead, 0 )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
     return result
 
 public function absolute( String path ) -> String:
@@ -421,7 +433,9 @@ public function absolute( String path ) -> String:
     I64 cwdBufferAddress = memoryToPtr( cwdBuffer )
     sysGetcwd( cwdBufferAddress, cwdBufferSize )
     String currentDirectory = ""
-    asm volatile "movq $1, $0" : output( "=r" currentDirectory ) : input( "r" cwdBufferAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" currentDirectory ) : input( "r" cwdBufferAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" currentDirectory ) : input( "r" cwdBufferAddress ) : clobber()
     return join( currentDirectory, path )
 
 public function parentDir( String path ) -> String:

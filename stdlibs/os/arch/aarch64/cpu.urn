@@ -1,0 +1,385 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/aarch64/cpu.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides direct access to AArch64 CPU state including general-purpose registers,
+# system registers (SCTLR_EL1, TCR_EL1, TTBR0/1, VBAR_EL1), PSTATE/DAIF, and
+# the generic timer counter, as well as interrupt control and TLB management.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.aarch64.cpu
+
+public struct Registers:
+
+    """
+    Full AArch64 CPU register context including all general-purpose registers (x0-x15),
+    the program counter, stack pointer, frame pointer, and PSTATE flags. This structure
+    is saved and restored during context switches and interrupt entry/exit. Field names
+    use x86-64 conventions for cross-platform compatibility with the kernel scheduler.
+    """
+
+    public I64 rax
+    public I64 rbx
+    public I64 rcx
+    public I64 rdx
+    public I64 rsi
+    public I64 rdi
+    public I64 rbp
+    public I64 rsp
+    public I64 r8
+    public I64 r9
+    public I64 r10
+    public I64 r11
+    public I64 r12
+    public I64 r13
+    public I64 r14
+    public I64 r15
+    public I64 rip
+    public I64 rflags
+    public I64 cs
+    public I64 ss
+
+    public function Registers( self ) -> Void:
+
+        """
+        Construct a zeroed register context suitable for a newly created task.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.rax = 0
+        self.rbx = 0
+        self.rcx = 0
+        self.rdx = 0
+        self.rsi = 0
+        self.rdi = 0
+        self.rbp = 0
+        self.rsp = 0
+        self.r8 = 0
+        self.r9 = 0
+        self.r10 = 0
+        self.r11 = 0
+        self.r12 = 0
+        self.r13 = 0
+        self.r14 = 0
+        self.r15 = 0
+        self.rip = 0
+        self.rflags = 0
+        self.cs = 0
+        self.ss = 0
+
+public function halt() -> Void:
+
+    """ Halt the CPU until the next interrupt arrives via the WFI instruction. """
+
+    asm volatile "wfi"
+
+public function enableInterrupts() -> Void:
+
+    """ Enable IRQ interrupts by clearing the I bit in DAIF. """
+
+    asm volatile "msr daifclr, #0x2"
+
+public function disableInterrupts() -> Void:
+
+    """ Disable IRQ interrupts by setting the I bit in DAIF. """
+
+    asm volatile "msr daifset, #0x2"
+
+public function readSctlr() -> I64:
+
+    """
+    Read SCTLR_EL1 (System Control Register) which contains MMU enable, cache
+    enable, alignment check, and other system control flags. Equivalent to
+    x86-64 CR0 in function.
+
+    Returns:
+        I64:
+            The current SCTLR_EL1 value.
+    """
+
+    I64 result = 0
+    asm "mrs $0, SCTLR_EL1" : output( "=r" result )
+    return result
+
+public function writeSctlr( I64 value ) -> Void:
+
+    """
+    Write a new value to SCTLR_EL1 to enable or disable the MMU, caches,
+    and alignment checking. Changes take effect after an ISB barrier.
+
+    Parameters:
+        value (I64):
+            The new SCTLR_EL1 value to write.
+    """
+
+    asm volatile "msr SCTLR_EL1, $0; isb" : : input( "r" value )
+
+public function readFar() -> I64:
+
+    """
+    Read FAR_EL1 (Fault Address Register) which contains the virtual address
+    that caused the last data abort or instruction abort. Equivalent to x86-64
+    CR2 (page fault linear address).
+
+    Returns:
+        I64:
+            The faulting virtual address.
+    """
+
+    I64 result = 0
+    asm "mrs $0, FAR_EL1" : output( "=r" result )
+    return result
+
+public function readTtbr0() -> I64:
+
+    """
+    Read TTBR0_EL1 (Translation Table Base Register 0) which holds the physical
+    base address of the page table for the lower virtual address range (user space).
+    Equivalent to x86-64 CR3.
+
+    Returns:
+        I64:
+            The current TTBR0_EL1 value containing the page table base.
+    """
+
+    I64 result = 0
+    asm "mrs $0, TTBR0_EL1" : output( "=r" result )
+    return result
+
+public function writeTtbr0( I64 value ) -> Void:
+
+    """
+    Write a new physical address into TTBR0_EL1 to switch the active user-space
+    page table. Followed by a TLB invalidation and ISB to ensure consistency.
+    This is the primary mechanism for switching between process address spaces.
+
+    Parameters:
+        value (I64):
+            The physical address of the new translation table to activate.
+    """
+
+    asm volatile "msr TTBR0_EL1, $0; isb" : : input( "r" value )
+
+public function readTtbr1() -> I64:
+
+    """
+    Read TTBR1_EL1 which holds the page table base for the upper virtual address
+    range (kernel space). On AArch64, TTBR1 maps the kernel half of the address
+    space while TTBR0 maps the user half.
+
+    Returns:
+        I64:
+            The current TTBR1_EL1 value.
+    """
+
+    I64 result = 0
+    asm "mrs $0, TTBR1_EL1" : output( "=r" result )
+    return result
+
+public function writeTtbr1( I64 value ) -> Void:
+
+    """
+    Write a new value to TTBR1_EL1 for kernel address space page table switching.
+
+    Parameters:
+        value (I64):
+            The physical address of the new kernel page table.
+    """
+
+    asm volatile "msr TTBR1_EL1, $0; isb" : : input( "r" value )
+
+public function readTcr() -> I64:
+
+    """
+    Read TCR_EL1 (Translation Control Register) which configures page table
+    granule size, address space size, and cacheability attributes for both
+    TTBR0 and TTBR1 regions.
+
+    Returns:
+        I64:
+            The current TCR_EL1 value.
+    """
+
+    I64 result = 0
+    asm "mrs $0, TCR_EL1" : output( "=r" result )
+    return result
+
+public function writeTcr( I64 value ) -> Void:
+
+    """
+    Write a new value to TCR_EL1 to configure translation granule, region
+    sizes, and shareability attributes.
+
+    Parameters:
+        value (I64):
+            The new TCR_EL1 value.
+    """
+
+    asm volatile "msr TCR_EL1, $0; isb" : : input( "r" value )
+
+public function invlpg( I64 virtualAddress ) -> Void:
+
+    """
+    Invalidate the TLB entry for the specified virtual address using TLBI VAE1IS.
+    This is the AArch64 equivalent of x86-64 invlpg. The address is shifted right
+    by 12 to form the page-aligned address input expected by TLBI.
+
+    Parameters:
+        virtualAddress (I64):
+            The virtual address whose TLB entry should be invalidated.
+    """
+
+    I64 pageAddress = virtualAddress >> 12
+    asm volatile "tlbi vae1is, $0; dsb sy; isb" : : input( "r" pageAddress ) : clobber( "memory" )
+
+public function readMsr( I64 msr ) -> I64:
+
+    """
+    Read a system register by index. On AArch64 this is provided for API
+    compatibility; actual system register access uses specific mrs instructions.
+    Returns 0 as a stub — use dedicated read functions for specific registers.
+
+    Parameters:
+        msr (I64):
+            The system register index (unused on AArch64).
+
+    Returns:
+        I64:
+            Always returns 0. Use specific register read functions instead.
+    """
+
+    return 0
+
+public function writeMsr( I64 msr, I64 value ) -> Void:
+
+    """
+    Write a system register by index. On AArch64 this is provided for API
+    compatibility; actual system register access uses specific msr instructions.
+    No-op — use dedicated write functions for specific registers.
+    """
+
+    return
+
+public function readRflags() -> I64:
+
+    """
+    Read the current DAIF register and normalize to x86-64 RFLAGS format where
+    bit 9 (IF) set means interrupts are enabled. On AArch64, DAIF bit 7 set means
+    IRQ masked (disabled), so this function inverts the sense.
+
+    Returns:
+        I64:
+            Normalized flags value with bit 9 = interrupts enabled.
+    """
+
+    I64 result = 0
+    asm "mrs $0, DAIF" : output( "=r" result )
+    I64 irqMasked = ( result >> 7 ) & 1
+    I64 interruptsEnabled = 1 - irqMasked
+    return interruptsEnabled << 9
+
+public function readTsc() -> I64:
+
+    """
+    Read the generic timer counter (CNTVCT_EL0) which provides a monotonically
+    increasing cycle counter similar to x86-64 RDTSC. The counter frequency can
+    be read from CNTFRQ_EL0.
+
+    Returns:
+        I64:
+            The current virtual timer counter value.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 result = 0
+    asm volatile "mrs $0, CNTVCT_EL0" : output( "=r" result )
+    return result
+
+public function readCr0() -> I64:
+
+    """ Read SCTLR_EL1 (AArch64 equivalent of CR0). """
+
+    return readSctlr()
+
+public function readCr2() -> I64:
+
+    """ Read FAR_EL1 (AArch64 equivalent of CR2). """
+
+    return readFar()
+
+public function readCr3() -> I64:
+
+    """ Read TTBR0_EL1 (AArch64 equivalent of CR3). """
+
+    return readTtbr0()
+
+public function writeCr3( I64 value ) -> Void:
+
+    """ Write TTBR0_EL1 (AArch64 equivalent of CR3). """
+
+    writeTtbr0( value )
+
+public function readCr4() -> I64:
+
+    """ Read TCR_EL1 (AArch64 equivalent of CR4). """
+
+    return readTcr()
+
+public function writeCr0( I64 value ) -> Void:
+
+    """ Write SCTLR_EL1 (AArch64 equivalent of CR0). """
+
+    writeSctlr( value )
+
+public function writeCr4( I64 value ) -> Void:
+
+    """ Write TCR_EL1 (AArch64 equivalent of CR4). """
+
+    writeTcr( value )
+
+export {
+    Registers,
+    disableInterrupts,
+    enableInterrupts,
+    halt,
+    invlpg,
+    readCr0,
+    readCr2,
+    readCr3,
+    readCr4,
+    readFar,
+    readMsr,
+    readRflags,
+    readSctlr,
+    readTcr,
+    readTsc,
+    readTtbr0,
+    readTtbr1,
+    writeCr0,
+    writeCr3,
+    writeCr4,
+    writeMsr,
+    writeSctlr,
+    writeTcr,
+    writeTtbr0,
+    writeTtbr1
+}

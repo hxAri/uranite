@@ -285,7 +285,9 @@ public function readlink( String path ) -> String:
     I64 bytesRead = sysReadlink( pathPointer, readBufferAddress, readBufferSize )
     writeByteAt( readBufferAddress, bytesRead, 0 )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" readBufferAddress ) : clobber()
     return result
 
 public function lockShared( I64 fd ) -> Void:
@@ -946,7 +948,9 @@ public function getcwd() -> String:
     I64 bufAddr = memoryToPtr( buf )
     sysGetcwd( bufAddr, cwdSize )
     String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" bufAddr ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" bufAddr ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" bufAddr ) : clobber()
     return result
 
 public function chdir( String path ) -> Void:
@@ -1032,7 +1036,9 @@ public function tempFile( String prefix ) -> File:
         if openResult.isOk():
             sysClose( openResult.value() )
             String temporaryPath = ""
-            asm volatile "movq $1, $0" : output( "=r" temporaryPath ) : input( "r" nameAddress ) : clobber()
+            asm volatile:
+                x86-64 "movq $1, $0" : output( "=r" temporaryPath ) : input( "r" nameAddress ) : clobber()
+                aarch64 "mov $0, $1" : output( "=r" temporaryPath ) : input( "r" nameAddress ) : clobber()
             return new File( temporaryPath, O_RDWR, 0 )
         attemptCount = attemptCount + 1
         nameBuffer.free()
@@ -1105,7 +1111,9 @@ public function tempDir( String prefix ) -> String:
         SyscallResult mkdirResult = syscall2( SYS_MKDIR, nameAddress, 448 )
         if mkdirResult.isOk():
             String directoryPath = ""
-            asm volatile "movq $1, $0" : output( "=r" directoryPath ) : input( "r" nameAddress ) : clobber()
+            asm volatile:
+                x86-64 "movq $1, $0" : output( "=r" directoryPath ) : input( "r" nameAddress ) : clobber()
+                aarch64 "mov $0, $1" : output( "=r" directoryPath ) : input( "r" nameAddress ) : clobber()
             return directoryPath
         attemptCount = attemptCount + 1
         nameBuffer.free()
@@ -1173,7 +1181,9 @@ public function listDirectory( String path ) -> ArrayList<String>:
                     writeByteAt( nameBufferAddress, copyIndex, copyByte )
                     copyIndex = copyIndex + 1
                 writeByteAt( nameBufferAddress, nameLength, 0 )
-                asm volatile "movq $1, $0" : output( "=r" entryName ) : input( "r" nameBufferAddress ) : clobber()
+                asm volatile:
+                    x86-64 "movq $1, $0" : output( "=r" entryName ) : input( "r" nameBufferAddress ) : clobber()
+                    aarch64 "mov $0, $1" : output( "=r" entryName ) : input( "r" nameBufferAddress ) : clobber()
                 if entryName != "." and entryName != "..":
                     entries.add( entryName )
             entryOffset = entryOffset + recordLength

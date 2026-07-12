@@ -388,7 +388,9 @@ public function readVarI64WithLength( I64 bufferAddress, I64 offset, I64 lengthO
         shiftAmount = shiftAmount + 7
         bytesConsumed = bytesConsumed + 1
     I64 effectiveAddress = lengthOutputAddress
-    asm volatile "movq $1, ($0)" : : input( "r" effectiveAddress, "r" bytesConsumed ) : clobber( "memory" )
+    asm volatile:
+        x86-64 "movq $1, ($0)" : : input( "r" effectiveAddress, "r" bytesConsumed ) : clobber( "memory" )
+        aarch64 "str $1, [$0]" : : input( "r" effectiveAddress, "r" bytesConsumed ) : clobber( "memory" )
     I64 signedResult = ( unsignedResult >> 1 ) ^ ( 0 - ( unsignedResult & 1 ) )
     return signedResult
 

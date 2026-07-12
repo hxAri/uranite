@@ -40,12 +40,16 @@ const I64 MAX_MIDDLEWARE = 16
 
 function addrToController( I64 addr ) -> Controller:
     Controller obj = new Controller()
-    asm volatile "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" obj ) : input( "r" addr ) : clobber()
     return obj
 
 function addrToRoute( I64 addr ) -> Route:
     Route obj = new Route( "", "", 0 )
-    asm volatile "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" obj ) : input( "r" addr ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" obj ) : input( "r" addr ) : clobber()
     return obj
 
 public class Application:
@@ -127,7 +131,9 @@ public class Application:
         """
         
         I64 ctrlAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" ctrlAddr ) : input( "r" ctrl ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" ctrlAddr ) : input( "r" ctrl ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" ctrlAddr ) : input( "r" ctrl ) : clobber()
         self.controllers.set( self.controllerCount, ctrlAddr )
         self.controllerCount = self.controllerCount + 1
         return self
@@ -151,7 +157,9 @@ public class Application:
         """
         
         I64 mwAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" mwAddr ) : input( "r" mw ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" mwAddr ) : input( "r" mw ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" mwAddr ) : input( "r" mw ) : clobber()
         self.middlewares.set( self.middlewareCount, mwAddr )
         self.middlewareCount = self.middlewareCount + 1
         return self

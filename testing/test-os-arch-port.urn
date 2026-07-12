@@ -1,7 +1,7 @@
 package testing
 
 from uranite.io.console import putsln
-from uranite.os.arch.x86-64.port import {
+from uranite.os.arch.port import {
     inb,
     inl,
     inw,

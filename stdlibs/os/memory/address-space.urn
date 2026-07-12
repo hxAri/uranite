@@ -1,0 +1,239 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-11 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/memory/address-space.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cross-platform address space abstraction for kernel task and process
+# management. Provides page protection flag combinators and a PMM-backed
+# AddressSpace class with map/unmap/translate operations. On architectures
+# without a native page table implementation, mapping operations succeed
+# as software-only bookkeeping (no hardware TLB manipulation).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.memory.address-space
+
+from uranite.memory.memory import Memory
+from uranite.os.memory.pmm import PhysicalMemoryManager
+
+const I64 PAGE_PRESENT = 1
+const I64 PAGE_WRITABLE = 2
+const I64 PAGE_USER = 4
+
+public function protReadOnly() -> I64:
+
+    """ Return page protection flags for read-only kernel access. """
+
+    return PAGE_PRESENT
+
+public function protReadWrite() -> I64:
+
+    """ Return page protection flags for read-write kernel access. """
+
+    return PAGE_PRESENT | PAGE_WRITABLE
+
+public function protUser() -> I64:
+
+    """ Return page protection flags for read-write user-space access. """
+
+    return PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER
+
+public function protUserReadOnly() -> I64:
+
+    """ Return page protection flags for read-only user-space access. """
+
+    return PAGE_PRESENT | PAGE_USER
+
+public class AddressSpace:
+
+    """
+    Per-process virtual address space backed by a Physical Memory Manager.
+    Provides map, unmap, and translate operations over the underlying page
+    table structure. Architecture-specific VMM modules (x86-64 PML4, aarch64
+    TTBR) provide hardware-accelerated implementations; this cross-platform
+    version uses software bookkeeping for portability.
+    """
+
+    protect PhysicalMemoryManager pmm
+    protect I64 rootAddr
+    protect Memory<I64> mappingTable
+    protect I64 mappingCount
+    protect I64 mappingCapacity
+
+    public function AddressSpace( self, PhysicalMemoryManager pmm ) -> Void:
+
+        """
+        Construct a new address space backed by the given Physical Memory Manager.
+        Allocates a root page table frame and initializes the mapping table.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.pmm = pmm
+        self.rootAddr = pmm.allocFrame()
+        self.mappingCapacity = 256
+        self.mappingCount = 0
+        self.mappingTable = new Memory<I64>( 512 )
+        I64 slotIndex = 0
+        while slotIndex < 512:
+            self.mappingTable.set( slotIndex, 0 )
+            slotIndex = slotIndex + 1
+
+    public function mapPage( self, I64 virtAddr, I64 physAddr, I64 flags ) -> Boolean:
+
+        """
+        Map a single 4KB virtual page to a physical address with the given
+        protection flags. Returns True on success, False if the mapping table
+        is full.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        if self.mappingCount >= self.mappingCapacity:
+            return False
+        I64 baseIndex = self.mappingCount * 2
+        self.mappingTable.set( baseIndex, virtAddr )
+        self.mappingTable.set( baseIndex + 1, physAddr | flags )
+        self.mappingCount = self.mappingCount + 1
+        return True
+
+    public function mapRange( self, I64 virtAddr, I64 physAddr, I64 pageCount, I64 flags ) -> Boolean:
+
+        """
+        Map a contiguous range of 4KB pages from virtual to physical addresses
+        with the given protection flags.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 pageOffset = 0
+        while pageOffset < pageCount:
+            I64 vaddr = virtAddr + ( pageOffset * 4096 )
+            I64 paddr = physAddr + ( pageOffset * 4096 )
+            Boolean ok = self.mapPage( vaddr, paddr, flags )
+            if not ok:
+                return False
+            pageOffset = pageOffset + 1
+        return True
+
+    public function unmapPage( self, I64 virtAddr ) -> Void:
+
+        """
+        Unmap a single 4KB virtual page by clearing its mapping entry.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 searchIndex = 0
+        while searchIndex < self.mappingCount:
+            I64 baseIndex = searchIndex * 2
+            if self.mappingTable.get( baseIndex ) == virtAddr:
+                self.mappingTable.set( baseIndex, 0 )
+                self.mappingTable.set( baseIndex + 1, 0 )
+                return
+            searchIndex = searchIndex + 1
+
+    public function unmapRange( self, I64 virtAddr, I64 pageCount ) -> Void:
+
+        """
+        Unmap a contiguous range of 4KB virtual pages.
+
+        Complexity:
+            Time: O(n*m)
+            Space: O(1)
+        """
+
+        I64 pageOffset = 0
+        while pageOffset < pageCount:
+            self.unmapPage( virtAddr + ( pageOffset * 4096 ) )
+            pageOffset = pageOffset + 1
+
+    public function translate( self, I64 virtAddr ) -> I64:
+
+        """
+        Translate a virtual address to its corresponding physical address.
+        Returns the physical address or 0 if not mapped.
+
+        Complexity:
+            Time: O(n)
+            Space: O(1)
+        """
+
+        I64 pageAddr = virtAddr & ( 0 - 4096 )
+        I64 offset = virtAddr & 4095
+        I64 searchIndex = 0
+        while searchIndex < self.mappingCount:
+            I64 baseIndex = searchIndex * 2
+            if self.mappingTable.get( baseIndex ) == pageAddr:
+                I64 entry = self.mappingTable.get( baseIndex + 1 )
+                I64 physBase = entry & ( 0 - 4096 )
+                return physBase + offset
+            searchIndex = searchIndex + 1
+        return 0
+
+    public function isMapped( self, I64 virtAddr ) -> Boolean:
+
+        """ Check if the given virtual address has a valid mapping. """
+
+        return self.translate( virtAddr ) != 0
+
+    public function activate( self ) -> Void:
+
+        """
+        Activate this address space on the current CPU. On x86-64 this writes
+        CR3; on aarch64 this writes TTBR0_EL1. In software-only mode this is
+        a no-op.
+        """
+
+        return
+
+    public function getRootAddress( self ) -> I64:
+
+        """
+        Return the physical address of the root page table.
+
+        Returns:
+            I64:
+                The physical address of the root table frame.
+        """
+
+        return self.rootAddr
+
+    public function destroy( self ) -> Void:
+
+        """
+        Release all memory held by this address space.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.mappingTable.free()
+
+export {
+    AddressSpace,
+    protReadOnly,
+    protReadWrite,
+    protUser,
+    protUserReadOnly
+}

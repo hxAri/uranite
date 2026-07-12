@@ -17,6 +17,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#include <algorithm>
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
@@ -169,6 +170,24 @@ namespace uranite::optimizer {
 				}
 				for( ast::nodes::StatementSharedPointer& tryCatchFinallyStatementBody : tryCatch.finallyBody ) {
 					this->collectCalledFunctionsInStatement( tryCatchFinallyStatementBody, called );
+				}
+				break;
+			}
+			case ast::Node::Kind::InlineAssemblyStatement: {
+				ast::nodes::InlineAssemblyStatement& asmStatement = static_cast<ast::nodes::InlineAssemblyStatement&>( *statement );
+				for( ast::nodes::InlineAssemblyOperand& output : asmStatement.outputs ) {
+					this->collectCalledFunctions( output.expression, called );
+				}
+				for( ast::nodes::InlineAssemblyOperand& input : asmStatement.inputs ) {
+					this->collectCalledFunctions( input.expression, called );
+				}
+				for( ast::nodes::InlineAssemblyArchVariant& variant : asmStatement.archVariants ) {
+					for( ast::nodes::InlineAssemblyOperand& output : variant.outputs ) {
+						this->collectCalledFunctions( output.expression, called );
+					}
+					for( ast::nodes::InlineAssemblyOperand& input : variant.inputs ) {
+						this->collectCalledFunctions( input.expression, called );
+					}
 				}
 				break;
 			}
@@ -374,6 +393,14 @@ namespace uranite::optimizer {
 				}
 				for( ast::nodes::InlineAssemblyOperand& input : asmStatement.inputs ) {
 					this->collectUsedIdentifiers( input.expression, used );
+				}
+				for( ast::nodes::InlineAssemblyArchVariant& variant : asmStatement.archVariants ) {
+					for( ast::nodes::InlineAssemblyOperand& output : variant.outputs ) {
+						this->collectUsedIdentifiers( output.expression, used );
+					}
+					for( ast::nodes::InlineAssemblyOperand& input : variant.inputs ) {
+						this->collectUsedIdentifiers( input.expression, used );
+					}
 				}
 				break;
 			}

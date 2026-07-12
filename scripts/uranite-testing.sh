@@ -58,7 +58,9 @@ if [[ ! $(command -v puts) ]]; then
 fi
 
 function main() {
+	local arguments=()
 	local compiled=0
+	local debugable=0
 	local faileds=()
 	local foutputs=()
 	local warnings=()
@@ -66,6 +68,12 @@ function main() {
 	local executed=0
 	local timeout=10
 	local temporary=$(mktemp)
+	for argument in "$@"; do
+		case "$argument" in
+			--gdb) debugable=1 ;;
+			*) arguments+=( "$argument" ) ;;
+		esac
+	done
 	for pathname in "$@"; do
 		if [[ "$pathname" =~ \/$ ]]; then
 			pathname="${pathname::-1}"
@@ -100,16 +108,20 @@ function main() {
 					executed=0
 				else
 					if [[ -f "$binary" ]]; then
-						timeout $timeout \
-							gdb \
-								-return-child-result \
-								-batch \
-								-ex "set confirm off" \
-								-ex "run" \
-								-ex "bt full" \
-								-ex "info register" \
-								-ex "quit" \
-									"$binary" 2>&1 | tee "$temporary"
+						if [[ $debugable -eq 1 ]]; then
+							timeout $timeout \
+								gdb \
+									-return-child-result \
+									-batch \
+									-ex "set confirm off" \
+									-ex "run" \
+									-ex "bt full" \
+									-ex "info register" \
+									-ex "quit" \
+										"$binary" 2>&1 | tee "$temporary"
+						else
+							timeout $timeout "$binary" 2>&1 | tee "$temporary"
+						fi
 						executed=${PIPESTATUS[0]}
 						compiled=$((compiled+1))
 						if [[ $executed -ne 0 ]]; then

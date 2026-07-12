@@ -1,0 +1,257 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/gdt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cross-platform descriptor table infrastructure. On x86-64 this is the Global
+# Descriptor Table (GDT) loaded via lgdt. On AArch64 this maps to the exception
+# level configuration loaded via VBAR_EL1. Data structures are architecture-neutral;
+# only the load instruction uses arch-block asm.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.gdt
+
+from uranite.memory.memory import Memory
+
+public struct GdtEntry:
+
+    """
+    Segment descriptor entry. On x86-64, encodes base/limit/access/flags for
+    hardware segmentation. On AArch64, stores exception level attributes in
+    the same field layout for API compatibility.
+    """
+
+    public I64 limitLow
+    public I64 baseLow
+    public I64 baseMiddle
+    public I64 access
+    public I64 granularity
+    public I64 baseHigh
+
+    public function GdtEntry( self, I64 base, I64 limit, I64 access, I64 flags ) -> Void:
+
+        """
+        Construct a descriptor entry by splitting base, limit, access, and flags
+        into the fragmented bit layout required by x86 hardware.
+
+        Parameters:
+            base (I64):
+                The 32-bit segment base address.
+            limit (I64):
+                The 20-bit segment limit value.
+            access (I64):
+                The access byte controlling segment type, DPL, and presence.
+            flags (I64):
+                The 4-bit flags nibble controlling granularity and mode.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.limitLow = limit & 65535
+        self.baseLow = base & 65535
+        self.baseMiddle = ( base >> 16 ) & 255
+        self.access = access
+        self.granularity = ( ( limit >> 16 ) & 15 ) | ( ( flags << 4 ) & 240 )
+        self.baseHigh = ( base >> 24 ) & 255
+
+public struct GdtPointer:
+
+    """
+    Table pointer loaded into the CPU. On x86-64 this is the GDTR structure
+    (limit + base). On AArch64 the base is written to VBAR_EL1.
+    """
+
+    public I64 limit
+    public I64 base
+
+    public function GdtPointer( self, I64 limit, I64 base ) -> Void:
+
+        """
+        Construct a table pointer with the given limit and base address.
+
+        Parameters:
+            limit (I64):
+                The table size in bytes minus one.
+            base (I64):
+                The base address of the table.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.limit = limit
+        self.base = base
+
+public class Gdt:
+
+    """
+    Descriptor table manager holding segment/exception-level entries and
+    providing standard flat-mode initialization.
+    """
+
+    protect Memory<GdtEntry> entries
+    protect I64 count
+
+    public function Gdt( self ) -> Void:
+
+        """
+        Construct an empty descriptor table with storage for up to 6 entries.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.entries = new Memory<GdtEntry>( 6 )
+        self.count = 0
+
+    public function addEntry( self, GdtEntry entry ) -> I64:
+
+        """
+        Append a descriptor entry and return its selector value (index * 8).
+
+        Parameters:
+            entry (GdtEntry):
+                The descriptor entry to append.
+
+        Returns:
+            I64:
+                The selector value for the newly added entry.
+        """
+
+        I64 index = self.count
+        self.entries.set( index, entry )
+        self.count = self.count + 1
+        return index * 8
+
+    public function setupFlat( self ) -> Void:
+
+        """
+        Initialize a standard five-entry flat table: null descriptor, kernel
+        code, kernel data, user code, user data. On x86-64 these are segment
+        descriptors; on AArch64 they represent EL1/EL0 privilege boundaries.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.addEntry( new GdtEntry( 0, 0, 0, 0 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 154, 10 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 146, 12 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 250, 10 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 242, 12 ) )
+
+    public function getCount( self ) -> I64:
+
+        """ Return the number of entries currently stored. """
+
+        return self.count
+
+    public function getPointer( self ) -> GdtPointer:
+
+        """
+        Construct a table pointer for loading into the CPU.
+
+        Returns:
+            GdtPointer:
+                A pointer with limit = (count * 8) - 1 and base = entry storage address.
+        """
+
+        I64 limit = ( self.count * 8 ) - 1
+        I64 base = addressof self.entries
+        return new GdtPointer( limit, base )
+
+    public function destroy( self ) -> Void:
+
+        """ Free the underlying memory allocation for the entry table. """
+
+        self.entries.free()
+
+public function loadGdt( GdtPointer ptr ) -> Void:
+
+    """
+    Load the descriptor table into the CPU. On x86-64 this executes lgdt.
+    On AArch64 this writes VBAR_EL1.
+
+    Parameters:
+        ptr (GdtPointer):
+            The table pointer containing the base address and size limit.
+    """
+
+    I64 baseAddr = ptr.base
+    asm volatile:
+        x86-64 "lgdt ($0)" : : input( "r" ptr ) : clobber( "memory" )
+        aarch64 "msr VBAR_EL1, $0; isb" : : input( "r" baseAddr ) : clobber( "memory" )
+
+public function reloadSegments( I64 codeSelector, I64 dataSelector ) -> Void:
+
+    """
+    Reload segment registers after a table change. On x86-64 this loads DS/ES/SS.
+    On AArch64 this is a no-op (no segment registers exist).
+
+    Parameters:
+        codeSelector (I64):
+            The code segment selector.
+        dataSelector (I64):
+            The data segment selector to load into DS, ES, and SS.
+    """
+
+    asm volatile:
+        x86-64 "mov $0, %ds; mov $0, %es; mov $0, %ss" : : input( "r" dataSelector )
+        aarch64 "nop"
+
+public const I64 KERNEL_CODE_SELECTOR = 8
+
+public const I64 KERNEL_DATA_SELECTOR = 16
+
+public function userCodeSelector() -> I64:
+
+    """
+    Return the user-space code selector value (24 | 3 = 27).
+
+    Returns:
+        I64:
+            The user code segment selector value.
+    """
+
+    return 24 | 3
+
+public function userDataSelector() -> I64:
+
+    """
+    Return the user-space data selector value (32 | 3 = 35).
+
+    Returns:
+        I64:
+            The user data segment selector value.
+    """
+
+    return 32 | 3
+
+export {
+    Gdt,
+    GdtEntry,
+    GdtPointer,
+    KERNEL_CODE_SELECTOR,
+    KERNEL_DATA_SELECTOR,
+    loadGdt,
+    reloadSegments,
+    userCodeSelector,
+    userDataSelector
+}

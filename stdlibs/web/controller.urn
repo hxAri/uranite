@@ -101,7 +101,9 @@ public class Controller:
         String fullPattern = self.prefix + pattern
         Route route = new Route( method, fullPattern, handler )
         I64 routeAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" routeAddr ) : input( "r" route ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" routeAddr ) : input( "r" route ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" routeAddr ) : input( "r" route ) : clobber()
         self.controllerRoutes.set( self.controllerRouteCount, routeAddr )
         self.controllerRouteCount = self.controllerRouteCount + 1
 

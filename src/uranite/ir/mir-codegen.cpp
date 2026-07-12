@@ -49,7 +49,7 @@ namespace uranite::ir::mir {
 			for( const semantic::TypeSharedPointer& fieldType : typeLayout.fieldTypes ) {
 				llvm::Type* llvmFieldType = this->toLLVMType( fieldType );
 				if( llvmFieldType->isVoidTy() ) {
-					llvmFieldType = llvm::Type::getInt8PtrTy( this->llvmContext );
+					llvmFieldType = llvm::PointerType::getUnqual( this->llvmContext );
 				}
 				fieldLLVMTypes.push_back( llvmFieldType );
 			}
@@ -156,7 +156,7 @@ namespace uranite::ir::mir {
 		llvm::TargetOptions targetOptions;
 		llvm::TargetMachine* targetMachine = target->createTargetMachine(
 			this->llvmModule->getTargetTriple(), "generic", "", targetOptions,
-			llvm::Optional<llvm::Reloc::Model>()
+			std::optional<llvm::Reloc::Model>()
 		);
 		this->llvmModule->setDataLayout( targetMachine->createDataLayout() );
 
@@ -168,7 +168,7 @@ namespace uranite::ir::mir {
 
 		llvm::legacy::PassManager passManager;
 		if( targetMachine->addPassesToEmitFile( passManager, outputStream, nullptr,
-			llvm::CGFT_ObjectFile ) ) {
+			llvm::CodeGenFileType::ObjectFile ) ) {
 			return false;
 		}
 		passManager.run( *this->llvmModule );
@@ -213,7 +213,7 @@ namespace uranite::ir::mir {
 				}
 			}
 			if( parameterType->isVoidTy() ) {
-				parameterType = llvm::Type::getInt8PtrTy( this->llvmContext );
+				parameterType = llvm::PointerType::getUnqual( this->llvmContext );
 			}
 			parameterTypes.push_back( parameterType );
 		}
@@ -535,8 +535,11 @@ namespace uranite::ir::mir {
 		else if( llvm::GetElementPtrInst* gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>( destinationPointer ) ) {
 			targetStoreType = gepInst->getResultElementType();
 		}
+		else if( llvm::GlobalVariable* globalVar = llvm::dyn_cast<llvm::GlobalVariable>( destinationPointer ) ) {
+			targetStoreType = globalVar->getValueType();
+		}
 		else if( destinationPointer->getType()->isPointerTy() ) {
-			targetStoreType = destinationPointer->getType()->getPointerElementType();
+			targetStoreType = sourceValue->getType();
 		}
 
 		if( targetStoreType == nullptr ) {
@@ -658,7 +661,7 @@ namespace uranite::ir::mir {
 			return;
 		}
 		llvm::Value* constValue = llvm::ConstantPointerNull::get(
-			llvm::Type::getInt8PtrTy( this->llvmContext )
+			llvm::PointerType::getUnqual( this->llvmContext )
 		);
 		this->setVariableValue( instruction.destinationVariable, constValue );
 	}
@@ -1377,24 +1380,27 @@ namespace uranite::ir::mir {
 
 		llvm::Type* pointedType = nullptr;
 
-		// Strategy 1: extract struct type from the pointer type (LLVM 14 typed pointers)
-		if( basePointer->getType()->isPointerTy() ) {
-			llvm::Type* elementType = basePointer->getType()->getPointerElementType();
-			if( elementType->isStructTy() ) {
-				pointedType = elementType;
+		// Strategy 1: extract struct type from alloca/GEP source
+		if( llvm::AllocaInst* allocaBase = llvm::dyn_cast<llvm::AllocaInst>( basePointer ) ) {
+			llvm::Type* allocatedType = allocaBase->getAllocatedType();
+			if( allocatedType->isStructTy() ) {
+				pointedType = allocatedType;
+			}
+		}
+		else if( llvm::GetElementPtrInst* gepBase = llvm::dyn_cast<llvm::GetElementPtrInst>( basePointer ) ) {
+			llvm::Type* resultType = gepBase->getResultElementType();
+			if( resultType->isStructTy() ) {
+				pointedType = resultType;
 			}
 		}
 
-		// Strategy 2: look up from alloca's allocated type
+		// Strategy 2: look up from alloca's allocated type (for double-pointer case)
 		if( pointedType == nullptr ) {
 			llvm::Value* rawPointer = this->getVariableValue( instruction.sourceOperands[0] );
 			if( llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>( rawPointer ) ) {
 				llvm::Type* allocatedType = allocaInst->getAllocatedType();
-				if( allocatedType->isPointerTy() ) {
-					llvm::Type* innerType = allocatedType->getPointerElementType();
-					if( innerType->isStructTy() ) {
-						pointedType = innerType;
-					}
+				if( allocatedType->isStructTy() ) {
+					pointedType = allocatedType;
 				}
 				else if( allocatedType->isStructTy() ) {
 					pointedType = allocatedType;
@@ -1495,7 +1501,7 @@ namespace uranite::ir::mir {
 
 		llvm::Function* freeFunction = this->getOrCreateFree();
 		llvm::Value* castPointer = this->irBuilder.CreateBitCast(
-			pointer, llvm::Type::getInt8PtrTy( this->llvmContext ), "free.cast"
+			pointer, llvm::PointerType::getUnqual( this->llvmContext ), "free.cast"
 		);
 		this->irBuilder.CreateCall( freeFunction, { castPointer } );
 	}
@@ -1668,12 +1674,12 @@ namespace uranite::ir::mir {
 				}
 			}
 			case semantic::Type::Kind::String:
-				return llvm::Type::getInt8PtrTy( this->llvmContext );
+				return llvm::PointerType::getUnqual( this->llvmContext );
 			case semantic::Type::Kind::Void:
 				return llvm::Type::getVoidTy( this->llvmContext );
 			case semantic::Type::Kind::Pointer:
 			case semantic::Type::Kind::Reference:
-				return llvm::Type::getInt8PtrTy( this->llvmContext );
+				return llvm::PointerType::getUnqual( this->llvmContext );
 			case semantic::Type::Kind::Class: {
 				std::string className = semanticType->name;
 				const std::string& qualifiedName = semanticType->qualified;
@@ -1702,13 +1708,13 @@ namespace uranite::ir::mir {
 					return llvm::Type::getInt1Ty( this->llvmContext );
 				}
 				if( qualifiedName == semantic::qname::STRING || className == "String" ) {
-					return llvm::Type::getInt8PtrTy( this->llvmContext );
+					return llvm::PointerType::getUnqual( this->llvmContext );
 				}
 				if( qualifiedName == semantic::qname::VOID || className == "Void" ) {
 					return llvm::Type::getVoidTy( this->llvmContext );
 				}
 				if( qualifiedName == semantic::qname::OBJECT || className == "Object" ) {
-					return llvm::Type::getInt8PtrTy( this->llvmContext );
+					return llvm::PointerType::getUnqual( this->llvmContext );
 				}
 
 				// Class type → struct pointer
@@ -1718,7 +1724,7 @@ namespace uranite::ir::mir {
 				if( structType != nullptr ) {
 					return llvm::PointerType::getUnqual( structType );
 				}
-				return llvm::Type::getInt8PtrTy( this->llvmContext );
+				return llvm::PointerType::getUnqual( this->llvmContext );
 			}
 			case semantic::Type::Kind::Enum:
 				return llvm::Type::getInt32Ty( this->llvmContext );
@@ -1729,13 +1735,13 @@ namespace uranite::ir::mir {
 				if( structType != nullptr ) {
 					return llvm::PointerType::getUnqual( structType );
 				}
-				return llvm::Type::getInt8PtrTy( this->llvmContext );
+				return llvm::PointerType::getUnqual( this->llvmContext );
 			}
 			case semantic::Type::Kind::Function:
 			case semantic::Type::Kind::Callable:
-				return llvm::Type::getInt8PtrTy( this->llvmContext );
+				return llvm::PointerType::getUnqual( this->llvmContext );
 			case semantic::Type::Kind::Optional:
-				return llvm::Type::getInt8PtrTy( this->llvmContext );
+				return llvm::PointerType::getUnqual( this->llvmContext );
 			case semantic::Type::Kind::Future:
 				return llvm::Type::getInt64Ty( this->llvmContext );
 			default:
@@ -1785,7 +1791,7 @@ namespace uranite::ir::mir {
 		llvm::Type* type
 	) {
 		if( type->isVoidTy() ) {
-			type = llvm::Type::getInt8PtrTy( function->getContext() );
+			type = llvm::PointerType::getUnqual( function->getContext() );
 		}
 		llvm::IRBuilder<> entryBuilder( &function->getEntryBlock(), function->getEntryBlock().begin() );
 		return entryBuilder.CreateAlloca( type, nullptr, name );
@@ -1795,7 +1801,7 @@ namespace uranite::ir::mir {
 		llvm::Function* mallocFunction = this->llvmModule->getFunction( "malloc" );
 		if( mallocFunction == nullptr ) {
 			llvm::FunctionType* mallocType = llvm::FunctionType::get(
-				llvm::Type::getInt8PtrTy( this->llvmContext ),
+				llvm::PointerType::getUnqual( this->llvmContext ),
 				{ llvm::Type::getInt64Ty( this->llvmContext ) },
 				false
 			);
@@ -1811,7 +1817,7 @@ namespace uranite::ir::mir {
 		if( freeFunction == nullptr ) {
 			llvm::FunctionType* freeType = llvm::FunctionType::get(
 				llvm::Type::getVoidTy( this->llvmContext ),
-				{ llvm::Type::getInt8PtrTy( this->llvmContext ) },
+				{ llvm::PointerType::getUnqual( this->llvmContext ) },
 				false
 			);
 			freeFunction = llvm::Function::Create(

@@ -21,6 +21,7 @@
 #define _URANITE_CODEGEN_CONTEXT_HPP_
 
 #include <string>
+#include <unordered_map>
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/GlobalVariable.h>

@@ -69,8 +69,7 @@ function main() {
 			fi
 		fi
 		# subshell "cmake --build ${basepath}/build -j$(($(nproc)/2))" "<<- c >"
-		subshell "cmake --build ${basepath}/build -j$(($(nproc)-2))" "<<- c >"
-		# subshell "cmake --build ${basepath}/build -j$(nproc)" "<<- c >"
+		subshell "cmake --build ${basepath}/build -j$(nproc)" "<<- c >"
 		return $SUBSHELLSTATUS
 	}
 	

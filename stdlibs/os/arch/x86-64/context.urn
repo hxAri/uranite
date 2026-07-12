@@ -1,0 +1,83 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-25 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/context.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# x86-64 coroutine context switching: saves and restores the callee-saved
+# register set (RBX, RBP, R12-R15) and swaps RSP between two context slots.
+# Selected automatically via the compiler's "native" arch token
+# (uranite.os.arch.native.context).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.x86-64.context
+
+from uranite.os.arch.native.memory import writeI64At
+
+public function swapContext( I64 fromStackPtr, I64 toStackPtr ) -> Void:
+
+    """
+    Switch execution context by saving callee-saved registers and swapping the
+    stack pointer. Pushes RBX, RBP, R12-R15, stores RSP at *fromStackPtr, loads
+    RSP from *toStackPtr, then pops the registers. The function's own return
+    consumes the entry address prepared by makeContext.
+
+    Parameters:
+        fromStackPtr (I64):
+            Pointer to the slot where the current RSP is saved.
+        toStackPtr (I64):
+            Pointer to the slot from which the target RSP is loaded.
+    """
+
+    asm volatile "pushq %rbx\n\tpushq %rbp\n\tpushq %r12\n\tpushq %r13\n\tpushq %r14\n\tpushq %r15\n\tmovq %rsp, (%rdi)\n\tmovq (%rsi), %rsp\n\tpopq %r15\n\tpopq %r14\n\tpopq %r13\n\tpopq %r12\n\tpopq %rbp\n\tpopq %rbx" : output() : input( "{rdi}" fromStackPtr, "{rsi}" toStackPtr ) : clobber( "memory", "cc" )
+
+public function makeContext( I64 stackBase, I64 stackSize, I64 entryFn ) -> I64:
+
+    """
+    Prepare a new execution context on a stack region. Writes the entry function
+    address and six zeroed callee-saved register slots, returning the initial
+    RSP for use with swapContext.
+
+    Parameters:
+        stackBase (I64):
+            Base address of the allocated stack memory region.
+        stackSize (I64):
+            Size in bytes of the stack memory region.
+        entryFn (I64):
+            Address of the function to run when the context is first resumed.
+
+    Returns:
+        I64:
+            The initial RSP value for the new context.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 stackTop = stackBase + stackSize
+    I64 aligned = stackTop - ( stackTop % 16 )
+    I64 base = aligned - 8
+    writeI64At( base, 0, entryFn )
+    writeI64At( base, -8, 0 )
+    writeI64At( base, -16, 0 )
+    writeI64At( base, -24, 0 )
+    writeI64At( base, -32, 0 )
+    writeI64At( base, -40, 0 )
+    writeI64At( base, -48, 0 )
+    return base - 48
+
+export {
+    makeContext,
+    swapContext
+}
