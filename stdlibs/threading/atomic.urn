@@ -63,7 +63,9 @@ public class AtomicI64:
         """
         
         I64 result = 0
-        asm volatile "movq ($1), $0" : output( "=r" result ) : input( "r" self.storage ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "movq ($1), $0" : output( "=r" result ) : input( "r" self.storage ) : clobber( "memory" )
+            aarch64 "ldar $0, [$1]" : output( "=r" result ) : input( "r" self.storage ) : clobber( "memory" )
         return result
     
     public function store( self, I64 value ) -> Void:
@@ -77,8 +79,10 @@ public class AtomicI64:
         """
         
         I64 old = 0
-        asm volatile "xchgq $0, ($2)" : output( "=r" old ) : input( "0" value, "r" self.storage ) : clobber( "memory" )
-    
+        asm volatile:
+            x86-64 "xchgq $0, ($2)" : output( "=r" old ) : input( "0" value, "r" self.storage ) : clobber( "memory" )
+            aarch64 "1: ldaxr $0, [$2]; stlxr w16, $1, [$2]; cbnz w16, 1b" : output( "=&r" old ) : input( "r" value, "r" self.storage ) : clobber( "memory", "x16" )
+
     public function fetchAdd( self, I64 delta ) -> I64:
         
         """
@@ -95,7 +99,9 @@ public class AtomicI64:
         """
         
         I64 result = 0
-        asm volatile "lock xaddq $0, ($2)" : output( "=r" result ) : input( "0" delta, "r" self.storage ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "lock xaddq $0, ($2)" : output( "=r" result ) : input( "0" delta, "r" self.storage ) : clobber( "memory" )
+            aarch64 "1: ldaxr $0, [$2]; add x16, $0, $1; stlxr w17, x16, [$2]; cbnz w17, 1b" : output( "=&r" result ) : input( "r" delta, "r" self.storage ) : clobber( "memory", "x16", "x17" )
         return result
     
     public function fetchSub( self, I64 delta ) -> I64:
@@ -135,7 +141,9 @@ public class AtomicI64:
         """
         
         I64 result = 0
-        asm volatile "lock cmpxchgq $2, ($1)" : output( "={rax}" result ) : input( "r" self.storage, "r" desired, "{rax}" expected ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "lock cmpxchgq $2, ($1)" : output( "={rax}" result ) : input( "r" self.storage, "r" desired, "{rax}" expected ) : clobber( "memory" )
+            aarch64 "1: ldaxr $0, [$1]; cmp $0, $3; b.ne 2f; stlxr w16, $2, [$1]; cbnz w16, 1b; 2:" : output( "=&r" result ) : input( "r" self.storage, "r" desired, "r" expected ) : clobber( "memory", "x16" )
         return result == expected
     
     public function exchange( self, I64 newValue ) -> I64:
@@ -154,7 +162,9 @@ public class AtomicI64:
         """
         
         I64 old = 0
-        asm volatile "xchgq $0, ($2)" : output( "=r" old ) : input( "0" newValue, "r" self.storage ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "xchgq $0, ($2)" : output( "=r" old ) : input( "0" newValue, "r" self.storage ) : clobber( "memory" )
+            aarch64 "1: ldaxr $0, [$2]; stlxr w16, $1, [$2]; cbnz w16, 1b" : output( "=&r" old ) : input( "r" newValue, "r" self.storage ) : clobber( "memory", "x16" )
         return old
     
     public function increment( self ) -> I64:
