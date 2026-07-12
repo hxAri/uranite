@@ -11,6 +11,7 @@
 #ifndef _URANITE_PKG_BUILDER_HPP_
 #define _URANITE_PKG_BUILDER_HPP_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
