@@ -203,7 +203,9 @@ function extractName( I64 bufAddr, I64 nameOffset ) -> String:
         ci = ci + 1
     writeByteAt( nameAddr, nameLen, 0 )
     String name = ""
-    asm volatile "movq $1, $0" : output( "=r" name ) : input( "r" nameAddr ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" name ) : input( "r" nameAddr ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" name ) : input( "r" nameAddr ) : clobber()
     return name
 
 function isDotEntry( String name ) -> Boolean:
