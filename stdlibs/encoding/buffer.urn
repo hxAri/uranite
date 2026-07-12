@@ -514,7 +514,9 @@ public class BinaryBuffer:
         I64 value = readVarI64WithLength( self.dataAddress, self.readPosition, lengthStore )
         I64 bytesConsumed = 0
         I64 effectiveAddress = lengthStore
-        asm volatile "movq ($1), $0" : output( "=r" bytesConsumed ) : input( "r" effectiveAddress ) : clobber()
+        asm volatile:
+            x86-64 "movq ($1), $0" : output( "=r" bytesConsumed ) : input( "r" effectiveAddress ) : clobber()
+            aarch64 "ldr $0, [$1]" : output( "=r" bytesConsumed ) : input( "r" effectiveAddress ) : clobber()
         dealloc( lengthStore )
         self.readPosition = self.readPosition + bytesConsumed
         return value
