@@ -213,7 +213,9 @@ public class StringWriter implements OutputStream:
         self.bufAddr = memoryToPtr( self.buffer )
         writeByteAt( self.bufAddr, self.position, 0 )
         String result = ""
-        asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" self.bufAddr ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" result ) : input( "r" self.bufAddr ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" result ) : input( "r" self.bufAddr ) : clobber()
         return result
     
     public function getLength( self ) -> I64:
