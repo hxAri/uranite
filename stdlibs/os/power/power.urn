@@ -183,7 +183,9 @@ public class PowerManager:
         """
         
         self.cpuState = 1
-        asm volatile "hlt"
+        asm volatile:
+            x86-64 "hlt"
+            aarch64 "wfi"
     
     public function suspend( self ) -> Boolean:
         
@@ -238,7 +240,9 @@ public class PowerManager:
         (254 decimal), which triggers a CPU reset on x86 systems.
         """
         
-        asm volatile "outb $0, $1" : : input( "{ax}" 254 as I8, "N{dx}" 100 as I16 )
+        asm volatile:
+            x86-64 "outb $0, $1" : : input( "{ax}" 254 as I8, "N{dx}" 100 as I16 )
+            aarch64 "movz x0, #0x0009; movk x0, #0x8400, lsl #16; hvc #0" : : : clobber( "x0", "x1", "x2", "x3" )
     
     public function getSystemState( self ) -> I64:
         
