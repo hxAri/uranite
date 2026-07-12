@@ -1,7 +1,7 @@
 package testing
 
 from uranite.io.console import putsln
-from uranite.os.arch.x86-64.idt import {
+from uranite.os.arch.idt import {
     GateType,
     IRQ_BASE,
     Idt,

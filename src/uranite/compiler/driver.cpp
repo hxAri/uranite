@@ -28,6 +28,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <llvm/TargetParser/Triple.h>
+#include <llvm/TargetParser/Host.h>
+
 #include "uranite/codegen/codegen.hpp"
 #include "uranite/compiler/driver.hpp"
 #include "uranite/ir/hir-lowering.hpp"
@@ -500,21 +503,55 @@ namespace uranite::compiler {
 		}
 	}
 
+	std::string Driver::targetArchSegment() const {
+		std::string triple = this->options.targetTriple.empty()
+			? llvm::sys::getDefaultTargetTriple()
+			: this->options.targetTriple;
+		llvm::Triple parsedTriple( triple );
+		switch( parsedTriple.getArch() ) {
+			case llvm::Triple::x86_64:
+				return "x86-64";
+			case llvm::Triple::aarch64:
+			case llvm::Triple::aarch64_be:
+				return "aarch64";
+			case llvm::Triple::riscv64:
+				return "riscv64";
+			case llvm::Triple::arm:
+			case llvm::Triple::armeb:
+				return "arm";
+			default:
+				return parsedTriple.getArchName().str();
+		}
+	}
+
 	std::string Driver::resolveModulePath( const std::vector<std::string>& modulePath ) {
 		if( modulePath.empty() ) {
 			return "";
 		}
-		
+
 		std::function<std::string( const std::filesystem::path& )> checkPathExists = []( const std::filesystem::path& candidatePath ) -> std::string {
 			if( std::filesystem::exists( candidatePath ) ) {
 				return candidatePath.string();
 			}
 			return "";
 		};
-		
+
 		bool isStdlibImport = ( modulePath[0] == "uranite" );
-		
+
 		std::vector<std::string> effectivePathSegments = modulePath;
+
+		// Rewrite the reserved "native" segment onto the active target architecture
+		// directory (e.g. uranite.os.arch.native.syscall -> .../os/arch/aarch64/syscall).
+		// This lets arch-neutral stdlib modules import architecture-specific primitives
+		// without hardcoding the host architecture.
+		if( isStdlibImport ) {
+			std::string archSegment = this->targetArchSegment();
+			for( std::string& pathSegment : effectivePathSegments ) {
+				if( pathSegment == "native" ) {
+					pathSegment = archSegment;
+				}
+			}
+		}
 		if( isStdlibImport ) {
 			effectivePathSegments.erase( effectivePathSegments.begin() );
 		}
@@ -925,7 +962,7 @@ namespace uranite::compiler {
 						std::string mirTempIrFile = fmt::format( "/tmp/uranite-mir-{}.ll", getpid() );
 						mirCodegenInstance.writeIR( mirTempIrFile );
 						std::string mirTempObjFile = fmt::format( "/tmp/uranite-mir-{}.o", getpid() );
-						std::string llcMirCommand = fmt::format( "llc -O2 -relocation-model=pic -filetype=obj -o {} {}", mirTempObjFile, mirTempIrFile );
+						std::string llcMirCommand = fmt::format( _URANITE_LLC_ " -O2 -relocation-model=pic -filetype=obj -o {} {}", mirTempObjFile, mirTempIrFile );
 						if( this->options.verbose ) {
 							spdlog::info( "Running: {}", llcMirCommand );
 						}
@@ -1005,7 +1042,7 @@ namespace uranite::compiler {
 					}
 					std::string temporaryIrFile = fmt::format( "{}.ll", finalOutputFilePath );
 					llvmCodegenInstance.writeIR( temporaryIrFile );
-					std::string llcCommand = fmt::format( "llc -O2 -filetype=obj -o {} {}", finalOutputFilePath, temporaryIrFile );
+					std::string llcCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -o {} {}", finalOutputFilePath, temporaryIrFile );
 					if( this->options.verbose ) {
 						spdlog::info( "Running: {}", llcCommand );
 					}
@@ -1032,7 +1069,7 @@ namespace uranite::compiler {
 					std::string temporaryOptFile = fmt::format( "{}.tmp.opt.ll", finalOutputFilePath );
 					std::string temporaryObjectFile = fmt::format( "{}.tmp.o", finalOutputFilePath );
 					llvmCodegenInstance.writeIR( temporaryIrFile );
-					std::string optCommand = fmt::format( "opt -O2 -S -o {} {}", temporaryOptFile, temporaryIrFile );
+					std::string optCommand = fmt::format( _URANITE_OPT_ " -O2 -S -o {} {}", temporaryOptFile, temporaryIrFile );
 					if( this->options.verbose ) {
 						spdlog::info( "Running: {}", optCommand );
 					}
@@ -1041,7 +1078,7 @@ namespace uranite::compiler {
 					if( optReturnCode == 0 ) {
 						llcInputFile = temporaryOptFile;
 					}
-					std::string llcCompileCommand = fmt::format( "llc -O2 -filetype=obj -relocation-model=pic -o {} {}", temporaryObjectFile, llcInputFile );
+					std::string llcCompileCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -relocation-model=pic -o {} {}", temporaryObjectFile, llcInputFile );
 					if( this->options.verbose ) {
 						spdlog::info( "Running: {}", llcCompileCommand );
 					}

@@ -95,10 +95,14 @@ public class ProcessFutureBase:
         """
         
         self.resultBuffer = new Memory<I64>( 1 )
-        asm volatile "movq $1, $0" : output( "=r" self.resultBuffer ) : input( "r" slotAddr ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" self.resultBuffer ) : input( "r" slotAddr ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" self.resultBuffer ) : input( "r" slotAddr ) : clobber()
         I64 excAddr = slotAddr + 8
         self.exceptionSlot = new Memory<I64>( 1 )
-        asm volatile "movq $1, $0" : output( "=r" self.exceptionSlot ) : input( "r" excAddr ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" self.exceptionSlot ) : input( "r" excAddr ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" self.exceptionSlot ) : input( "r" excAddr ) : clobber()
         self.state = new AtomicI64( PFUTURE_PENDING )
         self.completionEvent = new Event()
         self.scheduler = scheduler
@@ -174,7 +178,9 @@ public class ProcessFutureBase:
                     self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
                     self.scheduler.blockCurrent()
             else:
-                asm volatile "pause"
+                asm volatile:
+                    x86-64 "pause"
+                    aarch64 "yield"
     
     public function getState( self ) -> I64:
         
@@ -326,8 +332,12 @@ public class ProcessFuture<R>:
         I64 raw = self.base.getRawResult()
         Memory<R> temp = new Memory<R>( 1 )
         I64 tempAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" tempAddr ) : input( "r" temp ) : clobber()
-        asm volatile "movq $0, ($1)" : : input( "r" raw, "r" tempAddr ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" tempAddr ) : input( "r" temp ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" tempAddr ) : input( "r" temp ) : clobber()
+        asm volatile:
+            x86-64 "movq $0, ($1)" : : input( "r" raw, "r" tempAddr ) : clobber( "memory" )
+            aarch64 "str $0, [$1]" : : input( "r" raw, "r" tempAddr ) : clobber( "memory" )
         R value = temp.get( 0 )
         temp.free()
         return value

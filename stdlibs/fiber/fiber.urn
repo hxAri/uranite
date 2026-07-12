@@ -116,7 +116,9 @@ public function fiberTrampoline() -> Void:
     
     I64 fnAddr = readI64At( gCurrentFiberPtr, F_ENTRY_FN * 8 )
     I64 result = 0
-    asm volatile "call *$2" : output( "={rax}" result ) : input( "{rdi}" 0, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+    asm volatile:
+        x86-64 "call *$2" : output( "={rax}" result ) : input( "{rdi}" 0, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+        aarch64 "blr $2" : output( "={x0}" result ) : input( "{x0}" 0, "r" fnAddr ) : clobber( "memory", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x30" )
     writeI64At( gCurrentFiberPtr, F_RETURN_VALUE * 8, result )
     writeI64At( gCurrentFiberPtr, F_HAS_RETURN * 8, 1 )
     writeI64At( gCurrentFiberPtr, F_STATE * 8, FIBER_TERMINATED )
@@ -196,7 +198,9 @@ public class Fiber:
         """
 
         I64 extractedAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
         self.initFiber( extractedAddr )
 
     public function Fiber( self, I64 entryFn ) -> Void:

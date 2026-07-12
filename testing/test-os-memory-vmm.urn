@@ -1,7 +1,7 @@
 package testing
 
 from uranite.io.console import putsln
-from uranite.os.memory.vmm import protReadOnly, protReadWrite, protUser, protUserReadOnly
+from uranite.os.memory.address-space import protReadOnly, protReadWrite, protUser, protUserReadOnly
 from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:

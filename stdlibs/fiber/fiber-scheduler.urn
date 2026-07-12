@@ -97,7 +97,9 @@ public class FiberScheduler implements Scheduler:
         """
 
         I64 extractedAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
         return self.spawn( extractedAddr )
 
     public function spawn( self, I64 entryFn ) -> I64:

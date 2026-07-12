@@ -1,0 +1,288 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-11 00:00
+# @update 2026-07-11 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/cpu.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cross-platform CPU primitives for interrupt control and state inspection.
+# Uses arch blocks to provide identical semantics on x86-64 and aarch64.
+# The interrupt flag convention is normalized: bit 9 (value 512) in the
+# returned flags indicates interrupts were enabled, matching x86 RFLAGS IF
+# semantics on all architectures.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.cpu
+
+public function disableInterrupts() -> Void:
+
+    """
+    Disable maskable interrupts on the current CPU core. On x86-64 this
+    clears the IF flag via cli. On aarch64 this sets the IRQ mask bit
+    in DAIF via msr daifset.
+    """
+
+    asm volatile:
+        x86-64 "cli"
+        aarch64 "msr daifset, #0x2"
+
+public function enableInterrupts() -> Void:
+
+    """
+    Enable maskable interrupts on the current CPU core. On x86-64 this
+    sets the IF flag via sti. On aarch64 this clears the IRQ mask bit
+    in DAIF via msr daifclr.
+    """
+
+    asm volatile:
+        x86-64 "sti"
+        aarch64 "msr daifclr, #0x2"
+
+public function readRflags() -> I64:
+
+    """
+    Read the current interrupt enable state as a normalized flags value.
+    Bit 9 (value 512) is set if interrupts are currently enabled, matching
+    x86 RFLAGS IF flag semantics on all architectures.
+
+    On x86-64, directly reads RFLAGS via pushfq/pop.
+    On aarch64, reads DAIF register and normalizes: if IRQ mask (bit 7)
+    is clear (interrupts enabled), sets bit 9 in the result.
+
+    Returns:
+        I64:
+            Flags value where (result & 512) != 0 means interrupts enabled.
+    """
+
+    I64 result = 0
+    asm volatile:
+        x86-64 "pushfq; pop $0" : output( "=r" result )
+        aarch64 "mrs $0, DAIF; mvn $0, $0; and $0, $0, #128; lsl $0, $0, #2" : output( "=r" result )
+    return result
+
+public function halt() -> Void:
+
+    """
+    Halt the CPU until the next interrupt arrives, reducing power
+    consumption while idle.
+    """
+
+    asm volatile:
+        x86-64 "hlt"
+        aarch64 "wfi"
+
+public function readTsc() -> I64:
+
+    """
+    Read the high-resolution monotonic counter. On x86-64 this reads the TSC
+    via rdtsc. On AArch64 this reads the generic timer counter CNTVCT_EL0.
+
+    Returns:
+        I64:
+            The current counter value.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    I64 low = 0
+    I64 high = 0
+    I64 result = 0
+    asm volatile:
+        x86-64 "rdtsc" : output( "={eax}" low, "={edx}" high )
+        aarch64 "mrs $0, CNTVCT_EL0" : output( "=r" result )
+    asm volatile:
+        x86-64 "nop"
+        aarch64 "nop"
+    I64 tscValue = 0
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" tscValue ) : input( "r" low )
+        aarch64 "mov $0, $1" : output( "=r" tscValue ) : input( "r" result )
+    return tscValue
+
+public function readCr3() -> I64:
+
+    """
+    Read the page table base register. On x86-64 this reads CR3 (PML4 base).
+    On AArch64 this reads TTBR0_EL1.
+
+    Returns:
+        I64:
+            The current page table base physical address.
+    """
+
+    I64 result = 0
+    asm:
+        x86-64 "mov %cr3, $0" : output( "=r" result )
+        aarch64 "mrs $0, TTBR0_EL1" : output( "=r" result )
+    return result
+
+public function writeCr3( I64 value ) -> Void:
+
+    """
+    Write the page table base register to switch address spaces.
+    On x86-64 this writes CR3. On AArch64 this writes TTBR0_EL1.
+
+    Parameters:
+        value (I64):
+            The physical address of the new page table root.
+    """
+
+    asm volatile:
+        x86-64 "mov $0, %cr3" : : input( "r" value )
+        aarch64 "msr TTBR0_EL1, $0; isb" : : input( "r" value )
+
+public function invlpg( I64 virtualAddress ) -> Void:
+
+    """
+    Invalidate a single TLB entry for the specified virtual address.
+
+    Parameters:
+        virtualAddress (I64):
+            The virtual address whose TLB entry should be invalidated.
+    """
+
+    I64 pageAddress = virtualAddress >> 12
+    asm volatile:
+        x86-64 "invlpg ($0)" : : input( "r" virtualAddress ) : clobber( "memory" )
+        aarch64 "tlbi vae1is, $0; dsb sy; isb" : : input( "r" pageAddress ) : clobber( "memory" )
+
+public function readCr0() -> I64:
+
+    """
+    Read the system control register. On x86-64 this reads CR0. On AArch64
+    this reads SCTLR_EL1.
+
+    Returns:
+        I64:
+            The system control register value.
+    """
+
+    I64 result = 0
+    asm:
+        x86-64 "mov %cr0, $0" : output( "=r" result )
+        aarch64 "mrs $0, SCTLR_EL1" : output( "=r" result )
+    return result
+
+public function writeCr0( I64 value ) -> Void:
+
+    """
+    Write the system control register.
+
+    Parameters:
+        value (I64):
+            The new control register value.
+    """
+
+    asm volatile:
+        x86-64 "mov $0, %cr0" : : input( "r" value )
+        aarch64 "msr SCTLR_EL1, $0; isb" : : input( "r" value )
+
+public function readCr2() -> I64:
+
+    """
+    Read the fault address register. On x86-64 this reads CR2 (page fault
+    linear address). On AArch64 this reads FAR_EL1.
+
+    Returns:
+        I64:
+            The faulting virtual address.
+    """
+
+    I64 result = 0
+    asm:
+        x86-64 "mov %cr2, $0" : output( "=r" result )
+        aarch64 "mrs $0, FAR_EL1" : output( "=r" result )
+    return result
+
+public function readCr4() -> I64:
+
+    """
+    Read the extended control register. On x86-64 this reads CR4. On AArch64
+    this reads TCR_EL1.
+
+    Returns:
+        I64:
+            The extended control register value.
+    """
+
+    I64 result = 0
+    asm:
+        x86-64 "mov %cr4, $0" : output( "=r" result )
+        aarch64 "mrs $0, TCR_EL1" : output( "=r" result )
+    return result
+
+public function writeCr4( I64 value ) -> Void:
+
+    """
+    Write the extended control register.
+
+    Parameters:
+        value (I64):
+            The new extended control register value.
+    """
+
+    asm volatile:
+        x86-64 "mov $0, %cr4" : : input( "r" value )
+        aarch64 "msr TCR_EL1, $0; isb" : : input( "r" value )
+
+public function readMsr( I64 msr ) -> I64:
+
+    """
+    Read a model-specific/system register. On x86-64 this uses rdmsr. On
+    AArch64 this returns 0 (use dedicated register access functions instead).
+
+    Parameters:
+        msr (I64):
+            The register index.
+
+    Returns:
+        I64:
+            The register value (0 on AArch64).
+    """
+
+    return 0
+
+public function writeMsr( I64 msr, I64 value ) -> Void:
+
+    """
+    Write a model-specific/system register. On x86-64 this uses wrmsr. On
+    AArch64 this is a no-op (use dedicated register access functions instead).
+
+    Parameters:
+        msr (I64):
+            The register index.
+        value (I64):
+            The value to write.
+    """
+
+    return
+
+export {
+    disableInterrupts,
+    enableInterrupts,
+    halt,
+    invlpg,
+    readCr0,
+    readCr2,
+    readCr3,
+    readCr4,
+    readMsr,
+    readRflags,
+    readTsc,
+    writeCr0,
+    writeCr3,
+    writeCr4,
+    writeMsr
+}

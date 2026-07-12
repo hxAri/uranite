@@ -91,6 +91,16 @@ namespace uranite::compiler {
 			
 			/** @brief Resolves a logical module path into an absolute file system path. */
 			std::string resolveModulePath( const std::vector<std::string>& modulePath );
+
+			/**
+			 * @brief Returns the stdlib directory segment for the active target architecture.
+			 *
+			 * Derived from the configured target triple, or the host triple when none is set.
+			 * Used to rewrite the reserved "native" import segment (e.g.
+			 * `uranite.os.arch.native.syscall`) onto the matching arch directory such as
+			 * "x86-64" or "aarch64".
+			 */
+			std::string targetArchSegment() const;
 			
 			/** @brief Returns the collection of loaded and analyzed modules. */
 			const std::unordered_map<std::string, ModuleInfo>& getModules() const { return modules; }

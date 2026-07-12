@@ -17,7 +17,7 @@ namespace uranite::codegen {
 		spec.functionName = "__uranite_throw";
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getVoidTy( context ),
-			{ llvm::Type::getInt8PtrTy( context ), llvm::Type::getInt8PtrTy( context ) },
+			{ llvm::PointerType::getUnqual( context ), llvm::PointerType::getUnqual( context ) },
 			false
 		);
 		spec.isNoReturn = true;
@@ -39,8 +39,8 @@ namespace uranite::codegen {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_begin_catch";
 		spec.functionSignature = llvm::FunctionType::get(
-			llvm::Type::getInt8PtrTy( context ),
-			{ llvm::Type::getInt8PtrTy( context ) },
+			llvm::PointerType::getUnqual( context ),
+			{ llvm::PointerType::getUnqual( context ) },
 			false
 		);
 		return spec;
@@ -51,7 +51,7 @@ namespace uranite::codegen {
 		spec.functionName = "__uranite_end_catch";
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getVoidTy( context ),
-			{ llvm::Type::getInt8PtrTy( context ) },
+			{ llvm::PointerType::getUnqual( context ) },
 			false
 		);
 		return spec;
@@ -63,10 +63,10 @@ namespace uranite::codegen {
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getVoidTy( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
+				llvm::PointerType::getUnqual( context ),
 				llvm::Type::getInt64Ty( context ),
 				llvm::Type::getInt64Ty( context ),
-				llvm::Type::getInt8PtrTy( context )
+				llvm::PointerType::getUnqual( context )
 			},
 			false
 		);
@@ -87,7 +87,7 @@ namespace uranite::codegen {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "malloc";
 		spec.functionSignature = llvm::FunctionType::get(
-			llvm::Type::getInt8PtrTy( context ),
+			llvm::PointerType::getUnqual( context ),
 			{ llvm::Type::getInt64Ty( context ) },
 			false
 		);
@@ -99,7 +99,7 @@ namespace uranite::codegen {
 		spec.functionName = "free";
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getVoidTy( context ),
-			{ llvm::Type::getInt8PtrTy( context ) },
+			{ llvm::PointerType::getUnqual( context ) },
 			false
 		);
 		return spec;
@@ -109,7 +109,7 @@ namespace uranite::codegen {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "calloc";
 		spec.functionSignature = llvm::FunctionType::get(
-			llvm::Type::getInt8PtrTy( context ),
+			llvm::PointerType::getUnqual( context ),
 			{
 				llvm::Type::getInt64Ty( context ),
 				llvm::Type::getInt64Ty( context )
@@ -121,12 +121,12 @@ namespace uranite::codegen {
 
 	RuntimeFunctionSpec DefaultRuntime::getMemcpyFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
-		spec.functionName = "llvm.memcpy.p0i8.p0i8.i64";
+		spec.functionName = "llvm.memcpy.p0.p0.i64";
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getVoidTy( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
-				llvm::Type::getInt8PtrTy( context ),
+				llvm::PointerType::getUnqual( context ),
+				llvm::PointerType::getUnqual( context ),
 				llvm::Type::getInt64Ty( context ),
 				llvm::Type::getInt1Ty( context )
 			},
@@ -139,9 +139,9 @@ namespace uranite::codegen {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "realloc";
 		spec.functionSignature = llvm::FunctionType::get(
-			llvm::Type::getInt8PtrTy( context ),
+			llvm::PointerType::getUnqual( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
+				llvm::PointerType::getUnqual( context ),
 				llvm::Type::getInt64Ty( context )
 			},
 			false
@@ -154,7 +154,7 @@ namespace uranite::codegen {
 		spec.functionName = "printf";
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getInt32Ty( context ),
-			{ llvm::Type::getInt8PtrTy( context ) },
+			{ llvm::PointerType::getUnqual( context ) },
 			true
 		);
 		spec.isVariadic = true;
@@ -167,9 +167,9 @@ namespace uranite::codegen {
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getInt32Ty( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
+				llvm::PointerType::getUnqual( context ),
 				llvm::Type::getInt64Ty( context ),
-				llvm::Type::getInt8PtrTy( context )
+				llvm::PointerType::getUnqual( context )
 			},
 			true
 		);
@@ -182,7 +182,7 @@ namespace uranite::codegen {
 		spec.functionName = "strlen";
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getInt64Ty( context ),
-			{ llvm::Type::getInt8PtrTy( context ) },
+			{ llvm::PointerType::getUnqual( context ) },
 			false
 		);
 		return spec;
@@ -192,10 +192,10 @@ namespace uranite::codegen {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strcpy";
 		spec.functionSignature = llvm::FunctionType::get(
-			llvm::Type::getInt8PtrTy( context ),
+			llvm::PointerType::getUnqual( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
-				llvm::Type::getInt8PtrTy( context )
+				llvm::PointerType::getUnqual( context ),
+				llvm::PointerType::getUnqual( context )
 			},
 			false
 		);
@@ -206,10 +206,10 @@ namespace uranite::codegen {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strcat";
 		spec.functionSignature = llvm::FunctionType::get(
-			llvm::Type::getInt8PtrTy( context ),
+			llvm::PointerType::getUnqual( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
-				llvm::Type::getInt8PtrTy( context )
+				llvm::PointerType::getUnqual( context ),
+				llvm::PointerType::getUnqual( context )
 			},
 			false
 		);
@@ -222,8 +222,8 @@ namespace uranite::codegen {
 		spec.functionSignature = llvm::FunctionType::get(
 			llvm::Type::getInt32Ty( context ),
 			{
-				llvm::Type::getInt8PtrTy( context ),
-				llvm::Type::getInt8PtrTy( context )
+				llvm::PointerType::getUnqual( context ),
+				llvm::PointerType::getUnqual( context )
 			},
 			false
 		);

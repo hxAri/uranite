@@ -20,7 +20,7 @@
 
 package uranite.os.scheduler.scheduler
 
-from uranite.os.arch.x86-64.cpu import disableInterrupts, enableInterrupts, halt
+from uranite.os.arch.cpu import disableInterrupts, enableInterrupts, halt
 from uranite.os.task.task import Task, TaskState
 
 public class Scheduler:

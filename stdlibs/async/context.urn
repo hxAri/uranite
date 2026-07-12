@@ -1,61 +1,32 @@
+#
+# @author hxAri (hxari)
+# @create 2026-05-09 05:00
+# @update 2026-06-25 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/async/context.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Architecture-neutral facade for coroutine context switching. The register
+# save/restore sequence lives in the per-architecture context module, selected
+# automatically by the compiler's "native" arch token. This module re-exports
+# makeContext and swapContext so existing imports keep working across targets.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
 package uranite.async.context
 
-from uranite.io.syscall import memoryToPtr, writeI64At
-from uranite.memory.memory import Memory
-
-public function swapContext( I64 fromStackPtr, I64 toStackPtr ) -> Void:
-    
-    """
-    Switch execution context between two coroutines by saving and restoring
-    callee-saved registers and swapping the stack pointer. Uses x86-64
-    push/pop instructions to preserve RBX, RBP, R12-R15, then exchanges
-    RSP between the two context slots.
-    
-    Parameters:
-        fromStackPtr (I64):
-            Pointer to the memory location where the current RSP will be saved.
-        toStackPtr (I64):
-            Pointer to the memory location from which the target RSP will be loaded.
-    """
-    
-    asm volatile "pushq %rbx\n\tpushq %rbp\n\tpushq %r12\n\tpushq %r13\n\tpushq %r14\n\tpushq %r15\n\tmovq %rsp, (%rdi)\n\tmovq (%rsi), %rsp\n\tpopq %r15\n\tpopq %r14\n\tpopq %r13\n\tpopq %r12\n\tpopq %rbp\n\tpopq %rbx" : output() : input( "{rdi}" fromStackPtr, "{rsi}" toStackPtr ) : clobber( "memory", "cc" )
-
-public function makeContext( I64 stackBase, I64 stackSize, I64 entryFn ) -> I64:
-    
-    """
-    Prepare a new execution context on a given stack region. Writes the entry
-    function address and zeroed callee-saved register slots onto the stack,
-    returning a stack pointer value ready for use with swapContext.
-    
-    Parameters:
-        stackBase (I64):
-            Base address of the allocated stack memory region.
-        stackSize (I64):
-            Size in bytes of the stack memory region.
-        entryFn (I64):
-            Address of the function to execute when the context is first resumed.
-    
-    Returns:
-        I64:
-            The initial RSP value for the newly prepared context, pointing to
-            the bottom of the saved register frame.
-    
-    Complexity:
-        Time: O(1)
-        Space: O(1)
-    """
-    
-    I64 stackTop = stackBase + stackSize
-    I64 aligned = stackTop - ( stackTop % 16 )
-    I64 base = aligned - 8
-    writeI64At( base, 0, entryFn )
-    writeI64At( base, -8, 0 )
-    writeI64At( base, -16, 0 )
-    writeI64At( base, -24, 0 )
-    writeI64At( base, -32, 0 )
-    writeI64At( base, -40, 0 )
-    writeI64At( base, -48, 0 )
-    return base - 48
+from uranite.os.arch.native.context import {
+    makeContext,
+    swapContext
+}
 
 export {
     makeContext,

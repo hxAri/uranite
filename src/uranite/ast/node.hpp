@@ -2399,15 +2399,24 @@ namespace uranite::ast {
 			std::string constraint;
 			ExpressionSharedPointer expression;
 		};
-		
+
+		struct InlineAssemblyArchVariant {
+			std::string targetArch;
+			std::string asmTemplate;
+			std::vector<InlineAssemblyOperand> outputs;
+			std::vector<InlineAssemblyOperand> inputs;
+			std::vector<std::string> clobbers;
+		};
+
 		struct InlineAssemblyStatement : Statement {
-			
+
 			bool isVolatile;
 			std::string asmTemplate;
 			std::vector<InlineAssemblyOperand> outputs;
 			std::vector<InlineAssemblyOperand> inputs;
 			std::vector<std::string> clobbers;
-			
+			std::vector<InlineAssemblyArchVariant> archVariants;
+
 			InlineAssemblyStatement(
 				bool isVolatile,
 				const std::string& asmTemplate,
@@ -2422,7 +2431,16 @@ namespace uranite::ast {
 				inputs( std::move( inputs ) ),
 				clobbers( std::move( clobbers ) ) {
 			}
-		
+
+			InlineAssemblyStatement(
+				bool isVolatile,
+				std::vector<InlineAssemblyArchVariant> archVariants,
+				const lookup::SourceSharedPointer& source
+			) : Statement( Node::Kind::InlineAssemblyStatement, source ),
+				isVolatile( isVolatile ),
+				archVariants( std::move( archVariants ) ) {
+			}
+
 		};
 		
 		/**

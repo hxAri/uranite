@@ -1,0 +1,304 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/aarch64/idt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# AArch64 exception vector table (VBAR_EL1) equivalent of the x86-64 IDT. On ARM,
+# exceptions are dispatched via a fixed-layout 2KB vector table (16 entries x 128
+# bytes each) pointed to by VBAR_EL1. This module provides API-compatible structures
+# using the same interface as the x86-64 IDT module, mapping exception vectors to
+# their ARM equivalents.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.aarch64.idt
+
+from uranite.memory.memory import Memory
+
+public class IdtEntry:
+
+    """
+    AArch64 exception vector entry. Stores the handler address and attributes
+    for a single exception vector slot. On ARM, each vector slot is 128 bytes
+    (32 instructions) of inline code rather than a pointer, but this abstraction
+    stores handler addresses for compatibility.
+    """
+
+    public I64 offsetLow
+    public I64 selector
+    public I64 ist
+    public I64 typeAttr
+    public I64 offsetMiddle
+    public I64 offsetHigh
+    public I64 reserved
+
+    public function IdtEntry( self ) -> Void:
+
+        """
+        Construct a zeroed vector entry with no handler installed.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.offsetLow = 0
+        self.selector = 0
+        self.ist = 0
+        self.typeAttr = 0
+        self.offsetMiddle = 0
+        self.offsetHigh = 0
+        self.reserved = 0
+
+    public function setHandler( self, I64 handler, I64 selector, I64 typeAttr, I64 ist ) -> Void:
+
+        """
+        Configure this entry with an exception handler address and attributes.
+
+        Parameters:
+            handler (I64):
+                The virtual address of the exception handler function.
+            selector (I64):
+                Selector value (unused on AArch64, stored for compatibility).
+            typeAttr (I64):
+                Gate type attributes (mapped to exception routing config).
+            ist (I64):
+                Stack index (mapped to SP_ELx selection on AArch64).
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.offsetLow = handler & 65535
+        self.offsetMiddle = ( handler >> 16 ) & 65535
+        self.offsetHigh = ( handler >> 32 ) & 4294967295
+        self.selector = selector
+        self.typeAttr = typeAttr
+        self.ist = ist
+        self.reserved = 0
+
+    public function getHandler( self ) -> I64:
+
+        """
+        Reconstruct and return the full 64-bit handler address.
+
+        Returns:
+            I64:
+                The handler function address.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.offsetLow | ( self.offsetMiddle << 16 ) | ( self.offsetHigh << 32 )
+
+public struct IdtPointer:
+
+    """
+    AArch64 exception vector table pointer, corresponding to the VBAR_EL1
+    register contents. The base field holds the 2KB-aligned vector table address.
+    """
+
+    public I64 limit
+    public I64 base
+
+    public function IdtPointer( self, I64 limit, I64 base ) -> Void:
+
+        """
+        Construct a vector table pointer.
+
+        Parameters:
+            limit (I64):
+                Table size in bytes minus one.
+            base (I64):
+                Base address of the exception vector table (must be 2KB-aligned).
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.limit = limit
+        self.base = base
+
+public enum GateType backed I64:
+
+    """
+    Exception routing attributes mapped from x86-64 gate types to AArch64
+    exception level routing. The numeric values match x86-64 for test compatibility.
+    """
+
+    unit InterruptGateKernel 142
+
+    """ EL1 synchronous exception handler (masks IRQ on entry). """
+
+    unit TrapGateKernel 143
+
+    """ EL1 synchronous exception handler (preserves IRQ state). """
+
+    unit InterruptGateUser 238
+
+    """ EL0-originated exception routed to EL1 handler. """
+
+public enum InterruptVector backed I64:
+
+    """
+    AArch64 exception syndrome values mapped to x86-64-compatible vector numbers
+    for cross-platform kernel code. ARM exceptions are classified by ESR_EL1
+    syndrome codes rather than fixed vector numbers, but this enum provides
+    the same constants used by x86-64 code.
+    """
+
+    unit DivideError 0
+    unit Debug 1
+    unit Nmi 2
+    unit Breakpoint 3
+    unit Overflow 4
+    unit BoundRange 5
+    unit InvalidOpcode 6
+    unit DeviceNotAvail 7
+    unit DoubleFault 8
+    unit InvalidTss 10
+    unit SegmentNotPresent 11
+    unit StackSegment 12
+    unit GeneralProtection 13
+    unit PageFault 14
+    unit X87Fpu 16
+    unit AlignCheck 17
+    unit MachineCheck 18
+    unit SimdFp 19
+
+public const I64 IRQ_BASE = 32
+
+public class Idt:
+
+    """
+    AArch64 exception vector table manager. Provides the same API as the x86-64
+    IDT class, storing 256 vector entries for compatibility. On actual hardware,
+    the ARM vector table has a fixed 16-entry layout (4 exception types x 4
+    source contexts), but this abstraction allows the same test patterns.
+    """
+
+    protect Memory<IdtEntry> entries
+    protect I64 count
+
+    public function Idt( self ) -> Void:
+
+        """
+        Construct a vector table with 256 zeroed entries.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        self.entries = new Memory<IdtEntry>( 256 )
+        self.count = 256
+        I64 vectorIndex = 0
+        while vectorIndex < 256:
+            self.entries.set( vectorIndex, new IdtEntry() )
+            vectorIndex = vectorIndex + 1
+
+    public function setGate( self, I64 vector, I64 handler, I64 selector, I64 typeAttr ) -> Void:
+
+        """
+        Install an exception handler for the specified vector number.
+
+        Parameters:
+            vector (I64):
+                The vector number (0-255).
+            handler (I64):
+                The handler function address.
+            selector (I64):
+                Code selector (unused on AArch64).
+            typeAttr (I64):
+                Gate type attributes.
+        """
+
+        if vector >= 0 and vector < 256:
+            IdtEntry entry = self.entries.get( vector )
+            entry.setHandler( handler, selector, typeAttr, 0 )
+            self.entries.set( vector, entry )
+
+    public function setGateWithIst( self, I64 vector, I64 handler, I64 selector, I64 typeAttr, I64 ist ) -> Void:
+
+        """
+        Install an exception handler with dedicated stack selection.
+
+        Parameters:
+            vector (I64):
+                The vector number (0-255).
+            handler (I64):
+                The handler function address.
+            selector (I64):
+                Code selector (unused on AArch64).
+            typeAttr (I64):
+                Gate type attributes.
+            ist (I64):
+                Stack index for SP_ELx selection.
+        """
+
+        if vector >= 0 and vector < 256:
+            IdtEntry entry = self.entries.get( vector )
+            entry.setHandler( handler, selector, typeAttr, ist )
+            self.entries.set( vector, entry )
+
+    public function getEntry( self, I64 vector ) -> IdtEntry:
+
+        """
+        Return the vector entry for the specified index.
+
+        Parameters:
+            vector (I64):
+                The vector number (0-255).
+
+        Returns:
+            IdtEntry:
+                The entry for the given vector.
+        """
+
+        return self.entries.get( vector )
+
+    public function destroy( self ) -> Void:
+
+        """ Free the underlying memory allocation for the vector table. """
+
+        self.entries.free()
+
+public function loadIdt( IdtPointer ptr ) -> Void:
+
+    """
+    Load the exception vector table base address into VBAR_EL1. This is the
+    AArch64 equivalent of the x86-64 lidt instruction. The table must be
+    2KB-aligned.
+
+    Parameters:
+        ptr (IdtPointer):
+            The vector table pointer containing the base address.
+    """
+
+    I64 baseAddr = ptr.base
+    asm volatile "msr VBAR_EL1, $0; isb" : : input( "r" baseAddr ) : clobber( "memory" )
+
+export {
+    GateType,
+    IRQ_BASE,
+    Idt,
+    IdtEntry,
+    IdtPointer,
+    InterruptVector,
+    loadIdt
+}

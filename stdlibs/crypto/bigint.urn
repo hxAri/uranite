@@ -86,7 +86,9 @@ public class BigInt:
 
         I64 slot = self.limbsAddress + index * LIMB_SIZE
         I64 masked = value & LIMB_MASK
-        asm volatile "movq $1, ($0)" : output() : input( "r" slot, "r" masked ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "movq $1, ($0)" : output() : input( "r" slot, "r" masked ) : clobber( "memory" )
+            aarch64 "str $1, [$0]" : output() : input( "r" slot, "r" masked ) : clobber( "memory" )
 
     public function getLimb( self, I64 index ) -> I64:
 
@@ -110,7 +112,9 @@ public class BigInt:
             return 0
         I64 slot = self.limbsAddress + index * LIMB_SIZE
         I64 value = 0
-        asm volatile "movq ($1), $0" : output( "=r" value ) : input( "r" slot ) : clobber()
+        asm volatile:
+            x86-64 "movq ($1), $0" : output( "=r" value ) : input( "r" slot ) : clobber()
+            aarch64 "ldr $0, [$1]" : output( "=r" value ) : input( "r" slot ) : clobber()
         return value & LIMB_MASK
 
     public function isZero( self ) -> Boolean:

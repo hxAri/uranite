@@ -1,0 +1,220 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-25 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/aarch64/syscall.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# AArch64 (ARM64) Linux syscall layer: raw syscall0..6 invocation via the `svc`
+# instruction, generic-ABI syscall numbers, and operation wrappers. The AArch64
+# generic syscall table omits the legacy open/stat/mkdir/... calls, so the
+# operation wrappers translate them to their *at equivalents (openat, newfstatat,
+# mkdirat, ...). Selected automatically via the compiler's "native" arch token
+# (uranite.os.arch.native.syscall).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.aarch64.syscall
+
+from uranite.os.syscall.result import SyscallResult
+
+# Special "relative to current working directory" dirfd for the *at syscalls.
+const I64 AT_FDCWD = -100
+"""Pass as the dirfd argument so *at calls resolve paths against the CWD."""
+const I64 AT_SYMLINK_NOFOLLOW = 256
+"""newfstatat flag (0x100): do not dereference a final symbolic link."""
+const I64 AT_REMOVEDIR = 512
+"""unlinkat flag (0x200): remove a directory instead of a file."""
+
+# --- Raw syscall invocation: number in X8, args in X0-X5, return in X0 ---
+
+public function syscall0( I64 number ) -> SyscallResult:
+    I64 result = 0
+    asm "svc #0" : output( "={x0}" result ) : input( "{x8}" number ) : clobber( "memory" )
+    return new SyscallResult( result )
+
+public function syscall1( I64 number, I64 arg1 ) -> SyscallResult:
+    I64 result = 0
+    asm "svc #0" : output( "={x0}" result ) : input( "{x8}" number, "{x0}" arg1 ) : clobber( "memory" )
+    return new SyscallResult( result )
+
+public function syscall2( I64 number, I64 arg1, I64 arg2 ) -> SyscallResult:
+    I64 result = 0
+    asm "svc #0" : output( "={x0}" result ) : input( "{x8}" number, "{x0}" arg1, "{x1}" arg2 ) : clobber( "memory" )
+    return new SyscallResult( result )
+
+public function syscall3( I64 number, I64 arg1, I64 arg2, I64 arg3 ) -> SyscallResult:
+    I64 result = 0
+    asm "svc #0" : output( "={x0}" result ) : input( "{x8}" number, "{x0}" arg1, "{x1}" arg2, "{x2}" arg3 ) : clobber( "memory" )
+    return new SyscallResult( result )
+
+public function syscall4( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4 ) -> SyscallResult:
+    I64 result = 0
+    asm "svc #0" : output( "={x0}" result ) : input( "{x8}" number, "{x0}" arg1, "{x1}" arg2, "{x2}" arg3, "{x3}" arg4 ) : clobber( "memory" )
+    return new SyscallResult( result )
+
+public function syscall5( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4, I64 arg5 ) -> SyscallResult:
+    I64 result = 0
+    asm "svc #0" : output( "={x0}" result ) : input( "{x8}" number, "{x0}" arg1, "{x1}" arg2, "{x2}" arg3, "{x3}" arg4, "{x4}" arg5 ) : clobber( "memory" )
+    return new SyscallResult( result )
+
+public function syscall6( I64 number, I64 arg1, I64 arg2, I64 arg3, I64 arg4, I64 arg5, I64 arg6 ) -> SyscallResult:
+    I64 result = 0
+    asm "svc #0" : output( "={x0}" result ) : input( "{x8}" number, "{x0}" arg1, "{x1}" arg2, "{x2}" arg3, "{x3}" arg4, "{x4}" arg5, "{x5}" arg6 ) : clobber( "memory" )
+    return new SyscallResult( result )
+
+# --- Arity-stable syscall numbers (AArch64 generic ABI) ---
+
+const I64 SYS_READ = 63
+const I64 SYS_WRITE = 64
+const I64 SYS_MMAP = 222
+const I64 SYS_MUNMAP = 215
+const I64 SYS_CLOSE = 57
+const I64 SYS_LSEEK = 62
+const I64 SYS_FSTAT = 80
+const I64 SYS_FTRUNCATE = 46
+const I64 SYS_FSYNC = 82
+const I64 SYS_FCHMOD = 52
+const I64 SYS_FCHOWN = 55
+const I64 SYS_GETCWD = 17
+const I64 SYS_CHDIR = 49
+const I64 SYS_GETDENTS64 = 61
+const I64 SYS_STATFS = 43
+const I64 SYS_FLOCK = 32
+const I64 SYS_IOCTL = 29
+const I64 SYS_PIPE2 = 59
+
+# --- *at syscall numbers backing the legacy operation wrappers ---
+
+const I64 SYS_OPENAT = 56
+const I64 SYS_NEWFSTATAT = 79
+const I64 SYS_FACCESSAT = 48
+const I64 SYS_MKDIRAT = 34
+const I64 SYS_UNLINKAT = 35
+const I64 SYS_LINKAT = 37
+const I64 SYS_SYMLINKAT = 36
+const I64 SYS_READLINKAT = 78
+const I64 SYS_FCHMODAT = 53
+const I64 SYS_FCHOWNAT = 54
+const I64 SYS_RENAMEAT = 38
+
+# Legacy SYS_* names kept for source compatibility with modules that import
+# them by name. AArch64 has no plain open/stat/...; these resolve to the *at
+# numbers, so use the sc* operation wrappers below rather than calling these
+# numbers directly with the legacy argument shape.
+const I64 SYS_OPEN = 56
+const I64 SYS_STAT = 79
+const I64 SYS_LSTAT = 79
+const I64 SYS_ACCESS = 48
+const I64 SYS_MKDIR = 34
+const I64 SYS_RMDIR = 35
+const I64 SYS_UNLINK = 35
+const I64 SYS_LINK = 37
+const I64 SYS_SYMLINK = 36
+const I64 SYS_READLINK = 78
+const I64 SYS_CHMOD = 53
+const I64 SYS_CHOWN = 54
+const I64 SYS_RENAME = 38
+
+# --- Operation wrappers translating legacy calls to their *at equivalents ---
+
+public function scOpen( I64 pathPtr, I64 flags, I64 mode ) -> SyscallResult:
+    return syscall4( SYS_OPENAT, AT_FDCWD, pathPtr, flags, mode )
+
+public function scStat( I64 pathPtr, I64 statBufPtr ) -> SyscallResult:
+    return syscall4( SYS_NEWFSTATAT, AT_FDCWD, pathPtr, statBufPtr, 0 )
+
+public function scLstat( I64 pathPtr, I64 statBufPtr ) -> SyscallResult:
+    return syscall4( SYS_NEWFSTATAT, AT_FDCWD, pathPtr, statBufPtr, AT_SYMLINK_NOFOLLOW )
+
+public function scAccess( I64 pathPtr, I64 mode ) -> SyscallResult:
+    return syscall3( SYS_FACCESSAT, AT_FDCWD, pathPtr, mode )
+
+public function scMkdir( I64 pathPtr, I64 mode ) -> SyscallResult:
+    return syscall3( SYS_MKDIRAT, AT_FDCWD, pathPtr, mode )
+
+public function scRmdir( I64 pathPtr ) -> SyscallResult:
+    return syscall3( SYS_UNLINKAT, AT_FDCWD, pathPtr, AT_REMOVEDIR )
+
+public function scUnlink( I64 pathPtr ) -> SyscallResult:
+    return syscall3( SYS_UNLINKAT, AT_FDCWD, pathPtr, 0 )
+
+public function scRename( I64 oldPtr, I64 newPtr ) -> SyscallResult:
+    return syscall4( SYS_RENAMEAT, AT_FDCWD, oldPtr, AT_FDCWD, newPtr )
+
+public function scLink( I64 oldPtr, I64 newPtr ) -> SyscallResult:
+    return syscall5( SYS_LINKAT, AT_FDCWD, oldPtr, AT_FDCWD, newPtr, 0 )
+
+public function scSymlink( I64 targetPtr, I64 linkPtr ) -> SyscallResult:
+    return syscall3( SYS_SYMLINKAT, targetPtr, AT_FDCWD, linkPtr )
+
+public function scReadlink( I64 pathPtr, I64 bufPtr, I64 bufSize ) -> SyscallResult:
+    return syscall4( SYS_READLINKAT, AT_FDCWD, pathPtr, bufPtr, bufSize )
+
+public function scChmod( I64 pathPtr, I64 mode ) -> SyscallResult:
+    return syscall3( SYS_FCHMODAT, AT_FDCWD, pathPtr, mode )
+
+public function scChown( I64 pathPtr, I64 uid, I64 gid ) -> SyscallResult:
+    return syscall5( SYS_FCHOWNAT, AT_FDCWD, pathPtr, uid, gid, 0 )
+
+export {
+    SYS_ACCESS,
+    SYS_CHDIR,
+    SYS_CHMOD,
+    SYS_CHOWN,
+    SYS_CLOSE,
+    SYS_FCHMOD,
+    SYS_FCHOWN,
+    SYS_FLOCK,
+    SYS_FSTAT,
+    SYS_FSYNC,
+    SYS_FTRUNCATE,
+    SYS_GETCWD,
+    SYS_GETDENTS64,
+    SYS_IOCTL,
+    SYS_LINK,
+    SYS_LSEEK,
+    SYS_LSTAT,
+    SYS_MKDIR,
+    SYS_MMAP,
+    SYS_MUNMAP,
+    SYS_OPEN,
+    SYS_PIPE2,
+    SYS_READ,
+    SYS_READLINK,
+    SYS_RENAME,
+    SYS_RMDIR,
+    SYS_STAT,
+    SYS_STATFS,
+    SYS_SYMLINK,
+    SYS_UNLINK,
+    SYS_WRITE,
+    scAccess,
+    scChmod,
+    scChown,
+    scLink,
+    scLstat,
+    scMkdir,
+    scOpen,
+    scReadlink,
+    scRename,
+    scRmdir,
+    scStat,
+    scSymlink,
+    scUnlink,
+    syscall0,
+    syscall1,
+    syscall2,
+    syscall3,
+    syscall4,
+    syscall5,
+    syscall6
+}

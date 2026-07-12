@@ -1,0 +1,91 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-11 00:00
+# @update 2026-07-11 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/registers.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cross-platform CPU register context for kernel task management. Uses
+# x86-64 register naming (rax, rbx, ..., rip, rsp) as the canonical
+# field names. On aarch64, the fields map conceptually to the ARM
+# general-purpose registers (x0-x15 -> rax-r15, pc -> rip, sp -> rsp,
+# x29 -> rbp, pstate -> rflags). This is a pure data struct with no
+# inline assembly, so it compiles on any target architecture.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.registers
+
+public struct Registers:
+
+    """
+    CPU register context saved and restored during task context switches.
+    Fields use x86-64 names as the canonical identifiers. On aarch64,
+    the mapping is: rax-r15 hold x0-x15, rip holds pc, rsp holds sp,
+    rbp holds x29, rflags holds pstate, cs and ss are unused (zero).
+    """
+
+    public I64 rax
+    public I64 rbx
+    public I64 rcx
+    public I64 rdx
+    public I64 rsi
+    public I64 rdi
+    public I64 rbp
+    public I64 rsp
+    public I64 r8
+    public I64 r9
+    public I64 r10
+    public I64 r11
+    public I64 r12
+    public I64 r13
+    public I64 r14
+    public I64 r15
+    public I64 rip
+    public I64 rflags
+    public I64 cs
+    public I64 ss
+
+    public function Registers( self ) -> Void:
+
+        """
+        Construct a zeroed register context suitable for a newly created task.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.rax = 0
+        self.rbx = 0
+        self.rcx = 0
+        self.rdx = 0
+        self.rsi = 0
+        self.rdi = 0
+        self.rbp = 0
+        self.rsp = 0
+        self.r8 = 0
+        self.r9 = 0
+        self.r10 = 0
+        self.r11 = 0
+        self.r12 = 0
+        self.r13 = 0
+        self.r14 = 0
+        self.r15 = 0
+        self.rip = 0
+        self.rflags = 0
+        self.cs = 0
+        self.ss = 0
+
+export {
+    Registers
+}

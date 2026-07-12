@@ -1,7 +1,8 @@
 package testing
 
 from uranite.io.console import putsln
-from uranite.os.arch.x86-64.cpu import Registers, readTsc
+from uranite.os.arch.cpu import readTsc
+from uranite.os.arch.registers import Registers
 from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:

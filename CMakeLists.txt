@@ -17,7 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required( VERSION 3.25 )
+cmake_minimum_required( VERSION 3.22 )
 
 # Enable Test Code
 enable_testing()
@@ -25,22 +25,66 @@ enable_testing()
 project( Uranite DESCRIPTION "Accelerated Execution Through Quantum Precision" VERSION 2026.1 LANGUAGES C CXX )
 
 # LLVM Configuration (core + support for JSON)
-execute_process( COMMAND llvm-config --cxxflags OUTPUT_VARIABLE LLVM_CXXFLAGS OUTPUT_STRIP_TRAILING_WHITESPACE )
-execute_process( COMMAND llvm-config --ldflags OUTPUT_VARIABLE LLVM_LDFLAGS_RAW OUTPUT_STRIP_TRAILING_WHITESPACE )
+find_program( LLVM_CONFIG NAMES llvm-config llvm-config-19 REQUIRED )
+execute_process( COMMAND ${LLVM_CONFIG} --cxxflags OUTPUT_VARIABLE LLVM_CXXFLAGS OUTPUT_STRIP_TRAILING_WHITESPACE )
+execute_process( COMMAND ${LLVM_CONFIG} --ldflags OUTPUT_VARIABLE LLVM_LDFLAGS_RAW OUTPUT_STRIP_TRAILING_WHITESPACE )
 separate_arguments( LLVM_LDFLAGS NATIVE_COMMAND "${LLVM_LDFLAGS_RAW}" )
-execute_process( COMMAND llvm-config --libs core support OUTPUT_VARIABLE LLVM_LIBS_RAW OUTPUT_STRIP_TRAILING_WHITESPACE )
+execute_process( COMMAND ${LLVM_CONFIG} --libs core support OUTPUT_VARIABLE LLVM_LIBS_RAW OUTPUT_STRIP_TRAILING_WHITESPACE )
 separate_arguments( LLVM_LIBS NATIVE_COMMAND "${LLVM_LIBS_RAW}" )
+execute_process( COMMAND ${LLVM_CONFIG} --bindir OUTPUT_VARIABLE LLVM_BINDIR OUTPUT_STRIP_TRAILING_WHITESPACE )
 
 # Filter out -std= flags from LLVM to avoid conflict with our C++17 setting
 separate_arguments( LLVM_CXXFLAGS_LIST NATIVE_COMMAND "${LLVM_CXXFLAGS}" )
 list( FILTER LLVM_CXXFLAGS_LIST EXCLUDE REGEX "^-std=" )
 
 # Dependencies
-find_package( argparse REQUIRED )
-find_package( fmt REQUIRED )
+include( FetchContent )
+
+find_package( argparse QUIET )
+if( NOT argparse_FOUND )
+    FetchContent_Declare(
+        argparse
+        GIT_REPOSITORY https://github.com/p-ranav/argparse.git
+        GIT_TAG        v3.1
+    )
+    FetchContent_MakeAvailable( argparse )
+endif()
+
+find_package( fmt QUIET )
+if( NOT fmt_FOUND )
+    FetchContent_Declare(
+        fmt
+        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+        GIT_TAG        11.0.2
+    )
+    FetchContent_MakeAvailable( fmt )
+endif()
+
+find_package( GTest QUIET )
+if( NOT GTest_FOUND )
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        v1.15.2
+    )
+    set( INSTALL_GTEST OFF CACHE BOOL "" FORCE )
+    FetchContent_MakeAvailable( googletest )
+    include( GoogleTest )
+    add_library( GTest::GTest ALIAS gtest )
+    add_library( GTest::Main ALIAS gtest_main )
+endif()
+
+find_package( spdlog QUIET )
+if( NOT spdlog_FOUND )
+    FetchContent_Declare(
+        spdlog
+        GIT_REPOSITORY https://github.com/gabime/spdlog.git
+        GIT_TAG        v1.14.1
+    )
+    FetchContent_MakeAvailable( spdlog )
+endif()
+
 find_package( Git QUIET )
-find_package( GTest REQUIRED )
-find_package( spdlog REQUIRED )
 
 include( GNUInstallDirs )
 
@@ -62,6 +106,8 @@ add_definitions( -D_URANITE_COMPILER_VERSION_="1.0.0" )
 add_definitions( -D_URANITE_LANGUAGE_DESCRIPTION_="${PROJECT_DESCRIPTION}" )
 add_definitions( -D_URANITE_LANGUAGE_VERSION_="${PROJECT_VERSION}" )
 add_definitions( -D_URANITE_GIT_HASH_="${_URANITE_GIT_HASH_}" )
+add_definitions( -D_URANITE_LLC_="${LLVM_BINDIR}/llc" )
+add_definitions( -D_URANITE_OPT_="${LLVM_BINDIR}/opt" )
 
 # Default modules directory path
 # In development builds, use the source tree's stdlibs directory so the
@@ -85,8 +131,6 @@ add_definitions( -D_URANITE_C_RUNTIME_DIR_="${URANITE_C_RUNTIME_INSTALL_DIR}" )
 # Source Files
 file( GLOB_RECURSE URANITE_SOURCES "${CMAKE_SOURCE_DIR}/src/uranite/*.cpp" )
 file( GLOB URANITE_SOURCES_TEST "${CMAKE_SOURCE_DIR}/src/uranite-test/*.cpp" )
-file( GLOB_RECURSE LSP_SOURCES_LIB "${CMAKE_SOURCE_DIR}/src/uranite-lsp/*.cpp" )
-list( FILTER LSP_SOURCES_LIB EXCLUDE REGEX "lsp\\.cpp$" )
 
 # Set Global C++ standard
 set( CMAKE_CXX_STANDARD 17 )
@@ -124,17 +168,7 @@ set_target_properties( uranite-exception-runtime PROPERTIES C_STANDARD 11 ARCHIV
 
 # Define Executable Target
 add_executable( uranite ${URANITE_MAIN} ${URANITE_SOURCES_LIBRARY} )
-add_executable( uranite-tests ${URANITE_SOURCES_LIBRARY} ${LSP_SOURCES_LIB} ${URANITE_SOURCES_TEST} )
-
-# Uranite LSP Server
-file( GLOB_RECURSE LSP_SOURCES "${CMAKE_SOURCE_DIR}/src/uranite-lsp/*.cpp" )
-if( LSP_SOURCES )
-    add_executable( uranite-lsp ${LSP_SOURCES} ${URANITE_SOURCES_LIBRARY} )
-    target_include_directories( uranite-lsp PRIVATE src src/uranite src/uranite-lsp third_party/tree-sitter/lib/include grammar/tree-sitter-uranite/src )
-    target_compile_options( uranite-lsp PRIVATE ${LLVM_CXXFLAGS_LIST} -Wall -Wextra -Wno-unused-parameter -Werror=return-type -O2 -fexceptions -g -DNDEBUG )
-    target_link_libraries( uranite-lsp PRIVATE argparse::argparse fmt::fmt spdlog::spdlog ${LLVM_LIBS} pthread tree-sitter-runtime tree-sitter-uranite )
-    target_link_options( uranite-lsp PRIVATE ${LLVM_LDFLAGS} )
-endif()
+add_executable( uranite-tests ${URANITE_SOURCES_LIBRARY} ${URANITE_SOURCES_TEST} )
 
 # Uranite Formatter
 file( GLOB_RECURSE FMT_SOURCES "${CMAKE_SOURCE_DIR}/src/uranite-fmt/*.cpp" )
@@ -170,28 +204,6 @@ if( PKG_SOURCES )
     target_link_options( uranite-pkg PRIVATE ${LLVM_LDFLAGS} )
 endif()
 
-# Tree-sitter Runtime (vendored C library for incremental parsing)
-add_library( tree-sitter-runtime STATIC
-    third_party/tree-sitter/lib/src/lib.c
-)
-set_target_properties( tree-sitter-runtime PROPERTIES C_STANDARD 11 )
-target_include_directories( tree-sitter-runtime PUBLIC
-    third_party/tree-sitter/lib/include
-    third_party/tree-sitter/lib/src
-)
-
-# Tree-sitter Uranite Grammar (generated parser + external scanner)
-add_library( tree-sitter-uranite STATIC
-    grammar/tree-sitter-uranite/src/parser.c
-    grammar/tree-sitter-uranite/src/scanner.c
-)
-set_target_properties( tree-sitter-uranite PROPERTIES C_STANDARD 11 )
-target_include_directories( tree-sitter-uranite PUBLIC
-    third_party/tree-sitter/lib/include
-    third_party/tree-sitter/lib/src
-    grammar/tree-sitter-uranite/src
-)
-
 # FFI Runtime (C library for dynamic library loading)
 add_library( uranite-ffi-runtime STATIC src/uranite-crt/ffi-runtime.c )
 target_link_libraries( uranite-ffi-runtime PRIVATE dl )
@@ -210,7 +222,7 @@ add_dependencies(
 
 # Include Directories (scoped to target)
 target_include_directories( uranite PRIVATE src src/uranite )
-target_include_directories( uranite-tests PRIVATE src src/uranite src/uranite-lsp third_party/tree-sitter/lib/include grammar/tree-sitter-uranite/src )
+target_include_directories( uranite-tests PRIVATE src src/uranite )
 
 # Compiler Flags (from llvm-config + additional)
 target_compile_options( uranite PRIVATE ${LLVM_CXXFLAGS_LIST} -Wall -Wextra -Wno-unused-parameter -Werror=return-type -O2 -fexceptions -g -DNDEBUG )
@@ -218,7 +230,7 @@ target_compile_options( uranite-tests PRIVATE ${LLVM_CXXFLAGS_LIST} -Wall -Wextr
 
 # Link Dependencies
 target_link_libraries( uranite PRIVATE argparse::argparse fmt::fmt spdlog::spdlog ${LLVM_LIBS} )
-target_link_libraries( uranite-tests PRIVATE fmt::fmt GTest::GTest GTest::Main spdlog::spdlog ${LLVM_LIBS} pthread tree-sitter-runtime tree-sitter-uranite )
+target_link_libraries( uranite-tests PRIVATE fmt::fmt GTest::GTest GTest::Main spdlog::spdlog ${LLVM_LIBS} pthread )
 
 # Linker Flags (e.g. -L...)
 target_link_options( uranite PRIVATE ${LLVM_LDFLAGS} )
@@ -226,10 +238,6 @@ target_link_options( uranite-tests PRIVATE ${LLVM_LDFLAGS} )
 
 # Install rules
 install( TARGETS uranite RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
-
-if( LSP_SOURCES )
-    install( TARGETS uranite-lsp RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
-endif()
 
 if( FMT_SOURCES )
     install( TARGETS uranite-fmt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )

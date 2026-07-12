@@ -1,0 +1,152 @@
+#
+# @author hxAri (hxari)
+# @create 2026-06-25 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/x86-64/memory.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# x86-64 byte-level memory access primitives implemented with inline assembly.
+# Provides raw pointer extraction and width-specific load/store helpers used by
+# the architecture-neutral uranite.io.syscall layer. Selected automatically via
+# the compiler's "native" arch token (uranite.os.arch.native.memory).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.x86-64.memory
+
+from uranite.memory.memory import Memory
+
+public function stringToPtr( String content ) -> I64:
+
+    """
+    Convert a String value to its raw memory address by moving the
+    underlying pointer into an integer register.
+    """
+
+    I64 address = 0
+    asm volatile "movq $1, $0" : output( "=r" address ) : input( "r" content ) : clobber()
+    return address
+
+public function memoryToPtr( Memory<I64> m ) -> I64:
+
+    """
+    Convert a Memory<I64> value to its raw memory address by moving the
+    underlying pointer into an integer register.
+    """
+
+    I64 ptr = 0
+    asm volatile "movq $1, $0" : output( "=r" ptr ) : input( "r" m ) : clobber()
+    return ptr
+
+public function ptrToString( I64 addr ) -> String:
+
+    """
+    Reinterpret a raw memory address as a String value (the inverse of
+    stringToPtr) by moving the address into the result register.
+    """
+
+    String result = ""
+    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" addr ) : clobber()
+    return result
+
+public function readByteAt( I64 addr, I64 offset ) -> I64:
+
+    """
+    Read a single unsigned byte at addr+offset and zero-extend it to I64.
+    """
+
+    I64 result = 0
+    I64 effective = addr + offset
+    asm volatile "movzbq ($1), $0" : output( "=r" result ) : input( "r" effective ) : clobber()
+    return result
+
+public function readI16At( I64 addr, I64 offset ) -> I64:
+
+    """
+    Read an unsigned 16-bit integer at addr+offset and zero-extend it to I64.
+    """
+
+    I64 result = 0
+    I64 effective = addr + offset
+    asm volatile "movzwq ($1), $0" : output( "=r" result ) : input( "r" effective ) : clobber()
+    return result
+
+public function readI32At( I64 addr, I64 offset ) -> I64:
+
+    """
+    Read a 32-bit integer at addr+offset and zero-extend it to I64.
+    """
+
+    I64 result = 0
+    I64 effective = addr + offset
+    asm volatile "movl ($1), ${0:k}" : output( "=r" result ) : input( "r" effective ) : clobber()
+    return result
+
+public function readI64At( I64 addr, I64 offset ) -> I64:
+
+    """
+    Read a 64-bit integer at addr+offset.
+    """
+
+    I64 result = 0
+    I64 effective = addr + offset
+    asm volatile "movq ($1), $0" : output( "=r" result ) : input( "r" effective ) : clobber()
+    return result
+
+public function writeByteAt( I64 addr, I64 offset, I64 val ) -> Void:
+
+    """
+    Write the low byte of val to memory at addr+offset.
+    """
+
+    I64 effective = addr + offset
+    asm volatile "movb ${1:b}, ($0)" : : input( "r" effective, "q" val ) : clobber( "memory" )
+
+public function writeI16At( I64 addr, I64 offset, I64 val ) -> Void:
+
+    """
+    Write the low 16 bits of val to memory at addr+offset.
+    """
+
+    I64 effective = addr + offset
+    asm volatile "movw ${1:w}, ($0)" : : input( "r" effective, "r" val ) : clobber( "memory" )
+
+public function writeI32At( I64 addr, I64 offset, I64 val ) -> Void:
+
+    """
+    Write the low 32 bits of val to memory at addr+offset.
+    """
+
+    I64 effective = addr + offset
+    asm volatile "movl ${1:k}, ($0)" : : input( "r" effective, "r" val ) : clobber( "memory" )
+
+public function writeI64At( I64 addr, I64 offset, I64 val ) -> Void:
+
+    """
+    Write a full 64-bit value to memory at addr+offset.
+    """
+
+    I64 effective = addr + offset
+    asm volatile "movq $1, ($0)" : : input( "r" effective, "r" val ) : clobber( "memory" )
+
+export {
+    memoryToPtr,
+    ptrToString,
+    readByteAt,
+    readI16At,
+    readI32At,
+    readI64At,
+    stringToPtr,
+    writeByteAt,
+    writeI16At,
+    writeI32At,
+    writeI64At
+}

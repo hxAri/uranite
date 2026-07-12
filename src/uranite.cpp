@@ -20,7 +20,7 @@
 #include <argparse/argparse.hpp>
 #include <fmt/core.h>
 #include <fmt/color.h>
-#include <llvm/Support/Host.h>
+#include <llvm/TargetParser/Host.h>
 #include <llvm/Config/llvm-config.h>
 #include <optional>
 #include <spdlog/spdlog.h>

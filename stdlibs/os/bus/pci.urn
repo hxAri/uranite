@@ -21,7 +21,7 @@
 package uranite.os.bus.pci
 
 from uranite.memory.memory import Memory
-from uranite.os.arch.x86-64.port import inl, outl
+from uranite.os.arch.port import inl, outl
 
 public const I64 PCI_CONFIG_ADDRESS = 3320
 """

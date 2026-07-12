@@ -3,19 +3,22 @@ package main
 
 from uranite.io.console import puts
 
-
 function main() -> I32:
     asm volatile "nop"
     asm "nop"
 
     I64 result = 0
-    asm "mov $$42, $0" : output( "=r" result )
+    asm volatile:
+        x86-64 "mov $$42, $0" : output( "=r" result )
+        aarch64 "mov $0, #42" : output( "=r" result )
     puts( "asm mov result: ", result )
 
     I64 a = 10
     I64 b = 32
     I64 sum = 0
-    asm "add $1, $0" : output( "=r" sum ) : input( "r" a, "0" b )
+    asm volatile:
+        x86-64 "addq $2, $0" : output( "=r" sum ) : input( "0" sum, "r" b )
+        aarch64 "add $0, $1, $2" : output( "=r" sum ) : input( "r" a, "r" b )
     puts( "asm add result: ", sum )
 
     return 0

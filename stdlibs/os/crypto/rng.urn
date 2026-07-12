@@ -75,10 +75,18 @@ public class Csprng:
         I64 r1 = 0
         I64 r2 = 0
         I64 r3 = 0
-        asm volatile "rdrand $0" : output( "=r" r0 )
-        asm volatile "rdrand $0" : output( "=r" r1 )
-        asm volatile "rdrand $0" : output( "=r" r2 )
-        asm volatile "rdrand $0" : output( "=r" r3 )
+        asm volatile:
+            x86-64 "rdrand $0" : output( "=r" r0 )
+            aarch64 "mrs $0, S3_3_C2_C4_0" : output( "=r" r0 )
+        asm volatile:
+            x86-64 "rdrand $0" : output( "=r" r1 )
+            aarch64 "mrs $0, S3_3_C2_C4_0" : output( "=r" r1 )
+        asm volatile:
+            x86-64 "rdrand $0" : output( "=r" r2 )
+            aarch64 "mrs $0, S3_3_C2_C4_0" : output( "=r" r2 )
+        asm volatile:
+            x86-64 "rdrand $0" : output( "=r" r3 )
+            aarch64 "mrs $0, S3_3_C2_C4_0" : output( "=r" r3 )
         self.s0 = r0
         self.s1 = r1
         self.s2 = r2
@@ -86,13 +94,42 @@ public class Csprng:
         self.initialized = 1
         return True
     
+    public function seedFromGetrandom( self ) -> Boolean:
+
+        """
+        Seed the CSPRNG from the kernel entropy pool via the getrandom syscall.
+        This works on any Linux kernel >= 3.17 regardless of hardware RNG support.
+        Reads 32 bytes (four I64 state words) with flags=0 (blocking, /dev/urandom
+        quality). Returns True on success, False if the syscall returns an error.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        I64 sysGetrandom = 0
+        asm volatile:
+            x86-64 "mov $$318, $0" : output( "=r" sysGetrandom )
+            aarch64 "mov $0, #278" : output( "=r" sysGetrandom )
+        I64 bufAddr = addressof self.s0
+        I64 bufLen = 32
+        I64 flags = 0
+        I64 bytesRead = 0
+        asm volatile:
+            x86-64 "movq $1, %rax; movq $2, %rdi; movq $3, %rsi; movq $4, %rdx; syscall; movq %rax, $0" : output( "=r" bytesRead ) : input( "r" sysGetrandom, "r" bufAddr, "r" bufLen, "r" flags ) : clobber( "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory" )
+            aarch64 "mov x8, $1; mov x0, $2; mov x1, $3; mov x2, $4; svc #0; mov $0, x0" : output( "=r" bytesRead ) : input( "r" sysGetrandom, "r" bufAddr, "r" bufLen, "r" flags ) : clobber( "x0", "x1", "x2", "x8", "memory" )
+        if bytesRead == 32:
+            self.initialized = 1
+            return True
+        return False
+
     public function seed( self, I64 seed0, I64 seed1, I64 seed2, I64 seed3 ) -> Void:
 
         """
         Manually seed the CSPRNG with four 64-bit values. This is intended
         for testing or for platforms that do not support the RDRAND instruction.
         The provided values should have high entropy to ensure good random output.
-        
+
         Complexity:
             Time: O(1)
             Space: O(1)

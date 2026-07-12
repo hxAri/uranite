@@ -1,15 +1,18 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-30 10:00
-# @update 2026-06-21 01:44
+# @update 2026-06-25 00:00
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/io/syscall.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
-# Linux x86_64 syscall constants and thin wrapper functions for IO operations.
-# All wrappers check SyscallResult.isError() and raise appropriate IOError subclass.
-# Also provides byte-level memory access helpers via inline assembly.
+# Architecture-neutral IO syscall policy layer. Syscall numbers, the raw syscall
+# instruction, byte-level memory primitives, and the legacy/at operation shims
+# all live in the per-architecture modules selected by the compiler's "native"
+# arch token (uranite.os.arch.native.*). This module keeps the portable pieces:
+# the Linux flag/errno/stat constants, errno-to-error mapping, and the thin sysX
+# wrappers that check SyscallResult and raise the appropriate IOError subclass.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,74 +35,69 @@ from uranite.io.errors import {
     NotADirectoryError,
     PermissionError
 }
-from uranite.memory.memory import Memory
 from uranite.os.syscall.invoke import {
-    syscall0,
     syscall1,
     syscall2,
-    syscall3,
-    syscall4
+    syscall3
 }
 from uranite.os.syscall.result import SyscallResult
-
-const I64 SYS_READ = 0
-"""Linux x86_64 syscall number for read (0)."""
-const I64 SYS_WRITE = 1
-"""Linux x86_64 syscall number for write (1)."""
-const I64 SYS_OPEN = 2
-"""Linux x86_64 syscall number for open (2)."""
-const I64 SYS_CLOSE = 3
-"""Linux x86_64 syscall number for close (3)."""
-const I64 SYS_STAT = 4
-"""Linux x86_64 syscall number for stat (4)."""
-const I64 SYS_FSTAT = 5
-"""Linux x86_64 syscall number for fstat (5)."""
-const I64 SYS_LSTAT = 6
-"""Linux x86_64 syscall number for lstat (6)."""
-const I64 SYS_LSEEK = 8
-"""Linux x86_64 syscall number for lseek (8)."""
-const I64 SYS_IOCTL = 16
-"""Linux x86_64 syscall number for ioctl (16)."""
-const I64 SYS_ACCESS = 21
-"""Linux x86_64 syscall number for access (21)."""
-const I64 SYS_PIPE2 = 293
-"""Linux x86_64 syscall number for pipe2 (293)."""
-const I64 SYS_FTRUNCATE = 77
-"""Linux x86_64 syscall number for ftruncate (77)."""
-const I64 SYS_GETCWD = 79
-"""Linux x86_64 syscall number for getcwd (79)."""
-const I64 SYS_CHDIR = 80
-"""Linux x86_64 syscall number for chdir (80)."""
-const I64 SYS_RENAME = 82
-"""Linux x86_64 syscall number for rename (82)."""
-const I64 SYS_MKDIR = 83
-"""Linux x86_64 syscall number for mkdir (83)."""
-const I64 SYS_RMDIR = 84
-"""Linux x86_64 syscall number for rmdir (84)."""
-const I64 SYS_LINK = 86
-"""Linux x86_64 syscall number for link (86)."""
-const I64 SYS_UNLINK = 87
-"""Linux x86_64 syscall number for unlink (87)."""
-const I64 SYS_SYMLINK = 88
-"""Linux x86_64 syscall number for symlink (88)."""
-const I64 SYS_READLINK = 89
-"""Linux x86_64 syscall number for readlink (89)."""
-const I64 SYS_CHMOD = 90
-"""Linux x86_64 syscall number for chmod (90)."""
-const I64 SYS_FCHMOD = 91
-"""Linux x86_64 syscall number for fchmod (91)."""
-const I64 SYS_CHOWN = 92
-"""Linux x86_64 syscall number for chown (92)."""
-const I64 SYS_FCHOWN = 93
-"""Linux x86_64 syscall number for fchown (93)."""
-const I64 SYS_FSYNC = 74
-"""Linux x86_64 syscall number for fsync (74)."""
-const I64 SYS_FLOCK = 73
-"""Linux x86_64 syscall number for flock (73)."""
-const I64 SYS_GETDENTS64 = 217
-"""Linux x86_64 syscall number for getdents64 (217)."""
-const I64 SYS_STATFS = 137
-"""Linux x86_64 syscall number for statfs (137)."""
+from uranite.os.arch.native.memory import {
+    memoryToPtr,
+    ptrToString,
+    readByteAt,
+    readI16At,
+    readI32At,
+    readI64At,
+    stringToPtr,
+    writeByteAt,
+    writeI16At,
+    writeI32At,
+    writeI64At
+}
+from uranite.os.arch.native.syscall import {
+    SYS_ACCESS,
+    SYS_CHDIR,
+    SYS_CHMOD,
+    SYS_CHOWN,
+    SYS_CLOSE,
+    SYS_FCHMOD,
+    SYS_FCHOWN,
+    SYS_FLOCK,
+    SYS_FSTAT,
+    SYS_FSYNC,
+    SYS_FTRUNCATE,
+    SYS_GETCWD,
+    SYS_GETDENTS64,
+    SYS_IOCTL,
+    SYS_LINK,
+    SYS_LSEEK,
+    SYS_LSTAT,
+    SYS_MKDIR,
+    SYS_OPEN,
+    SYS_PIPE2,
+    SYS_READ,
+    SYS_READLINK,
+    SYS_RENAME,
+    SYS_RMDIR,
+    SYS_STAT,
+    SYS_STATFS,
+    SYS_SYMLINK,
+    SYS_UNLINK,
+    SYS_WRITE,
+    scAccess,
+    scChmod,
+    scChown,
+    scLink,
+    scLstat,
+    scMkdir,
+    scOpen,
+    scReadlink,
+    scRename,
+    scRmdir,
+    scStat,
+    scSymlink,
+    scUnlink
+}
 
 const I64 O_RDONLY = 0
 """Open flag for read-only access."""
@@ -188,25 +186,6 @@ const I64 ENOTEMPTY = 39
 const I64 EPIPE = 32
 """Errno: broken pipe."""
 
-public function stringToPtr( String content ) -> I64:
-
-    """
-    Convert a String value to its raw memory address by extracting the
-    underlying pointer via inline assembly.
-
-    Parameters:
-        content (String):
-            The string to extract the pointer from.
-
-    Returns:
-        I64:
-            The raw memory address of the string data.
-    """
-
-    I64 address = 0
-    asm volatile "movq $1, $0" : output( "=r" address ) : input( "r" content ) : clobber()
-    return address
-
 public function stringLen( String content ) -> I64:
 
     """
@@ -234,221 +213,29 @@ public function stringLen( String content ) -> I64:
             byteCount = byteCount + 1
     return byteCount
 
-public function memoryToPtr( Memory<I64> m ) -> I64:
-    
-    """
-    Convert a Memory<I64> value to its raw memory address by extracting
-    the underlying pointer via inline assembly.
-    
-    Parameters:
-        m (Memory<I64>):
-            The memory object to extract the pointer from.
-    
-    Returns:
-        I64:
-            The raw memory address of the memory block.
-    """
-    
-    I64 ptr = 0
-    asm volatile "movq $1, $0" : output( "=r" ptr ) : input( "r" m ) : clobber()
-    return ptr
-
-public function readByteAt( I64 addr, I64 offset ) -> I64:
-    
-    """
-    Read a single unsigned byte from memory at the given address plus
-    offset and zero-extend it to I64.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-    
-    Returns:
-        I64:
-            The byte value (0-255) at the effective address.
-    """
-    
-    I64 result = 0
-    I64 effective = addr + offset
-    asm volatile "movzbq ($1), $0" : output( "=r" result ) : input( "r" effective ) : clobber()
-    return result
-
-public function readI16At( I64 addr, I64 offset ) -> I64:
-    
-    """
-    Read an unsigned 16-bit integer from memory at the given address
-    plus offset and zero-extend it to I64.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-    
-    Returns:
-        I64:
-            The 16-bit value zero-extended to I64.
-    """
-    
-    I64 result = 0
-    I64 effective = addr + offset
-    asm volatile "movzwq ($1), $0" : output( "=r" result ) : input( "r" effective ) : clobber()
-    return result
-
-public function readI32At( I64 addr, I64 offset ) -> I64:
-    
-    """
-    Read a 32-bit integer from memory at the given address plus offset
-    and zero-extend it to I64.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-    
-    Returns:
-        I64:
-            The 32-bit value zero-extended to I64.
-    """
-    
-    I64 result = 0
-    I64 effective = addr + offset
-    asm volatile "movl ($1), ${0:k}" : output( "=r" result ) : input( "r" effective ) : clobber()
-    return result
-
-public function readI64At( I64 addr, I64 offset ) -> I64:
-    
-    """
-    Read a 64-bit integer from memory at the given address plus offset.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-    
-    Returns:
-        I64:
-            The 64-bit value at the effective address.
-    """
-    
-    I64 result = 0
-    I64 effective = addr + offset
-    asm volatile "movq ($1), $0" : output( "=r" result ) : input( "r" effective ) : clobber()
-    return result
-
-public function writeByteAt( I64 addr, I64 offset, I64 val ) -> Void:
-    
-    """
-    Write the low byte of val to memory at the given address plus
-    offset.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-        val (I64):
-            The value whose low byte will be written.
-    """
-    
-    I64 effective = addr + offset
-    asm volatile "movb ${1:b}, ($0)" : : input( "r" effective, "q" val ) : clobber( "memory" )
-
-public function writeI16At( I64 addr, I64 offset, I64 val ) -> Void:
-    
-    """
-    Write the low 16 bits of val to memory at the given address plus
-    offset.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-        val (I64):
-            The value whose low 16 bits will be written.
-    """
-    
-    I64 effective = addr + offset
-    asm volatile "movw ${1:w}, ($0)" : : input( "r" effective, "r" val ) : clobber( "memory" )
-
-public function writeI32At( I64 addr, I64 offset, I64 val ) -> Void:
-    
-    """
-    Write the low 32 bits of val to memory at the given address plus
-    offset.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-        val (I64):
-            The value whose low 32 bits will be written.
-    """
-    
-    I64 effective = addr + offset
-    asm volatile "movl ${1:k}, ($0)" : : input( "r" effective, "r" val ) : clobber( "memory" )
-
-public function writeI64At( I64 addr, I64 offset, I64 val ) -> Void:
-    
-    """
-    Write a full 64-bit value to memory at the given address plus
-    offset.
-    
-    Parameters:
-        addr (I64):
-            The base memory address.
-        offset (I64):
-            The byte offset from the base address.
-        val (I64):
-            The 64-bit value to write.
-    """
-    
-    I64 effective = addr + offset
-    asm volatile "movq $1, ($0)" : : input( "r" effective, "r" val ) : clobber( "memory" )
-
 public function raiseFromErrno( I64 errCode, String context ) -> Void:
-    
+
     """
     Translate a Linux errno value into the appropriate Uranite IOError
-    subclass and raise it. Maps known errno values to specific error
-    types such as FileNotFoundError, PermissionError, and others.
-    Falls back to a generic IOError for unrecognized errno values.
-    
+    subclass and raise it. Falls back to a generic IOError for
+    unrecognized errno values.
+
     Parameters:
         errCode (I64):
             The Linux errno value returned by a failed syscall.
         context (String):
             A human-readable description of the operation that failed.
-    
+
     Raises:
-        FileNotFoundError:
-            When errCode is ENOENT (2).
-        PermissionError:
-            When errCode is EACCES (13).
-        FileExistsError:
-            When errCode is EEXIST (17).
-        IsADirectoryError:
-            When errCode is EISDIR (21).
-        NotADirectoryError:
-            When errCode is ENOTDIR (20).
-        DirectoryNotEmptyError:
-            When errCode is ENOTEMPTY (39).
-        BrokenPipeError:
-            When errCode is EPIPE (32).
-        IOError:
-            For all other errno values.
-    
+        FileNotFoundError, PermissionError, FileExistsError,
+        IsADirectoryError, NotADirectoryError, DirectoryNotEmptyError,
+        BrokenPipeError, or IOError depending on errCode.
+
     Complexity:
         Time: O(1)
         Space: O(1)
     """
-    
+
     if errCode == ENOENT:
         raise new FileNotFoundError( context, errCode, None )
     elif errCode == EACCES:
@@ -467,652 +254,433 @@ public function raiseFromErrno( I64 errCode, String context ) -> Void:
         raise new IOError( context, errCode, None )
 
 public function sysOpen( I64 pathPtr, I64 flags, I64 mode ) -> I64:
-    
+
     """
-    Open a file via the Linux open syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated path string.
-        flags (I64):
-            Open flags (O_RDONLY, O_WRONLY, O_CREAT, etc.).
-        mode (I64):
-            File permission mode, used when O_CREAT is set.
-    
-    Returns:
-        I64:
-            The new file descriptor.
-    
+    Open a file. Uses the open syscall on x86-64 and openat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails, with a subclass matching the errno.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_OPEN, pathPtr, flags, mode )
+
+    SyscallResult syscallResult = scOpen( pathPtr, flags, mode )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "open failed" )
     return syscallResult.value()
 
 public function sysClose( I64 fd ) -> Void:
-    
+
     """
-    Close a file descriptor via the Linux close syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to close.
-    
+    Close a file descriptor.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall1( SYS_CLOSE, fd )
+
+    SyscallResult syscallResult = syscall1( SYS_CLOSE, fd )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "close failed" )
 
 public function sysRead( I64 fd, I64 bufPtr, I64 count ) -> I64:
-    
+
     """
-    Read bytes from a file descriptor via the Linux read syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to read from.
-        bufPtr (I64):
-            Pointer to the destination buffer.
-        count (I64):
-            Maximum number of bytes to read.
-    
-    Returns:
-        I64:
-            The number of bytes actually read.
-    
+    Read bytes from a file descriptor.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_READ, fd, bufPtr, count )
+
+    SyscallResult syscallResult = syscall3( SYS_READ, fd, bufPtr, count )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "read failed" )
     return syscallResult.value()
 
 public function sysWrite( I64 fd, I64 bufPtr, I64 count ) -> I64:
-    
+
     """
-    Write bytes to a file descriptor via the Linux write syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to write to.
-        bufPtr (I64):
-            Pointer to the source buffer.
-        count (I64):
-            Number of bytes to write.
-    
-    Returns:
-        I64:
-            The number of bytes actually written.
-    
+    Write bytes to a file descriptor.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_WRITE, fd, bufPtr, count )
+
+    SyscallResult syscallResult = syscall3( SYS_WRITE, fd, bufPtr, count )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "write failed" )
     return syscallResult.value()
 
 public function sysLseek( I64 fd, I64 offset, I64 whence ) -> I64:
-    
+
     """
-    Reposition the file offset of a file descriptor via the Linux
-    lseek syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to seek.
-        offset (I64):
-            The offset in bytes.
-        whence (I64):
-            The reference point: SEEK_SET, SEEK_CUR, or SEEK_END.
-    
-    Returns:
-        I64:
-            The resulting offset from the beginning of the file.
-    
+    Reposition the file offset of a file descriptor.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_LSEEK, fd, offset, whence )
+
+    SyscallResult syscallResult = syscall3( SYS_LSEEK, fd, offset, whence )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "lseek failed" )
     return syscallResult.value()
 
 public function sysStat( I64 pathPtr, I64 statBufPtr ) -> Void:
-    
+
     """
-    Obtain file status for a path via the Linux stat syscall. Follows
-    symbolic links.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated path string.
-        statBufPtr (I64):
-            Pointer to a 144-byte buffer to receive the stat structure.
-    
+    Obtain file status for a path, following symbolic links. Uses stat on
+    x86-64 and newfstatat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_STAT, pathPtr, statBufPtr )
+
+    SyscallResult syscallResult = scStat( pathPtr, statBufPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "stat failed" )
 
 public function sysFstat( I64 fd, I64 statBufPtr ) -> Void:
-    
+
     """
-    Obtain file status for an open file descriptor via the Linux fstat
-    syscall.
-    
-    Parameters:
-        fd (I64):
-            The open file descriptor to stat.
-        statBufPtr (I64):
-            Pointer to a 144-byte buffer to receive the stat structure.
-    
+    Obtain file status for an open file descriptor.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_FSTAT, fd, statBufPtr )
+
+    SyscallResult syscallResult = syscall2( SYS_FSTAT, fd, statBufPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "fstat failed" )
 
 public function sysLstat( I64 pathPtr, I64 statBufPtr ) -> Void:
-    
+
     """
-    Obtain file status for a path via the Linux lstat syscall. Does
-    not follow symbolic links.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated path string.
-        statBufPtr (I64):
-            Pointer to a 144-byte buffer to receive the stat structure.
-    
+    Obtain file status for a path without following symbolic links. Uses
+    lstat on x86-64 and newfstatat with AT_SYMLINK_NOFOLLOW on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_LSTAT, pathPtr, statBufPtr )
+
+    SyscallResult syscallResult = scLstat( pathPtr, statBufPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "lstat failed" )
 
 public function sysFtruncate( I64 fd, I64 length ) -> Void:
-    
+
     """
-    Truncate or extend a file to a specified length via the Linux
-    ftruncate syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor of the file to truncate.
-        length (I64):
-            The desired file size in bytes.
-    
+    Truncate or extend a file to a specified length.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_FTRUNCATE, fd, length )
+
+    SyscallResult syscallResult = syscall2( SYS_FTRUNCATE, fd, length )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "ftruncate failed" )
 
 public function sysFsync( I64 fd ) -> Void:
-    
+
     """
-    Synchronize a file's in-core state with its storage device via
-    the Linux fsync syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to synchronize.
-    
+    Synchronize a file's in-core state with its storage device.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall1( SYS_FSYNC, fd )
+
+    SyscallResult syscallResult = syscall1( SYS_FSYNC, fd )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "fsync failed" )
 
 public function sysMkdir( I64 pathPtr, I64 mode ) -> Void:
-    
+
     """
-    Create a directory via the Linux mkdir syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated directory path.
-        mode (I64):
-            The permission mode for the new directory.
-    
+    Create a directory. Uses mkdir on x86-64 and mkdirat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_MKDIR, pathPtr, mode )
+
+    SyscallResult syscallResult = scMkdir( pathPtr, mode )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "mkdir failed" )
 
 public function sysRmdir( I64 pathPtr ) -> Void:
-    
+
     """
-    Remove an empty directory via the Linux rmdir syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated directory path.
-    
+    Remove an empty directory. Uses rmdir on x86-64 and unlinkat with
+    AT_REMOVEDIR on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall1( SYS_RMDIR, pathPtr )
+
+    SyscallResult syscallResult = scRmdir( pathPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "rmdir failed" )
 
 public function sysUnlink( I64 pathPtr ) -> Void:
-    
+
     """
-    Delete a file (remove a directory entry) via the Linux unlink
-    syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated file path.
-    
+    Delete a file. Uses unlink on x86-64 and unlinkat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall1( SYS_UNLINK, pathPtr )
+
+    SyscallResult syscallResult = scUnlink( pathPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "unlink failed" )
 
 public function sysRename( I64 oldPtr, I64 newPtr ) -> Void:
-    
+
     """
-    Rename a file or directory via the Linux rename syscall.
-    
-    Parameters:
-        oldPtr (I64):
-            Pointer to the null-terminated old path.
-        newPtr (I64):
-            Pointer to the null-terminated new path.
-    
+    Rename a file or directory. Uses rename on x86-64 and renameat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_RENAME, oldPtr, newPtr )
+
+    SyscallResult syscallResult = scRename( oldPtr, newPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "rename failed" )
 
 public function sysLink( I64 oldPtr, I64 newPtr ) -> Void:
-    
+
     """
-    Create a hard link via the Linux link syscall.
-    
-    Parameters:
-        oldPtr (I64):
-            Pointer to the null-terminated existing path.
-        newPtr (I64):
-            Pointer to the null-terminated new link path.
-    
+    Create a hard link. Uses link on x86-64 and linkat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_LINK, oldPtr, newPtr )
+
+    SyscallResult syscallResult = scLink( oldPtr, newPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "link failed" )
 
 public function sysSymlink( I64 targetPtr, I64 linkPtr ) -> Void:
-    
+
     """
-    Create a symbolic link via the Linux symlink syscall.
-    
-    Parameters:
-        targetPtr (I64):
-            Pointer to the null-terminated target path.
-        linkPtr (I64):
-            Pointer to the null-terminated symbolic link path.
-    
+    Create a symbolic link. Uses symlink on x86-64 and symlinkat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_SYMLINK, targetPtr, linkPtr )
+
+    SyscallResult syscallResult = scSymlink( targetPtr, linkPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "symlink failed" )
 
 public function sysReadlink( I64 pathPtr, I64 bufPtr, I64 bufSize ) -> I64:
-    
+
     """
-    Read the target of a symbolic link via the Linux readlink syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated symlink path.
-        bufPtr (I64):
-            Pointer to the buffer to receive the link target.
-        bufSize (I64):
-            The size of the destination buffer in bytes.
-    
-    Returns:
-        I64:
-            The number of bytes placed in the buffer (not null-terminated
-            by the syscall).
-    
+    Read the target of a symbolic link. Uses readlink on x86-64 and
+    readlinkat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_READLINK, pathPtr, bufPtr, bufSize )
+
+    SyscallResult syscallResult = scReadlink( pathPtr, bufPtr, bufSize )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "readlink failed" )
     return syscallResult.value()
 
 public function sysChmod( I64 pathPtr, I64 mode ) -> Void:
-    
+
     """
-    Change file permissions via the Linux chmod syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated file path.
-        mode (I64):
-            The new permission mode bits.
-    
+    Change file permissions. Uses chmod on x86-64 and fchmodat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_CHMOD, pathPtr, mode )
+
+    SyscallResult syscallResult = scChmod( pathPtr, mode )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "chmod failed" )
 
 public function sysFchmod( I64 fd, I64 mode ) -> Void:
-    
+
     """
-    Change file permissions for an open file descriptor via the Linux
-    fchmod syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to modify.
-        mode (I64):
-            The new permission mode bits.
-    
+    Change file permissions for an open file descriptor.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_FCHMOD, fd, mode )
+
+    SyscallResult syscallResult = syscall2( SYS_FCHMOD, fd, mode )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "fchmod failed" )
 
 public function sysChown( I64 pathPtr, I64 uid, I64 gid ) -> Void:
-    
+
     """
-    Change file ownership via the Linux chown syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated file path.
-        uid (I64):
-            The new owner user ID.
-        gid (I64):
-            The new owner group ID.
-    
+    Change file ownership. Uses chown on x86-64 and fchownat on aarch64.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_CHOWN, pathPtr, uid, gid )
+
+    SyscallResult syscallResult = scChown( pathPtr, uid, gid )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "chown failed" )
 
 public function sysFchown( I64 fd, I64 uid, I64 gid ) -> Void:
-    
+
     """
-    Change file ownership for an open file descriptor via the Linux
-    fchown syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to modify.
-        uid (I64):
-            The new owner user ID.
-        gid (I64):
-            The new owner group ID.
-    
+    Change file ownership for an open file descriptor.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_FCHOWN, fd, uid, gid )
+
+    SyscallResult syscallResult = syscall3( SYS_FCHOWN, fd, uid, gid )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "fchown failed" )
 
 public function sysAccess( I64 pathPtr, I64 mode ) -> Boolean:
-    
+
     """
-    Check file accessibility via the Linux access syscall. Unlike other
-    syscall wrappers, this does not raise on failure but returns a
-    Boolean indicating whether the check passed.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated file path.
-        mode (I64):
-            The access mode to check (F_OK, R_OK, W_OK, X_OK).
-    
+    Check file accessibility. Uses access on x86-64 and faccessat on aarch64.
+    Returns a Boolean rather than raising.
+
     Returns:
         Boolean:
             True if the access check passed, False otherwise.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_ACCESS, pathPtr, mode )
+
+    SyscallResult syscallResult = scAccess( pathPtr, mode )
     return syscallResult.isOk()
 
 public function sysGetcwd( I64 bufPtr, I64 size ) -> I64:
-    
+
     """
-    Get the current working directory via the Linux getcwd syscall.
-    
-    Parameters:
-        bufPtr (I64):
-            Pointer to the buffer to receive the null-terminated path.
-        size (I64):
-            The size of the buffer in bytes.
-    
-    Returns:
-        I64:
-            The length of the path written to the buffer.
-    
+    Get the current working directory.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_GETCWD, bufPtr, size )
+
+    SyscallResult syscallResult = syscall2( SYS_GETCWD, bufPtr, size )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "getcwd failed" )
     return syscallResult.value()
 
 public function sysChdir( I64 pathPtr ) -> Void:
-    
+
     """
-    Change the current working directory via the Linux chdir syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated directory path.
-    
+    Change the current working directory.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall1( SYS_CHDIR, pathPtr )
+
+    SyscallResult syscallResult = syscall1( SYS_CHDIR, pathPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "chdir failed" )
 
 public function sysGetdents64( I64 fd, I64 bufPtr, I64 bufSize ) -> I64:
-    
+
     """
-    Read directory entries via the Linux getdents64 syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor of the open directory.
-        bufPtr (I64):
-            Pointer to the buffer to receive directory entries.
-        bufSize (I64):
-            The size of the buffer in bytes.
-    
+    Read directory entries.
+
     Returns:
         I64:
-            The number of bytes read into the buffer, or 0 at end of
-            directory.
-    
+            Bytes read into the buffer, or 0 at end of directory.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_GETDENTS64, fd, bufPtr, bufSize )
+
+    SyscallResult syscallResult = syscall3( SYS_GETDENTS64, fd, bufPtr, bufSize )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "getdents64 failed" )
     return syscallResult.value()
 
 public function sysStatfs( I64 pathPtr, I64 bufPtr ) -> Void:
-    
+
     """
-    Obtain filesystem statistics via the Linux statfs syscall.
-    
-    Parameters:
-        pathPtr (I64):
-            Pointer to the null-terminated path within the filesystem.
-        bufPtr (I64):
-            Pointer to the buffer to receive the statfs structure.
-    
+    Obtain filesystem statistics.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_STATFS, pathPtr, bufPtr )
+
+    SyscallResult syscallResult = syscall2( SYS_STATFS, pathPtr, bufPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "statfs failed" )
 
 public function sysFlock( I64 fd, I64 operation ) -> Void:
-    
+
     """
-    Apply or remove an advisory lock on a file via the Linux flock
-    syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor to lock or unlock.
-        operation (I64):
-            The lock operation: LOCK_SH, LOCK_EX, LOCK_UN, optionally
-            OR'd with LOCK_NB.
-    
+    Apply or remove an advisory lock on a file.
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_FLOCK, fd, operation )
+
+    SyscallResult syscallResult = syscall2( SYS_FLOCK, fd, operation )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "flock failed" )
 
 public function sysIoctl( I64 fd, I64 request, I64 argPtr ) -> I64:
-    
+
     """
-    Perform a device-specific I/O control operation via the Linux ioctl
-    syscall.
-    
-    Parameters:
-        fd (I64):
-            The file descriptor of the device.
-        request (I64):
-            The ioctl request code.
-        argPtr (I64):
-            Pointer to the request-specific argument buffer.
-    
+    Perform a device-specific I/O control operation.
+
     Returns:
         I64:
             The return value from the ioctl call.
-    
+
     Raises:
         IOError:
             If the syscall fails.
     """
-    
-    SyscallResult syscallResult =syscall3( SYS_IOCTL, fd, request, argPtr )
+
+    SyscallResult syscallResult = syscall3( SYS_IOCTL, fd, request, argPtr )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "ioctl failed" )
     return syscallResult.value()
 
 public function sysPipe2( I64 pipefdPtr, I64 flags ) -> Void:
-    
+
     """
-    Create a pipe with flags via the Linux pipe2 syscall. The two file
-    descriptors (read end, write end) are written to the memory at
-    pipefdPtr.
-    
-    Parameters:
-        pipefdPtr (I64):
-            Pointer to an array of two I32 values to receive the read
-            and write file descriptors.
-        flags (I64):
-            Flags such as O_CLOEXEC to set on the new file descriptors.
-    
+    Create a pipe with flags. The two file descriptors (read end, write end)
+    are written to the memory at pipefdPtr.
+
     Raises:
         IOError:
             If the syscall fails.
-    
+
     Complexity:
         Time: O(1)
         Space: O(1)
     """
-    
-    SyscallResult syscallResult =syscall2( SYS_PIPE2, pipefdPtr, flags )
+
+    SyscallResult syscallResult = syscall2( SYS_PIPE2, pipefdPtr, flags )
     if syscallResult.isError():
         raiseFromErrno( syscallResult.errorCode(), "pipe2 failed" )
 
@@ -1180,6 +748,7 @@ export {
     W_OK,
     X_OK,
     memoryToPtr,
+    ptrToString,
     raiseFromErrno,
     readByteAt,
     readI16At,

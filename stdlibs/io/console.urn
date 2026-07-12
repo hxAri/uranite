@@ -28,6 +28,7 @@ from uranite.io.syscall import {
     TCGETS,
     TCSETS,
     memoryToPtr,
+    ptrToString,
     readByteAt,
     readI32At,
     stringLen,
@@ -170,8 +171,7 @@ public function input( String prompt ) -> String:
                 totalRead = totalRead - 1
                 done = True
     writeByteAt( bufferAddress, totalRead, 0 )
-    String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" bufferAddress ) : clobber()
+    String result = ptrToString( bufferAddress )
     return result
 
 public function getpass( String prompt ) -> String:
@@ -242,8 +242,7 @@ public function getpass( String prompt ) -> String:
     termiosBuffer.free()
     writeNewlineFd( STDOUT_FD )
     writeByteAt( bufferAddress, totalRead, 0 )
-    String result = ""
-    asm volatile "movq $1, $0" : output( "=r" result ) : input( "r" bufferAddress ) : clobber()
+    String result = ptrToString( bufferAddress )
     return result
 
 public function puts( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:

@@ -23,7 +23,7 @@
 
 package uranite.os.sync.spinlock
 
-from uranite.os.arch.x86-64.cpu import disableInterrupts, enableInterrupts, readRflags
+from uranite.os.arch.cpu import disableInterrupts, enableInterrupts, readRflags
 
 public class Spinlock:
 
@@ -61,9 +61,13 @@ public class Spinlock:
         I64 old = 1
         I64 lockAddr = addressof self.locked
         while old != 0:
-            asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+            asm volatile:
+                x86-64 "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+                aarch64 "1: ldaxr $0, [$2]; stlxr w16, $1, [$2]; cbnz w16, 1b" : output( "=&r" old ) : input( "r" expected, "r" lockAddr ) : clobber( "memory", "x16" )
             if old != 0:
-                asm volatile "pause"
+                asm volatile:
+                    x86-64 "pause"
+                    aarch64 "yield"
 
     public function unlock( self ) -> Void:
 
@@ -82,7 +86,7 @@ public class Spinlock:
         Attempt to acquire the spinlock without spinning. Performs a
         single atomic exchange and returns True if the lock was
         successfully acquired, False if already held.
-        
+
         Complexity:
             Time: O(1)
             Space: O(1)
@@ -91,7 +95,9 @@ public class Spinlock:
         I64 expected = 1
         I64 old = 0
         I64 lockAddr = addressof self.locked
-        asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+            aarch64 "1: ldaxr $0, [$2]; stlxr w16, $1, [$2]; cbnz w16, 1b" : output( "=&r" old ) : input( "r" expected, "r" lockAddr ) : clobber( "memory", "x16" )
         if old != 0:
             return False
         return True
@@ -151,9 +157,13 @@ public class SpinlockIrq:
         I64 old = 1
         I64 lockAddr = addressof self.locked
         while old != 0:
-            asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+            asm volatile:
+                x86-64 "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+                aarch64 "1: ldaxr $0, [$2]; stlxr w16, $1, [$2]; cbnz w16, 1b" : output( "=&r" old ) : input( "r" expected, "r" lockAddr ) : clobber( "memory", "x16" )
             if old != 0:
-                asm volatile "pause"
+                asm volatile:
+                    x86-64 "pause"
+                    aarch64 "yield"
         self.savedFlags = flagsBeforeLock
 
     public function unlock( self ) -> Void:
@@ -192,7 +202,9 @@ public class SpinlockIrq:
         I64 expected = 1
         I64 old = 0
         I64 lockAddr = addressof self.locked
-        asm volatile "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+        asm volatile:
+            x86-64 "xchg $0, ($2)" : output( "=r" old ) : input( "0" expected, "r" lockAddr ) : clobber( "memory" )
+            aarch64 "1: ldaxr $0, [$2]; stlxr w16, $1, [$2]; cbnz w16, 1b" : output( "=&r" old ) : input( "r" expected, "r" lockAddr ) : clobber( "memory", "x16" )
         if old != 0:
             I64 interruptFlagMask = 512
             if ( flagsBeforeLock & interruptFlagMask ) != 0:

@@ -25,13 +25,10 @@ package uranite.memory.allocator
 
 from uranite.errors.error import Error
 from uranite.io.syscall import readByteAt, readI64At, writeByteAt, writeI64At
+from uranite.os.arch.native.syscall import SYS_MMAP, SYS_MUNMAP
 from uranite.os.syscall.invoke import syscall2, syscall6
 from uranite.os.syscall.result import SyscallResult
 
-const I64 SYS_MMAP = 9
-""" Linux syscall number for mmap. """
-const I64 SYS_MUNMAP = 11
-""" Linux syscall number for munmap. """
 const I64 PROT_READ = 1
 """ Memory protection flag: page can be read. """
 const I64 PROT_WRITE = 2

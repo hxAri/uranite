@@ -84,7 +84,9 @@ public class Once:
         """
 
         I64 extractedAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" initializer ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" initializer ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" extractedAddr ) : input( "r" initializer ) : clobber()
         self.callOnceRaw( extractedAddr )
 
     protect function callOnceRaw( self, I64 initializerAddr ) -> Void:
@@ -115,14 +117,18 @@ public class Once:
             self.state.store( ONCE_IN_PROGRESS )
             self.guard.unlock()
 
-            asm volatile "callq *$0" : : input( "r" initializerAddr ) : clobber( "memory" )
+            asm volatile:
+                x86-64 "callq *$0" : : input( "r" initializerAddr ) : clobber( "memory" )
+                aarch64 "blr $0" : : input( "r" initializerAddr ) : clobber( "memory", "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x30" )
 
             self.state.store( ONCE_COMPLETED )
             return
 
         self.guard.unlock()
         while self.state.load() != ONCE_COMPLETED:
-            asm volatile "pause"
+            asm volatile:
+                x86-64 "pause"
+                aarch64 "yield"
     
     public function isCompleted( self ) -> Boolean:
         

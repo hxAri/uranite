@@ -80,7 +80,9 @@ public function executorWorkerLoop( I64 threadId, I64 channelAddr ) -> Void:
     """
     
     ChannelInner<I64> channel = new ChannelInner<I64>( 1, new Scheduler() )
-    asm volatile "movq $1, $0" : output( "=r" channel ) : input( "r" channelAddr ) : clobber()
+    asm volatile:
+        x86-64 "movq $1, $0" : output( "=r" channel ) : input( "r" channelAddr ) : clobber()
+        aarch64 "mov $0, $1" : output( "=r" channel ) : input( "r" channelAddr ) : clobber()
     
     FutureBase fb = new FutureBase( new Scheduler() )
     Memory<I64> desc = new Memory<I64>( 1 )
@@ -98,32 +100,44 @@ public function executorWorkerLoop( I64 threadId, I64 channelAddr ) -> Void:
             running = False
             break
         
-        asm volatile "movq $1, $0" : output( "=r" desc ) : input( "r" descAddr ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" desc ) : input( "r" descAddr ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" desc ) : input( "r" descAddr ) : clobber()
         
         I64 arity = desc.get( 0 )
         I64 fnAddr = desc.get( 1 )
         I64 fbAddr = desc.get( 2 )
         
-        asm volatile "movq $1, $0" : output( "=r" fb ) : input( "r" fbAddr ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" fb ) : input( "r" fbAddr ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" fb ) : input( "r" fbAddr ) : clobber()
         fb.setRunning()
         
         I64 result = 0
         Boolean failed = False
         try:
             if arity == 0:
-                asm volatile "call *$1" : output( "={rax}" result ) : input( "r" fnAddr ) : clobber( "memory", "rdi", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+                asm volatile:
+                    x86-64 "call *$1" : output( "={rax}" result ) : input( "r" fnAddr ) : clobber( "memory", "rdi", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+                    aarch64 "blr $1" : output( "={x0}" result ) : input( "r" fnAddr ) : clobber( "memory", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x30" )
             elif arity == 1:
                 I64 a1 = desc.get( 3 )
-                asm volatile "call *$2" : output( "={rax}" result ) : input( "{rdi}" a1, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+                asm volatile:
+                    x86-64 "call *$2" : output( "={rax}" result ) : input( "{rdi}" a1, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+                    aarch64 "blr $2" : output( "={x0}" result ) : input( "{x0}" a1, "r" fnAddr ) : clobber( "memory", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x30" )
             elif arity == 2:
                 I64 a1 = desc.get( 3 )
                 I64 a2 = desc.get( 4 )
-                asm volatile "call *$3" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "r" fnAddr ) : clobber( "memory", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+                asm volatile:
+                    x86-64 "call *$3" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "r" fnAddr ) : clobber( "memory", "rcx", "rdx", "r8", "r9", "r10", "r11" )
+                    aarch64 "blr $3" : output( "={x0}" result ) : input( "{x0}" a1, "{x1}" a2, "r" fnAddr ) : clobber( "memory", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x30" )
             elif arity == 3:
                 I64 a1 = desc.get( 3 )
                 I64 a2 = desc.get( 4 )
                 I64 a3 = desc.get( 5 )
-                asm volatile "call *$4" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "{rdx}" a3, "r" fnAddr ) : clobber( "memory", "rcx", "r8", "r9", "r10", "r11" )
+                asm volatile:
+                    x86-64 "call *$4" : output( "={rax}" result ) : input( "{rdi}" a1, "{rsi}" a2, "{rdx}" a3, "r" fnAddr ) : clobber( "memory", "rcx", "r8", "r9", "r10", "r11" )
+                    aarch64 "blr $4" : output( "={x0}" result ) : input( "{x0}" a1, "{x1}" a2, "{x2}" a3, "r" fnAddr ) : clobber( "memory", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x30" )
         except as e:
             failed = True
         
@@ -209,7 +223,9 @@ public class ThreadPoolExecutor:
         self.workers = new Memory<Thread>( numWorkers )
         
         I64 channelAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" channelAddr ) : input( "r" self.taskChannel ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" channelAddr ) : input( "r" self.taskChannel ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" channelAddr ) : input( "r" self.taskChannel ) : clobber()
         I64 workerEntryAddr = addressof executorWorkerLoop
         I64 workerIndex = 0
         while workerIndex < numWorkers:
@@ -264,7 +280,9 @@ public class ThreadPoolExecutor:
         desc.set( 5, 0 )
         
         I64 descAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
         self.taskChannel.send( descAddr )
         self.activeCount.increment()
         
@@ -310,7 +328,9 @@ public class ThreadPoolExecutor:
         desc.set( 5, 0 )
         
         I64 descAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
         self.taskChannel.send( descAddr )
         self.activeCount.increment()
         
@@ -358,7 +378,9 @@ public class ThreadPoolExecutor:
         desc.set( 5, 0 )
         
         I64 descAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
         self.taskChannel.send( descAddr )
         self.activeCount.increment()
         
@@ -408,7 +430,9 @@ public class ThreadPoolExecutor:
         desc.set( 5, arg3 )
         
         I64 descAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" descAddr ) : input( "r" desc ) : clobber()
         self.taskChannel.send( descAddr )
         self.activeCount.increment()
         
@@ -439,7 +463,9 @@ public class ThreadPoolExecutor:
             while workerIndex < self.workerCount:
                 Thread worker = self.workers.get( workerIndex )
                 while worker.isFinished() == False:
-                    asm volatile "pause"
+                    asm volatile:
+                        x86-64 "pause"
+                        aarch64 "yield"
                 workerIndex = workerIndex + 1
     
     public function isShutdown( self ) -> Boolean:
@@ -571,7 +597,9 @@ public class TaskSubmitter0<R>:
         """
         
         I64 fnAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
         FutureBase base = self.executor.run( fnAddr )
         return new Future<R>( base )
 
@@ -621,9 +649,13 @@ public class TaskSubmitter1<R, A>:
         """
         
         I64 fnAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
         I64 argRaw = 0
-        asm volatile "movq $1, $0" : output( "=r" argRaw ) : input( "r" arg ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" argRaw ) : input( "r" arg ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" argRaw ) : input( "r" arg ) : clobber()
         FutureBase base = self.executor.submit1( fnAddr, argRaw )
         return new Future<R>( base )
 
@@ -675,11 +707,17 @@ public class TaskSubmitter2<R, A, B>:
         """
         
         I64 fnAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
         I64 a1Raw = 0
-        asm volatile "movq $1, $0" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
         I64 a2Raw = 0
-        asm volatile "movq $1, $0" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
         FutureBase base = self.executor.submit2( fnAddr, a1Raw, a2Raw )
         return new Future<R>( base )
 
@@ -733,13 +771,21 @@ public class TaskSubmitter3<R, A, B, C>:
         """
         
         I64 fnAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" fnAddr ) : input( "r" fn ) : clobber()
         I64 a1Raw = 0
-        asm volatile "movq $1, $0" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" a1Raw ) : input( "r" arg1 ) : clobber()
         I64 a2Raw = 0
-        asm volatile "movq $1, $0" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" a2Raw ) : input( "r" arg2 ) : clobber()
         I64 a3Raw = 0
-        asm volatile "movq $1, $0" : output( "=r" a3Raw ) : input( "r" arg3 ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" a3Raw ) : input( "r" arg3 ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" a3Raw ) : input( "r" arg3 ) : clobber()
         FutureBase base = self.executor.submit3( fnAddr, a1Raw, a2Raw, a3Raw )
         return new Future<R>( base )
 

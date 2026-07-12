@@ -21,8 +21,8 @@
 package uranite.os.task.task
 
 from uranite.memory.memory import Memory
-from uranite.os.arch.x86-64.cpu import Registers
-from uranite.os.memory.vmm import AddressSpace
+from uranite.os.arch.registers import Registers
+from uranite.os.memory.address-space import AddressSpace
 from uranite.os.security.handle import HandleTable
 
 enum TaskState:

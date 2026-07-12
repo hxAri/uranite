@@ -1,0 +1,335 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/paging.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Cross-platform 4-level page table infrastructure with 4KB granule. On x86-64
+# this maps to PML4/PDPT/PD/PT loaded via CR3. On AArch64 this maps to L0/L1/L2/L3
+# loaded via TTBR0_EL1. Data structures and index extraction are identical across
+# architectures; only TLB flush uses arch-block asm.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.paging
+
+from uranite.memory.memory import Memory
+from uranite.os.arch.cpu import disableInterrupts, enableInterrupts, halt
+
+public const I64 PAGE_PRESENT = 1
+
+""" Valid/present flag (bit 0): the entry references a valid page or table. """
+
+public const I64 PAGE_WRITABLE = 2
+
+""" Read/write flag (bit 1): allows write access to the page. """
+
+public const I64 PAGE_USER = 4
+
+""" User flag (bit 2): allows user-mode access to the page. """
+
+public const I64 PAGE_WRITE_THROUGH = 8
+
+""" Write-through caching attribute (bit 3). """
+
+public const I64 PAGE_CACHE_DISABLE = 16
+
+""" Cache disable flag (bit 4): disables caching for MMIO regions. """
+
+public const I64 PAGE_ACCESSED = 32
+
+""" Accessed flag (bit 5): set by hardware on first access. """
+
+public const I64 PAGE_DIRTY = 64
+
+""" Dirty flag (bit 6): set by hardware on write. """
+
+public const I64 PAGE_HUGE = 128
+
+""" Page size / block descriptor flag (bit 7): creates a 2MB or 1GB mapping. """
+
+public const I64 PAGE_GLOBAL = 256
+
+""" Global flag (bit 8): prevents TLB flush on address space switch. """
+
+public function pageNoExecute() -> I64:
+
+    """
+    Return the no-execute flag. On x86-64 this is bit 63 (NX). On AArch64
+    this is bit 54 (UXN).
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return 1 << 54
+
+public class PageTableEntry:
+
+    """
+    Single 8-byte page table entry combining a physical page frame address
+    with permission and status flags. Bits 12-51 hold the physical frame
+    number; bits 0-11 hold flags.
+    """
+
+    public I64 raw
+
+    public function PageTableEntry( self, I64 raw ) -> Void:
+
+        """
+        Construct a page table entry from a raw 8-byte value.
+
+        Parameters:
+            raw (I64):
+                The raw entry value with address and flag bits.
+        """
+
+        self.raw = raw
+
+    public function isPresent( self ) -> Boolean:
+
+        """ Check if the valid/present flag (bit 0) is set. """
+
+        return ( self.raw & 1 ) != 0
+
+    public function isWritable( self ) -> Boolean:
+
+        """ Check if the writable flag (bit 1) is set. """
+
+        return ( self.raw & 2 ) != 0
+
+    public function isUser( self ) -> Boolean:
+
+        """ Check if the user-accessible flag (bit 2) is set. """
+
+        return ( self.raw & 4 ) != 0
+
+    public function isHuge( self ) -> Boolean:
+
+        """ Check if the page size / block descriptor flag (bit 7) is set. """
+
+        return ( self.raw & 128 ) != 0
+
+    public function address( self ) -> I64:
+
+        """
+        Extract the physical page frame address (bits 12-51).
+
+        Returns:
+            I64:
+                The 4KB-aligned physical address.
+        """
+
+        return self.raw & 4503599627366400
+
+    public function set( self, I64 physAddr, I64 flags ) -> Void:
+
+        """
+        Set this entry to map to the given physical address with flags.
+
+        Parameters:
+            physAddr (I64):
+                The 4KB-aligned physical address.
+            flags (I64):
+                The page table entry flags.
+        """
+
+        self.raw = ( physAddr & 4503599627366400 ) | flags
+
+    public function clear( self ) -> Void:
+
+        """ Clear this entry (mark as not-present). """
+
+        self.raw = 0
+
+    public function flags( self ) -> I64:
+
+        """
+        Extract only the flag bits (bits 0-11).
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        return self.raw & 4095
+
+public class PageTable:
+
+    """
+    Array of 512 page table entries (one 4KB page). Used at all four levels
+    of the translation hierarchy.
+    """
+
+    protect Memory<I64> entries
+
+    public function PageTable( self ) -> Void:
+
+        """
+        Construct a page table with all 512 entries zeroed (not-present).
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        self.entries = new Memory<I64>( 512 )
+        I64 entryIndex = 0
+        while entryIndex < 512:
+            self.entries.set( entryIndex, 0 )
+            entryIndex = entryIndex + 1
+
+    public function getEntry( self, I64 index ) -> PageTableEntry:
+
+        """
+        Return the entry at the given index as a PageTableEntry object.
+
+        Parameters:
+            index (I64):
+                The entry index (0-511).
+
+        Returns:
+            PageTableEntry:
+                A wrapper around the raw entry value.
+        """
+
+        return new PageTableEntry( self.entries.get( index ) )
+
+    public function setEntry( self, I64 index, I64 value ) -> Void:
+
+        """
+        Write a raw value into the entry at the given index.
+
+        Parameters:
+            index (I64):
+                The entry index (0-511).
+            value (I64):
+                The raw entry value.
+        """
+
+        self.entries.set( index, value )
+
+    public function clearEntry( self, I64 index ) -> Void:
+
+        """
+        Clear the entry at the given index.
+
+        Parameters:
+            index (I64):
+                The entry index (0-511).
+        """
+
+        self.entries.set( index, 0 )
+
+    public function destroy( self ) -> Void:
+
+        """ Free the underlying memory allocation. """
+
+        self.entries.free()
+
+public function pml4Index( I64 virtualAddr ) -> I64:
+
+    """ Extract the L0/PML4 index (bits 39-47) from a virtual address. """
+
+    return ( virtualAddr >> 39 ) & 511
+
+public function pdptIndex( I64 virtualAddr ) -> I64:
+
+    """ Extract the L1/PDPT index (bits 30-38) from a virtual address. """
+
+    return ( virtualAddr >> 30 ) & 511
+
+public function pdIndex( I64 virtualAddr ) -> I64:
+
+    """ Extract the L2/PD index (bits 21-29) from a virtual address. """
+
+    return ( virtualAddr >> 21 ) & 511
+
+public function ptIndex( I64 virtualAddr ) -> I64:
+
+    """
+    Extract the L3/PT index (bits 12-20) from a virtual address.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    return ( virtualAddr >> 12 ) & 511
+
+public const I64 PAGE_SIZE = 4096
+
+""" Standard 4KB page size. """
+
+public const I64 HUGE_PAGE_2MB = 2097152
+
+""" 2MB huge/block page size (L2 block descriptor). """
+
+public const I64 HUGE_PAGE_1GB = 1073741824
+
+""" 1GB huge/block page size (L1 block descriptor). """
+
+public function flushPage( I64 virtualAddr ) -> Void:
+
+    """
+    Invalidate a single TLB entry for the specified virtual address.
+
+    Parameters:
+        virtualAddr (I64):
+            The virtual address whose TLB entry should be invalidated.
+    """
+
+    I64 pageAddr = virtualAddr >> 12
+    asm volatile:
+        x86-64 "invlpg ($0)" : : input( "r" virtualAddr ) : clobber( "memory" )
+        aarch64 "tlbi vae1is, $0; dsb sy; isb" : : input( "r" pageAddr ) : clobber( "memory" )
+
+public function flushTlb() -> Void:
+
+    """
+    Flush the entire TLB. On x86-64 this reloads CR3. On AArch64 this
+    executes TLBI VMALLE1IS.
+
+    Complexity:
+        Time: O(1)
+        Space: O(1)
+    """
+
+    asm volatile:
+        x86-64 "mov %cr3, %rax; mov %rax, %cr3" : : : clobber( "rax", "memory" )
+        aarch64 "tlbi vmalle1is; dsb sy; isb" : : : clobber( "memory" )
+
+export {
+    HUGE_PAGE_1GB,
+    HUGE_PAGE_2MB,
+    PAGE_ACCESSED,
+    PAGE_CACHE_DISABLE,
+    PAGE_DIRTY,
+    PAGE_GLOBAL,
+    PAGE_HUGE,
+    PAGE_PRESENT,
+    PAGE_SIZE,
+    PAGE_USER,
+    PAGE_WRITABLE,
+    PAGE_WRITE_THROUGH,
+    PageTable,
+    PageTableEntry,
+    flushPage,
+    flushTlb,
+    pageNoExecute,
+    pdIndex,
+    pdptIndex,
+    pml4Index,
+    ptIndex
+}
