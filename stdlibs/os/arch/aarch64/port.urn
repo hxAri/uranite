@@ -1,0 +1,143 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/aarch64/port.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# AArch64 does not have x86-style port I/O instructions (in/out). All device
+# access is memory-mapped. This module provides API-compatible stubs that map
+# port addresses to MMIO operations via a base address. On real hardware, the
+# platform firmware provides the ECAM (Enhanced Configuration Access Mechanism)
+# base address for PCI configuration space access.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.aarch64.port
+
+public function inb( I64 port ) -> I64:
+
+    """
+    Read an 8-bit value from the given port address via MMIO. On AArch64,
+    port I/O is emulated through memory-mapped access. The port number is
+    treated as an offset from a platform-specific MMIO base.
+
+    Parameters:
+        port (I64):
+            The port address to read from.
+
+    Returns:
+        I64:
+            The 8-bit value read (zero-extended to I64).
+    """
+
+    I64 result = 0
+    asm volatile "ldrb ${0:w}, [$1]" : output( "=r" result ) : input( "r" port ) : clobber( "memory" )
+    return result
+
+public function outb( I64 port, I64 value ) -> Void:
+
+    """
+    Write an 8-bit value to the given port address via MMIO.
+
+    Parameters:
+        port (I64):
+            The port address to write to.
+        value (I64):
+            The 8-bit value to write (low byte used).
+    """
+
+    asm volatile "strb ${0:w}, [$1]" : : input( "r" value, "r" port ) : clobber( "memory" )
+
+public function inw( I64 port ) -> I64:
+
+    """
+    Read a 16-bit value from the given port address via MMIO.
+
+    Parameters:
+        port (I64):
+            The port address to read from.
+
+    Returns:
+        I64:
+            The 16-bit value read (zero-extended to I64).
+    """
+
+    I64 result = 0
+    asm volatile "ldrh ${0:w}, [$1]" : output( "=r" result ) : input( "r" port ) : clobber( "memory" )
+    return result
+
+public function outw( I64 port, I64 value ) -> Void:
+
+    """
+    Write a 16-bit value to the given port address via MMIO.
+
+    Parameters:
+        port (I64):
+            The port address to write to.
+        value (I64):
+            The 16-bit value to write (low halfword used).
+    """
+
+    asm volatile "strh ${0:w}, [$1]" : : input( "r" value, "r" port ) : clobber( "memory" )
+
+public function inl( I64 port ) -> I64:
+
+    """
+    Read a 32-bit value from the given port address via MMIO.
+
+    Parameters:
+        port (I64):
+            The port address to read from.
+
+    Returns:
+        I64:
+            The 32-bit value read (zero-extended to I64).
+    """
+
+    I64 result = 0
+    asm volatile "ldr ${0:w}, [$1]" : output( "=r" result ) : input( "r" port ) : clobber( "memory" )
+    return result
+
+public function outl( I64 port, I64 value ) -> Void:
+
+    """
+    Write a 32-bit value to the given port address via MMIO.
+
+    Parameters:
+        port (I64):
+            The port address to write to.
+        value (I64):
+            The 32-bit value to write (low word used).
+    """
+
+    asm volatile "str ${0:w}, [$1]" : : input( "r" value, "r" port ) : clobber( "memory" )
+
+public function ioWait() -> Void:
+
+    """
+    I/O wait for device synchronization. On x86-64 this writes to port 0x80
+    (POST diagnostic port) as a timing delay. On AArch64, a DSB instruction
+    ensures all prior memory operations complete before proceeding.
+    """
+
+    asm volatile "dsb sy"
+
+export {
+    inb,
+    inl,
+    inw,
+    ioWait,
+    outb,
+    outl,
+    outw
+}
