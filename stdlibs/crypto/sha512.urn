@@ -188,7 +188,9 @@ public class Sha512:
         """
 
         I64 rightShifted = 0
-        asm volatile "shrq %cl, $0" : output( "=r" rightShifted ) : input( "0" value, "{rcx}" amount ) : clobber()
+        asm volatile:
+            x86-64 "shrq %cl, $0" : output( "=r" rightShifted ) : input( "0" value, "{rcx}" amount ) : clobber()
+            aarch64 "lsr $0, $0, $2" : output( "=r" rightShifted ) : input( "0" value, "r" amount ) : clobber()
         I64 leftShifted = value << ( 64 - amount )
         return rightShifted | leftShifted
 
@@ -209,7 +211,9 @@ public class Sha512:
         """
 
         I64 result = 0
-        asm volatile "shrq %cl, $0" : output( "=r" result ) : input( "0" value, "{rcx}" amount ) : clobber()
+        asm volatile:
+            x86-64 "shrq %cl, $0" : output( "=r" result ) : input( "0" value, "{rcx}" amount ) : clobber()
+            aarch64 "lsr $0, $0, $2" : output( "=r" result ) : input( "0" value, "r" amount ) : clobber()
         return result
 
     protect function processBlock( self ) -> Void:
