@@ -482,7 +482,9 @@ public function parseHostPort( String hostPort ) -> HostAddress:
         writeByteAt( hostNameBuffer, hostLength, 0 )
 
         String hostString = ""
-        asm volatile "movq $1, $0" : output( "=r" hostString ) : input( "r" hostNameBuffer ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" hostString ) : input( "r" hostNameBuffer ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" hostString ) : input( "r" hostNameBuffer ) : clobber()
 
         I64 resolvedIp = resolveHostname( hostString )
         if resolvedIp >= 0:
