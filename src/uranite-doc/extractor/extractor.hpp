@@ -19,6 +19,7 @@
 #ifndef _URANITE_DOC_EXTRACTOR_EXTRACTOR_HPP_
 #define _URANITE_DOC_EXTRACTOR_EXTRACTOR_HPP_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

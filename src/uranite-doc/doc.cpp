@@ -17,6 +17,7 @@
 //
 
 #include <argparse/argparse.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <fmt/color.h>
 #include <fmt/core.h>

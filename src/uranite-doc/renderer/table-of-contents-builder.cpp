@@ -17,6 +17,7 @@
 //
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fmt/core.h>
 

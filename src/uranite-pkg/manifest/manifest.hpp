@@ -11,6 +11,7 @@
 #ifndef _URANITE_PKG_MANIFEST_MANIFEST_HPP_
 #define _URANITE_PKG_MANIFEST_MANIFEST_HPP_
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
