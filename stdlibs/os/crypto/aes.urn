@@ -101,7 +101,7 @@ public class AesContext:
         
         I64 result = 0
         asm volatile:
-            x86-64 "mov $$1, %%eax; cpuid; shr $$25, %%ecx; and $$1, %%ecx; mov %%rcx, $0" : output( "=r" result ) : : clobber( "rax", "rbx", "rcx", "rdx" )
+            x86-64 "mov $$1, %eax; cpuid; shr $$25, %ecx; and $$1, %ecx; mov %rcx, $0" : output( "=r" result ) : : clobber( "rax", "rbx", "rcx", "rdx" )
             aarch64 "mrs $0, S3_0_C0_C6_0; ubfx $0, $0, #4, #4" : output( "=r" result ) : : clobber()
         return result != 0
     
