@@ -2,7 +2,7 @@
 <!--
 @author hxAri (hxari)
 @create 2025-02-24 15:15
-@update 10-07-2026
+@update 12-07-2026
 @github https://github.com/uranite-lang/uranite
 
 Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -43,6 +43,7 @@ A low-level, high-productivity system programming language built on top of a C++
     - [Ergonomic Standard Library](#ergonomic-standard-library)
     - [Unified Error Hierarchy](#unified-error-hierarchy)
     - [Additional Language Capabilities](#additional-language-capabilities)
+      - [Multi-Architecture Inline Assembly](#multi-architecture-inline-assembly)
   - [Compiler Architecture \& Pipeline State](#compiler-architecture--pipeline-state)
     - [Active Compilation Pipeline](#active-compilation-pipeline)
     - [HIR and MIR Pipeline](#hir-and-mir-pipeline)
@@ -141,7 +142,7 @@ The standard library is written entirely in Uranite. Core I/O, threading, networ
 | `memory/` | `Memory<T>` compiler intrinsic for raw typed memory |
 | `net/` | TCP socket wrappers, HTTP client/server, request/response parsing |
 | `operators/` | `Comparable`, `Equatable`, `Hashable` for operator overloading |
-| `os/` | Bare-metal OS primitives: arch, bus, crypto, debug, drivers, filesystems, HAL, IPC, memory, networking, power, scheduler, security, sync, syscalls, tasks, timers, VFS |
+| `os/` | Bare-metal OS primitives: arch (x86-64 + aarch64), bus, crypto, debug, drivers, filesystems, HAL, IPC, memory, networking, power, scheduler, security, sync, syscalls, tasks, timers, VFS |
 | `process/` | Multiprocessing with `ProcessPoolExecutor` and shared memory |
 | `regexp/` | Backtracking regex engine with character classes, anchors, alternation, quantifiers |
 | `string/` | `StringBuilder` for efficient mutable string construction |
@@ -176,11 +177,30 @@ function getElement( ArrayList<I64> items, I64 index ) -> I64:
 
 - **Nullable types** with `?Type` syntax and `None` literal; `is None` / `is not None` checks
 - **Pattern matching** via `match` expressions and statements with enum variant dispatch
-- **Inline assembly** using `asm volatile` with full LLVM constraint syntax
+- **Inline assembly** with full LLVM constraint syntax and **multi-architecture arch blocks** for cross-platform code
 - **C FFI** through `extern function` declarations
 - **`addressof` operator** returning the raw `I64` address of any expression
 - **Comprehension expressions** for inline collection construction
 - **Range expressions** with `..` (exclusive) and `...` (inclusive)
+
+#### Multi-Architecture Inline Assembly
+
+Uranite supports architecture-specific inline assembly via arch blocks. The compiler selects the variant matching the compile target and emits only that one, producing a hard error if no variant matches. This enables a single source file to target multiple ISAs without preprocessor conditionals or separate modules.
+
+```uranite
+I64 flags = 0
+asm volatile:
+    x86-64 "pushfq; pop $0" : output( "=r" flags )
+    aarch64 "mrs $0, nzcv" : output( "=r" flags )
+```
+
+The universal form remains available for single-architecture or architecture-agnostic instructions:
+
+```uranite
+asm volatile "nop"
+```
+
+Currently supported targets: **x86-64** and **aarch64**. The standard library has been refactored to use arch blocks across 46 modules (sync, threading, crypto, I/O, OS primitives, coroutines, fibers, and networking), enabling seamless compilation on both architectures from a single codebase.
 
 ---
 
@@ -209,7 +229,7 @@ Source (.urn)
   Optimizer  AST-level: constant folding, DCE, strength reduction, tail-call optimization
     |
     v
-  Codegen -- LLVM IR generation (~9320 lines)
+  Codegen -- LLVM IR generation (~9440 lines)
     |
     v
   Linker --- Links runtime libraries, produces native executable
