@@ -41,7 +41,7 @@ jobs:
         -   name: "Configure CMake"
             run: "cmake -B build -S . -DCMAKE_BUILD_TYPE=Release"
         -   name: "Build Uranite Compiler & Tools"
-            run: "cmake --build build --config Release -j $(($(nproc)/2))"
+            run: "cmake --build build --config Release -j $(nproc)"
         -   name: "Run Compiler Unit Tests"
             run: "./build/uranite-tests"
         -   name: "Run Uranite Language Integration Tests"
