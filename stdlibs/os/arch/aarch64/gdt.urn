@@ -1,0 +1,239 @@
+#
+# @author hxAri (hxari)
+# @create 2026-07-12 00:00
+# @update 2026-07-12 00:00
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/arch/aarch64/gdt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# AArch64 does not use segmentation or a GDT. This module provides API-compatible
+# data structures and constants that map to the AArch64 exception level model.
+# GdtEntry stores exception level configuration attributes, Gdt manages a set of
+# entries, and the selector constants map to EL0/EL1 privilege boundaries.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.arch.aarch64.gdt
+
+from uranite.memory.memory import Memory
+
+public struct GdtEntry:
+
+    """
+    AArch64 equivalent of a segment descriptor. Stores exception level attributes
+    in a layout compatible with the x86-64 GdtEntry API. On AArch64, these fields
+    represent SPSR configuration for EL transitions rather than segment limits.
+    """
+
+    public I64 limitLow
+    public I64 baseLow
+    public I64 baseMiddle
+    public I64 access
+    public I64 granularity
+    public I64 baseHigh
+
+    public function GdtEntry( self, I64 base, I64 limit, I64 access, I64 flags ) -> Void:
+
+        """
+        Construct a descriptor entry with the given attributes, splitting fields
+        in the same manner as x86-64 for API compatibility.
+
+        Parameters:
+            base (I64):
+                Base address field (unused on AArch64, stored for compatibility).
+            limit (I64):
+                Limit field (unused on AArch64, stored for compatibility).
+            access (I64):
+                Access byte representing exception level and permissions.
+            flags (I64):
+                Flags nibble for granularity and mode bits.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.limitLow = limit & 65535
+        self.baseLow = base & 65535
+        self.baseMiddle = ( base >> 16 ) & 255
+        self.access = access
+        self.granularity = ( ( limit >> 16 ) & 15 ) | ( ( flags << 4 ) & 240 )
+        self.baseHigh = ( base >> 24 ) & 255
+
+public struct GdtPointer:
+
+    """
+    AArch64 equivalent of the GDTR pointer structure. Stores a base address and
+    limit for the exception vector table (VBAR_EL1) which serves a similar
+    structural role to the x86 GDT pointer.
+    """
+
+    public I64 limit
+    public I64 base
+
+    public function GdtPointer( self, I64 limit, I64 base ) -> Void:
+
+        """
+        Construct a table pointer with the given limit and base address.
+
+        Parameters:
+            limit (I64):
+                The table size in bytes minus one.
+            base (I64):
+                The base address of the table.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.limit = limit
+        self.base = base
+
+public class Gdt:
+
+    """
+    AArch64 exception level descriptor table manager. Provides the same API as
+    the x86-64 GDT class, storing entries that represent exception level
+    configurations instead of segment descriptors.
+    """
+
+    protect Memory<GdtEntry> entries
+    protect I64 count
+
+    public function Gdt( self ) -> Void:
+
+        """
+        Construct an empty descriptor table with pre-allocated storage for
+        up to 6 entries.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.entries = new Memory<GdtEntry>( 6 )
+        self.count = 0
+
+    public function addEntry( self, GdtEntry entry ) -> I64:
+
+        """
+        Append a descriptor entry and return its selector value (index * 8).
+
+        Parameters:
+            entry (GdtEntry):
+                The descriptor entry to append.
+
+        Returns:
+            I64:
+                The selector value for the newly added entry.
+        """
+
+        I64 index = self.count
+        self.entries.set( index, entry )
+        self.count = self.count + 1
+        return index * 8
+
+    public function setupFlat( self ) -> Void:
+
+        """
+        Initialize a standard five-entry table mapping to AArch64 exception levels:
+        null entry, EL1 code (kernel), EL1 data (kernel), EL0 code (user), EL0 data
+        (user). Uses the same access byte values as x86-64 for API compatibility.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.addEntry( new GdtEntry( 0, 0, 0, 0 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 154, 10 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 146, 12 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 250, 10 ) )
+        self.addEntry( new GdtEntry( 0, 1048575, 242, 12 ) )
+
+    public function getCount( self ) -> I64:
+
+        """ Return the number of entries currently stored. """
+
+        return self.count
+
+    public function destroy( self ) -> Void:
+
+        """ Free the underlying memory allocation for the entry table. """
+
+        self.entries.free()
+
+public function loadGdt( GdtPointer ptr ) -> Void:
+
+    """
+    On AArch64, writes the base address to VBAR_EL1 (Vector Base Address Register)
+    which is the closest equivalent to loading a GDT — it tells the CPU where to
+    find the exception/interrupt handler table.
+
+    Parameters:
+        ptr (GdtPointer):
+            The table pointer containing the base address.
+    """
+
+    I64 baseAddr = ptr.base
+    asm volatile "msr VBAR_EL1, $0; isb" : : input( "r" baseAddr ) : clobber( "memory" )
+
+public function reloadSegments( I64 codeSelector, I64 dataSelector ) -> Void:
+
+    """
+    No-op on AArch64. There are no segment registers to reload. Exception level
+    transitions are handled by ERET/SVC instructions, not segment register loads.
+    """
+
+    return
+
+public const I64 KERNEL_CODE_SELECTOR = 8
+
+public const I64 KERNEL_DATA_SELECTOR = 16
+
+public function userCodeSelector() -> I64:
+
+    """
+    Return the user-space code selector value (27) for API compatibility with
+    x86-64. On AArch64 this corresponds to EL0 execution privilege.
+
+    Returns:
+        I64:
+            The user code selector value (27).
+    """
+
+    return 24 | 3
+
+public function userDataSelector() -> I64:
+
+    """
+    Return the user-space data selector value (35) for API compatibility with
+    x86-64. On AArch64 this corresponds to EL0 data access privilege.
+
+    Returns:
+        I64:
+            The user data selector value (35).
+    """
+
+    return 32 | 3
+
+export {
+    Gdt,
+    GdtEntry,
+    GdtPointer,
+    KERNEL_CODE_SELECTOR,
+    KERNEL_DATA_SELECTOR,
+    loadGdt,
+    reloadSegments,
+    userCodeSelector,
+    userDataSelector
+}
