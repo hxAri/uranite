@@ -69,7 +69,9 @@ public class SimpleFuture implements Future<I64>:
         """
 
         I64 extractedAddr = 0
-        asm volatile "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+        asm volatile:
+            x86-64 "movq $1, $0" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
+            aarch64 "mov $0, $1" : output( "=r" extractedAddr ) : input( "r" entryFn ) : clobber()
         self.fiber = new Fiber( extractedAddr )
         self.futureState = FUTURE_PENDING
         self.resolvedValue = 0
