@@ -138,7 +138,7 @@ public function ioWait() -> Void:
     """
 
     asm volatile:
-        x86-64 "outb %al, $0x80"
+        x86-64 "outb %al, $$0x80"
         aarch64 "dsb sy"
 
 export {
