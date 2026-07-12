@@ -19,6 +19,7 @@
 #ifndef _URANITE_FMT_LINTER_LINTER_HPP_
 #define _URANITE_FMT_LINTER_LINTER_HPP_
 
+#include <cstdint>
 #include <string>
 #include <unordered_set>
 #include <vector>
