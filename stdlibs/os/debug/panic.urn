@@ -115,16 +115,26 @@ public class PanicContext:
         self.address = addr
         self.hasPanicked = 1
         I64 rsp = 0
-        asm volatile "mov %rsp, $0" : output( "=r" rsp )
+        asm volatile:
+            x86-64 "mov %rsp, $0" : output( "=r" rsp )
+            aarch64 "mov $0, sp" : output( "=r" rsp )
         self.stackPointer = rsp
         I64 rip = 0
-        asm volatile "lea (%rip), $0" : output( "=r" rip )
+        asm volatile:
+            x86-64 "lea (%rip), $0" : output( "=r" rip )
+            aarch64 "adr $0, ." : output( "=r" rip )
         self.instructionPointer = rip
         I64 rbp = 0
-        asm volatile "mov %rbp, $0" : output( "=r" rbp )
+        asm volatile:
+            x86-64 "mov %rbp, $0" : output( "=r" rbp )
+            aarch64 "mov $0, x29" : output( "=r" rbp )
         self.unwindStack( rbp )
-        asm volatile "cli"
-        asm volatile "hlt"
+        asm volatile:
+            x86-64 "cli"
+            aarch64 "msr daifset, #0xf"
+        asm volatile:
+            x86-64 "hlt"
+            aarch64 "wfi"
     
     protect function unwindStack( self, I64 framePointer ) -> Void:
         
