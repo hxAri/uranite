@@ -113,7 +113,9 @@ public class Barrier:
                     self.scheduler.getCurrentTask().block( BlockReason.Semaphore )
                     self.scheduler.blockCurrent()
             else:
-                asm volatile "pause"
+                asm volatile:
+                    x86-64 "pause"
+                    aarch64 "yield"
         
         return False
     
