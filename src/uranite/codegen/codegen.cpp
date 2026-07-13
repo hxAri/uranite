@@ -79,7 +79,11 @@ namespace uranite::codegen {
 		this->module->setTargetTriple( llvm::sys::getDefaultTargetTriple() );
 		this->registerBuiltInStructTypes();
 	}
-	
+
+	void LLVMCodegen::setTargetTriple( const std::string& triple ) {
+		this->module->setTargetTriple( triple );
+	}
+
 	void LLVMCodegen::collectFreeVariables( const ast::nodes::ExpressionSharedPointer& expression, const std::unordered_set<std::string>& bound, std::vector<std::string>& freeVariables ) {
 		if( expression == nullptr ) {
 			return;
