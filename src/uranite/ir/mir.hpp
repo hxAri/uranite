@@ -312,13 +312,23 @@ namespace uranite::ir::mir {
 		int virtualTableEntryCount = 0;
 	};
 	
+	struct MIRModuleConstant {
+		enum ConstantKind { Integer, Float, Boolean, String };
+		ConstantKind kind = Integer;
+		int64_t integerValue = 0;
+		double floatValue = 0.0;
+		bool booleanValue = false;
+		std::string stringValue;
+	};
+
 	/** @brief Top-level MIR container holding all functions and type layouts for a module. */
 	struct MIRModuleDefinition {
-		
+
 		std::string moduleName;
 		std::vector<std::shared_ptr<MIRFunctionDefinition>> functionDefinitions;
 		std::unordered_map<std::string, TypeLayoutDescriptor> typeLayoutTable;
-	
+		std::unordered_map<std::string, MIRModuleConstant> moduleConstants;
+
 	};
 
 } // namespace uranite::ir::mir
