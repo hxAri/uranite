@@ -1,0 +1,71 @@
+name: "Uranite CI/CD Pipeline"
+on:
+    push:
+        branches:
+        -   "prod"
+        -   "dev"
+    pull_request:
+        branches:
+        -   "prod"
+        -   "dev"
+jobs:
+    build-and-test:
+        runs-on: "ubuntu-latest"
+        steps:
+        -   name: "Checkout Code"
+            uses: "actions/checkout@v4"
+        -   name: "Cache APT Packages"
+            uses: "actions/cache@v4"
+            with:
+                path: "/var/cache/apt/archives/*.deb"
+                key: ${{ runner.os }}-apt-${{ hashFiles( '.github/workflows/uranite.yaml' ) }}
+                restore-keys: |
+                    ${{ runner.os }}-apt-
+        -   name: "Install Dependencies"
+            run: |
+                sudo apt update
+                sudo apt install -y \
+                    g++ \
+                    cmake \
+                    llvm-19-dev \
+                    libfmt-dev \
+                    libspdlog-dev \
+                    libgtest-dev
+        -   name: "Cache Build Artifacts"
+            uses: "actions/cache@v4"
+            with:
+                path: "build"
+                key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt') }}
+                restore-keys: |
+                    ${{ runner.os }}-cmake-
+        -   name: "Configure CMake"
+            run: "cmake -B build -S . -DCMAKE_BUILD_TYPE=Release"
+        -   name: "Build Uranite Compiler & Tools"
+            run: "cmake --build build --config Release -j $(nproc)"
+        -   name: "Run Compiler Unit Tests"
+            run: "./build/uranite-tests"
+        -   name: "Run Uranite Language Integration Tests"
+            run: |
+                chmod +x scripts/uranite-testing.sh
+                export PATH="$GITHUB_WORKSPACE/build:$PATH"
+                ./scripts/uranite-testing.sh ./examples
+                ./scripts/uranite-testing.sh ./examples/benchmarks
+                ./scripts/uranite-testing.sh ./examples/tutorials
+                ./scripts/uranite-testing.sh ./testing
+        -   name: "Package Uranite Distribution (Prod Only)"
+            if: github.ref == 'refs/heads/prod' && github.event_name == 'push'
+            run: |
+                mkdir -p dist/bin dist/runtime dist/stdlib
+                cp build/uranite dist/bin/
+                cp build/uranite-fmt dist/bin/
+                cp build/uranite-doc dist/bin/
+                cp build/uranite-pkg dist/bin/
+                cp build/runtime/*.a dist/runtime/
+                cp -r stdlibs/* dist/stdlib/
+                tar -czvf uranite-linux.tar.gz -C dist .
+        -   name: "Upload Release Asset (Prod Only)"
+            if: github.ref == 'refs/heads/prod' && github.event_name == 'push'
+            uses: "actions/upload-artifact@v4"
+            with:
+                name: "uranite-complete-distribution"
+                path: "uranite-linux.tar.gz"

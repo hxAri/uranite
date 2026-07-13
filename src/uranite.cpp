@@ -139,6 +139,9 @@ int main( int argc, char* argv[] ) {
         .help( "Additional directory to search for module imports" )
         .append()
         .default_value( std::vector<std::string>{} );
+    program.add_argument( "--target" )
+        .help( "Target triple for cross-compilation (e.g., aarch64-linux-gnu, x86_64-linux-gnu)" )
+        .default_value( std::string( "" ) );
     program.add_argument( "--version-info" )
         .help( "Show detailed version information" )
         .default_value( false )
@@ -151,7 +154,7 @@ int main( int argc, char* argv[] ) {
     }
     if( program.get<bool>( "--version-info" ) ) {
         banner();
-        fmt::print( "Target: {}\n", llvm::sys::getDefaultTargetTriple() );
+        fmt::print( "Host: {}\n", llvm::sys::getDefaultTargetTriple() );
         fmt::print( "LLVM Version: {}\n", LLVM_VERSION_STRING );
         return 0;
     }
@@ -184,6 +187,7 @@ int main( int argc, char* argv[] ) {
     options.maximumErrorCount = static_cast<uint32_t>( program.get<int>( "--max-errors" ) );
     options.modulesPath = program.get<std::string>( "--modules-path" );
     options.includePaths = program.get<std::vector<std::string>>( "--include" );
+    options.targetTriple = program.get<std::string>( "--target" );
     if( program.get<bool>( "--emit-llvm" ) ) {
         options.output.kind = uranite::compiler::Output::Kind::LLVMIR;
     }

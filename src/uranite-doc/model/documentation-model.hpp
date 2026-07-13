@@ -19,6 +19,7 @@
 #ifndef _URANITE_DOC_MODEL_DOCUMENTATION_MODEL_HPP_
 #define _URANITE_DOC_MODEL_DOCUMENTATION_MODEL_HPP_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

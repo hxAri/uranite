@@ -677,6 +677,9 @@ namespace uranite::compiler {
 		}
 		try {
 			if( this->options.verbose ) {
+				if( this->options.targetTriple.empty() == false ) {
+					spdlog::info( "Target: {}", this->options.targetTriple );
+				}
 				spdlog::info( "Stage 1: Lexical Analysis" );
 			}
 			lexer::Lexer lexer( this->source, this->options.output.source, this->diagnostic );
@@ -938,6 +941,9 @@ namespace uranite::compiler {
 							spdlog::info( "Stage 5.0: MIR → LLVM IR Code Generation" );
 						}
 						ir::mir::MIRCodegen mirCodegenInstance( semanticAnalyzer, this->diagnostic );
+						if( this->options.targetTriple.empty() == false ) {
+							mirCodegenInstance.setTargetTriple( this->options.targetTriple );
+						}
 						if( mirCodegenInstance.generate( *mirModule ) == false ) {
 							fmt::print( stderr, "Compilation failed during MIR code generation.\n" );
 							return 1;
@@ -963,6 +969,9 @@ namespace uranite::compiler {
 						mirCodegenInstance.writeIR( mirTempIrFile );
 						std::string mirTempObjFile = fmt::format( "/tmp/uranite-mir-{}.o", getpid() );
 						std::string llcMirCommand = fmt::format( _URANITE_LLC_ " -O2 -relocation-model=pic -filetype=obj -o {} {}", mirTempObjFile, mirTempIrFile );
+						if( this->options.targetTriple.empty() == false ) {
+							llcMirCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -relocation-model=pic -filetype=obj -o {} {}", this->options.targetTriple, mirTempObjFile, mirTempIrFile );
+						}
 						if( this->options.verbose ) {
 							spdlog::info( "Running: {}", llcMirCommand );
 						}
@@ -975,7 +984,11 @@ namespace uranite::compiler {
 						if( mirOutputFilePath.empty() ) {
 							mirOutputFilePath = "a.out";
 						}
-						std::string ccMirCommand = fmt::format( "cc {} -o {} -lm", mirTempObjFile, mirOutputFilePath );
+						std::string ccMirLinker = "cc";
+						if( this->options.targetTriple.empty() == false ) {
+							ccMirLinker = fmt::format( "{}-gcc", this->options.targetTriple );
+						}
+						std::string ccMirCommand = fmt::format( "{} {} -o {} -lm", ccMirLinker, mirTempObjFile, mirOutputFilePath );
 						if( this->options.verbose ) {
 							spdlog::info( "Running: {}", ccMirCommand );
 						}
@@ -1006,6 +1019,9 @@ namespace uranite::compiler {
 				spdlog::info( "Stage 6: LLVM IR Code Generation" );
 			}
 			codegen::LLVMCodegen llvmCodegenInstance( semanticAnalyzer, this->diagnostic );
+			if( this->options.targetTriple.empty() == false ) {
+				llvmCodegenInstance.setTargetTriple( this->options.targetTriple );
+			}
 			if( llvmCodegenInstance.generate( *programRoot ) == false ) {
 				fmt::print( stderr, "Compilation failed during code generation.\n" );
 				return 1;
@@ -1042,7 +1058,13 @@ namespace uranite::compiler {
 					}
 					std::string temporaryIrFile = fmt::format( "{}.ll", finalOutputFilePath );
 					llvmCodegenInstance.writeIR( temporaryIrFile );
-					std::string llcCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -o {} {}", finalOutputFilePath, temporaryIrFile );
+					std::string llcCommand;
+					if( this->options.targetTriple.empty() == false ) {
+						llcCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -filetype=obj -o {} {}", this->options.targetTriple, finalOutputFilePath, temporaryIrFile );
+					}
+					else {
+						llcCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -o {} {}", finalOutputFilePath, temporaryIrFile );
+					}
 					if( this->options.verbose ) {
 						spdlog::info( "Running: {}", llcCommand );
 					}
@@ -1078,7 +1100,13 @@ namespace uranite::compiler {
 					if( optReturnCode == 0 ) {
 						llcInputFile = temporaryOptFile;
 					}
-					std::string llcCompileCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -relocation-model=pic -o {} {}", temporaryObjectFile, llcInputFile );
+					std::string llcCompileCommand;
+					if( this->options.targetTriple.empty() == false ) {
+						llcCompileCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -filetype=obj -relocation-model=pic -o {} {}", this->options.targetTriple, temporaryObjectFile, llcInputFile );
+					}
+					else {
+						llcCompileCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -relocation-model=pic -o {} {}", temporaryObjectFile, llcInputFile );
+					}
 					if( this->options.verbose ) {
 						spdlog::info( "Running: {}", llcCompileCommand );
 					}
@@ -1089,7 +1117,11 @@ namespace uranite::compiler {
 						fmt::print( stderr, "error: llc failed\n" );
 						return 1;
 					}
-					std::string linkerCommand = fmt::format( "cc -o {}", finalOutputFilePath );
+					std::string linkerCompiler = "cc";
+					if( this->options.targetTriple.empty() == false ) {
+						linkerCompiler = fmt::format( "{}-gcc", this->options.targetTriple );
+					}
+					std::string linkerCommand = fmt::format( "{} -o {}", linkerCompiler, finalOutputFilePath );
 					linkerCommand = fmt::format( "{} {}", linkerCommand, temporaryObjectFile );
 					auto scanRuntimeDirectory = [&]( const std::filesystem::path& runtimeDirectory ) -> bool {
 						if( std::filesystem::exists( runtimeDirectory ) == false || std::filesystem::is_directory( runtimeDirectory ) == false ) {
@@ -1169,13 +1201,17 @@ namespace uranite::compiler {
 						return 1;
 					}
 					if( this->options.stripDebugInfo ) {
-						std::string stripCommand = fmt::format( "strip --strip-debug {} 2>/dev/null", finalOutputFilePath );
+						std::string stripBinary = "strip";
+						if( this->options.targetTriple.empty() == false ) {
+							stripBinary = fmt::format( "{}-strip", this->options.targetTriple );
+						}
+						std::string stripCommand = fmt::format( "{} --strip-debug {} 2>/dev/null", stripBinary, finalOutputFilePath );
 						system( stripCommand.c_str() );
 					}
 					if( this->options.verbose ) {
 						spdlog::info( "Executable written to \"{}\"", finalOutputFilePath );
 					}
-					if( this->options.executeAfterCompilation ) {
+					if( this->options.executeAfterCompilation && this->options.targetTriple.empty() ) {
 						std::string binaryExecutionCommand = finalOutputFilePath;
 						for( std::string& executionArgument : this->options.arguments ) {
 							binaryExecutionCommand = fmt::format( "{} {}", binaryExecutionCommand, executionArgument );

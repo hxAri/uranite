@@ -82,7 +82,13 @@ namespace uranite::codegen {
 			 * @param diagnosticEngine Reference to the engine for reporting compilation errors.
 			 */
 			LLVMCodegen( semantic::Analyzer& semanticAnalyzer, diagnostic::Engine& diagnosticEngine );
-			
+
+			/**
+			 * @brief Overrides the target triple for cross-compilation.
+			 * @param triple The LLVM target triple string (e.g., "aarch64-linux-gnu").
+			 */
+			void setTargetTriple( const std::string& triple );
+
 			/**
 			 * @brief Dumps the current state of the LLVM module to standard error.
 			 */
