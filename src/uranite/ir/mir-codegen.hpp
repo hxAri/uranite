@@ -94,12 +94,15 @@ namespace uranite::ir::mir {
 
 		// Helpers
 		llvm::Type* toLLVMType( const semantic::TypeSharedPointer& semanticType );
+		llvm::Type* resolveReturnType( const semantic::TypeSharedPointer& returnTypeDescriptor );
+		bool functionReturnsConstructedObject( MIRFunctionDefinition& functionDefinition );
 		llvm::Value* getVariableValue( MIRVariableIdentifier variableIdentifier );
 		llvm::Value* loadVariableValue( MIRVariableIdentifier variableIdentifier );
 		void setVariableValue( MIRVariableIdentifier variableIdentifier, llvm::Value* value );
 		llvm::AllocaInst* createEntryBlockAllocation( llvm::Function* function, const std::string& name, llvm::Type* type );
 		llvm::Function* getOrCreateMalloc();
 		llvm::Function* getOrCreateFree();
+		llvm::Function* getOrCreateUraniteThrow();
 
 		semantic::Analyzer& semanticAnalyzer;
 		diagnostic::Engine& diagnosticEngine;
@@ -123,6 +126,9 @@ namespace uranite::ir::mir {
 
 		// Current module being generated (for type layout lookups)
 		MIRModuleDefinition* currentMIRModule = nullptr;
+
+		// Current function being generated (for variable descriptor lookups)
+		MIRFunctionDefinition* currentMIRFunction = nullptr;
 
 	};
 
