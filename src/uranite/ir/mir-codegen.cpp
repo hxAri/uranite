@@ -28,9 +28,14 @@ namespace uranite::ir::mir {
 		  irBuilder( this->llvmContext ) {
 	}
 
+	void MIRCodegen::setTargetTriple( const std::string& triple ) {
+		this->targetTriple_ = triple;
+	}
+
 	bool MIRCodegen::generate( MIRModuleDefinition& mirModule ) {
 		this->llvmModule = std::make_unique<llvm::Module>( mirModule.moduleName, this->llvmContext );
-		this->llvmModule->setTargetTriple( llvm::sys::getDefaultTargetTriple() );
+		std::string resolvedTriple = this->targetTriple_.empty() ? llvm::sys::getDefaultTargetTriple() : this->targetTriple_;
+		this->llvmModule->setTargetTriple( resolvedTriple );
 		this->functionResolutionMap.clear();
 		this->structTypeCache.clear();
 		this->currentMIRModule = &mirModule;

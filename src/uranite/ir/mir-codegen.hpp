@@ -42,6 +42,9 @@ namespace uranite::ir::mir {
 
 		MIRCodegen( semantic::Analyzer& semanticAnalyzer, diagnostic::Engine& diagnosticEngine );
 
+		/** @brief Overrides the target triple for cross-compilation. */
+		void setTargetTriple( const std::string& triple );
+
 		/** @brief Generates LLVM IR for all functions in the MIR module. */
 		bool generate( MIRModuleDefinition& mirModule );
 
@@ -114,6 +117,9 @@ namespace uranite::ir::mir {
 
 		// Function resolution: MIR name → LLVM function
 		std::unordered_map<std::string, llvm::Function*> functionResolutionMap;
+
+		// Cross-compilation target triple override (empty = host default)
+		std::string targetTriple_;
 
 		// Current module being generated (for type layout lookups)
 		MIRModuleDefinition* currentMIRModule = nullptr;
