@@ -798,8 +798,21 @@ namespace uranite::ir::hir {
 				for( const std::pair<std::string, ast::nodes::ExpressionSharedPointer>& field : constructExpression.fields ) {
 					constructorFields.push_back( { field.first, this->lowerExpression( field.second ) } );
 				}
+				semantic::TypeSharedPointer constructedType = expression->semanticType;
+				if( constructedType == nullptr && constructExpression.type != nullptr ) {
+					std::string typeName;
+					if( constructExpression.type->kind == ast::Node::Kind::SimpleType ) {
+						typeName = static_cast<ast::nodes::SimpleTypeNode&>( *constructExpression.type ).name;
+					}
+					else if( constructExpression.type->kind == ast::Node::Kind::GenericType ) {
+						typeName = static_cast<ast::nodes::GenericTypeNode&>( *constructExpression.type ).name;
+					}
+					if( typeName.empty() == false ) {
+						constructedType = std::make_shared<semantic::Type>( semantic::Type::Kind::Class, typeName );
+					}
+				}
 				return std::make_shared<HIRConstruct>(
-					expression->semanticType,
+					constructedType,
 					std::move( constructorFields ),
 					expression->source
 				);
