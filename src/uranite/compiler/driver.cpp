@@ -866,6 +866,41 @@ namespace uranite::compiler {
 				spdlog::info( "Borrow check passed" );
 			}
 			if( this->options.verbose || this->options.dumpHIR || this->options.dumpMIR || this->options.useMIR ) {
+				if( this->options.useMIR ) {
+					std::set<std::string> existingClassNames;
+					for( const ast::nodes::DeclarationSharedPointer& existingDeclaration : programRoot->declarations ) {
+						if( existingDeclaration != nullptr && existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+							existingClassNames.insert( static_cast<const ast::nodes::ClassDeclaration&>( *existingDeclaration ).name );
+						}
+						if( existingDeclaration != nullptr && existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+							existingClassNames.insert( static_cast<const ast::nodes::StructDeclaration&>( *existingDeclaration ).name );
+						}
+					}
+					for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
+						if( moduleEntry.second.program == nullptr ) {
+							continue;
+						}
+						for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleEntry.second.program->declarations ) {
+							if( moduleDeclaration == nullptr ) {
+								continue;
+							}
+							if( moduleDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+								std::string className = static_cast<ast::nodes::ClassDeclaration&>( *moduleDeclaration ).name;
+								if( existingClassNames.count( className ) == 0 ) {
+									programRoot->declarations.push_back( moduleDeclaration );
+									existingClassNames.insert( className );
+								}
+							}
+							else if( moduleDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+								std::string structName = static_cast<ast::nodes::StructDeclaration&>( *moduleDeclaration ).name;
+								if( existingClassNames.count( structName ) == 0 ) {
+									programRoot->declarations.push_back( moduleDeclaration );
+									existingClassNames.insert( structName );
+								}
+							}
+						}
+					}
+				}
 				if( this->options.verbose ) {
 					spdlog::info( "Stage 4.5: HIR Lowering" );
 				}
@@ -988,7 +1023,73 @@ namespace uranite::compiler {
 						if( this->options.targetTriple.empty() == false ) {
 							ccMirLinker = fmt::format( "{}-gcc", this->options.targetTriple );
 						}
-						std::string ccMirCommand = fmt::format( "{} {} -o {} -lm", ccMirLinker, mirTempObjFile, mirOutputFilePath );
+						std::string ccMirCommand = fmt::format( "{} -o {} {}", ccMirLinker, mirOutputFilePath, mirTempObjFile );
+						auto mirScanRuntimeDirectory = [&]( const std::filesystem::path& runtimeDirectory ) -> bool {
+							if( std::filesystem::exists( runtimeDirectory ) == false || std::filesystem::is_directory( runtimeDirectory ) == false ) {
+								return false;
+							}
+							bool foundAnyLibrary = false;
+							for( const std::filesystem::directory_entry& directoryEntry : std::filesystem::directory_iterator( runtimeDirectory ) ) {
+								if( directoryEntry.is_regular_file() == false ) {
+									continue;
+								}
+								std::string entryFilename = directoryEntry.path().filename().string();
+								if( entryFilename.find( "liburanite-" ) == 0 && entryFilename.size() > 2 &&
+									entryFilename.substr( entryFilename.size() - 2 ) == ".a" ) {
+									ccMirCommand = fmt::format( "{} {}", ccMirCommand, directoryEntry.path().string() );
+									foundAnyLibrary = true;
+								}
+							}
+							return foundAnyLibrary;
+						};
+						bool mirRuntimeResolved = false;
+						std::string mirCrtDir = _URANITE_C_RUNTIME_DIR_;
+						if( mirCrtDir.empty() == false ) {
+							mirRuntimeResolved = mirScanRuntimeDirectory( std::filesystem::path( mirCrtDir ) );
+						}
+						if( mirRuntimeResolved == false ) {
+							std::string executableDirectory = getExecutableDirectory();
+							if( executableDirectory.empty() == false ) {
+								std::filesystem::path exeRelativeRuntimePath = std::filesystem::path( executableDirectory ) / ".." / "lib" / "uranite" / "runtime";
+								if( std::filesystem::exists( exeRelativeRuntimePath ) ) {
+									mirRuntimeResolved = mirScanRuntimeDirectory( std::filesystem::canonical( exeRelativeRuntimePath ) );
+								}
+							}
+						}
+						if( mirRuntimeResolved == false ) {
+							std::filesystem::path runtimeSearchPath = std::filesystem::current_path();
+							for( int searchDepth = 0; searchDepth < 5; searchDepth++ ) {
+								if( mirScanRuntimeDirectory( runtimeSearchPath / "build" / "runtime" ) ) {
+									mirRuntimeResolved = true;
+									break;
+								}
+								if( mirScanRuntimeDirectory( runtimeSearchPath / "runtime" ) ) {
+									mirRuntimeResolved = true;
+									break;
+								}
+								if( runtimeSearchPath.has_parent_path() && runtimeSearchPath.parent_path() != runtimeSearchPath ) {
+									runtimeSearchPath = runtimeSearchPath.parent_path();
+								}
+								else {
+									break;
+								}
+							}
+						}
+						ccMirCommand = fmt::format( "{} -lpthread -lrt -lm", ccMirCommand );
+						bool mirNeedsFfi = false;
+						for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
+							if( moduleEntry.first.find( "/ffi/" ) != std::string::npos ||
+								moduleEntry.second.packageName.find( "uranite.ffi" ) == 0 ) {
+								mirNeedsFfi = true;
+								break;
+							}
+						}
+						if( mirNeedsFfi ) {
+							ccMirCommand = fmt::format( "{} -ldl", ccMirCommand );
+						}
+						for( const std::string& additionalLibrary : this->options.linkLibraries ) {
+							ccMirCommand = fmt::format( "{} -l{}", ccMirCommand, additionalLibrary );
+						}
 						if( this->options.verbose ) {
 							spdlog::info( "Running: {}", ccMirCommand );
 						}
