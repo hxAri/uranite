@@ -44,6 +44,7 @@ namespace uranite::ir::mir {
 		// Declaration lowering
 		void lowerFunctionDefinition( hir::HIRFunctionDefinition& hirFunction );
 		void lowerClassDefinition( hir::HIRClassDefinition& hirClass );
+		void lowerStructDefinition( hir::HIRStructDefinition& hirStruct );
 		
 		// Statement lowering — emits instructions into current block
 		void lowerStatement( const hir::HIRNodeSharedPointer& hirStatement );
