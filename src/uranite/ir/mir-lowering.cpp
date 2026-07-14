@@ -309,6 +309,49 @@ namespace uranite::ir::mir {
 				else {
 					targetVariable = this->lowerExpression( assignment.targetExpression );
 				}
+				if( assignment.assignmentOperator != token::Type::Assignment &&
+					targetVariable != INVALID_VARIABLE_IDENTIFIER ) {
+					MIRInstruction loadInstruction( MIRInstructionKind::LoadVariable );
+					loadInstruction.destinationVariable = this->currentFunction->allocateVariable(
+						"_compound_lhs", assignment.targetExpression->resolvedType, false
+					);
+					loadInstruction.sourceOperands.push_back( targetVariable );
+					loadInstruction.sourceLocation = assignment.sourceLocation;
+					MIRVariableIdentifier loadedTarget = this->emitInstruction( loadInstruction );
+					MIRInstructionKind arithmeticKind = MIRInstructionKind::AddInteger;
+					bool isFloatOp = assignment.valueExpression != nullptr &&
+						assignment.valueExpression->resolvedType != nullptr &&
+						( assignment.valueExpression->resolvedType->kind == semantic::Type::Kind::Float ||
+						  assignment.valueExpression->resolvedType->name == "Float" ||
+						  assignment.valueExpression->resolvedType->name == "Double" );
+					switch( assignment.assignmentOperator ) {
+						case token::Type::PlusAssignment:
+							arithmeticKind = isFloatOp ? MIRInstructionKind::AddFloat : MIRInstructionKind::AddInteger;
+							break;
+						case token::Type::MinusAssignment:
+							arithmeticKind = isFloatOp ? MIRInstructionKind::SubtractFloat : MIRInstructionKind::SubtractInteger;
+							break;
+						case token::Type::StarAssignment:
+							arithmeticKind = isFloatOp ? MIRInstructionKind::MultiplyFloat : MIRInstructionKind::MultiplyInteger;
+							break;
+						case token::Type::SlashAssignment:
+							arithmeticKind = isFloatOp ? MIRInstructionKind::DivideFloat : MIRInstructionKind::DivideInteger;
+							break;
+						default:
+							break;
+					}
+					MIRInstruction arithmeticInstruction( arithmeticKind );
+					arithmeticInstruction.sourceOperands.push_back( loadedTarget );
+					arithmeticInstruction.sourceOperands.push_back( valueVariable );
+					arithmeticInstruction.operandType = assignment.valueExpression != nullptr
+						? assignment.valueExpression->resolvedType : nullptr;
+					arithmeticInstruction.sourceLocation = assignment.sourceLocation;
+					arithmeticInstruction.destinationVariable = this->currentFunction->allocateVariable(
+						"_compound_result", assignment.valueExpression != nullptr
+							? assignment.valueExpression->resolvedType : nullptr, false
+					);
+					valueVariable = this->emitInstruction( arithmeticInstruction );
+				}
 				MIRInstruction storeInstruction( MIRInstructionKind::StoreVariable );
 				storeInstruction.destinationVariable = targetVariable;
 				storeInstruction.sourceOperands.push_back( valueVariable );
