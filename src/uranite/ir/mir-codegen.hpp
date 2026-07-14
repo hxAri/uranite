@@ -101,8 +101,10 @@ namespace uranite::ir::mir {
 		void setVariableValue( MIRVariableIdentifier variableIdentifier, llvm::Value* value );
 		llvm::AllocaInst* createEntryBlockAllocation( llvm::Function* function, const std::string& name, llvm::Type* type );
 		llvm::Function* getOrCreateMalloc();
+		llvm::Function* getOrCreateCalloc();
 		llvm::Function* getOrCreateFree();
 		llvm::Function* getOrCreateUraniteThrow();
+		llvm::Type* resolveMemoryElementType( const semantic::TypeSharedPointer& operandType );
 
 		semantic::Analyzer& semanticAnalyzer;
 		diagnostic::Engine& diagnosticEngine;
@@ -129,6 +131,9 @@ namespace uranite::ir::mir {
 
 		// Current function being generated (for variable descriptor lookups)
 		MIRFunctionDefinition* currentMIRFunction = nullptr;
+
+		// Memory<T> element type per variable (compiler intrinsic tracking)
+		std::unordered_map<MIRVariableIdentifier, llvm::Type*> memoryElementTypes;
 
 	};
 
