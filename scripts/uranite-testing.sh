@@ -61,20 +61,22 @@ function main() {
 	local arguments=()
 	local compiled=0
 	local debugable=0
+	local executed=0
 	local faileds=()
 	local foutputs=()
-	local warnings=()
-	local woutputs=()
-	local executed=0
+	local mir=0
 	local timeout=10
 	local temporary=$(mktemp)
+	local warnings=()
+	local woutputs=()
 	for argument in "$@"; do
 		case "$argument" in
 			--gdb) debugable=1 ;;
+			--mir) mir=1 ;;
 			*) arguments+=( "$argument" ) ;;
 		esac
 	done
-	for pathname in "$@"; do
+	for pathname in "${arguments[@]}"; do
 		if [[ "$pathname" =~ \/$ ]]; then
 			pathname="${pathname::-1}"
 		fi
@@ -87,7 +89,11 @@ function main() {
 				fi
 				cd "$basepath" || continue
 				local binary="${filename%.urn}"
-				timeout $timeout "$basepath/build/uranite" -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
+				if [[ $mir -eq 1 ]]; then
+					timeout $timeout "$basepath/build/uranite" --use-mir -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
+				else
+					timeout $timeout "$basepath/build/uranite" -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
+				fi
 				executed=${PIPESTATUS[0]}
 				if [[ "$(cat "$temporary")" =~ [Ww]arning\: ]]; then
 					warnings+=( "$filename" )
