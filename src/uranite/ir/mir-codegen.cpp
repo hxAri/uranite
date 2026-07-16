@@ -69,6 +69,33 @@ namespace uranite::ir::mir {
 			this->structTypeCache[typeName] = structType;
 		}
 
+		for( const std::pair<const std::string, MIRGlobalVariable>& globalEntry : mirModule.globalVariables ) {
+			const MIRGlobalVariable& mirGlobal = globalEntry.second;
+			llvm::Type* globalType = this->toLLVMType( mirGlobal.variableType );
+			if( globalType->isVoidTy() ) {
+				globalType = llvm::Type::getInt64Ty( this->llvmContext );
+			}
+			llvm::Constant* initializer = nullptr;
+			if( mirGlobal.hasInitializer ) {
+				if( mirGlobal.initialValue.kind == MIRModuleConstant::Integer ) {
+					initializer = llvm::ConstantInt::get( globalType->isIntegerTy() ? globalType : llvm::Type::getInt64Ty( this->llvmContext ), mirGlobal.initialValue.integerValue );
+				}
+				else if( mirGlobal.initialValue.kind == MIRModuleConstant::Float ) {
+					initializer = llvm::ConstantFP::get( globalType->isFloatingPointTy() ? globalType : llvm::Type::getDoubleTy( this->llvmContext ), mirGlobal.initialValue.floatValue );
+				}
+				else if( mirGlobal.initialValue.kind == MIRModuleConstant::Boolean ) {
+					initializer = llvm::ConstantInt::get( llvm::Type::getInt1Ty( this->llvmContext ), mirGlobal.initialValue.booleanValue ? 1 : 0 );
+				}
+			}
+			if( initializer == nullptr ) {
+				initializer = llvm::Constant::getNullValue( globalType );
+			}
+			new llvm::GlobalVariable(
+				*this->llvmModule, globalType, false,
+				llvm::GlobalValue::InternalLinkage, initializer, mirGlobal.variableName
+			);
+		}
+
 		for( std::shared_ptr<MIRFunctionDefinition>& functionDefinition : mirModule.functionDefinitions ) {
 			if( functionDefinition == nullptr ) {
 				continue;
@@ -279,6 +306,7 @@ namespace uranite::ir::mir {
 
 		this->variableValueMap.clear();
 		this->blockMap.clear();
+		this->memoryElementTypes.clear();
 		this->currentMIRFunction = &functionDefinition;
 
 		if( llvmFunction == nullptr ) {
@@ -773,6 +801,16 @@ namespace uranite::ir::mir {
 	}
 
 	void MIRCodegen::generateLoadVariable( const MIRInstruction& instruction ) {
+		if( instruction.calledFunctionQualifiedName.empty() == false &&
+			instruction.calledFunctionQualifiedName[0] == '@' ) {
+			std::string globalName = instruction.calledFunctionQualifiedName.substr( 1 );
+			llvm::GlobalVariable* globalVar = this->llvmModule->getGlobalVariable( globalName, true );
+			if( globalVar != nullptr && instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+				llvm::Value* loadedValue = this->irBuilder.CreateLoad( globalVar->getValueType(), globalVar, "global.load" );
+				this->setVariableValue( instruction.destinationVariable, loadedValue );
+				return;
+			}
+		}
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ||
 			instruction.sourceOperands.empty() ) {
 			return;
@@ -805,6 +843,26 @@ namespace uranite::ir::mir {
 	}
 
 	void MIRCodegen::generateStoreVariable( const MIRInstruction& instruction ) {
+		if( instruction.calledFunctionQualifiedName.empty() == false &&
+			instruction.calledFunctionQualifiedName[0] == '@' ) {
+			std::string globalName = instruction.calledFunctionQualifiedName.substr( 1 );
+			llvm::GlobalVariable* globalVar = this->llvmModule->getGlobalVariable( globalName, true );
+			if( globalVar != nullptr && instruction.sourceOperands.empty() == false ) {
+				llvm::Value* sourceValue = this->loadVariableValue( instruction.sourceOperands[0] );
+				if( sourceValue != nullptr ) {
+					if( sourceValue->getType() != globalVar->getValueType() ) {
+						if( sourceValue->getType()->isIntegerTy() && globalVar->getValueType()->isIntegerTy() ) {
+							sourceValue = this->irBuilder.CreateIntCast( sourceValue, globalVar->getValueType(), true, "global.cast" );
+						}
+						else if( sourceValue->getType()->isFloatingPointTy() && globalVar->getValueType()->isFloatingPointTy() ) {
+							sourceValue = this->irBuilder.CreateFPCast( sourceValue, globalVar->getValueType(), "global.fcast" );
+						}
+					}
+					this->irBuilder.CreateStore( sourceValue, globalVar );
+				}
+				return;
+			}
+		}
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ||
 			instruction.sourceOperands.empty() ) {
 			return;
@@ -1707,10 +1765,22 @@ namespace uranite::ir::mir {
 				if( this->memoryElementTypes.count( instruction.sourceOperands[0] ) > 0 ) {
 					elementType = this->memoryElementTypes[instruction.sourceOperands[0]];
 				}
-				else if( instruction.operandType != nullptr ) {
-					elementType = this->toLLVMType( instruction.operandType );
-					if( elementType->isVoidTy() ) {
-						elementType = llvm::Type::getInt64Ty( this->llvmContext );
+				else if( this->currentMIRFunction != nullptr ) {
+					MIRVariableIdentifier memoryVariableIdentifier = instruction.sourceOperands[0];
+					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
+					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
+						descriptorIterator->second.variableType != nullptr ) {
+						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
+						if( resolved != nullptr && resolved->isVoidTy() == false ) {
+							elementType = resolved;
+							this->memoryElementTypes[memoryVariableIdentifier] = elementType;
+						}
+					}
+				}
+				if( elementType->isIntegerTy( 64 ) && instruction.operandType != nullptr ) {
+					llvm::Type* operandResolved = this->toLLVMType( instruction.operandType );
+					if( operandResolved != nullptr && operandResolved->isVoidTy() == false && operandResolved->isPointerTy() == false ) {
+						elementType = operandResolved;
 					}
 				}
 				if( indexValue->getType()->isIntegerTy() == false ) {
@@ -1733,7 +1803,19 @@ namespace uranite::ir::mir {
 				if( this->memoryElementTypes.count( instruction.sourceOperands[0] ) > 0 ) {
 					elementType = this->memoryElementTypes[instruction.sourceOperands[0]];
 				}
-				else if( storeValue->getType()->isFloatingPointTy() ) {
+				else if( this->currentMIRFunction != nullptr ) {
+					MIRVariableIdentifier memoryVariableIdentifier = instruction.sourceOperands[0];
+					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
+					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
+						descriptorIterator->second.variableType != nullptr ) {
+						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
+						if( resolved != nullptr && resolved->isVoidTy() == false ) {
+							elementType = resolved;
+							this->memoryElementTypes[memoryVariableIdentifier] = elementType;
+						}
+					}
+				}
+				if( elementType->isIntegerTy( 64 ) && storeValue->getType()->isFloatingPointTy() ) {
 					elementType = storeValue->getType();
 				}
 				if( indexValue->getType()->isIntegerTy() == false ) {
@@ -1777,6 +1859,18 @@ namespace uranite::ir::mir {
 				if( this->memoryElementTypes.count( instruction.sourceOperands[0] ) > 0 ) {
 					elementType = this->memoryElementTypes[instruction.sourceOperands[0]];
 				}
+				else if( this->currentMIRFunction != nullptr ) {
+					MIRVariableIdentifier memoryVariableIdentifier = instruction.sourceOperands[0];
+					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
+					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
+						descriptorIterator->second.variableType != nullptr ) {
+						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
+						if( resolved != nullptr && resolved->isVoidTy() == false ) {
+							elementType = resolved;
+							this->memoryElementTypes[memoryVariableIdentifier] = elementType;
+						}
+					}
+				}
 				llvm::DataLayout dataLayout( this->llvmModule.get() );
 				uint64_t elementSize = dataLayout.getTypeAllocSize( elementType );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
@@ -1805,6 +1899,18 @@ namespace uranite::ir::mir {
 				llvm::Type* elementType = llvm::Type::getInt64Ty( this->llvmContext );
 				if( this->memoryElementTypes.count( instruction.sourceOperands[0] ) > 0 ) {
 					elementType = this->memoryElementTypes[instruction.sourceOperands[0]];
+				}
+				else if( this->currentMIRFunction != nullptr ) {
+					MIRVariableIdentifier arenaVariableIdentifier = instruction.sourceOperands[0];
+					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( arenaVariableIdentifier );
+					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
+						descriptorIterator->second.variableType != nullptr ) {
+						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
+						if( resolved != nullptr && resolved->isVoidTy() == false ) {
+							elementType = resolved;
+							this->memoryElementTypes[arenaVariableIdentifier] = elementType;
+						}
+					}
 				}
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
 				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
@@ -1867,6 +1973,743 @@ namespace uranite::ir::mir {
 		}
 		if( calledName == "Arena.Arena" ) {
 			return;
+		}
+
+		// OOP wrapper type method intrinsics
+		{
+			static const std::unordered_map<std::string, int> integerWrapperBitWidths = {
+				{"Int", 64}, {"I64", 64}, {"Long", 64}, {"Integer", 64}, {"UInt", 64}, {"U64", 64},
+				{"I32", 32}, {"U32", 32}, {"I16", 16}, {"U16", 16},
+				{"I8", 8}, {"U8", 8}, {"Byte", 8}, {"Char", 32}
+			};
+			static const std::unordered_set<std::string> floatWrapperNames = {
+				"Float", "Double", "F64", "F32"
+			};
+			static const std::unordered_set<std::string> unsignedWrapperNames = {
+				"UInt", "U64", "U32", "U16", "U8", "Byte"
+			};
+
+			size_t dotPosition = calledName.find( '.' );
+			if( dotPosition != std::string::npos ) {
+				std::string wrapperName = calledName.substr( 0, dotPosition );
+				std::string methodName = calledName.substr( dotPosition + 1 );
+
+				bool isIntegerWrapper = integerWrapperBitWidths.count( wrapperName ) > 0;
+				bool isFloatWrapper = floatWrapperNames.count( wrapperName ) > 0;
+				bool isUnsigned = unsignedWrapperNames.count( wrapperName ) > 0;
+
+				if( wrapperName == "Boolean" && dotPosition != std::string::npos ) {
+					llvm::Type* i1Type = llvm::Type::getInt1Ty( this->llvmContext );
+					auto loadBoolSelf = [&]() -> llvm::Value* {
+						if( instruction.sourceOperands.empty() ) return nullptr;
+						llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+						if( selfValue == nullptr ) return nullptr;
+						if( selfValue->getType() != i1Type ) {
+							if( selfValue->getType()->isIntegerTy() ) {
+								selfValue = this->irBuilder.CreateTrunc( selfValue, i1Type, "bool.trunc" );
+							}
+						}
+						return selfValue;
+					};
+					auto loadBoolArg = [&]() -> llvm::Value* {
+						if( instruction.sourceOperands.size() < 2 ) return nullptr;
+						llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[1] );
+						if( argValue == nullptr ) return nullptr;
+						if( argValue->getType() != i1Type ) {
+							if( argValue->getType()->isIntegerTy() ) {
+								argValue = this->irBuilder.CreateTrunc( argValue, i1Type, "bool.arg.trunc" );
+							}
+						}
+						return argValue;
+					};
+					auto setBoolResult = [&]( llvm::Value* resultValue ) {
+						if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER && resultValue != nullptr ) {
+							this->setVariableValue( instruction.destinationVariable, resultValue );
+						}
+					};
+					if( methodName == "getValue" || methodName == "value" ) {
+						setBoolResult( loadBoolSelf() );
+						return;
+					}
+					if( methodName == "negate" ) {
+						llvm::Value* selfValue = loadBoolSelf();
+						if( selfValue != nullptr ) {
+							setBoolResult( this->irBuilder.CreateXor( selfValue, llvm::ConstantInt::getTrue( this->llvmContext ), "bool.neg" ) );
+						}
+						return;
+					}
+					if( methodName == "logicalAnd" ) {
+						llvm::Value* selfValue = loadBoolSelf();
+						llvm::Value* argValue = loadBoolArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setBoolResult( this->irBuilder.CreateAnd( selfValue, argValue, "bool.and" ) );
+						}
+						return;
+					}
+					if( methodName == "logicalOr" ) {
+						llvm::Value* selfValue = loadBoolSelf();
+						llvm::Value* argValue = loadBoolArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setBoolResult( this->irBuilder.CreateOr( selfValue, argValue, "bool.or" ) );
+						}
+						return;
+					}
+					if( methodName == "logicalXor" ) {
+						llvm::Value* selfValue = loadBoolSelf();
+						llvm::Value* argValue = loadBoolArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setBoolResult( this->irBuilder.CreateXor( selfValue, argValue, "bool.xor" ) );
+						}
+						return;
+					}
+					if( methodName == "equals" ) {
+						llvm::Value* selfValue = loadBoolSelf();
+						llvm::Value* argValue = loadBoolArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setBoolResult( this->irBuilder.CreateICmpEQ( selfValue, argValue, "bool.eq" ) );
+						}
+						return;
+					}
+					if( methodName == "toString" ) {
+						llvm::Value* selfValue = loadBoolSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* trueStr = this->irBuilder.CreateGlobalStringPtr( "True", "bool.true" );
+							llvm::Value* falseStr = this->irBuilder.CreateGlobalStringPtr( "False", "bool.false" );
+							setBoolResult( this->irBuilder.CreateSelect( selfValue, trueStr, falseStr, "bool.str" ) );
+						}
+						return;
+					}
+					if( methodName == "Boolean" ) {
+						return;
+					}
+				}
+				if( wrapperName == "Char" && dotPosition != std::string::npos ) {
+					llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
+					auto loadCharSelf = [&]() -> llvm::Value* {
+						if( instruction.sourceOperands.empty() ) return nullptr;
+						llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+						if( selfValue == nullptr ) return nullptr;
+						if( selfValue->getType() != i32Type ) {
+							if( selfValue->getType()->isPointerTy() ) {
+								selfValue = this->irBuilder.CreatePtrToInt( selfValue, i32Type, "char.ptoi" );
+							}
+							else if( selfValue->getType()->isIntegerTy() ) {
+								selfValue = this->irBuilder.CreateIntCast( selfValue, i32Type, true, "char.cast" );
+							}
+						}
+						return selfValue;
+					};
+					auto setCharResult = [&]( llvm::Value* resultValue ) {
+						if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER && resultValue != nullptr ) {
+							this->setVariableValue( instruction.destinationVariable, resultValue );
+						}
+					};
+					if( methodName == "getValue" || methodName == "value" ) {
+						setCharResult( loadCharSelf() );
+						return;
+					}
+					if( methodName == "isAlpha" ) {
+						llvm::Value* selfValue = loadCharSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* geA = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, 'A' ), "char.geA" );
+							llvm::Value* leZ = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, 'Z' ), "char.leZ" );
+							llvm::Value* isUpper = this->irBuilder.CreateAnd( geA, leZ, "char.isUpper" );
+							llvm::Value* gea = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, 'a' ), "char.gea" );
+							llvm::Value* lez = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, 'z' ), "char.lez" );
+							llvm::Value* isLower = this->irBuilder.CreateAnd( gea, lez, "char.isLower" );
+							setCharResult( this->irBuilder.CreateOr( isUpper, isLower, "char.isAlpha" ) );
+						}
+						return;
+					}
+					if( methodName == "isDigit" ) {
+						llvm::Value* selfValue = loadCharSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* ge0 = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, '0' ), "char.ge0" );
+							llvm::Value* le9 = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, '9' ), "char.le9" );
+							setCharResult( this->irBuilder.CreateAnd( ge0, le9, "char.isDigit" ) );
+						}
+						return;
+					}
+					if( methodName == "isAlphanumeric" ) {
+						llvm::Value* selfValue = loadCharSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* geA = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, 'A' ), "char.geA" );
+							llvm::Value* leZ = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, 'Z' ), "char.leZ" );
+							llvm::Value* isUpper = this->irBuilder.CreateAnd( geA, leZ, "char.isUpper" );
+							llvm::Value* gea = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, 'a' ), "char.gea" );
+							llvm::Value* lez = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, 'z' ), "char.lez" );
+							llvm::Value* isLower = this->irBuilder.CreateAnd( gea, lez, "char.isLower" );
+							llvm::Value* isAlpha = this->irBuilder.CreateOr( isUpper, isLower, "char.isAlpha" );
+							llvm::Value* ge0 = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, '0' ), "char.ge0" );
+							llvm::Value* le9 = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, '9' ), "char.le9" );
+							llvm::Value* isDigit = this->irBuilder.CreateAnd( ge0, le9, "char.isDigit" );
+							setCharResult( this->irBuilder.CreateOr( isAlpha, isDigit, "char.isAlnum" ) );
+						}
+						return;
+					}
+					if( methodName == "isWhitespace" ) {
+						llvm::Value* selfValue = loadCharSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* isSpace = this->irBuilder.CreateICmpEQ( selfValue, llvm::ConstantInt::get( i32Type, ' ' ), "char.isSpace" );
+							llvm::Value* isTab = this->irBuilder.CreateICmpEQ( selfValue, llvm::ConstantInt::get( i32Type, '\t' ), "char.isTab" );
+							llvm::Value* isNewline = this->irBuilder.CreateICmpEQ( selfValue, llvm::ConstantInt::get( i32Type, '\n' ), "char.isNl" );
+							llvm::Value* isReturn = this->irBuilder.CreateICmpEQ( selfValue, llvm::ConstantInt::get( i32Type, '\r' ), "char.isCr" );
+							llvm::Value* result = this->irBuilder.CreateOr( isSpace, isTab, "char.ws1" );
+							result = this->irBuilder.CreateOr( result, isNewline, "char.ws2" );
+							setCharResult( this->irBuilder.CreateOr( result, isReturn, "char.isWs" ) );
+						}
+						return;
+					}
+					if( methodName == "toUpper" ) {
+						llvm::Value* selfValue = loadCharSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* gea = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, 'a' ), "char.gea" );
+							llvm::Value* lez = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, 'z' ), "char.lez" );
+							llvm::Value* isLower = this->irBuilder.CreateAnd( gea, lez, "char.isLower" );
+							llvm::Value* upper = this->irBuilder.CreateSub( selfValue, llvm::ConstantInt::get( i32Type, 32 ), "char.upper" );
+							setCharResult( this->irBuilder.CreateSelect( isLower, upper, selfValue, "char.toUpper" ) );
+						}
+						return;
+					}
+					if( methodName == "toLower" ) {
+						llvm::Value* selfValue = loadCharSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* geA = this->irBuilder.CreateICmpSGE( selfValue, llvm::ConstantInt::get( i32Type, 'A' ), "char.geA" );
+							llvm::Value* leZ = this->irBuilder.CreateICmpSLE( selfValue, llvm::ConstantInt::get( i32Type, 'Z' ), "char.leZ" );
+							llvm::Value* isUpper = this->irBuilder.CreateAnd( geA, leZ, "char.isUpper" );
+							llvm::Value* lower = this->irBuilder.CreateAdd( selfValue, llvm::ConstantInt::get( i32Type, 32 ), "char.lower" );
+							setCharResult( this->irBuilder.CreateSelect( isUpper, lower, selfValue, "char.toLower" ) );
+						}
+						return;
+					}
+					if( methodName == "toString" ) {
+						llvm::Value* selfValue = loadCharSelf();
+						if( selfValue != nullptr ) {
+							llvm::Function* snprintfFunction = this->llvmModule->getFunction( "snprintf" );
+							if( snprintfFunction == nullptr ) {
+								llvm::FunctionType* snprintfType = llvm::FunctionType::get(
+									llvm::Type::getInt32Ty( this->llvmContext ),
+									{ llvm::PointerType::getUnqual( this->llvmContext ), llvm::Type::getInt64Ty( this->llvmContext ), llvm::PointerType::getUnqual( this->llvmContext ) },
+									true
+								);
+								snprintfFunction = llvm::Function::Create( snprintfType, llvm::Function::ExternalLinkage, "snprintf", this->llvmModule.get() );
+							}
+							llvm::Value* buffer = this->irBuilder.CreateAlloca( llvm::Type::getInt8Ty( this->llvmContext ), llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 8 ), "char.buf" );
+							llvm::Value* fmtStr = this->irBuilder.CreateGlobalStringPtr( "%c", "char.fmt" );
+							this->irBuilder.CreateCall( snprintfFunction, { buffer, llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 8 ), fmtStr, selfValue } );
+							setCharResult( buffer );
+						}
+						return;
+					}
+					if( methodName == "Char" ) {
+						return;
+					}
+				}
+				if( isIntegerWrapper || isFloatWrapper ) {
+					llvm::Type* primitiveType = nullptr;
+					if( isIntegerWrapper ) {
+						primitiveType = llvm::Type::getInt64Ty( this->llvmContext );
+					}
+					else if( wrapperName == "F32" ) {
+						primitiveType = llvm::Type::getFloatTy( this->llvmContext );
+					}
+					else {
+						primitiveType = llvm::Type::getDoubleTy( this->llvmContext );
+					}
+
+					auto loadSelf = [&]() -> llvm::Value* {
+						if( instruction.sourceOperands.empty() ) return nullptr;
+						llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+						if( selfValue == nullptr ) return nullptr;
+						if( selfValue->getType() != primitiveType ) {
+							if( primitiveType->isIntegerTy() && selfValue->getType()->isIntegerTy() ) {
+								selfValue = this->irBuilder.CreateIntCast( selfValue, primitiveType, !isUnsigned, "wrap.self" );
+							}
+							else if( primitiveType->isFloatingPointTy() && selfValue->getType()->isIntegerTy() ) {
+								selfValue = this->irBuilder.CreateSIToFP( selfValue, primitiveType, "wrap.self.itof" );
+							}
+							else if( primitiveType->isIntegerTy() && selfValue->getType()->isFloatingPointTy() ) {
+								selfValue = this->irBuilder.CreateFPToSI( selfValue, primitiveType, "wrap.self.ftoi" );
+							}
+							else if( primitiveType->isFloatingPointTy() && selfValue->getType()->isFloatingPointTy() ) {
+								selfValue = this->irBuilder.CreateFPCast( selfValue, primitiveType, "wrap.self.fcast" );
+							}
+							else if( selfValue->getType()->isPointerTy() && primitiveType->isIntegerTy() ) {
+								selfValue = this->irBuilder.CreatePtrToInt( selfValue, primitiveType, "wrap.self.ptoi" );
+							}
+						}
+						return selfValue;
+					};
+					auto loadArg = [&]() -> llvm::Value* {
+						if( instruction.sourceOperands.size() < 2 ) return nullptr;
+						llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[1] );
+						if( argValue == nullptr ) return nullptr;
+						if( argValue->getType() != primitiveType ) {
+							if( primitiveType->isIntegerTy() && argValue->getType()->isIntegerTy() ) {
+								argValue = this->irBuilder.CreateIntCast( argValue, primitiveType, !isUnsigned, "wrap.arg" );
+							}
+							else if( primitiveType->isFloatingPointTy() && argValue->getType()->isIntegerTy() ) {
+								argValue = this->irBuilder.CreateSIToFP( argValue, primitiveType, "wrap.arg.itof" );
+							}
+							else if( primitiveType->isIntegerTy() && argValue->getType()->isFloatingPointTy() ) {
+								argValue = this->irBuilder.CreateFPToSI( argValue, primitiveType, "wrap.arg.ftoi" );
+							}
+							else if( primitiveType->isFloatingPointTy() && argValue->getType()->isFloatingPointTy() ) {
+								argValue = this->irBuilder.CreateFPCast( argValue, primitiveType, "wrap.arg.fcast" );
+							}
+							else if( argValue->getType()->isPointerTy() && primitiveType->isIntegerTy() ) {
+								argValue = this->irBuilder.CreatePtrToInt( argValue, primitiveType, "wrap.arg.ptoi" );
+							}
+						}
+						return argValue;
+					};
+					auto setResult = [&]( llvm::Value* resultValue ) {
+						if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER && resultValue != nullptr ) {
+							this->setVariableValue( instruction.destinationVariable, resultValue );
+						}
+					};
+
+					if( methodName == "getValue" || methodName == "value" ) {
+						setResult( loadSelf() );
+						return;
+					}
+					if( methodName == "add" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( isFloatWrapper
+								? this->irBuilder.CreateFAdd( selfValue, argValue, "wrap.add" )
+								: this->irBuilder.CreateAdd( selfValue, argValue, "wrap.add" ) );
+						}
+						return;
+					}
+					if( methodName == "subtract" || methodName == "sub" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( isFloatWrapper
+								? this->irBuilder.CreateFSub( selfValue, argValue, "wrap.sub" )
+								: this->irBuilder.CreateSub( selfValue, argValue, "wrap.sub" ) );
+						}
+						return;
+					}
+					if( methodName == "multiply" || methodName == "mul" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( isFloatWrapper
+								? this->irBuilder.CreateFMul( selfValue, argValue, "wrap.mul" )
+								: this->irBuilder.CreateMul( selfValue, argValue, "wrap.mul" ) );
+						}
+						return;
+					}
+					if( methodName == "divide" || methodName == "div" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							if( isFloatWrapper ) {
+								setResult( this->irBuilder.CreateFDiv( selfValue, argValue, "wrap.div" ) );
+							}
+							else if( isUnsigned ) {
+								setResult( this->irBuilder.CreateUDiv( selfValue, argValue, "wrap.div" ) );
+							}
+							else {
+								setResult( this->irBuilder.CreateSDiv( selfValue, argValue, "wrap.div" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "modulo" || methodName == "mod" || methodName == "remainder" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							if( isFloatWrapper ) {
+								setResult( this->irBuilder.CreateFRem( selfValue, argValue, "wrap.rem" ) );
+							}
+							else if( isUnsigned ) {
+								setResult( this->irBuilder.CreateURem( selfValue, argValue, "wrap.rem" ) );
+							}
+							else {
+								setResult( this->irBuilder.CreateSRem( selfValue, argValue, "wrap.rem" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "negate" || methodName == "neg" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							if( isFloatWrapper ) {
+								setResult( this->irBuilder.CreateFNeg( selfValue, "wrap.neg" ) );
+							}
+							else {
+								setResult( this->irBuilder.CreateNeg( selfValue, "wrap.neg" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "abs" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							if( isFloatWrapper ) {
+								llvm::Value* negValue = this->irBuilder.CreateFNeg( selfValue, "wrap.abs.neg" );
+								llvm::Value* isNeg = this->irBuilder.CreateFCmpOLT( selfValue,
+									llvm::ConstantFP::get( primitiveType, 0.0 ), "wrap.abs.cmp" );
+								setResult( this->irBuilder.CreateSelect( isNeg, negValue, selfValue, "wrap.abs" ) );
+							}
+							else {
+								llvm::Value* negValue = this->irBuilder.CreateNeg( selfValue, "wrap.abs.neg" );
+								llvm::Value* isNeg = this->irBuilder.CreateICmpSLT( selfValue,
+									llvm::ConstantInt::get( primitiveType, 0, true ), "wrap.abs.cmp" );
+								setResult( this->irBuilder.CreateSelect( isNeg, negValue, selfValue, "wrap.abs" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "equals" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOEQ( selfValue, argValue, "wrap.eq" )
+								: this->irBuilder.CreateICmpEQ( selfValue, argValue, "wrap.eq" );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "compareTo" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+							if( isFloatWrapper ) {
+								llvm::Value* isLt = this->irBuilder.CreateFCmpOLT( selfValue, argValue, "wrap.cmp.lt" );
+								llvm::Value* isGt = this->irBuilder.CreateFCmpOGT( selfValue, argValue, "wrap.cmp.gt" );
+								llvm::Value* ltExt = this->irBuilder.CreateZExt( isLt, i64Type );
+								llvm::Value* gtExt = this->irBuilder.CreateZExt( isGt, i64Type );
+								setResult( this->irBuilder.CreateSub( gtExt, ltExt, "wrap.cmp" ) );
+							}
+							else {
+								llvm::Value* isLt = isUnsigned
+									? this->irBuilder.CreateICmpULT( selfValue, argValue, "wrap.cmp.lt" )
+									: this->irBuilder.CreateICmpSLT( selfValue, argValue, "wrap.cmp.lt" );
+								llvm::Value* isGt = isUnsigned
+									? this->irBuilder.CreateICmpUGT( selfValue, argValue, "wrap.cmp.gt" )
+									: this->irBuilder.CreateICmpSGT( selfValue, argValue, "wrap.cmp.gt" );
+								llvm::Value* ltExt = this->irBuilder.CreateZExt( isLt, i64Type );
+								llvm::Value* gtExt = this->irBuilder.CreateZExt( isGt, i64Type );
+								setResult( this->irBuilder.CreateSub( gtExt, ltExt, "wrap.cmp" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "greaterThan" || methodName == "gt" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOGT( selfValue, argValue, "wrap.gt" )
+								: ( isUnsigned
+									? this->irBuilder.CreateICmpUGT( selfValue, argValue, "wrap.gt" )
+									: this->irBuilder.CreateICmpSGT( selfValue, argValue, "wrap.gt" ) );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "lessThan" || methodName == "lt" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOLT( selfValue, argValue, "wrap.lt" )
+								: ( isUnsigned
+									? this->irBuilder.CreateICmpULT( selfValue, argValue, "wrap.lt" )
+									: this->irBuilder.CreateICmpSLT( selfValue, argValue, "wrap.lt" ) );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "greaterThanOrEqual" || methodName == "gte" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOGE( selfValue, argValue, "wrap.gte" )
+								: ( isUnsigned
+									? this->irBuilder.CreateICmpUGE( selfValue, argValue, "wrap.gte" )
+									: this->irBuilder.CreateICmpSGE( selfValue, argValue, "wrap.gte" ) );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "lessThanOrEqual" || methodName == "lte" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOLE( selfValue, argValue, "wrap.lte" )
+								: ( isUnsigned
+									? this->irBuilder.CreateICmpULE( selfValue, argValue, "wrap.lte" )
+									: this->irBuilder.CreateICmpSLE( selfValue, argValue, "wrap.lte" ) );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "min" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Value* cond = isFloatWrapper
+								? this->irBuilder.CreateFCmpOLT( selfValue, argValue, "wrap.min.cmp" )
+								: ( isUnsigned
+									? this->irBuilder.CreateICmpULT( selfValue, argValue, "wrap.min.cmp" )
+									: this->irBuilder.CreateICmpSLT( selfValue, argValue, "wrap.min.cmp" ) );
+							setResult( this->irBuilder.CreateSelect( cond, selfValue, argValue, "wrap.min" ) );
+						}
+						return;
+					}
+					if( methodName == "max" ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							llvm::Value* cond = isFloatWrapper
+								? this->irBuilder.CreateFCmpOGT( selfValue, argValue, "wrap.max.cmp" )
+								: ( isUnsigned
+									? this->irBuilder.CreateICmpUGT( selfValue, argValue, "wrap.max.cmp" )
+									: this->irBuilder.CreateICmpSGT( selfValue, argValue, "wrap.max.cmp" ) );
+							setResult( this->irBuilder.CreateSelect( cond, selfValue, argValue, "wrap.max" ) );
+						}
+						return;
+					}
+					if( methodName == "bitwiseAnd" && isIntegerWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( this->irBuilder.CreateAnd( selfValue, argValue, "wrap.and" ) );
+						}
+						return;
+					}
+					if( methodName == "bitwiseOr" && isIntegerWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( this->irBuilder.CreateOr( selfValue, argValue, "wrap.or" ) );
+						}
+						return;
+					}
+					if( methodName == "bitwiseXor" && isIntegerWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( this->irBuilder.CreateXor( selfValue, argValue, "wrap.xor" ) );
+						}
+						return;
+					}
+					if( methodName == "bitwiseNot" && isIntegerWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							setResult( this->irBuilder.CreateNot( selfValue, "wrap.not" ) );
+						}
+						return;
+					}
+					if( methodName == "shiftLeft" && isIntegerWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( this->irBuilder.CreateShl( selfValue, argValue, "wrap.shl" ) );
+						}
+						return;
+					}
+					if( methodName == "shiftRight" && isIntegerWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( isUnsigned
+								? this->irBuilder.CreateLShr( selfValue, argValue, "wrap.shr" )
+								: this->irBuilder.CreateAShr( selfValue, argValue, "wrap.shr" ) );
+						}
+						return;
+					}
+					if( methodName == "toString" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+							llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
+							llvm::Function* snprintfFunction = this->llvmModule->getFunction( "snprintf" );
+							if( snprintfFunction == nullptr ) {
+								llvm::FunctionType* snprintfType = llvm::FunctionType::get( i32Type, { ptrType, i64Type, ptrType }, true );
+								snprintfFunction = llvm::Function::Create( snprintfType, llvm::Function::ExternalLinkage, "snprintf", this->llvmModule.get() );
+							}
+							llvm::Function* mallocFunction = this->getOrCreateMalloc();
+							llvm::Value* bufSize = llvm::ConstantInt::get( i64Type, 48 );
+							llvm::Value* bufPtr = this->irBuilder.CreateCall( mallocFunction, { bufSize }, "wrap.str.buf" );
+							if( isFloatWrapper ) {
+								llvm::Value* fmtStr = this->irBuilder.CreateGlobalStringPtr( "%g", "wrap.str.fmt" );
+								if( selfValue->getType()->isFloatTy() ) {
+									selfValue = this->irBuilder.CreateFPExt( selfValue, llvm::Type::getDoubleTy( this->llvmContext ), "wrap.str.ext" );
+								}
+								this->irBuilder.CreateCall( snprintfFunction, { bufPtr, bufSize, fmtStr, selfValue } );
+							}
+							else {
+								llvm::Value* printVal = selfValue;
+								if( selfValue->getType() != i64Type ) {
+									printVal = isUnsigned
+										? this->irBuilder.CreateZExt( selfValue, i64Type, "wrap.str.zext" )
+										: this->irBuilder.CreateSExt( selfValue, i64Type, "wrap.str.sext" );
+								}
+								llvm::Value* fmtStr = this->irBuilder.CreateGlobalStringPtr( "%ld", "wrap.str.fmt" );
+								this->irBuilder.CreateCall( snprintfFunction, { bufPtr, bufSize, fmtStr, printVal } );
+							}
+							setResult( bufPtr );
+						}
+						return;
+					}
+					if( methodName == "toI64" || methodName == "toInt" || methodName == "toLong" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+							if( isFloatWrapper ) {
+								setResult( this->irBuilder.CreateFPToSI( selfValue, i64Type, "wrap.toi64" ) );
+							}
+							else {
+								setResult( this->irBuilder.CreateIntCast( selfValue, i64Type, !isUnsigned, "wrap.toi64" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "toI32" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
+							if( isFloatWrapper ) {
+								setResult( this->irBuilder.CreateFPToSI( selfValue, i32Type, "wrap.toi32" ) );
+							}
+							else {
+								setResult( this->irBuilder.CreateIntCast( selfValue, i32Type, !isUnsigned, "wrap.toi32" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "toFloat" || methodName == "toDouble" || methodName == "toF64" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Type* doubleType = llvm::Type::getDoubleTy( this->llvmContext );
+							if( isFloatWrapper ) {
+								setResult( this->irBuilder.CreateFPCast( selfValue, doubleType, "wrap.tof64" ) );
+							}
+							else if( isUnsigned ) {
+								setResult( this->irBuilder.CreateUIToFP( selfValue, doubleType, "wrap.tof64" ) );
+							}
+							else {
+								setResult( this->irBuilder.CreateSIToFP( selfValue, doubleType, "wrap.tof64" ) );
+							}
+						}
+						return;
+					}
+					if( methodName == "isInfinite" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* absVal = this->irBuilder.CreateUnaryIntrinsic( llvm::Intrinsic::fabs, selfValue, nullptr, "wrap.fabs" );
+							llvm::Value* inf = llvm::ConstantFP::getInfinity( primitiveType );
+							setResult( this->irBuilder.CreateFCmpOEQ( absVal, inf, "wrap.isinf" ) );
+						}
+						return;
+					}
+					if( methodName == "isNaN" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							setResult( this->irBuilder.CreateFCmpUNO( selfValue, selfValue, "wrap.isnan" ) );
+						}
+						return;
+					}
+					if( methodName == "isFinite" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* absVal = this->irBuilder.CreateUnaryIntrinsic( llvm::Intrinsic::fabs, selfValue, nullptr, "wrap.fabs" );
+							llvm::Value* inf = llvm::ConstantFP::getInfinity( primitiveType );
+							llvm::Value* isInf = this->irBuilder.CreateFCmpOEQ( absVal, inf, "wrap.isinf" );
+							llvm::Value* isNan = this->irBuilder.CreateFCmpUNO( selfValue, selfValue, "wrap.isnan" );
+							llvm::Value* notFinite = this->irBuilder.CreateOr( isInf, isNan, "wrap.notfinite" );
+							setResult( this->irBuilder.CreateNot( notFinite, "wrap.isfinite" ) );
+						}
+						return;
+					}
+					if( methodName == "floor" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							setResult( this->irBuilder.CreateUnaryIntrinsic( llvm::Intrinsic::floor, selfValue, nullptr, "wrap.floor" ) );
+						}
+						return;
+					}
+					if( methodName == "ceil" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							setResult( this->irBuilder.CreateUnaryIntrinsic( llvm::Intrinsic::ceil, selfValue, nullptr, "wrap.ceil" ) );
+						}
+						return;
+					}
+					if( methodName == "round" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							setResult( this->irBuilder.CreateUnaryIntrinsic( llvm::Intrinsic::round, selfValue, nullptr, "wrap.round" ) );
+						}
+						return;
+					}
+					if( methodName == "sqrt" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							setResult( this->irBuilder.CreateUnaryIntrinsic( llvm::Intrinsic::sqrt, selfValue, nullptr, "wrap.sqrt" ) );
+						}
+						return;
+					}
+					if( methodName == "power" && isFloatWrapper ) {
+						llvm::Value* selfValue = loadSelf();
+						llvm::Value* argValue = loadArg();
+						if( selfValue != nullptr && argValue != nullptr ) {
+							setResult( this->irBuilder.CreateBinaryIntrinsic( llvm::Intrinsic::pow, selfValue, argValue, nullptr, "wrap.pow" ) );
+						}
+						return;
+					}
+					if( methodName == "isZero" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOEQ( selfValue, llvm::ConstantFP::get( primitiveType, 0.0 ), "wrap.iszero" )
+								: this->irBuilder.CreateICmpEQ( selfValue, llvm::ConstantInt::get( primitiveType, 0 ), "wrap.iszero" );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "isPositive" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOGT( selfValue, llvm::ConstantFP::get( primitiveType, 0.0 ), "wrap.ispos" )
+								: this->irBuilder.CreateICmpSGT( selfValue, llvm::ConstantInt::get( primitiveType, 0, true ), "wrap.ispos" );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "isNegative" ) {
+						llvm::Value* selfValue = loadSelf();
+						if( selfValue != nullptr ) {
+							llvm::Value* result = isFloatWrapper
+								? this->irBuilder.CreateFCmpOLT( selfValue, llvm::ConstantFP::get( primitiveType, 0.0 ), "wrap.isneg" )
+								: this->irBuilder.CreateICmpSLT( selfValue, llvm::ConstantInt::get( primitiveType, 0, true ), "wrap.isneg" );
+							setResult( result );
+						}
+						return;
+					}
+					if( methodName == "Boolean" || methodName == "Int" || methodName == "I64" ||
+						methodName == "I32" || methodName == "I16" || methodName == "I8" ||
+						methodName == "UInt" || methodName == "U64" || methodName == "U32" ||
+						methodName == "U16" || methodName == "U8" || methodName == "Byte" ||
+						methodName == "Long" || methodName == "Integer" || methodName == "Char" ||
+						methodName == "Float" || methodName == "Double" || methodName == "F32" || methodName == "F64" ) {
+						return;
+					}
+				}
+			}
 		}
 
 		if( calledName == "concat" && instruction.sourceOperands.size() == 2 ) {
@@ -3094,33 +3937,55 @@ namespace uranite::ir::mir {
 		if( operandType == nullptr ) {
 			return llvm::Type::getInt64Ty( this->llvmContext );
 		}
+
+		std::string elementClassName;
+		semantic::TypeSharedPointer elementSemaType = nullptr;
+
 		if( operandType->kind == semantic::Type::Kind::Class ) {
 			semantic::ClassType* classType = dynamic_cast<semantic::ClassType*>( operandType.get() );
 			if( classType != nullptr && classType->typeSubstitutions.empty() == false ) {
 				for( const std::pair<const std::string, semantic::TypeSharedPointer>& substitution : classType->typeSubstitutions ) {
 					if( substitution.second != nullptr ) {
-						llvm::Type* resolved = this->toLLVMType( substitution.second );
-						if( resolved != nullptr && resolved->isVoidTy() == false ) {
-							return resolved;
-						}
+						elementSemaType = substitution.second;
+						elementClassName = substitution.second->name;
+						break;
 					}
 				}
 			}
 		}
-		std::string typeName = operandType->name;
-		size_t openBracket = typeName.find( '<' );
-		size_t closeBracket = typeName.rfind( '>' );
-		if( openBracket != std::string::npos && closeBracket != std::string::npos && closeBracket > openBracket ) {
-			std::string elementName = typeName.substr( openBracket + 1, closeBracket - openBracket - 1 );
-			semantic::TypeSharedPointer elementSemaType = std::make_shared<semantic::Type>(
-				semantic::Type::Kind::Class, elementName
-			);
-			llvm::Type* resolved = this->toLLVMType( elementSemaType );
-			if( resolved != nullptr && resolved->isVoidTy() == false ) {
-				return resolved;
+
+		if( elementSemaType == nullptr ) {
+			std::string typeName = operandType->name;
+			size_t openBracket = typeName.find( '<' );
+			size_t closeBracket = typeName.rfind( '>' );
+			if( openBracket != std::string::npos && closeBracket != std::string::npos && closeBracket > openBracket ) {
+				elementClassName = typeName.substr( openBracket + 1, closeBracket - openBracket - 1 );
+				elementSemaType = std::make_shared<semantic::Type>(
+					semantic::Type::Kind::Class, elementClassName
+				);
 			}
 		}
-		return llvm::Type::getInt64Ty( this->llvmContext );
+
+		if( elementSemaType == nullptr ) {
+			return llvm::Type::getInt64Ty( this->llvmContext );
+		}
+
+		llvm::Type* resolved = this->toLLVMType( elementSemaType );
+		if( resolved == nullptr || resolved->isVoidTy() ) {
+			return llvm::Type::getInt64Ty( this->llvmContext );
+		}
+
+		if( resolved->isPointerTy() && elementSemaType->kind == semantic::Type::Kind::Class ) {
+			if( this->structTypeCache.count( elementClassName ) > 0 ) {
+				return this->structTypeCache[elementClassName];
+			}
+			llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, elementClassName );
+			if( structType != nullptr ) {
+				return structType;
+			}
+		}
+
+		return resolved;
 	}
 
 	llvm::Function* MIRCodegen::getOrCreateFree() {
