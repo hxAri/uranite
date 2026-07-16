@@ -146,6 +146,40 @@ namespace uranite::ir::mir {
 			}
 		}
 
+		for( std::shared_ptr<hir::HIRGlobalVariableDefinition>& globalVarDefinition : hirModule.globalVariableDefinitions ) {
+			if( globalVarDefinition == nullptr ) {
+				continue;
+			}
+			MIRGlobalVariable mirGlobal;
+			mirGlobal.variableName = globalVarDefinition->variableName;
+			mirGlobal.variableType = globalVarDefinition->variableType;
+			if( globalVarDefinition->initializerExpression != nullptr ) {
+				mirGlobal.hasInitializer = true;
+				hir::HIRNodeSharedPointer& initExpr = globalVarDefinition->initializerExpression;
+				if( initExpr->nodeKind == hir::HIRNodeKind::IntegerLiteral ) {
+					hir::HIRIntegerLiteral& intLit = static_cast<hir::HIRIntegerLiteral&>( *initExpr );
+					mirGlobal.initialValue.kind = MIRModuleConstant::Integer;
+					mirGlobal.initialValue.integerValue = intLit.integerValue;
+				}
+				else if( initExpr->nodeKind == hir::HIRNodeKind::FloatLiteral ) {
+					hir::HIRFloatLiteral& floatLit = static_cast<hir::HIRFloatLiteral&>( *initExpr );
+					mirGlobal.initialValue.kind = MIRModuleConstant::Float;
+					mirGlobal.initialValue.floatValue = floatLit.floatValue;
+				}
+				else if( initExpr->nodeKind == hir::HIRNodeKind::BooleanLiteral ) {
+					hir::HIRBooleanLiteral& boolLit = static_cast<hir::HIRBooleanLiteral&>( *initExpr );
+					mirGlobal.initialValue.kind = MIRModuleConstant::Boolean;
+					mirGlobal.initialValue.booleanValue = boolLit.booleanValue;
+				}
+				else if( initExpr->nodeKind == hir::HIRNodeKind::StringLiteral ) {
+					hir::HIRStringLiteral& strLit = static_cast<hir::HIRStringLiteral&>( *initExpr );
+					mirGlobal.initialValue.kind = MIRModuleConstant::String;
+					mirGlobal.initialValue.stringValue = strLit.stringValue;
+				}
+			}
+			this->currentModule->globalVariables[globalVarDefinition->variableName] = mirGlobal;
+		}
+
 		for( std::shared_ptr<hir::HIRFunctionDefinition>& functionDefinition : hirModule.functionDefinitions ) {
 			if( functionDefinition != nullptr ) {
 				this->lowerFunctionDefinition( *functionDefinition );
@@ -296,6 +330,7 @@ namespace uranite::ir::mir {
 				hir::HIRAssignment& assignment = static_cast<hir::HIRAssignment&>( *hirStatement );
 				MIRVariableIdentifier valueVariable = this->lowerExpression( assignment.valueExpression );
 				MIRVariableIdentifier targetVariable = INVALID_VARIABLE_IDENTIFIER;
+				std::string globalTargetName;
 				if( assignment.targetExpression != nullptr &&
 					assignment.targetExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
 					hir::HIRIdentifier& targetIdentifier =
@@ -305,17 +340,26 @@ namespace uranite::ir::mir {
 					if( targetLookup != this->variableNameMap.end() ) {
 						targetVariable = targetLookup->second;
 					}
+					else if( this->currentModule->globalVariables.find( targetIdentifier.identifierName ) !=
+							 this->currentModule->globalVariables.end() ) {
+						globalTargetName = targetIdentifier.identifierName;
+					}
 				}
 				else {
 					targetVariable = this->lowerExpression( assignment.targetExpression );
 				}
 				if( assignment.assignmentOperator != token::Type::Assignment &&
-					targetVariable != INVALID_VARIABLE_IDENTIFIER ) {
+					( targetVariable != INVALID_VARIABLE_IDENTIFIER || globalTargetName.empty() == false ) ) {
 					MIRInstruction loadInstruction( MIRInstructionKind::LoadVariable );
 					loadInstruction.destinationVariable = this->currentFunction->allocateVariable(
 						"_compound_lhs", assignment.targetExpression->resolvedType, false
 					);
-					loadInstruction.sourceOperands.push_back( targetVariable );
+					if( globalTargetName.empty() == false ) {
+						loadInstruction.calledFunctionQualifiedName = fmt::format( "@{}", globalTargetName );
+					}
+					else {
+						loadInstruction.sourceOperands.push_back( targetVariable );
+					}
 					loadInstruction.sourceLocation = assignment.sourceLocation;
 					MIRVariableIdentifier loadedTarget = this->emitInstruction( loadInstruction );
 					MIRInstructionKind arithmeticKind = MIRInstructionKind::AddInteger;
@@ -353,7 +397,12 @@ namespace uranite::ir::mir {
 					valueVariable = this->emitInstruction( arithmeticInstruction );
 				}
 				MIRInstruction storeInstruction( MIRInstructionKind::StoreVariable );
-				storeInstruction.destinationVariable = targetVariable;
+				if( globalTargetName.empty() == false ) {
+					storeInstruction.calledFunctionQualifiedName = fmt::format( "@{}", globalTargetName );
+				}
+				else {
+					storeInstruction.destinationVariable = targetVariable;
+				}
 				storeInstruction.sourceOperands.push_back( valueVariable );
 				storeInstruction.sourceLocation = assignment.sourceLocation;
 				this->emitInstruction( storeInstruction );
@@ -1095,6 +1144,19 @@ namespace uranite::ir::mir {
 						);
 						constantInstruction.destinationVariable = resultVariable;
 						return this->emitInstruction( constantInstruction );
+					}
+					std::unordered_map<std::string, MIRGlobalVariable>::iterator globalLookup =
+						this->currentModule->globalVariables.find( identifier.identifierName );
+					if( globalLookup != this->currentModule->globalVariables.end() ) {
+						MIRInstruction loadInstruction( MIRInstructionKind::LoadVariable );
+						loadInstruction.calledFunctionQualifiedName = fmt::format( "@{}", identifier.identifierName );
+						loadInstruction.operandType = identifier.resolvedType;
+						loadInstruction.sourceLocation = identifier.sourceLocation;
+						MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
+							identifier.identifierName, identifier.resolvedType, false
+						);
+						loadInstruction.destinationVariable = resultVariable;
+						return this->emitInstruction( loadInstruction );
 					}
 				}
 				MIRInstruction loadInstruction( MIRInstructionKind::LoadVariable );
