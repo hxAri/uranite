@@ -27,6 +27,7 @@
 #include "uranite/diagnostic/diagnostic.hpp"
 #include "uranite/ir/hir.hpp"
 #include "uranite/ir/mir.hpp"
+#include "uranite/semantic/typeref.hpp"
 
 namespace uranite::ir::mir {
 	
@@ -34,7 +35,7 @@ namespace uranite::ir::mir {
 	class MIRLowering {
 	public:
 		
-		MIRLowering( diagnostic::Engine& diagnosticEngine );
+		MIRLowering( diagnostic::Engine& diagnosticEngine, const semantic::Registry* typeRegistry = nullptr );
 		
 		/** @brief Lowers an entire HIR module into an MIR module. */
 		std::shared_ptr<MIRModuleDefinition> lower( hir::HIRModule& hirModule );
@@ -91,6 +92,13 @@ namespace uranite::ir::mir {
 		// Maps variable names to their MIR variable identifiers within current function
 		std::unordered_map<std::string, MIRVariableIdentifier> variableNameMap;
 
+		// Active landing pad for try/catch — when set, calls emit InvokeFunction instead of CallFunction
+		MIRBlockIdentifier activeLandingPad = INVALID_BLOCK_IDENTIFIER;
+
+		// Generic class type substitutions: className -> (paramName -> concreteTypeName)
+		std::unordered_map<std::string, std::unordered_map<std::string, std::string>> genericClassSubstitutions;
+
+		const semantic::Registry* typeRegistry;
 		diagnostic::Engine& diagnosticEngine;
 	
 	};
