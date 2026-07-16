@@ -22,6 +22,13 @@
 - Boolean wrapper intrinsics — `logicalAnd`, `logicalOr`, `logicalXor`, `negate`, `equals`, `toString`
 - Char wrapper intrinsics — `isAlpha`, `isDigit`, `isAlphanumeric`, `isWhitespace`, `toUpper`, `toLower`, `toString` with inline range-check logic
 - Global mutable variable support in MIR path — `MIRGlobalVariable` struct, HIR→MIR lowering, LLVM `GlobalVariable` generation, load/store via `@`-prefixed name markers
+- `InvokeFunction` instruction handler — resolves callee, builds arguments with type coercion, emits `CreateInvoke` with normal/unwind destinations, sets personality function
+- `LandingPad` instruction handler — emits LLVM `landingpad` with catch-all clause, extracts exception via `__uranite_begin_catch`
+- `is` operator support in MIR lowering — maps `KeywordIs` to `CompareEqual` for identity/None checks
+- Generic type parameter method resolution in MIR lowering — scans semantic registry for monomorphized class types, builds substitution map with transitive resolution, resolves `K.hashCode` to `String.hashCode` at method call sites
+- Universal bare method intrinsics (`hashCode`, `toString`) in MIR codegen — handles calls from imported generic module code without class prefix
+- String wrapper method intrinsics in MIR codegen — `hashCode` (ptrtoint), `toString` (identity), `substring` (malloc+memcpy), `equals` (strcmp), `length` (strlen)
+- Post-generation interface method resolution pass — replaces unresolved interface method declarations (`Sequence.get`, `Set.exists`) with implementing class methods, generates type-coercing wrapper thunks when signatures differ, walks transitive interface hierarchy
 
 **Changed**
 - MIR lowering `lowerFieldAccess` intercepts enum type field access before emitting `ComputeFieldAddress`
@@ -46,17 +53,18 @@
 - Char wrapper crashes — `isAlpha`, `isDigit` etc. received pointer-typed self value; added `PtrToInt` conversion in `loadCharSelf`
 - Global mutable variables always reading zero — `getGlobalVariable()` with `AllowInternal=false` (default) couldn't find `InternalLinkage` globals; fixed with `AllowInternal=true`
 - `test-language-void` abort — global `callCount` variable not generated or referenced in MIR path; fixed by adding full global variable support
+- `stress-exceptions` abort — try/catch blocks had no exception routing; implemented `InvokeFunction`/`LandingPad` code generation
+- `__uranite_personality_v0` linker errors — `Function::Create` auto-suffixed duplicates (`.126`, `.127`); fixed to reuse existing declaration via `getFunction`
+- `__unnamed_1` linker errors in `writeArgsToFd`/`writeI64ArgsToFd` — `is None` checks emitted as `NoOperation` which fell through to `InvokeFunction` handler; fixed by separating `NoOperation` from `InvokeFunction` case group and mapping `KeywordIs` to `CompareEqual`
 
 **Issues**
 - `InstanceOfCheck` always returns false in MIR codegen
-- `InlineAssembly`, `DeferPush`/`DeferEmit`, `CallVirtual`, `InvokeFunction`/`LandingPad` remain as no-op stubs
-- Generic type parameter method calls emit unresolved names (`E.hashCode`, `K.toString`) — requires MIR-level monomorphization pass, blocks generic collection benchmarks
-- `stress-exceptions` aborts — needs `InvokeFunction`/`LandingPad` for try/catch
+- `InlineAssembly`, `DeferPush`/`DeferEmit`, `CallVirtual` remain as no-op stubs
+- Generic collection runtime crashes (fasta FPE, k-nucleotide/stress-collections segfault) — interface wrapper thunk calling convention mismatches need investigation
 
 **Notes**
-- MIR benchmark results: 7/11 pass (hello-world, colorize, fannkuch-redux, binary-trees, mandelbrot, n-body, spectral-norm, stress-memory)
-- 3 compile failures (fasta, k-nucleotide, stress-collections) — generic method resolution
-- 1 runtime failure (stress-exceptions) — missing try/catch support
+- MIR benchmark results: 11/11 compile, 8/11 pass runtime (binary-trees, colorize, fannkuch-redux, mandelbrot, n-body, spectral-norm, stress-exceptions, stress-memory)
+- 3 runtime failures (fasta, k-nucleotide, stress-collections) — generic collection code crashes at runtime
 - MIR language tests: 21/22 pass (only test-language-string fails — generic `E.hashCode` resolution)
 - MIR module tests: 111/212 pass, 14 compile fails, 87 runtime fails (up from 88/212)
 - 152/152 unit tests pass
