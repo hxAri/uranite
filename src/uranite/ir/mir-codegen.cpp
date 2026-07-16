@@ -11,6 +11,7 @@
 #include "uranite/ir/mir-codegen.hpp"
 
 #include <fmt/format.h>
+#include <unordered_set>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/MC/TargetRegistry.h>
@@ -206,6 +207,122 @@ namespace uranite::ir::mir {
 						hasChanges = true;
 					}
 				}
+			}
+		}
+
+		// Resolve unresolved interface method calls (Sequence.get -> ArrayList.get, etc.)
+		{
+			std::vector<llvm::Function*> toErase;
+			for( llvm::Function& unresolvedFunction : *this->llvmModule ) {
+				if( unresolvedFunction.isDeclaration() == false ) continue;
+				std::string unresolvedName = unresolvedFunction.getName().str();
+				size_t dotPos = unresolvedName.find( '.' );
+				if( dotPos == std::string::npos ) continue;
+				std::string typeName = unresolvedName.substr( 0, dotPos );
+				std::string methodName = unresolvedName.substr( dotPos + 1 );
+				llvm::Function* resolvedFunction = nullptr;
+				for( const std::pair<const std::string, llvm::Function*>& entry : this->functionResolutionMap ) {
+					size_t entryDot = entry.first.find( '.' );
+					if( entryDot == std::string::npos ) continue;
+					if( entry.first.substr( entryDot + 1 ) != methodName ) continue;
+					std::string candidateClass = entry.first.substr( 0, entryDot );
+					if( candidateClass == typeName ) continue;
+					semantic::TypeSharedPointer candidateType = this->semanticAnalyzer.types().lookupType( candidateClass );
+					if( candidateType == nullptr ) {
+						for( const std::pair<const std::string, semantic::TypeSharedPointer>& regEntry : this->semanticAnalyzer.types().getUserTypes() ) {
+							if( regEntry.second != nullptr && regEntry.second->name == candidateClass ) {
+								candidateType = regEntry.second;
+								break;
+							}
+						}
+					}
+					if( candidateType == nullptr || candidateType->kind != semantic::Type::Kind::Class ) continue;
+					semantic::ClassType* classPtr = static_cast<semantic::ClassType*>( candidateType.get() );
+					std::vector<semantic::TypeSharedPointer> interfaceQueue( classPtr->interfaces.begin(), classPtr->interfaces.end() );
+					std::unordered_set<std::string> visitedInterfaces;
+					while( interfaceQueue.empty() == false && resolvedFunction == nullptr ) {
+						semantic::TypeSharedPointer iface = interfaceQueue.back();
+						interfaceQueue.pop_back();
+						if( iface == nullptr ) continue;
+						std::string ifaceName = iface->name;
+						size_t bracketPos = ifaceName.find( '<' );
+						if( bracketPos != std::string::npos ) ifaceName = ifaceName.substr( 0, bracketPos );
+						if( visitedInterfaces.count( ifaceName ) > 0 ) continue;
+						visitedInterfaces.insert( ifaceName );
+						if( ifaceName == typeName ) {
+							resolvedFunction = entry.second;
+							break;
+						}
+						semantic::TypeSharedPointer parentIface = this->semanticAnalyzer.types().lookupType( ifaceName );
+						if( parentIface == nullptr ) {
+							for( const std::pair<const std::string, semantic::TypeSharedPointer>& regEntry : this->semanticAnalyzer.types().getUserTypes() ) {
+								if( regEntry.second != nullptr && regEntry.second->name == ifaceName ) {
+									parentIface = regEntry.second;
+									break;
+								}
+							}
+						}
+						if( parentIface != nullptr && parentIface->kind == semantic::Type::Kind::Interface ) {
+							semantic::InterfaceType* parentIfacePtr = static_cast<semantic::InterfaceType*>( parentIface.get() );
+							for( const semantic::TypeSharedPointer& parentExtends : parentIfacePtr->superInterfaces ) {
+								interfaceQueue.push_back( parentExtends );
+							}
+						}
+					}
+					if( resolvedFunction != nullptr ) break;
+				}
+				if( resolvedFunction != nullptr && resolvedFunction != &unresolvedFunction ) {
+					if( unresolvedFunction.getFunctionType() == resolvedFunction->getFunctionType() ) {
+						unresolvedFunction.replaceAllUsesWith( resolvedFunction );
+						toErase.push_back( &unresolvedFunction );
+					}
+					else {
+						llvm::BasicBlock* wrapperBlock = llvm::BasicBlock::Create(
+							this->llvmContext, "entry", &unresolvedFunction
+						);
+						llvm::IRBuilder<> wrapperBuilder( wrapperBlock );
+						std::vector<llvm::Value*> forwardedArgs;
+						llvm::FunctionType* targetType = resolvedFunction->getFunctionType();
+						unsigned argIndex = 0;
+						for( llvm::Argument& arg : unresolvedFunction.args() ) {
+							llvm::Value* forwarded = &arg;
+							if( argIndex < targetType->getNumParams() ) {
+								llvm::Type* expectedType = targetType->getParamType( argIndex );
+								if( forwarded->getType() != expectedType ) {
+									if( forwarded->getType()->isIntegerTy() && expectedType->isPointerTy() ) {
+										forwarded = wrapperBuilder.CreateIntToPtr( forwarded, expectedType );
+									}
+									else if( forwarded->getType()->isPointerTy() && expectedType->isIntegerTy() ) {
+										forwarded = wrapperBuilder.CreatePtrToInt( forwarded, expectedType );
+									}
+									else if( forwarded->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
+										forwarded = wrapperBuilder.CreateIntCast( forwarded, expectedType, true );
+									}
+								}
+							}
+							forwardedArgs.push_back( forwarded );
+							argIndex++;
+						}
+						llvm::Value* callResult = wrapperBuilder.CreateCall( resolvedFunction, forwardedArgs );
+						if( unresolvedFunction.getReturnType()->isVoidTy() ) {
+							wrapperBuilder.CreateRetVoid();
+						}
+						else if( callResult->getType() != unresolvedFunction.getReturnType() ) {
+							if( callResult->getType()->isPointerTy() && unresolvedFunction.getReturnType()->isIntegerTy() ) {
+								wrapperBuilder.CreateRet( wrapperBuilder.CreatePtrToInt( callResult, unresolvedFunction.getReturnType() ) );
+							}
+							else {
+								wrapperBuilder.CreateRet( callResult );
+							}
+						}
+						else {
+							wrapperBuilder.CreateRet( callResult );
+						}
+					}
+				}
+			}
+			for( llvm::Function* deadFunction : toErase ) {
+				deadFunction->eraseFromParent();
 			}
 		}
 
@@ -578,8 +695,157 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::DropValue:
 			case MIRInstructionKind::DeferPush:
 			case MIRInstructionKind::DeferEmit:
-			case MIRInstructionKind::LandingPad:
-			case MIRInstructionKind::InvokeFunction:
+				break;
+			case MIRInstructionKind::InvokeFunction: {
+				// Resolve function
+				std::string invokedName = instruction.calledFunctionQualifiedName;
+				llvm::Function* invokedFunction = nullptr;
+				if( this->functionResolutionMap.count( invokedName ) > 0 ) {
+					invokedFunction = this->functionResolutionMap[invokedName];
+				}
+				if( invokedFunction == nullptr ) {
+					invokedFunction = this->llvmModule->getFunction( invokedName );
+				}
+				if( invokedFunction == nullptr ) {
+					std::vector<llvm::Type*> paramTypes;
+					for( size_t operandIndex = 0; operandIndex < instruction.sourceOperands.size(); operandIndex++ ) {
+						llvm::Value* operandValue = this->getVariableValue( instruction.sourceOperands[operandIndex] );
+						llvm::Type* argType = llvm::Type::getInt64Ty( this->llvmContext );
+						if( operandValue != nullptr ) {
+							argType = operandValue->getType();
+							if( llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>( operandValue ) ) {
+								argType = allocaInst->getAllocatedType();
+							}
+						}
+						paramTypes.push_back( argType );
+					}
+					llvm::Type* returnType = llvm::Type::getInt64Ty( this->llvmContext );
+					if( instruction.operandType != nullptr ) {
+						returnType = this->toLLVMType( instruction.operandType );
+					}
+					llvm::FunctionType* externType = llvm::FunctionType::get( returnType, paramTypes, false );
+					invokedFunction = llvm::Function::Create(
+						externType, llvm::Function::ExternalLinkage, invokedName, this->llvmModule.get()
+					);
+					this->functionResolutionMap[invokedName] = invokedFunction;
+				}
+				// Set personality on enclosing function
+				llvm::Function* enclosingFunction = this->irBuilder.GetInsertBlock()->getParent();
+				if( enclosingFunction->hasPersonalityFn() == false ) {
+					llvm::Function* personalityFunction = this->llvmModule->getFunction( "__uranite_personality_v0" );
+					if( personalityFunction == nullptr ) {
+						llvm::FunctionType* personalityType = llvm::FunctionType::get(
+							llvm::Type::getInt32Ty( this->llvmContext ), true
+						);
+						personalityFunction = llvm::Function::Create(
+							personalityType, llvm::Function::ExternalLinkage,
+							"__uranite_personality_v0", this->llvmModule.get()
+						);
+					}
+					enclosingFunction->setPersonalityFn( personalityFunction );
+				}
+				// Build arguments
+				llvm::FunctionType* invokeType = invokedFunction->getFunctionType();
+				unsigned expectedParams = invokeType->getNumParams();
+				std::vector<llvm::Value*> invokeArgs;
+				for( unsigned argumentIndex = 0; argumentIndex < instruction.sourceOperands.size(); argumentIndex++ ) {
+					if( argumentIndex >= expectedParams && invokedFunction->isVarArg() == false ) {
+						break;
+					}
+					llvm::Value* argumentValue = this->loadVariableValue( instruction.sourceOperands[argumentIndex] );
+					if( argumentValue == nullptr ) {
+						if( argumentIndex < expectedParams ) {
+							invokeArgs.push_back( llvm::Constant::getNullValue( invokeType->getParamType( argumentIndex ) ) );
+						}
+						continue;
+					}
+					if( argumentIndex < expectedParams ) {
+						llvm::Type* expectedType = invokeType->getParamType( argumentIndex );
+						if( argumentValue->getType() != expectedType ) {
+							if( argumentValue->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
+								argumentValue = this->irBuilder.CreateIntCast( argumentValue, expectedType, true, "inv.cast" );
+							}
+							else if( argumentValue->getType()->isPointerTy() && expectedType->isIntegerTy() ) {
+								argumentValue = this->irBuilder.CreatePtrToInt( argumentValue, expectedType, "inv.ptoi" );
+							}
+							else if( argumentValue->getType()->isIntegerTy() && expectedType->isPointerTy() ) {
+								argumentValue = this->irBuilder.CreateIntToPtr( argumentValue, expectedType, "inv.itop" );
+							}
+							else if( argumentValue->getType()->isFloatingPointTy() && expectedType->isFloatingPointTy() ) {
+								argumentValue = this->irBuilder.CreateFPCast( argumentValue, expectedType, "inv.fpc" );
+							}
+							else if( argumentValue->getType()->isIntegerTy() && expectedType->isFloatingPointTy() ) {
+								argumentValue = this->irBuilder.CreateSIToFP( argumentValue, expectedType, "inv.itof" );
+							}
+							else if( argumentValue->getType()->isFloatingPointTy() && expectedType->isIntegerTy() ) {
+								argumentValue = this->irBuilder.CreateFPToSI( argumentValue, expectedType, "inv.ftoi" );
+							}
+						}
+					}
+					invokeArgs.push_back( argumentValue );
+				}
+				while( invokeArgs.size() < expectedParams ) {
+					invokeArgs.push_back( llvm::Constant::getNullValue( invokeType->getParamType( invokeArgs.size() ) ) );
+				}
+				if( invokeArgs.size() > expectedParams && invokedFunction->isVarArg() == false ) {
+					invokeArgs.resize( expectedParams );
+				}
+				// Resolve target blocks
+				llvm::BasicBlock* normalDest = this->blockMap[instruction.trueBranchTarget];
+				llvm::BasicBlock* unwindDest = this->blockMap[instruction.landingPadTarget];
+				if( normalDest == nullptr || unwindDest == nullptr ) {
+					llvm::Value* result = this->irBuilder.CreateCall( invokedFunction, invokeArgs );
+					if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER &&
+						invokedFunction->getReturnType()->isVoidTy() == false ) {
+						this->setVariableValue( instruction.destinationVariable, result );
+					}
+				}
+				else {
+					llvm::InvokeInst* invokeResult = this->irBuilder.CreateInvoke(
+						invokedFunction, normalDest, unwindDest, invokeArgs
+					);
+					if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER &&
+						invokedFunction->getReturnType()->isVoidTy() == false ) {
+						this->setVariableValue( instruction.destinationVariable, invokeResult );
+					}
+				}
+				break;
+			}
+			case MIRInstructionKind::LandingPad: {
+				llvm::Function* enclosingFunction = this->irBuilder.GetInsertBlock()->getParent();
+				if( enclosingFunction->hasPersonalityFn() == false ) {
+					llvm::Function* personalityFunction = this->llvmModule->getFunction( "__uranite_personality_v0" );
+					if( personalityFunction == nullptr ) {
+						llvm::FunctionType* personalityType = llvm::FunctionType::get(
+							llvm::Type::getInt32Ty( this->llvmContext ), true
+						);
+						personalityFunction = llvm::Function::Create(
+							personalityType, llvm::Function::ExternalLinkage,
+							"__uranite_personality_v0", this->llvmModule.get()
+						);
+					}
+					enclosingFunction->setPersonalityFn( personalityFunction );
+				}
+				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+				llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
+				llvm::StructType* landingPadType = llvm::StructType::get( this->llvmContext, { ptrType, i32Type } );
+				llvm::LandingPadInst* landingPad = this->irBuilder.CreateLandingPad( landingPadType, 1, "lp" );
+				landingPad->addClause( llvm::Constant::getNullValue( ptrType ) );
+				llvm::Value* exceptionPtr = this->irBuilder.CreateExtractValue( landingPad, 0, "exc.ptr" );
+				llvm::Function* beginCatchFunction = this->llvmModule->getFunction( "__uranite_begin_catch" );
+				if( beginCatchFunction == nullptr ) {
+					llvm::FunctionType* beginCatchType = llvm::FunctionType::get( ptrType, { ptrType }, false );
+					beginCatchFunction = llvm::Function::Create(
+						beginCatchType, llvm::Function::ExternalLinkage,
+						"__uranite_begin_catch", this->llvmModule.get()
+					);
+				}
+				llvm::Value* caughtObject = this->irBuilder.CreateCall( beginCatchFunction, { exceptionPtr }, "caught" );
+				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+					this->setVariableValue( instruction.destinationVariable, caughtObject );
+				}
+				break;
+			}
 			case MIRInstructionKind::CallVirtual:
 			case MIRInstructionKind::DestructObject:
 			case MIRInstructionKind::LoadVirtualTable:
@@ -1975,6 +2241,35 @@ namespace uranite::ir::mir {
 			return;
 		}
 
+		// Universal methods without class prefix (from imported generic module code)
+		if( calledName == "hashCode" && instruction.sourceOperands.empty() == false ) {
+			llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+			if( selfValue != nullptr ) {
+				llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+				llvm::Value* hashResult = nullptr;
+				if( selfValue->getType()->isIntegerTy() ) {
+					hashResult = this->irBuilder.CreateIntCast( selfValue, i64Type, true, "hash.int" );
+				}
+				else if( selfValue->getType()->isPointerTy() ) {
+					hashResult = this->irBuilder.CreatePtrToInt( selfValue, i64Type, "hash.ptr" );
+				}
+				else if( selfValue->getType()->isFloatingPointTy() ) {
+					hashResult = this->irBuilder.CreateBitCast( selfValue, i64Type, "hash.fp" );
+				}
+				if( hashResult != nullptr ) {
+					this->setVariableValue( instruction.destinationVariable, hashResult );
+					return;
+				}
+			}
+		}
+		if( calledName == "toString" && instruction.sourceOperands.empty() == false ) {
+			llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+			if( selfValue != nullptr && selfValue->getType()->isPointerTy() ) {
+				this->setVariableValue( instruction.destinationVariable, selfValue );
+				return;
+			}
+		}
+
 		// OOP wrapper type method intrinsics
 		{
 			static const std::unordered_map<std::string, int> integerWrapperBitWidths = {
@@ -2203,6 +2498,115 @@ namespace uranite::ir::mir {
 					}
 					if( methodName == "Char" ) {
 						return;
+					}
+				}
+				if( methodName == "hashCode" && instruction.sourceOperands.empty() == false ) {
+					llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+					if( selfValue != nullptr ) {
+						llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+						llvm::Value* hashResult = nullptr;
+						if( selfValue->getType()->isIntegerTy() ) {
+							hashResult = this->irBuilder.CreateIntCast( selfValue, i64Type, true, "hash.int" );
+						}
+						else if( selfValue->getType()->isPointerTy() ) {
+							hashResult = this->irBuilder.CreatePtrToInt( selfValue, i64Type, "hash.ptr" );
+						}
+						else if( selfValue->getType()->isFloatingPointTy() ) {
+							hashResult = this->irBuilder.CreateBitCast( selfValue, i64Type, "hash.fp" );
+						}
+						if( hashResult != nullptr ) {
+							this->setVariableValue( instruction.destinationVariable, hashResult );
+							return;
+						}
+					}
+				}
+				if( wrapperName == "String" ) {
+					llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+					if( selfValue != nullptr ) {
+						if( methodName == "toString" ) {
+							this->setVariableValue( instruction.destinationVariable, selfValue );
+							return;
+						}
+						if( methodName == "substring" && instruction.sourceOperands.size() >= 3 ) {
+							llvm::Value* startIndex = this->loadVariableValue( instruction.sourceOperands[1] );
+							llvm::Value* endIndex = this->loadVariableValue( instruction.sourceOperands[2] );
+							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+							if( startIndex->getType() != i64Type ) {
+								startIndex = this->irBuilder.CreateIntCast( startIndex, i64Type, true, "sub.start" );
+							}
+							if( endIndex->getType() != i64Type ) {
+								endIndex = this->irBuilder.CreateIntCast( endIndex, i64Type, true, "sub.end" );
+							}
+							llvm::Value* length = this->irBuilder.CreateSub( endIndex, startIndex, "sub.len" );
+							llvm::Value* srcPtr = this->irBuilder.CreateGEP(
+								llvm::Type::getInt8Ty( this->llvmContext ), selfValue, startIndex, "sub.src"
+							);
+							llvm::Value* sizeWithNull = this->irBuilder.CreateAdd(
+								length, llvm::ConstantInt::get( i64Type, 1 ), "sub.alloc"
+							);
+							llvm::Function* mallocFunction = this->llvmModule->getFunction( "malloc" );
+							if( mallocFunction == nullptr ) {
+								llvm::FunctionType* mallocType = llvm::FunctionType::get(
+									llvm::PointerType::getUnqual( this->llvmContext ), { i64Type }, false
+								);
+								mallocFunction = llvm::Function::Create(
+									mallocType, llvm::Function::ExternalLinkage, "malloc", this->llvmModule.get()
+								);
+							}
+							llvm::Value* destPtr = this->irBuilder.CreateCall( mallocFunction, { sizeWithNull }, "sub.buf" );
+							llvm::Function* memcpyFunction = this->llvmModule->getFunction( "memcpy" );
+							if( memcpyFunction == nullptr ) {
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::FunctionType* memcpyType = llvm::FunctionType::get( ptrType, { ptrType, ptrType, i64Type }, false );
+								memcpyFunction = llvm::Function::Create(
+									memcpyType, llvm::Function::ExternalLinkage, "memcpy", this->llvmModule.get()
+								);
+							}
+							this->irBuilder.CreateCall( memcpyFunction, { destPtr, srcPtr, length } );
+							llvm::Value* nullPos = this->irBuilder.CreateGEP(
+								llvm::Type::getInt8Ty( this->llvmContext ), destPtr, length, "sub.null"
+							);
+							this->irBuilder.CreateStore( llvm::ConstantInt::get( llvm::Type::getInt8Ty( this->llvmContext ), 0 ), nullPos );
+							this->setVariableValue( instruction.destinationVariable, destPtr );
+							return;
+						}
+						if( methodName == "equals" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* otherValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							llvm::Function* strcmpFunction = this->llvmModule->getFunction( "strcmp" );
+							if( strcmpFunction == nullptr ) {
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::FunctionType* strcmpType = llvm::FunctionType::get(
+									llvm::Type::getInt32Ty( this->llvmContext ), { ptrType, ptrType }, false
+								);
+								strcmpFunction = llvm::Function::Create(
+									strcmpType, llvm::Function::ExternalLinkage, "strcmp", this->llvmModule.get()
+								);
+							}
+							llvm::Value* cmpResult = this->irBuilder.CreateCall( strcmpFunction, { selfValue, otherValue }, "str.cmp" );
+							llvm::Value* isEqual = this->irBuilder.CreateICmpEQ(
+								cmpResult, llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->llvmContext ), 0 ), "str.eq"
+							);
+							this->setVariableValue( instruction.destinationVariable, isEqual );
+							return;
+						}
+						if( methodName == "length" ) {
+							llvm::Function* strlenFunction = this->llvmModule->getFunction( "strlen" );
+							if( strlenFunction == nullptr ) {
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::FunctionType* strlenType = llvm::FunctionType::get(
+									llvm::Type::getInt64Ty( this->llvmContext ), { ptrType }, false
+								);
+								strlenFunction = llvm::Function::Create(
+									strlenType, llvm::Function::ExternalLinkage, "strlen", this->llvmModule.get()
+								);
+							}
+							llvm::Value* lenResult = this->irBuilder.CreateCall( strlenFunction, { selfValue }, "str.len" );
+							this->setVariableValue( instruction.destinationVariable, lenResult );
+							return;
+						}
+						if( methodName == "String" ) {
+							return;
+						}
 					}
 				}
 				if( isIntegerWrapper || isFloatWrapper ) {
@@ -2801,6 +3205,36 @@ namespace uranite::ir::mir {
 				}
 				else {
 					break;
+				}
+			}
+		}
+		if( callee == nullptr && calledName.find( '.' ) != std::string::npos ) {
+			size_t dotPosition = calledName.find( '.' );
+			std::string typeName = calledName.substr( 0, dotPosition );
+			std::string methodName = calledName.substr( dotPosition + 1 );
+			for( const std::pair<const std::string, llvm::Function*>& entry : this->functionResolutionMap ) {
+				size_t entryDotPos = entry.first.find( '.' );
+				if( entryDotPos != std::string::npos &&
+					entry.first.substr( entryDotPos + 1 ) == methodName &&
+					entry.first.substr( 0, entryDotPos ) != typeName ) {
+					std::string candidateClass = entry.first.substr( 0, entryDotPos );
+					semantic::TypeSharedPointer candidateType = this->semanticAnalyzer.types().lookupType( candidateClass );
+					if( candidateType != nullptr && candidateType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassType* classPtr = static_cast<semantic::ClassType*>( candidateType.get() );
+						for( const semantic::TypeSharedPointer& implementedInterface : classPtr->interfaces ) {
+							if( implementedInterface == nullptr ) continue;
+							std::string ifaceName = implementedInterface->name;
+							size_t bracketPos = ifaceName.find( '<' );
+							if( bracketPos != std::string::npos ) {
+								ifaceName = ifaceName.substr( 0, bracketPos );
+							}
+							if( ifaceName == typeName ) {
+								callee = entry.second;
+								break;
+							}
+						}
+						if( callee != nullptr ) break;
+					}
 				}
 			}
 		}
