@@ -321,6 +321,13 @@ namespace uranite::ir::mir {
 		std::string stringValue;
 	};
 
+	struct MIRGlobalVariable {
+		std::string variableName;
+		semantic::TypeSharedPointer variableType;
+		MIRModuleConstant initialValue;
+		bool hasInitializer = false;
+	};
+
 	/** @brief Top-level MIR container holding all functions and type layouts for a module. */
 	struct MIRModuleDefinition {
 
@@ -328,6 +335,7 @@ namespace uranite::ir::mir {
 		std::vector<std::shared_ptr<MIRFunctionDefinition>> functionDefinitions;
 		std::unordered_map<std::string, TypeLayoutDescriptor> typeLayoutTable;
 		std::unordered_map<std::string, MIRModuleConstant> moduleConstants;
+		std::unordered_map<std::string, MIRGlobalVariable> globalVariables;
 
 	};
 
