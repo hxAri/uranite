@@ -23,14 +23,61 @@
 
 namespace uranite::ir::mir {
 	
-	MIRLowering::MIRLowering( diagnostic::Engine& diagnosticEngine )
-		: diagnosticEngine( diagnosticEngine ) {
+	MIRLowering::MIRLowering( diagnostic::Engine& diagnosticEngine, const semantic::Registry* typeRegistry )
+		: typeRegistry( typeRegistry ), diagnosticEngine( diagnosticEngine ) {
 	}
 	
 	std::shared_ptr<MIRModuleDefinition> MIRLowering::lower( hir::HIRModule& hirModule ) {
 		this->currentModule = std::make_shared<MIRModuleDefinition>();
 		this->currentModule->moduleName = hirModule.moduleName;
-		
+
+		if( this->typeRegistry != nullptr ) {
+			for( const std::pair<const std::string, semantic::TypeSharedPointer>& registryEntry : this->typeRegistry->getUserTypes() ) {
+				if( registryEntry.second == nullptr || registryEntry.second->kind != semantic::Type::Kind::Class ) {
+					continue;
+				}
+				semantic::ClassType* classType = static_cast<semantic::ClassType*>( registryEntry.second.get() );
+				if( classType->typeSubstitutions.empty() ) {
+					continue;
+				}
+				std::string baseName = registryEntry.first;
+				size_t bracketPosition = baseName.find( '<' );
+				if( bracketPosition == std::string::npos ) {
+					continue;
+				}
+				baseName = baseName.substr( 0, bracketPosition );
+				std::unordered_map<std::string, std::string>& substitutions = this->genericClassSubstitutions[baseName];
+				for( const std::pair<const std::string, semantic::TypeSharedPointer>& substitution : classType->typeSubstitutions ) {
+					std::string concreteTypeName = substitution.second->name;
+					size_t genericBracket = concreteTypeName.find( '<' );
+					if( genericBracket != std::string::npos ) {
+						concreteTypeName = concreteTypeName.substr( 0, genericBracket );
+					}
+					bool isConcreteType = ( substitution.second->kind != semantic::Type::Kind::GenericParameter );
+					if( substitutions.count( substitution.first ) == 0 || isConcreteType ) {
+						substitutions[substitution.first] = concreteTypeName;
+					}
+				}
+			}
+			// Transitively resolve substitutions: E -> K -> String becomes E -> String
+			bool changed = true;
+			int maxIterations = 10;
+			while( changed && maxIterations-- > 0 ) {
+				changed = false;
+				for( std::pair<const std::string, std::unordered_map<std::string, std::string>>& classEntry : this->genericClassSubstitutions ) {
+					for( std::pair<const std::string, std::string>& paramEntry : classEntry.second ) {
+						for( const std::pair<const std::string, std::unordered_map<std::string, std::string>>& otherClass : this->genericClassSubstitutions ) {
+							std::unordered_map<std::string, std::string>::const_iterator resolvedIt = otherClass.second.find( paramEntry.second );
+							if( resolvedIt != otherClass.second.end() && resolvedIt->second != paramEntry.second ) {
+								paramEntry.second = resolvedIt->second;
+								changed = true;
+							}
+						}
+					}
+				}
+			}
+		}
+
 		for( std::shared_ptr<hir::HIRClassDefinition>& classDefinition : hirModule.classDefinitions ) {
 			if( classDefinition == nullptr ) {
 				continue;
@@ -950,11 +997,14 @@ namespace uranite::ir::mir {
 		jumpToTry.trueBranchTarget = tryBlock->blockIdentifier;
 		this->emitTerminator( jumpToTry );
 		
-		// Try body
+		// Try body — set active landing pad so calls become InvokeFunction
 		this->switchToBlock( tryBlock );
+		MIRBlockIdentifier previousLandingPad = this->activeLandingPad;
+		this->activeLandingPad = landingPadBlock->blockIdentifier;
 		if( hirTryCatch.tryBody != nullptr ) {
 			this->lowerBlock( *hirTryCatch.tryBody );
 		}
+		this->activeLandingPad = previousLandingPad;
 		if( this->currentBlock->isTerminated == false ) {
 			MIRInstruction jumpToMerge( MIRInstructionKind::JumpUnconditional );
 			jumpToMerge.trueBranchTarget = mergeBlock->blockIdentifier;
@@ -1398,6 +1448,7 @@ namespace uranite::ir::mir {
 			case token::Type::GreaterThanEqual: instructionKind = MIRInstructionKind::CompareGreaterEqual; break;
 			case token::Type::KeywordAnd:       instructionKind = MIRInstructionKind::LogicalAnd; break;
 			case token::Type::KeywordOr:        instructionKind = MIRInstructionKind::LogicalOr; break;
+			case token::Type::KeywordIs:        instructionKind = MIRInstructionKind::CompareEqual; break;
 			default:                            instructionKind = MIRInstructionKind::NoOperation; break;
 		}
 		
@@ -1456,7 +1507,8 @@ namespace uranite::ir::mir {
 			argumentVariables.push_back( this->lowerExpression( argument ) );
 		}
 		
-		MIRInstruction callInstruction( MIRInstructionKind::CallFunction );
+		bool useInvoke = ( this->activeLandingPad != INVALID_BLOCK_IDENTIFIER );
+		MIRInstruction callInstruction( useInvoke ? MIRInstructionKind::InvokeFunction : MIRInstructionKind::CallFunction );
 		if( hirCall.calleeExpression != nullptr ) {
 			if( hirCall.calleeExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
 				hir::HIRIdentifier& calleeIdentifier = static_cast<hir::HIRIdentifier&>( *hirCall.calleeExpression );
@@ -1476,11 +1528,19 @@ namespace uranite::ir::mir {
 		callInstruction.sourceOperands = std::move( argumentVariables );
 		callInstruction.operandType = hirCall.resolvedType;
 		callInstruction.sourceLocation = hirCall.sourceLocation;
-		
+
 		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
 			"_call", hirCall.resolvedType, false
 		);
 		callInstruction.destinationVariable = resultVariable;
+		if( useInvoke ) {
+			std::shared_ptr<MIRBasicBlock> continuationBlock = this->currentFunction->createBasicBlock( "invoke.cont" );
+			callInstruction.trueBranchTarget = continuationBlock->blockIdentifier;
+			callInstruction.landingPadTarget = this->activeLandingPad;
+			this->emitTerminator( callInstruction );
+			this->switchToBlock( continuationBlock );
+			return resultVariable;
+		}
 		return this->emitInstruction( callInstruction );
 	}
 	
@@ -1493,7 +1553,8 @@ namespace uranite::ir::mir {
 			argumentVariables.push_back( this->lowerExpression( argument ) );
 		}
 		
-		MIRInstruction callInstruction( MIRInstructionKind::CallFunction );
+		bool useInvoke = ( this->activeLandingPad != INVALID_BLOCK_IDENTIFIER );
+		MIRInstruction callInstruction( useInvoke ? MIRInstructionKind::InvokeFunction : MIRInstructionKind::CallFunction );
 		std::string ownerClassName;
 		if( hirMethodCall.receiverObject != nullptr &&
 			hirMethodCall.receiverObject->resolvedType != nullptr ) {
@@ -1509,6 +1570,40 @@ namespace uranite::ir::mir {
 			if( genericBracketPosition != std::string::npos ) {
 				ownerClassName = ownerClassName.substr( 0, genericBracketPosition );
 			}
+			if( receiverType->kind == semantic::Type::Kind::GenericParameter &&
+				this->currentClassName.empty() == false ) {
+				std::unordered_map<std::string, std::unordered_map<std::string, std::string>>::iterator classIt =
+					this->genericClassSubstitutions.find( this->currentClassName );
+				if( classIt != this->genericClassSubstitutions.end() ) {
+					std::unordered_map<std::string, std::string>::iterator paramIt =
+						classIt->second.find( ownerClassName );
+					if( paramIt != classIt->second.end() ) {
+						ownerClassName = paramIt->second;
+					}
+				}
+			}
+			if( receiverType->kind == semantic::Type::Kind::Interface &&
+				this->currentClassName.empty() == false ) {
+				std::unordered_map<std::string, std::unordered_map<std::string, std::string>>::iterator classIt =
+					this->genericClassSubstitutions.find( this->currentClassName );
+				if( classIt != this->genericClassSubstitutions.end() ) {
+					for( const std::pair<const std::string, std::string>& substitution : classIt->second ) {
+						if( this->typeRegistry != nullptr ) {
+							semantic::TypeSharedPointer concreteType = this->typeRegistry->lookupType( substitution.second );
+							if( concreteType != nullptr && concreteType->kind == semantic::Type::Kind::Class ) {
+								semantic::ClassType* concreteClass = static_cast<semantic::ClassType*>( concreteType.get() );
+								for( const semantic::TypeSharedPointer& implementedInterface : concreteClass->interfaces ) {
+									if( implementedInterface != nullptr && implementedInterface->name == ownerClassName ) {
+										ownerClassName = substitution.second;
+										goto interfaceResolved;
+									}
+								}
+							}
+						}
+					}
+					interfaceResolved:;
+				}
+			}
 		}
 		if( ownerClassName.empty() == false ) {
 			callInstruction.calledFunctionQualifiedName = ownerClassName + "." + hirMethodCall.methodName;
@@ -1519,11 +1614,19 @@ namespace uranite::ir::mir {
 		callInstruction.sourceOperands = std::move( argumentVariables );
 		callInstruction.operandType = hirMethodCall.resolvedType;
 		callInstruction.sourceLocation = hirMethodCall.sourceLocation;
-		
+
 		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
 			"_mcall", hirMethodCall.resolvedType, false
 		);
 		callInstruction.destinationVariable = resultVariable;
+		if( useInvoke ) {
+			std::shared_ptr<MIRBasicBlock> continuationBlock = this->currentFunction->createBasicBlock( "invoke.cont" );
+			callInstruction.trueBranchTarget = continuationBlock->blockIdentifier;
+			callInstruction.landingPadTarget = this->activeLandingPad;
+			this->emitTerminator( callInstruction );
+			this->switchToBlock( continuationBlock );
+			return resultVariable;
+		}
 		return this->emitInstruction( callInstruction );
 	}
 	
