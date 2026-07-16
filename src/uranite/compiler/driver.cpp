@@ -926,7 +926,7 @@ namespace uranite::compiler {
 					if( this->options.verbose ) {
 						spdlog::info( "Stage 4.6: MIR Lowering" );
 					}
-					ir::mir::MIRLowering mirLoweringPass( this->diagnostic );
+					ir::mir::MIRLowering mirLoweringPass( this->diagnostic, &semanticAnalyzer.types() );
 					std::shared_ptr<ir::mir::MIRModuleDefinition> mirModule = mirLoweringPass.lower( *hirModule );
 					if( this->options.verbose ) {
 						size_t totalBlocks = 0;
