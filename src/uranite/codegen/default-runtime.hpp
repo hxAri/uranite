@@ -39,6 +39,9 @@ namespace uranite::codegen {
 			RuntimeFunctionSpec getStrcpyFunction( llvm::LLVMContext& context ) override;
 			RuntimeFunctionSpec getStrcatFunction( llvm::LLVMContext& context ) override;
 			RuntimeFunctionSpec getStrcmpFunction( llvm::LLVMContext& context ) override;
+			RuntimeFunctionSpec getStrstrFunction( llvm::LLVMContext& context ) override;
+			RuntimeFunctionSpec getStrncmpFunction( llvm::LLVMContext& context ) override;
+			RuntimeFunctionSpec getWriteFunction( llvm::LLVMContext& context ) override;
 	};
 
 } // namespace uranite::codegen
