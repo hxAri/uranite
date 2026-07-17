@@ -1001,17 +1001,28 @@ namespace uranite::compiler {
 							return 0;
 						}
 						std::string mirTempIrFile = fmt::format( "/tmp/uranite-mir-{}.ll", getpid() );
+						std::string mirTempOptFile = fmt::format( "/tmp/uranite-mir-{}.opt.ll", getpid() );
 						mirCodegenInstance.writeIR( mirTempIrFile );
+						std::string optMirCommand = fmt::format( _URANITE_OPT_ " -O2 -S -o {} {}", mirTempOptFile, mirTempIrFile );
+						if( this->options.verbose ) {
+							spdlog::info( "Running: {}", optMirCommand );
+						}
+						int optMirReturnCode = system( optMirCommand.c_str() );
+						std::string llcMirInputFile = mirTempIrFile;
+						if( optMirReturnCode == 0 ) {
+							llcMirInputFile = mirTempOptFile;
+						}
 						std::string mirTempObjFile = fmt::format( "/tmp/uranite-mir-{}.o", getpid() );
-						std::string llcMirCommand = fmt::format( _URANITE_LLC_ " -O2 -relocation-model=pic -filetype=obj -o {} {}", mirTempObjFile, mirTempIrFile );
+						std::string llcMirCommand = fmt::format( _URANITE_LLC_ " -O2 -relocation-model=pic -filetype=obj -o {} {}", mirTempObjFile, llcMirInputFile );
 						if( this->options.targetTriple.empty() == false ) {
-							llcMirCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -relocation-model=pic -filetype=obj -o {} {}", this->options.targetTriple, mirTempObjFile, mirTempIrFile );
+							llcMirCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -relocation-model=pic -filetype=obj -o {} {}", this->options.targetTriple, mirTempObjFile, llcMirInputFile );
 						}
 						if( this->options.verbose ) {
 							spdlog::info( "Running: {}", llcMirCommand );
 						}
 						int llcMirReturnCode = system( llcMirCommand.c_str() );
 						std::remove( mirTempIrFile.c_str() );
+						std::remove( mirTempOptFile.c_str() );
 						if( llcMirReturnCode != 0 ) {
 							fmt::print( stderr, "error: llc failed with code {}\n", llcMirReturnCode );
 							return 1;
