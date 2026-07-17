@@ -268,6 +268,8 @@ namespace uranite::ir::mir {
 		std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor> variableDescriptorTable;
 		MIRVariableIdentifier nextAvailableVariableIdentifier = 0;
 		MIRBlockIdentifier entryBlockIdentifier = 0;
+		int variadicParameterIndex = -1;
+		semantic::TypeSharedPointer variadicElementType;
 		
 		/** @brief Allocates a new variable and registers it in the descriptor table. */
 		MIRVariableIdentifier allocateVariable(
