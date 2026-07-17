@@ -66,6 +66,7 @@ function main() {
 	local foutputs=()
 	local mir=0
 	local timeout=10
+	local totals=0
 	local temporary=$(mktemp)
 	local warnings=()
 	local woutputs=()
@@ -89,6 +90,7 @@ function main() {
 				fi
 				cd "$basepath" || continue
 				local binary="${filename%.urn}"
+				local totals=$((totals+1))
 				if [[ $mir -eq 1 ]]; then
 					timeout $timeout "$basepath/build/uranite" --use-mir -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
 				else
@@ -169,12 +171,11 @@ function main() {
 	clear
 	puts "$temporary: removing temporary file"
 	rm "$temporary"
-	clear
 	puts "=========================================="
-	puts "$compiled: successfully compiled .urn codes"
+	puts "$compiled: successfully compiled of $totals .urn codes"
 	if [[ ${#faileds[@]} -ge 1 ]]; then
 		puts "=========================================="
-		puts "${#faileds[@]}: files has been error occurred"
+		puts "${#faileds[@]}: files has been error occurred of $totals totals"
 		puts "=========================================="
 		for i in "${!faileds[@]}"; do
 			puts "${faileds[$i]/${basepath}\//}"
@@ -190,7 +191,7 @@ function main() {
 		if [[ ${#faileds[@]} -le 0 ]]; then
 			puts "=========================================="
 		fi
-		puts "${#warnings[@]}: files has been warning occurred"
+		puts "${#warnings[@]}: files has been warning occurred of $totals totals"
 		puts "=========================================="
 		for i in "${!warnings[@]}"; do
 			puts "${warnings[$i]/${basepath}\//}"
