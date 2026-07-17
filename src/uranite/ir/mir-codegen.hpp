@@ -30,6 +30,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 
+#include "uranite/codegen/default-runtime.hpp"
 #include "uranite/diagnostic/diagnostic.hpp"
 #include "uranite/ir/mir.hpp"
 #include "uranite/semantic/analyzer.hpp"
@@ -103,11 +104,24 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreateMalloc();
 		llvm::Function* getOrCreateCalloc();
 		llvm::Function* getOrCreateFree();
+		llvm::Function* getOrCreateMemcpy();
+		llvm::Function* getOrCreateStrlen();
+		llvm::Function* getOrCreateStrcmp();
+		llvm::Function* getOrCreateStrcpy();
+		llvm::Function* getOrCreateStrcat();
+		llvm::Function* getOrCreateStrstr();
+		llvm::Function* getOrCreateStrncmp();
+		llvm::Function* getOrCreateSnprintf();
+		llvm::Function* getOrCreateWrite();
 		llvm::Function* getOrCreateUraniteThrow();
+		llvm::Function* getOrCreatePersonality();
+		llvm::Function* getOrCreateBeginCatch();
+		llvm::Function* getOrCreateExtern( const std::string& name, llvm::Type* returnType, std::vector<llvm::Type*> paramTypes );
 		llvm::Type* resolveMemoryElementType( const semantic::TypeSharedPointer& operandType );
 
 		semantic::Analyzer& semanticAnalyzer;
 		diagnostic::Engine& diagnosticEngine;
+		std::shared_ptr<codegen::RuntimeInterface> runtimeInterface_;
 
 		llvm::LLVMContext llvmContext;
 		std::unique_ptr<llvm::Module> llvmModule;
@@ -131,6 +145,9 @@ namespace uranite::ir::mir {
 
 		// Current function being generated (for variable descriptor lookups)
 		MIRFunctionDefinition* currentMIRFunction = nullptr;
+
+		// MIR function lookup for variadic parameter detection at call sites
+		std::unordered_map<std::string, MIRFunctionDefinition*> mirFunctionDefinitionMap;
 
 		// Memory<T> element type per variable (compiler intrinsic tracking)
 		std::unordered_map<MIRVariableIdentifier, llvm::Type*> memoryElementTypes;
