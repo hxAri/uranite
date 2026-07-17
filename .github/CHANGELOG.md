@@ -9,7 +9,7 @@
 - Imported enum variant resolution via `EnumType` semantic info with AST backed value fallback
 - `Memory<T>` compiler intrinsic in MIR codegen — constructor emits `calloc(capacity, sizeof(T))`, `get`/`set`/`free`/`copyTo` emit inline GEP+load/store
 - `Arena<T>` compiler intrinsic in MIR codegen — struct `{ptr, i64 count, i64 capacity}` with `alloc`/`freeAll`/`destroy`/`count` inlined
-- `String.format` intrinsic in MIR codegen — compile-time `{}` placeholder→`%ld`/`%f` rewrite with snprintf
+- `String.format` intrinsic in MIR codegen — compile-time placeholder rewrite with snprintf: `{}` positional, `{0}` indexed, `{:x}`/`{:X}` hex, `{:o}` octal, `{:.2f}` precision, `{{`/`}}` escaped braces
 - `Object.toString` stub in MIR codegen — identity function returning self pointer, unblocks `writeArgsToFd` linkage
 - Inline `puts`/`putsln`/`putserr`/`putserrln` in MIR codegen — direct `write` syscalls with snprintf-based type coercion (integer `%ld`, float `%f`, bool `True`/`False`)
 - Compound assignment operators (`+=`, `-=`, `*=`, `/=`) in MIR lowering — emits load+arithmetic+store instead of plain store
@@ -27,15 +27,28 @@
 - `is` operator support in MIR lowering — maps `KeywordIs` to `CompareEqual` for identity/None checks
 - Generic type parameter method resolution in MIR lowering — scans semantic registry for monomorphized class types, builds substitution map with transitive resolution, resolves `K.hashCode` to `String.hashCode` at method call sites
 - Universal bare method intrinsics (`hashCode`, `toString`) in MIR codegen — handles calls from imported generic module code without class prefix
-- String wrapper method intrinsics in MIR codegen — `hashCode` (ptrtoint), `toString` (identity), `substring` (malloc+memcpy), `equals` (strcmp), `length` (strlen)
+- String wrapper method intrinsics in MIR codegen — `hashCode` (ptrtoint), `toString` (identity), `substring` (malloc+memcpy), `equals` (strcmp), `length` (strlen), `charCodeAt` (GEP+load+zext), `getValue`/`value` (identity), `isEmpty` (strlen==0), `concat` (strlen+malloc+strcpy+strcat), `startsWith` (strncmp), `endsWith` (strlen+strcmp tail), `contains` (strstr), `indexOf` (strstr offset), `charAt` (GEP+load), `toUpper`/`toLower` (inline char loop), `trim` (whitespace skip loop), `replace` (strstr+memcpy loop)
+- `Arena<T>.capacity` intrinsic in MIR codegen — reads struct field index 2
+- Constructor overload resolution in MIR codegen — arity-based suffix (`ClassName.ClassName#N`) disambiguates overloaded constructors during pre-registration and call-site lookup
+- `InstanceOfCheck` instruction lowering from HIR to MIR — `HIRInstanceOf` now emits `InstanceOfCheck` with target type in `operandType`
+- `InstanceOfCheck` static type hierarchy resolution in MIR codegen — checks variable descriptor type against target type, walks class inheritance chain, returns true for `Object`-typed sources
+- `RuntimeInterface` abstraction in MIR codegen — all C runtime functions (malloc, free, calloc, memcpy, strlen, strcmp, strcpy, strcat, strstr, strncmp, snprintf, write) and Uranite CRT functions (__uranite_throw, __uranite_personality_v0, __uranite_begin_catch) resolved through swappable `RuntimeInterface`, matching AST codegen architecture
+- `getOrCreateExtern` helper in MIR codegen — generic extern function declaration factory for functions not yet in `RuntimeInterface`
 - Post-generation interface method resolution pass — replaces unresolved interface method declarations (`Sequence.get`, `Set.exists`) with implementing class methods, generates type-coercing wrapper thunks when signatures differ, walks transitive interface hierarchy
+- Field default value initialization in MIR codegen — classes without explicit constructors but with field defaults (e.g., `private Int IM = 139968`) now store literal values via GEP after malloc; supports integer, float, boolean, char, string, None, and negated literals
+- Struct field GEP auto-load in `StoreVariable` — when a `ComputeFieldAddress` result (2-index struct GEP) is stored to a local variable, the field value is loaded instead of storing the raw address
 
 **Changed**
 - MIR lowering `lowerFieldAccess` intercepts enum type field access before emitting `ComputeFieldAddress`
 - MIR codegen pre-registration loop and `generateFunction` both detect `main` and override signature
 - `AddressOf`, `TakeReference`, `DereferencePointer`, `InstanceOfCheck` separated from `InlineAssembly` no-op fall-through handler
+- MIR codegen function pre-registration uses arity-suffixed names for overloaded methods instead of skipping duplicates
+- `generateFunction` matches pre-registered functions by arity when base name collides
+- `InstanceOfCheck` codegen upgraded from constant-false stub to static type hierarchy checker
 - `resolveMemoryElementType()` returns actual struct types for user-defined class element types (not opaque pointer) — uses `structTypeCache`/`StructType::getTypeByName` lookup
 - `memoryElementTypes` map cleared per-function to prevent cross-function variable ID collisions
+- MIR codegen memcpy switched from C `memcpy` to LLVM intrinsic `llvm.memcpy.p0.p0.i64` matching AST codegen path
+- `RuntimeInterface` extended with `getStrstrFunction`, `getStrncmpFunction`, `getWriteFunction` — 3 new virtual methods for MIR codegen's string intrinsics and I/O
 
 **Fixed**
 - `DmaDirection.ToDevice` and similar enum variant accesses returning `0` regardless of actual backed value
@@ -56,17 +69,22 @@
 - `stress-exceptions` abort — try/catch blocks had no exception routing; implemented `InvokeFunction`/`LandingPad` code generation
 - `__uranite_personality_v0` linker errors — `Function::Create` auto-suffixed duplicates (`.126`, `.127`); fixed to reuse existing declaration via `getFunction`
 - `__unnamed_1` linker errors in `writeArgsToFd`/`writeI64ArgsToFd` — `is None` checks emitted as `NoOperation` which fell through to `InvokeFunction` handler; fixed by separating `NoOperation` from `InvokeFunction` case group and mapping `KeywordIs` to `CompareEqual`
+- `fasta` FPE — `Fasta` class had no explicit constructor but had field defaults (`Int IM = 139968`); malloc'd memory stayed zero-initialized, causing division by zero on `% self.IM`
+- `stress-collections` and `k-nucleotide` segfault — `HashMap.grow` stored field addresses (GEP pointers) into local variables instead of loading field values; `oldCapacity` contained a heap address instead of `16`, causing out-of-bounds iteration during rehash
+- `String.format` printing raw pointer addresses for String arguments — internal snprintf rewrite used `%ld` for all non-float types; now correctly maps pointer-typed args to `%s`
+- `Arena.capacity` returning 0 — intrinsic handler missing for `capacity` method; field index 2 never read
+- Constructor overloads silently dropped — pre-registration skipped duplicate function names; only first constructor registered in LLVM IR (e.g., `HashSet(self)` registered but `HashSet(self, Int)` discarded)
+- `InstanceOfCheck` always returning false — `HIRInstanceOf` never lowered to MIR; now uses static type hierarchy resolution
+- `test-collection-hashset` FPE from uninitialized capacity — constructor overload `HashSet(self, Int)` not generated, leaving struct zero-initialized
 
 **Issues**
-- `InstanceOfCheck` always returns false in MIR codegen
 - `InlineAssembly`, `DeferPush`/`DeferEmit`, `CallVirtual` remain as no-op stubs
-- Generic collection runtime crashes (fasta FPE, k-nucleotide/stress-collections segfault) — interface wrapper thunk calling convention mismatches need investigation
+- Variadic argument packing (`Args<T>` struct construction) not implemented in MIR lowering — variadic calls pass only first argument
+- `String.format` `{:b}` (binary) format not supported (no snprintf equivalent)
 
 **Notes**
-- MIR benchmark results: 11/11 compile, 8/11 pass runtime (binary-trees, colorize, fannkuch-redux, mandelbrot, n-body, spectral-norm, stress-exceptions, stress-memory)
-- 3 runtime failures (fasta, k-nucleotide, stress-collections) — generic collection code crashes at runtime
-- MIR language tests: 21/22 pass (only test-language-string fails — generic `E.hashCode` resolution)
-- MIR module tests: 111/212 pass, 14 compile fails, 87 runtime fails (up from 88/212)
+- MIR benchmark results: 11/11 compile, 11/11 pass runtime (all benchmarks pass)
+- MIR module tests: 125/212 pass, 0 compile fail, 87 runtime fail (32 segfault, 21 abort, 0 FPE, 30 timeout)
 - 152/152 unit tests pass
 
 ## v1.0.0-2026.1 2026-07-13
