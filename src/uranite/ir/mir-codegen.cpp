@@ -26,6 +26,7 @@ namespace uranite::ir::mir {
 	MIRCodegen::MIRCodegen( semantic::Analyzer& semanticAnalyzer, diagnostic::Engine& diagnosticEngine )
 		: semanticAnalyzer( semanticAnalyzer ),
 		  diagnosticEngine( diagnosticEngine ),
+		  runtimeInterface_( std::make_shared<codegen::DefaultRuntime>() ),
 		  irBuilder( this->llvmContext ) {
 	}
 
@@ -40,6 +41,15 @@ namespace uranite::ir::mir {
 		this->functionResolutionMap.clear();
 		this->structTypeCache.clear();
 		this->currentMIRModule = &mirModule;
+
+		this->mirFunctionDefinitionMap.clear();
+		for( std::shared_ptr<MIRFunctionDefinition>& funcDef : mirModule.functionDefinitions ) {
+			if( funcDef == nullptr ) continue;
+			std::string mapKey = funcDef->ownerClassQualifiedName.empty()
+				? funcDef->functionName
+				: funcDef->ownerClassQualifiedName + "." + funcDef->functionName;
+			this->mirFunctionDefinitionMap[mapKey] = funcDef.get();
+		}
 
 		for( const std::pair<const std::string, TypeLayoutDescriptor>& typeEntry : mirModule.typeLayoutTable ) {
 			const std::string& typeName = typeEntry.first;
@@ -106,7 +116,19 @@ namespace uranite::ir::mir {
 				llvmFunctionName = functionDefinition->ownerClassQualifiedName + "." + functionDefinition->functionName;
 			}
 			if( this->functionResolutionMap.count( llvmFunctionName ) > 0 ) {
-				continue;
+				if( functionDefinition->ownerClassQualifiedName.empty() ) {
+					continue;
+				}
+				llvm::Function* existingFunction = this->functionResolutionMap[llvmFunctionName];
+				std::string existingSuffix = fmt::format( "{}#{}", llvmFunctionName, existingFunction->arg_size() );
+				if( this->functionResolutionMap.count( existingSuffix ) == 0 ) {
+					this->functionResolutionMap[existingSuffix] = existingFunction;
+				}
+				llvmFunctionName = fmt::format( "{}#{}", llvmFunctionName,
+					functionDefinition->parameterVariableIdentifiers.size() );
+				if( this->functionResolutionMap.count( llvmFunctionName ) > 0 ) {
+					continue;
+				}
 			}
 			bool isMainFunction = ( llvmFunctionName == "main" &&
 				functionDefinition->ownerClassQualifiedName.empty() );
@@ -129,9 +151,14 @@ namespace uranite::ir::mir {
 				parameterTypes.push_back( llvm::Type::getInt32Ty( this->llvmContext ) );
 				parameterTypes.push_back( llvm::PointerType::getUnqual( this->llvmContext ) );
 			}
-			for( MIRVariableIdentifier parameterVariable : functionDefinition->parameterVariableIdentifiers ) {
+			for( unsigned paramIdx = 0; paramIdx < functionDefinition->parameterVariableIdentifiers.size(); paramIdx++ ) {
+				MIRVariableIdentifier parameterVariable = functionDefinition->parameterVariableIdentifiers[paramIdx];
 				llvm::Type* parameterType = llvm::Type::getInt64Ty( this->llvmContext );
-				if( functionDefinition->variableDescriptorTable.count( parameterVariable ) > 0 ) {
+				if( functionDefinition->variadicParameterIndex >= 0 &&
+					paramIdx == static_cast<unsigned>( functionDefinition->variadicParameterIndex ) ) {
+					parameterType = llvm::PointerType::getUnqual( this->llvmContext );
+				}
+				else if( functionDefinition->variableDescriptorTable.count( parameterVariable ) > 0 ) {
 					MIRVariableDescriptor& descriptor =
 						functionDefinition->variableDescriptorTable[parameterVariable];
 					if( descriptor.variableType != nullptr ) {
@@ -416,6 +443,18 @@ namespace uranite::ir::mir {
 		llvm::Function* llvmFunction = nullptr;
 		if( this->functionResolutionMap.count( llvmFunctionName ) > 0 ) {
 			llvmFunction = this->functionResolutionMap[llvmFunctionName];
+			if( llvmFunction != nullptr && functionDefinition.ownerClassQualifiedName.empty() == false &&
+				llvmFunction->arg_size() != functionDefinition.parameterVariableIdentifiers.size() ) {
+				std::string aritySuffix = fmt::format( "{}#{}", llvmFunctionName,
+					functionDefinition.parameterVariableIdentifiers.size() );
+				if( this->functionResolutionMap.count( aritySuffix ) > 0 ) {
+					llvmFunction = this->functionResolutionMap[aritySuffix];
+					llvmFunctionName = aritySuffix;
+				}
+				else {
+					llvmFunction = nullptr;
+				}
+			}
 			if( llvmFunction != nullptr && llvmFunction->isDeclaration() == false ) {
 				return;
 			}
@@ -448,9 +487,14 @@ namespace uranite::ir::mir {
 				parameterTypes.push_back( llvm::Type::getInt32Ty( this->llvmContext ) );
 				parameterTypes.push_back( llvm::PointerType::getUnqual( this->llvmContext ) );
 			}
-			for( MIRVariableIdentifier parameterVariable : functionDefinition.parameterVariableIdentifiers ) {
+			for( unsigned paramIdx = 0; paramIdx < functionDefinition.parameterVariableIdentifiers.size(); paramIdx++ ) {
+				MIRVariableIdentifier parameterVariable = functionDefinition.parameterVariableIdentifiers[paramIdx];
 				llvm::Type* parameterType = llvm::Type::getInt64Ty( this->llvmContext );
-				if( functionDefinition.variableDescriptorTable.count( parameterVariable ) > 0 ) {
+				if( functionDefinition.variadicParameterIndex >= 0 &&
+					paramIdx == static_cast<unsigned>( functionDefinition.variadicParameterIndex ) ) {
+					parameterType = llvm::PointerType::getUnqual( this->llvmContext );
+				}
+				else if( functionDefinition.variableDescriptorTable.count( parameterVariable ) > 0 ) {
 					MIRVariableDescriptor& descriptor =
 						functionDefinition.variableDescriptorTable[parameterVariable];
 					if( descriptor.variableType != nullptr ) {
@@ -732,17 +776,7 @@ namespace uranite::ir::mir {
 				// Set personality on enclosing function
 				llvm::Function* enclosingFunction = this->irBuilder.GetInsertBlock()->getParent();
 				if( enclosingFunction->hasPersonalityFn() == false ) {
-					llvm::Function* personalityFunction = this->llvmModule->getFunction( "__uranite_personality_v0" );
-					if( personalityFunction == nullptr ) {
-						llvm::FunctionType* personalityType = llvm::FunctionType::get(
-							llvm::Type::getInt32Ty( this->llvmContext ), true
-						);
-						personalityFunction = llvm::Function::Create(
-							personalityType, llvm::Function::ExternalLinkage,
-							"__uranite_personality_v0", this->llvmModule.get()
-						);
-					}
-					enclosingFunction->setPersonalityFn( personalityFunction );
+					enclosingFunction->setPersonalityFn( this->getOrCreatePersonality() );
 				}
 				// Build arguments
 				llvm::FunctionType* invokeType = invokedFunction->getFunctionType();
@@ -814,17 +848,7 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::LandingPad: {
 				llvm::Function* enclosingFunction = this->irBuilder.GetInsertBlock()->getParent();
 				if( enclosingFunction->hasPersonalityFn() == false ) {
-					llvm::Function* personalityFunction = this->llvmModule->getFunction( "__uranite_personality_v0" );
-					if( personalityFunction == nullptr ) {
-						llvm::FunctionType* personalityType = llvm::FunctionType::get(
-							llvm::Type::getInt32Ty( this->llvmContext ), true
-						);
-						personalityFunction = llvm::Function::Create(
-							personalityType, llvm::Function::ExternalLinkage,
-							"__uranite_personality_v0", this->llvmModule.get()
-						);
-					}
-					enclosingFunction->setPersonalityFn( personalityFunction );
+					enclosingFunction->setPersonalityFn( this->getOrCreatePersonality() );
 				}
 				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
 				llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
@@ -832,15 +856,7 @@ namespace uranite::ir::mir {
 				llvm::LandingPadInst* landingPad = this->irBuilder.CreateLandingPad( landingPadType, 1, "lp" );
 				landingPad->addClause( llvm::Constant::getNullValue( ptrType ) );
 				llvm::Value* exceptionPtr = this->irBuilder.CreateExtractValue( landingPad, 0, "exc.ptr" );
-				llvm::Function* beginCatchFunction = this->llvmModule->getFunction( "__uranite_begin_catch" );
-				if( beginCatchFunction == nullptr ) {
-					llvm::FunctionType* beginCatchType = llvm::FunctionType::get( ptrType, { ptrType }, false );
-					beginCatchFunction = llvm::Function::Create(
-						beginCatchType, llvm::Function::ExternalLinkage,
-						"__uranite_begin_catch", this->llvmModule.get()
-					);
-				}
-				llvm::Value* caughtObject = this->irBuilder.CreateCall( beginCatchFunction, { exceptionPtr }, "caught" );
+				llvm::Value* caughtObject = this->irBuilder.CreateCall( this->getOrCreateBeginCatch(), { exceptionPtr }, "caught" );
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					this->setVariableValue( instruction.destinationVariable, caughtObject );
 				}
@@ -882,8 +898,60 @@ namespace uranite::ir::mir {
 			}
 			case MIRInstructionKind::InstanceOfCheck: {
 				if( instruction.destinationVariable != 0 ) {
+					bool isMatch = false;
+					if( instruction.operandType != nullptr && instruction.sourceOperands.empty() == false ) {
+						std::string targetTypeName = instruction.operandType->name;
+						size_t bracketPos = targetTypeName.find( '<' );
+						if( bracketPos != std::string::npos ) {
+							targetTypeName = targetTypeName.substr( 0, bracketPos );
+						}
+						MIRVariableIdentifier sourceVar = instruction.sourceOperands[0];
+						if( this->currentMIRFunction->variableDescriptorTable.count( sourceVar ) > 0 ) {
+							MIRVariableDescriptor& descriptor = this->currentMIRFunction->variableDescriptorTable[sourceVar];
+							if( descriptor.variableType != nullptr ) {
+								std::string sourceTypeName = descriptor.variableType->name;
+								bracketPos = sourceTypeName.find( '<' );
+								if( bracketPos != std::string::npos ) {
+									sourceTypeName = sourceTypeName.substr( 0, bracketPos );
+								}
+								if( sourceTypeName == targetTypeName ) {
+									isMatch = true;
+								}
+								else if( descriptor.variableType->kind == semantic::Type::Kind::Class ) {
+									semantic::ClassType* classPtr = static_cast<semantic::ClassType*>( descriptor.variableType.get() );
+									semantic::TypeSharedPointer current = classPtr->baseClass;
+									while( current != nullptr && isMatch == false ) {
+										std::string baseName = current->name;
+										bracketPos = baseName.find( '<' );
+										if( bracketPos != std::string::npos ) {
+											baseName = baseName.substr( 0, bracketPos );
+										}
+										if( baseName == targetTypeName ) {
+											isMatch = true;
+										}
+										if( current->kind == semantic::Type::Kind::Class ) {
+											current = static_cast<semantic::ClassType*>( current.get() )->baseClass;
+										}
+										else {
+											break;
+										}
+									}
+								}
+								if( isMatch == false && ( sourceTypeName == "Object" || sourceTypeName == targetTypeName ) ) {
+									isMatch = true;
+								}
+							}
+							else {
+								isMatch = true;
+							}
+						}
+						else {
+							isMatch = true;
+						}
+					}
 					this->setVariableValue( instruction.destinationVariable,
-						llvm::ConstantInt::getFalse( this->llvmContext ) );
+						isMatch ? llvm::ConstantInt::getTrue( this->llvmContext )
+						        : llvm::ConstantInt::getFalse( this->llvmContext ) );
 				}
 				break;
 			}
@@ -1145,6 +1213,14 @@ namespace uranite::ir::mir {
 			llvm::Type* sourceAllocType = sourceAlloca->getAllocatedType();
 			if( sourceAllocType->isFirstClassType() && sourceAllocType->isVoidTy() == false ) {
 				sourceValue = this->irBuilder.CreateLoad( sourceAllocType, sourceValue, "store.load" );
+			}
+		}
+		else if( llvm::GetElementPtrInst* sourceGEP = llvm::dyn_cast<llvm::GetElementPtrInst>( sourceValue ) ) {
+			if( sourceGEP->getNumIndices() >= 2 ) {
+				llvm::Type* elementType = sourceGEP->getResultElementType();
+				if( elementType->isFirstClassType() && elementType->isVoidTy() == false ) {
+					sourceValue = this->irBuilder.CreateLoad( elementType, sourceValue, "store.gep.load" );
+				}
 			}
 		}
 
@@ -1853,28 +1929,10 @@ namespace uranite::ir::mir {
 			llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
 			llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
 			llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-			llvm::Function* strlenFunction = this->llvmModule->getFunction( "strlen" );
-			if( strlenFunction == nullptr ) {
-				llvm::FunctionType* strlenType = llvm::FunctionType::get( i64Type, { ptrType }, false );
-				strlenFunction = llvm::Function::Create(
-					strlenType, llvm::Function::ExternalLinkage, "strlen", this->llvmModule.get()
-				);
-			}
-			llvm::Function* writeFunction = this->llvmModule->getFunction( "write" );
-			if( writeFunction == nullptr ) {
-				llvm::FunctionType* writeType = llvm::FunctionType::get(
-					i64Type, { i32Type, ptrType, i64Type }, false
-				);
-				writeFunction = llvm::Function::Create(
-					writeType, llvm::Function::ExternalLinkage, "write", this->llvmModule.get()
-				);
-			}
-			llvm::FunctionCallee snprintfCallee = this->llvmModule->getOrInsertFunction( "snprintf",
-				llvm::FunctionType::get( i32Type, { ptrType, i64Type, ptrType }, true )
-			);
-			llvm::FunctionCallee mallocCallee = this->llvmModule->getOrInsertFunction( "malloc",
-				llvm::FunctionType::get( ptrType, { i64Type }, false )
-			);
+			llvm::Function* strlenFunction = this->getOrCreateStrlen();
+			llvm::Function* writeFunction = this->getOrCreateWrite();
+			llvm::Function* snprintfFunction = this->getOrCreateSnprintf();
+			llvm::Function* mallocFunction = this->getOrCreateMalloc();
 			int fileDescriptor = ( calledName == "putserr" || calledName == "putserrln" ) ? 2 : 1;
 			llvm::Value* fdValue = llvm::ConstantInt::get( i32Type, fileDescriptor );
 			for( size_t operandIndex = 0; operandIndex < instruction.sourceOperands.size(); operandIndex++ ) {
@@ -1898,7 +1956,7 @@ namespace uranite::ir::mir {
 					strValue = this->irBuilder.CreateSelect( argValue, trueStr, falseStr, "bool.str" );
 				}
 				else if( argValue->getType()->isIntegerTy() ) {
-					llvm::Value* buf = this->irBuilder.CreateCall( mallocCallee, {
+					llvm::Value* buf = this->irBuilder.CreateCall( mallocFunction, {
 						llvm::ConstantInt::get( i64Type, 24 )
 					}, "int.buf" );
 					llvm::Value* val = argValue;
@@ -1906,13 +1964,13 @@ namespace uranite::ir::mir {
 						val = this->irBuilder.CreateSExt( argValue, i64Type, "iext" );
 					}
 					llvm::Value* intFmt = this->irBuilder.CreateGlobalStringPtr( "%ld", "int.fmt" );
-					this->irBuilder.CreateCall( snprintfCallee, {
+					this->irBuilder.CreateCall( snprintfFunction, {
 						buf, llvm::ConstantInt::get( i64Type, 24 ), intFmt, val
 					} );
 					strValue = buf;
 				}
 				else if( argValue->getType()->isDoubleTy() || argValue->getType()->isFloatTy() ) {
-					llvm::Value* buf = this->irBuilder.CreateCall( mallocCallee, {
+					llvm::Value* buf = this->irBuilder.CreateCall( mallocFunction, {
 						llvm::ConstantInt::get( i64Type, 48 )
 					}, "flt.buf" );
 					llvm::Value* val = argValue;
@@ -1920,7 +1978,7 @@ namespace uranite::ir::mir {
 						val = this->irBuilder.CreateFPExt( val, llvm::Type::getDoubleTy( this->llvmContext ), "f2d" );
 					}
 					llvm::Value* fltFmt = this->irBuilder.CreateGlobalStringPtr( "%f", "flt.fmt" );
-					this->irBuilder.CreateCall( snprintfCallee, {
+					this->irBuilder.CreateCall( snprintfFunction, {
 						buf, llvm::ConstantInt::get( i64Type, 48 ), fltFmt, val
 					} );
 					strValue = buf;
@@ -1948,26 +2006,15 @@ namespace uranite::ir::mir {
 				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
 				llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
-				llvm::Function* snprintfFunction = this->llvmModule->getFunction( "snprintf" );
-				if( snprintfFunction == nullptr ) {
-					llvm::FunctionType* snprintfType = llvm::FunctionType::get( i32Type, { ptrType, i64Type, ptrType }, true );
-					snprintfFunction = llvm::Function::Create(
-						snprintfType, llvm::Function::ExternalLinkage, "snprintf", this->llvmModule.get()
-					);
-				}
-				llvm::Function* strlenFunction = this->llvmModule->getFunction( "strlen" );
-				if( strlenFunction == nullptr ) {
-					llvm::FunctionType* strlenType = llvm::FunctionType::get( i64Type, { ptrType }, false );
-					strlenFunction = llvm::Function::Create(
-						strlenType, llvm::Function::ExternalLinkage, "strlen", this->llvmModule.get()
-					);
-				}
+				llvm::Function* snprintfFunction = this->getOrCreateSnprintf();
+				llvm::Function* strlenFunction = this->getOrCreateStrlen();
 				llvm::Function* mallocFunction = this->getOrCreateMalloc();
 				llvm::Value* fmtLen = this->irBuilder.CreateCall( strlenFunction, { formatString }, "fmt.len" );
 				llvm::Value* extraSpace = llvm::ConstantInt::get( i64Type, 64 * ( instruction.sourceOperands.size() - 1 ) );
 				llvm::Value* bufSize = this->irBuilder.CreateAdd( fmtLen, extraSpace, "buf.size" );
 				llvm::Value* bufPtr = this->irBuilder.CreateCall( mallocFunction, { bufSize }, "fmt.buf" );
 				llvm::Value* cFormatStr = formatString;
+				std::vector<size_t> argOrder;
 				llvm::GlobalVariable* globalVar = llvm::dyn_cast<llvm::GlobalVariable>( formatString );
 				if( globalVar != nullptr && globalVar->hasInitializer() ) {
 					llvm::ConstantDataSequential* dataSeq = llvm::dyn_cast<llvm::ConstantDataSequential>( globalVar->getInitializer() );
@@ -1979,22 +2026,78 @@ namespace uranite::ir::mir {
 						std::string formatted;
 						size_t argIdx = 1;
 						for( size_t charIndex = 0; charIndex < original.size(); charIndex++ ) {
-							if( charIndex + 1 < original.size() && original[charIndex] == '{' && original[charIndex + 1] == '}' ) {
-								if( argIdx < instruction.sourceOperands.size() ) {
-									llvm::Value* argVal = this->loadVariableValue( instruction.sourceOperands[argIdx] );
-									if( argVal != nullptr && argVal->getType()->isFloatingPointTy() ) {
-										formatted += "%f";
+							if( charIndex + 1 < original.size() && original[charIndex] == '{' && original[charIndex + 1] == '{' ) {
+								formatted += '{';
+								charIndex++;
+								continue;
+							}
+							if( charIndex + 1 < original.size() && original[charIndex] == '}' && original[charIndex + 1] == '}' ) {
+								formatted += '}';
+								charIndex++;
+								continue;
+							}
+							if( original[charIndex] == '{' ) {
+								size_t closePos = original.find( '}', charIndex + 1 );
+								if( closePos != std::string::npos ) {
+									std::string spec = original.substr( charIndex + 1, closePos - charIndex - 1 );
+									size_t resolvedArgIdx = argIdx;
+									std::string formatSpec;
+									if( spec.empty() ) {
+										resolvedArgIdx = argIdx++;
+									}
+									else if( spec.find( ':' ) == 0 ) {
+										resolvedArgIdx = argIdx++;
+										formatSpec = spec.substr( 1 );
+									}
+									else if( spec.find_first_not_of( "0123456789" ) == std::string::npos ) {
+										resolvedArgIdx = std::stoul( spec ) + 1;
+									}
+									else {
+										size_t colonPos = spec.find( ':' );
+										if( colonPos != std::string::npos ) {
+											std::string indexPart = spec.substr( 0, colonPos );
+											formatSpec = spec.substr( colonPos + 1 );
+											if( indexPart.find_first_not_of( "0123456789" ) == std::string::npos ) {
+												resolvedArgIdx = std::stoul( indexPart ) + 1;
+											}
+										}
+									}
+									argOrder.push_back( resolvedArgIdx );
+									if( formatSpec == "x" ) {
+										formatted += "%lx";
+									}
+									else if( formatSpec == "X" ) {
+										formatted += "%lX";
+									}
+									else if( formatSpec == "o" ) {
+										formatted += "%lo";
+									}
+									else if( formatSpec == "b" ) {
+										formatted += "%ld";
+									}
+									else if( formatSpec.empty() == false && formatSpec[0] == '.' ) {
+										formatted += "%" + formatSpec;
+									}
+									else if( resolvedArgIdx < instruction.sourceOperands.size() ) {
+										llvm::Value* argVal = this->loadVariableValue( instruction.sourceOperands[resolvedArgIdx] );
+										if( argVal != nullptr && argVal->getType()->isFloatingPointTy() ) {
+											formatted += "%f";
+										}
+										else if( argVal != nullptr && argVal->getType()->isPointerTy() ) {
+											formatted += "%s";
+										}
+										else {
+											formatted += "%ld";
+										}
 									}
 									else {
 										formatted += "%ld";
 									}
-									argIdx++;
+									charIndex = closePos;
+									continue;
 								}
-								charIndex++;
 							}
-							else {
-								formatted += original[charIndex];
-							}
+							formatted += original[charIndex];
 						}
 						llvm::Constant* fmtConstant = llvm::ConstantDataArray::getString( this->llvmContext, formatted, true );
 						llvm::GlobalVariable* fmtGlobal = new llvm::GlobalVariable(
@@ -2005,15 +2108,31 @@ namespace uranite::ir::mir {
 					}
 				}
 				std::vector<llvm::Value*> snprintfArgs = { bufPtr, bufSize, cFormatStr };
-				for( size_t argIndex = 1; argIndex < instruction.sourceOperands.size(); argIndex++ ) {
-					llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[argIndex] );
-					if( argValue != nullptr ) {
-						if( argValue->getType()->isFloatingPointTy() ) {
-							argValue = this->irBuilder.CreateFPExt(
-								argValue, llvm::Type::getDoubleTy( this->llvmContext ), "fmt.dbl"
-							);
+				if( argOrder.empty() == false ) {
+					for( size_t orderIdx = 0; orderIdx < argOrder.size(); orderIdx++ ) {
+						size_t resolvedIdx = argOrder[orderIdx];
+						if( resolvedIdx < instruction.sourceOperands.size() ) {
+							llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[resolvedIdx] );
+							if( argValue != nullptr ) {
+								if( argValue->getType()->isFloatingPointTy() ) {
+									argValue = this->irBuilder.CreateFPExt(
+										argValue, llvm::Type::getDoubleTy( this->llvmContext ), "fmt.dbl" );
+								}
+								snprintfArgs.push_back( argValue );
+							}
 						}
-						snprintfArgs.push_back( argValue );
+					}
+				}
+				else {
+					for( size_t argIndex = 1; argIndex < instruction.sourceOperands.size(); argIndex++ ) {
+						llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[argIndex] );
+						if( argValue != nullptr ) {
+							if( argValue->getType()->isFloatingPointTy() ) {
+								argValue = this->irBuilder.CreateFPExt(
+									argValue, llvm::Type::getDoubleTy( this->llvmContext ), "fmt.dbl" );
+							}
+							snprintfArgs.push_back( argValue );
+						}
 					}
 				}
 				this->irBuilder.CreateCall( snprintfFunction, snprintfArgs );
@@ -2237,6 +2356,20 @@ namespace uranite::ir::mir {
 			}
 			return;
 		}
+		if( calledName == "Arena.capacity" && instruction.sourceOperands.size() >= 1 ) {
+			llvm::Value* arenaPointer = this->loadVariableValue( instruction.sourceOperands[0] );
+			if( arenaPointer != nullptr && instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+				llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+				llvm::StructType* arenaStructType = llvm::StructType::get(
+					this->llvmContext, { ptrType, i64Type, i64Type }
+				);
+				llvm::Value* capGep = this->irBuilder.CreateStructGEP( arenaStructType, arenaPointer, 2, "arena.cap.ptr" );
+				llvm::Value* capValue = this->irBuilder.CreateLoad( i64Type, capGep, "arena.cap" );
+				this->setVariableValue( instruction.destinationVariable, capValue );
+			}
+			return;
+		}
 		if( calledName == "Arena.Arena" ) {
 			return;
 		}
@@ -2266,6 +2399,28 @@ namespace uranite::ir::mir {
 			llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
 			if( selfValue != nullptr && selfValue->getType()->isPointerTy() ) {
 				this->setVariableValue( instruction.destinationVariable, selfValue );
+				return;
+			}
+		}
+		if( calledName == "charCodeAt" && instruction.sourceOperands.size() >= 2 ) {
+			llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
+			llvm::Value* indexValue = this->loadVariableValue( instruction.sourceOperands[1] );
+			if( selfValue != nullptr && indexValue != nullptr && selfValue->getType()->isPointerTy() ) {
+				if( indexValue->getType()->isIntegerTy() == false ) {
+					indexValue = this->irBuilder.CreateFPToSI(
+						indexValue, llvm::Type::getInt64Ty( this->llvmContext ), "idx.int"
+					);
+				}
+				llvm::Value* charPtr = this->irBuilder.CreateGEP(
+					llvm::Type::getInt8Ty( this->llvmContext ), selfValue, indexValue, "str.char.ptr"
+				);
+				llvm::Value* charVal = this->irBuilder.CreateLoad(
+					llvm::Type::getInt8Ty( this->llvmContext ), charPtr, "str.char"
+				);
+				llvm::Value* charI64 = this->irBuilder.CreateZExt(
+					charVal, llvm::Type::getInt64Ty( this->llvmContext ), "str.charcode"
+				);
+				this->setVariableValue( instruction.destinationVariable, charI64 );
 				return;
 			}
 		}
@@ -2480,15 +2635,7 @@ namespace uranite::ir::mir {
 					if( methodName == "toString" ) {
 						llvm::Value* selfValue = loadCharSelf();
 						if( selfValue != nullptr ) {
-							llvm::Function* snprintfFunction = this->llvmModule->getFunction( "snprintf" );
-							if( snprintfFunction == nullptr ) {
-								llvm::FunctionType* snprintfType = llvm::FunctionType::get(
-									llvm::Type::getInt32Ty( this->llvmContext ),
-									{ llvm::PointerType::getUnqual( this->llvmContext ), llvm::Type::getInt64Ty( this->llvmContext ), llvm::PointerType::getUnqual( this->llvmContext ) },
-									true
-								);
-								snprintfFunction = llvm::Function::Create( snprintfType, llvm::Function::ExternalLinkage, "snprintf", this->llvmModule.get() );
-							}
+							llvm::Function* snprintfFunction = this->getOrCreateSnprintf();
 							llvm::Value* buffer = this->irBuilder.CreateAlloca( llvm::Type::getInt8Ty( this->llvmContext ), llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 8 ), "char.buf" );
 							llvm::Value* fmtStr = this->irBuilder.CreateGlobalStringPtr( "%c", "char.fmt" );
 							this->irBuilder.CreateCall( snprintfFunction, { buffer, llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 8 ), fmtStr, selfValue } );
@@ -2544,25 +2691,8 @@ namespace uranite::ir::mir {
 							llvm::Value* sizeWithNull = this->irBuilder.CreateAdd(
 								length, llvm::ConstantInt::get( i64Type, 1 ), "sub.alloc"
 							);
-							llvm::Function* mallocFunction = this->llvmModule->getFunction( "malloc" );
-							if( mallocFunction == nullptr ) {
-								llvm::FunctionType* mallocType = llvm::FunctionType::get(
-									llvm::PointerType::getUnqual( this->llvmContext ), { i64Type }, false
-								);
-								mallocFunction = llvm::Function::Create(
-									mallocType, llvm::Function::ExternalLinkage, "malloc", this->llvmModule.get()
-								);
-							}
-							llvm::Value* destPtr = this->irBuilder.CreateCall( mallocFunction, { sizeWithNull }, "sub.buf" );
-							llvm::Function* memcpyFunction = this->llvmModule->getFunction( "memcpy" );
-							if( memcpyFunction == nullptr ) {
-								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-								llvm::FunctionType* memcpyType = llvm::FunctionType::get( ptrType, { ptrType, ptrType, i64Type }, false );
-								memcpyFunction = llvm::Function::Create(
-									memcpyType, llvm::Function::ExternalLinkage, "memcpy", this->llvmModule.get()
-								);
-							}
-							this->irBuilder.CreateCall( memcpyFunction, { destPtr, srcPtr, length } );
+							llvm::Value* destPtr = this->irBuilder.CreateCall( this->getOrCreateMalloc(), { sizeWithNull }, "sub.buf" );
+							this->irBuilder.CreateCall( this->getOrCreateMemcpy(), { destPtr, srcPtr, length, this->irBuilder.getFalse() } );
 							llvm::Value* nullPos = this->irBuilder.CreateGEP(
 								llvm::Type::getInt8Ty( this->llvmContext ), destPtr, length, "sub.null"
 							);
@@ -2572,16 +2702,7 @@ namespace uranite::ir::mir {
 						}
 						if( methodName == "equals" && instruction.sourceOperands.size() >= 2 ) {
 							llvm::Value* otherValue = this->loadVariableValue( instruction.sourceOperands[1] );
-							llvm::Function* strcmpFunction = this->llvmModule->getFunction( "strcmp" );
-							if( strcmpFunction == nullptr ) {
-								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-								llvm::FunctionType* strcmpType = llvm::FunctionType::get(
-									llvm::Type::getInt32Ty( this->llvmContext ), { ptrType, ptrType }, false
-								);
-								strcmpFunction = llvm::Function::Create(
-									strcmpType, llvm::Function::ExternalLinkage, "strcmp", this->llvmModule.get()
-								);
-							}
+							llvm::Function* strcmpFunction = this->getOrCreateStrcmp();
 							llvm::Value* cmpResult = this->irBuilder.CreateCall( strcmpFunction, { selfValue, otherValue }, "str.cmp" );
 							llvm::Value* isEqual = this->irBuilder.CreateICmpEQ(
 								cmpResult, llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->llvmContext ), 0 ), "str.eq"
@@ -2590,18 +2711,344 @@ namespace uranite::ir::mir {
 							return;
 						}
 						if( methodName == "length" ) {
-							llvm::Function* strlenFunction = this->llvmModule->getFunction( "strlen" );
-							if( strlenFunction == nullptr ) {
-								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-								llvm::FunctionType* strlenType = llvm::FunctionType::get(
-									llvm::Type::getInt64Ty( this->llvmContext ), { ptrType }, false
-								);
-								strlenFunction = llvm::Function::Create(
-									strlenType, llvm::Function::ExternalLinkage, "strlen", this->llvmModule.get()
-								);
-							}
+							llvm::Function* strlenFunction = this->getOrCreateStrlen();
 							llvm::Value* lenResult = this->irBuilder.CreateCall( strlenFunction, { selfValue }, "str.len" );
 							this->setVariableValue( instruction.destinationVariable, lenResult );
+							return;
+						}
+						if( methodName == "charCodeAt" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* indexValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							if( indexValue != nullptr ) {
+								if( indexValue->getType()->isIntegerTy() == false ) {
+									indexValue = this->irBuilder.CreateFPToSI(
+										indexValue, llvm::Type::getInt64Ty( this->llvmContext ), "idx.int"
+									);
+								}
+								llvm::Value* charPtr = this->irBuilder.CreateGEP(
+									llvm::Type::getInt8Ty( this->llvmContext ), selfValue, indexValue, "str.char.ptr"
+								);
+								llvm::Value* charVal = this->irBuilder.CreateLoad(
+									llvm::Type::getInt8Ty( this->llvmContext ), charPtr, "str.char"
+								);
+								llvm::Value* charI64 = this->irBuilder.CreateZExt(
+									charVal, llvm::Type::getInt64Ty( this->llvmContext ), "str.charcode"
+								);
+								this->setVariableValue( instruction.destinationVariable, charI64 );
+								return;
+							}
+						}
+						if( methodName == "getValue" || methodName == "value" ) {
+							this->setVariableValue( instruction.destinationVariable, selfValue );
+							return;
+						}
+						if( methodName == "isEmpty" ) {
+							llvm::Value* lenResult = this->irBuilder.CreateCall( this->getOrCreateStrlen(), { selfValue }, "str.len" );
+							llvm::Value* isZero = this->irBuilder.CreateICmpEQ(
+								lenResult, llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 0 ), "str.empty" );
+							this->setVariableValue( instruction.destinationVariable, isZero );
+							return;
+						}
+						if( methodName == "concat" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* otherValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							if( otherValue != nullptr ) {
+								llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::Function* strlenFunc = this->getOrCreateStrlen();
+								llvm::Function* mallocFunc = this->getOrCreateMalloc();
+								llvm::Function* strcpyFunc = this->getOrCreateStrcpy();
+								llvm::Function* strcatFunc = this->getOrCreateStrcat();
+								llvm::Value* lenA = this->irBuilder.CreateCall( strlenFunc, { selfValue }, "cat.lenA" );
+								llvm::Value* lenB = this->irBuilder.CreateCall( strlenFunc, { otherValue }, "cat.lenB" );
+								llvm::Value* totalLen = this->irBuilder.CreateAdd( lenA, lenB, "cat.total" );
+								llvm::Value* allocSize = this->irBuilder.CreateAdd(
+									totalLen, llvm::ConstantInt::get( i64Type, 1 ), "cat.alloc" );
+								llvm::Value* buf = this->irBuilder.CreateCall( mallocFunc, { allocSize }, "cat.buf" );
+								this->irBuilder.CreateCall( strcpyFunc, { buf, selfValue } );
+								this->irBuilder.CreateCall( strcatFunc, { buf, otherValue } );
+								this->setVariableValue( instruction.destinationVariable, buf );
+							}
+							return;
+						}
+						if( methodName == "startsWith" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* prefixValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							if( prefixValue != nullptr ) {
+								llvm::Function* strlenFunc = this->getOrCreateStrlen();
+								llvm::Function* strncmpFunc = this->getOrCreateStrncmp();
+								llvm::Value* prefixLen = this->irBuilder.CreateCall( strlenFunc, { prefixValue }, "sw.len" );
+								llvm::Value* cmpResult = this->irBuilder.CreateCall( strncmpFunc, { selfValue, prefixValue, prefixLen }, "sw.cmp" );
+								llvm::Value* isMatch = this->irBuilder.CreateICmpEQ(
+									cmpResult, llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->llvmContext ), 0 ), "sw.eq" );
+								this->setVariableValue( instruction.destinationVariable, isMatch );
+							}
+							return;
+						}
+						if( methodName == "endsWith" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* suffixValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							if( suffixValue != nullptr ) {
+								llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+								llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::Function* strlenFunc = this->getOrCreateStrlen();
+								llvm::Function* strcmpFunc = this->getOrCreateStrcmp();
+								llvm::Value* selfLen = this->irBuilder.CreateCall( strlenFunc, { selfValue }, "ew.slen" );
+								llvm::Value* suffixLen = this->irBuilder.CreateCall( strlenFunc, { suffixValue }, "ew.suflen" );
+								llvm::Value* offset = this->irBuilder.CreateSub( selfLen, suffixLen, "ew.off" );
+								llvm::Value* tailPtr = this->irBuilder.CreateGEP(
+									llvm::Type::getInt8Ty( this->llvmContext ), selfValue, offset, "ew.tail" );
+								llvm::Value* cmpResult = this->irBuilder.CreateCall( strcmpFunc, { tailPtr, suffixValue }, "ew.cmp" );
+								llvm::Value* isMatch = this->irBuilder.CreateICmpEQ(
+									cmpResult, llvm::ConstantInt::get( i32Type, 0 ), "ew.eq" );
+								llvm::Value* lenOk = this->irBuilder.CreateICmpSGE( selfLen, suffixLen, "ew.lenok" );
+								llvm::Value* result = this->irBuilder.CreateAnd( lenOk, isMatch, "ew.result" );
+								this->setVariableValue( instruction.destinationVariable, result );
+							}
+							return;
+						}
+						if( methodName == "contains" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* substrValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							if( substrValue != nullptr ) {
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::Function* strstrFunc = this->getOrCreateStrstr();
+								llvm::Value* found = this->irBuilder.CreateCall( strstrFunc, { selfValue, substrValue }, "str.find" );
+								llvm::Value* isFound = this->irBuilder.CreateICmpNE(
+									found, llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) ), "str.has" );
+								this->setVariableValue( instruction.destinationVariable, isFound );
+							}
+							return;
+						}
+						if( methodName == "indexOf" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* substrValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							if( substrValue != nullptr ) {
+								llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::Function* strstrFunc = this->getOrCreateStrstr();
+								llvm::Value* found = this->irBuilder.CreateCall( strstrFunc, { selfValue, substrValue }, "idx.find" );
+								llvm::Value* isNull = this->irBuilder.CreateICmpEQ(
+									found, llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) ), "idx.null" );
+								llvm::Value* offset = this->irBuilder.CreatePtrDiff( llvm::Type::getInt8Ty( this->llvmContext ), found, selfValue, "idx.off" );
+								llvm::Value* result = this->irBuilder.CreateSelect( isNull,
+									llvm::ConstantInt::get( i64Type, -1 ), offset, "idx.result" );
+								this->setVariableValue( instruction.destinationVariable, result );
+							}
+							return;
+						}
+						if( methodName == "charAt" && instruction.sourceOperands.size() >= 2 ) {
+							llvm::Value* indexValue = this->loadVariableValue( instruction.sourceOperands[1] );
+							if( indexValue != nullptr ) {
+								llvm::Type* i8Type = llvm::Type::getInt8Ty( this->llvmContext );
+								llvm::Value* charPtr = this->irBuilder.CreateGEP( i8Type, selfValue, indexValue, "at.ptr" );
+								llvm::Value* charVal = this->irBuilder.CreateLoad( i8Type, charPtr, "at.char" );
+								llvm::Value* charI64 = this->irBuilder.CreateZExt(
+									charVal, llvm::Type::getInt64Ty( this->llvmContext ), "at.i64" );
+								this->setVariableValue( instruction.destinationVariable, charI64 );
+							}
+							return;
+						}
+						if( methodName == "toUpper" ) {
+							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+							llvm::Type* i8Type = llvm::Type::getInt8Ty( this->llvmContext );
+							llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+							llvm::Function* strlenFunc = this->getOrCreateStrlen();
+							llvm::Function* mallocFunc = this->getOrCreateMalloc();
+							llvm::Function* memcpyFunc = this->getOrCreateMemcpy();
+							llvm::Value* len = this->irBuilder.CreateCall( strlenFunc, { selfValue }, "up.len" );
+							llvm::Value* allocSize = this->irBuilder.CreateAdd( len, llvm::ConstantInt::get( i64Type, 1 ), "up.alloc" );
+							llvm::Value* buf = this->irBuilder.CreateCall( mallocFunc, { allocSize }, "up.buf" );
+							this->irBuilder.CreateCall( memcpyFunc, { buf, selfValue, allocSize, this->irBuilder.getFalse() } );
+							llvm::Function* currentFunc = this->irBuilder.GetInsertBlock()->getParent();
+							llvm::BasicBlock* loopHeader = llvm::BasicBlock::Create( this->llvmContext, "up.hdr", currentFunc );
+							llvm::BasicBlock* loopBody = llvm::BasicBlock::Create( this->llvmContext, "up.body", currentFunc );
+							llvm::BasicBlock* loopExit = llvm::BasicBlock::Create( this->llvmContext, "up.exit", currentFunc );
+							llvm::Value* idxAlloca = this->irBuilder.CreateAlloca( i64Type, nullptr, "up.idx" );
+							this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, 0 ), idxAlloca );
+							this->irBuilder.CreateBr( loopHeader );
+							this->irBuilder.SetInsertPoint( loopHeader );
+							llvm::Value* idx = this->irBuilder.CreateLoad( i64Type, idxAlloca, "up.i" );
+							llvm::Value* cond = this->irBuilder.CreateICmpSLT( idx, len, "up.cond" );
+							this->irBuilder.CreateCondBr( cond, loopBody, loopExit );
+							this->irBuilder.SetInsertPoint( loopBody );
+							llvm::Value* charPtr = this->irBuilder.CreateGEP( i8Type, buf, idx, "up.ptr" );
+							llvm::Value* ch = this->irBuilder.CreateLoad( i8Type, charPtr, "up.ch" );
+							llvm::Value* isLower = this->irBuilder.CreateAnd(
+								this->irBuilder.CreateICmpSGE( ch, llvm::ConstantInt::get( i8Type, 'a' ), "up.ge" ),
+								this->irBuilder.CreateICmpSLE( ch, llvm::ConstantInt::get( i8Type, 'z' ), "up.le" ), "up.islow" );
+							llvm::Value* upper = this->irBuilder.CreateSub( ch, llvm::ConstantInt::get( i8Type, 32 ), "up.upper" );
+							llvm::Value* result = this->irBuilder.CreateSelect( isLower, upper, ch, "up.sel" );
+							this->irBuilder.CreateStore( result, charPtr );
+							llvm::Value* nextIdx = this->irBuilder.CreateAdd( idx, llvm::ConstantInt::get( i64Type, 1 ), "up.next" );
+							this->irBuilder.CreateStore( nextIdx, idxAlloca );
+							this->irBuilder.CreateBr( loopHeader );
+							this->irBuilder.SetInsertPoint( loopExit );
+							this->setVariableValue( instruction.destinationVariable, buf );
+							return;
+						}
+						if( methodName == "toLower" ) {
+							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+							llvm::Type* i8Type = llvm::Type::getInt8Ty( this->llvmContext );
+							llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+							llvm::Function* strlenFunc = this->getOrCreateStrlen();
+							llvm::Function* mallocFunc = this->getOrCreateMalloc();
+							llvm::Function* memcpyFunc = this->getOrCreateMemcpy();
+							llvm::Value* len = this->irBuilder.CreateCall( strlenFunc, { selfValue }, "lo.len" );
+							llvm::Value* allocSize = this->irBuilder.CreateAdd( len, llvm::ConstantInt::get( i64Type, 1 ), "lo.alloc" );
+							llvm::Value* buf = this->irBuilder.CreateCall( mallocFunc, { allocSize }, "lo.buf" );
+							this->irBuilder.CreateCall( memcpyFunc, { buf, selfValue, allocSize, this->irBuilder.getFalse() } );
+							llvm::Function* currentFunc = this->irBuilder.GetInsertBlock()->getParent();
+							llvm::BasicBlock* loopHeader = llvm::BasicBlock::Create( this->llvmContext, "lo.hdr", currentFunc );
+							llvm::BasicBlock* loopBody = llvm::BasicBlock::Create( this->llvmContext, "lo.body", currentFunc );
+							llvm::BasicBlock* loopExit = llvm::BasicBlock::Create( this->llvmContext, "lo.exit", currentFunc );
+							llvm::Value* idxAlloca = this->irBuilder.CreateAlloca( i64Type, nullptr, "lo.idx" );
+							this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, 0 ), idxAlloca );
+							this->irBuilder.CreateBr( loopHeader );
+							this->irBuilder.SetInsertPoint( loopHeader );
+							llvm::Value* idx = this->irBuilder.CreateLoad( i64Type, idxAlloca, "lo.i" );
+							llvm::Value* cond = this->irBuilder.CreateICmpSLT( idx, len, "lo.cond" );
+							this->irBuilder.CreateCondBr( cond, loopBody, loopExit );
+							this->irBuilder.SetInsertPoint( loopBody );
+							llvm::Value* charPtr = this->irBuilder.CreateGEP( i8Type, buf, idx, "lo.ptr" );
+							llvm::Value* ch = this->irBuilder.CreateLoad( i8Type, charPtr, "lo.ch" );
+							llvm::Value* isUpper = this->irBuilder.CreateAnd(
+								this->irBuilder.CreateICmpSGE( ch, llvm::ConstantInt::get( i8Type, 'A' ), "lo.ge" ),
+								this->irBuilder.CreateICmpSLE( ch, llvm::ConstantInt::get( i8Type, 'Z' ), "lo.le" ), "lo.isup" );
+							llvm::Value* lower = this->irBuilder.CreateAdd( ch, llvm::ConstantInt::get( i8Type, 32 ), "lo.lower" );
+							llvm::Value* result = this->irBuilder.CreateSelect( isUpper, lower, ch, "lo.sel" );
+							this->irBuilder.CreateStore( result, charPtr );
+							llvm::Value* nextIdx = this->irBuilder.CreateAdd( idx, llvm::ConstantInt::get( i64Type, 1 ), "lo.next" );
+							this->irBuilder.CreateStore( nextIdx, idxAlloca );
+							this->irBuilder.CreateBr( loopHeader );
+							this->irBuilder.SetInsertPoint( loopExit );
+							this->setVariableValue( instruction.destinationVariable, buf );
+							return;
+						}
+						if( methodName == "trim" ) {
+							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+							llvm::Type* i8Type = llvm::Type::getInt8Ty( this->llvmContext );
+							llvm::Function* strlenFunc = this->getOrCreateStrlen();
+							llvm::Function* mallocFunc = this->getOrCreateMalloc();
+							llvm::Function* memcpyFunc = this->getOrCreateMemcpy();
+							llvm::Value* len = this->irBuilder.CreateCall( strlenFunc, { selfValue }, "trim.len" );
+							llvm::Function* currentFunc = this->irBuilder.GetInsertBlock()->getParent();
+							llvm::BasicBlock* trimStartHdr = llvm::BasicBlock::Create( this->llvmContext, "trim.s.hdr", currentFunc );
+							llvm::BasicBlock* trimStartBody = llvm::BasicBlock::Create( this->llvmContext, "trim.s.body", currentFunc );
+							llvm::BasicBlock* trimStartInc = llvm::BasicBlock::Create( this->llvmContext, "trim.s.inc", currentFunc );
+							llvm::BasicBlock* trimEndHdr = llvm::BasicBlock::Create( this->llvmContext, "trim.e.hdr", currentFunc );
+							llvm::BasicBlock* trimEndBody = llvm::BasicBlock::Create( this->llvmContext, "trim.e.body", currentFunc );
+							llvm::BasicBlock* trimEndDec = llvm::BasicBlock::Create( this->llvmContext, "trim.e.dec", currentFunc );
+							llvm::BasicBlock* trimCopy = llvm::BasicBlock::Create( this->llvmContext, "trim.copy", currentFunc );
+							llvm::Value* startAlloca = this->irBuilder.CreateAlloca( i64Type, nullptr, "trim.start" );
+							llvm::Value* endAlloca = this->irBuilder.CreateAlloca( i64Type, nullptr, "trim.end" );
+							this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, 0 ), startAlloca );
+							this->irBuilder.CreateStore( len, endAlloca );
+							this->irBuilder.CreateBr( trimStartHdr );
+							this->irBuilder.SetInsertPoint( trimStartHdr );
+							llvm::Value* startIdx = this->irBuilder.CreateLoad( i64Type, startAlloca, "trim.si" );
+							llvm::Value* startCond = this->irBuilder.CreateICmpSLT( startIdx, len, "trim.sc" );
+							this->irBuilder.CreateCondBr( startCond, trimStartBody, trimEndHdr );
+							this->irBuilder.SetInsertPoint( trimStartBody );
+							llvm::Value* sCharPtr = this->irBuilder.CreateGEP( i8Type, selfValue, startIdx, "trim.scp" );
+							llvm::Value* sCh = this->irBuilder.CreateLoad( i8Type, sCharPtr, "trim.sch" );
+							llvm::Value* isSpace = this->irBuilder.CreateOr(
+								this->irBuilder.CreateICmpEQ( sCh, llvm::ConstantInt::get( i8Type, ' ' ) ),
+								this->irBuilder.CreateOr(
+									this->irBuilder.CreateICmpEQ( sCh, llvm::ConstantInt::get( i8Type, '\t' ) ),
+									this->irBuilder.CreateOr(
+										this->irBuilder.CreateICmpEQ( sCh, llvm::ConstantInt::get( i8Type, '\n' ) ),
+										this->irBuilder.CreateICmpEQ( sCh, llvm::ConstantInt::get( i8Type, '\r' ) ) ) ) );
+							this->irBuilder.CreateCondBr( isSpace, trimStartInc, trimEndHdr );
+							this->irBuilder.SetInsertPoint( trimStartInc );
+							llvm::Value* nextStart = this->irBuilder.CreateAdd( startIdx, llvm::ConstantInt::get( i64Type, 1 ) );
+							this->irBuilder.CreateStore( nextStart, startAlloca );
+							this->irBuilder.CreateBr( trimStartHdr );
+							this->irBuilder.SetInsertPoint( trimEndHdr );
+							llvm::Value* endIdx = this->irBuilder.CreateLoad( i64Type, endAlloca, "trim.ei" );
+							llvm::Value* startVal = this->irBuilder.CreateLoad( i64Type, startAlloca, "trim.sv" );
+							llvm::Value* endCond = this->irBuilder.CreateICmpSGT( endIdx, startVal, "trim.ec" );
+							this->irBuilder.CreateCondBr( endCond, trimEndBody, trimCopy );
+							this->irBuilder.SetInsertPoint( trimEndBody );
+							llvm::Value* ePos = this->irBuilder.CreateSub( endIdx, llvm::ConstantInt::get( i64Type, 1 ), "trim.epos" );
+							llvm::Value* eCharPtr = this->irBuilder.CreateGEP( i8Type, selfValue, ePos, "trim.ecp" );
+							llvm::Value* eCh = this->irBuilder.CreateLoad( i8Type, eCharPtr, "trim.ech" );
+							llvm::Value* eIsSpace = this->irBuilder.CreateOr(
+								this->irBuilder.CreateICmpEQ( eCh, llvm::ConstantInt::get( i8Type, ' ' ) ),
+								this->irBuilder.CreateOr(
+									this->irBuilder.CreateICmpEQ( eCh, llvm::ConstantInt::get( i8Type, '\t' ) ),
+									this->irBuilder.CreateOr(
+										this->irBuilder.CreateICmpEQ( eCh, llvm::ConstantInt::get( i8Type, '\n' ) ),
+										this->irBuilder.CreateICmpEQ( eCh, llvm::ConstantInt::get( i8Type, '\r' ) ) ) ) );
+							this->irBuilder.CreateCondBr( eIsSpace, trimEndDec, trimCopy );
+							this->irBuilder.SetInsertPoint( trimEndDec );
+							this->irBuilder.CreateStore( ePos, endAlloca );
+							this->irBuilder.CreateBr( trimEndHdr );
+							this->irBuilder.SetInsertPoint( trimCopy );
+							llvm::Value* trimStart = this->irBuilder.CreateLoad( i64Type, startAlloca, "trim.rs" );
+							llvm::Value* trimEnd = this->irBuilder.CreateLoad( i64Type, endAlloca, "trim.re" );
+							llvm::Value* trimLen = this->irBuilder.CreateSub( trimEnd, trimStart, "trim.len2" );
+							llvm::Value* trimAlloc = this->irBuilder.CreateAdd( trimLen, llvm::ConstantInt::get( i64Type, 1 ), "trim.alloc" );
+							llvm::Value* trimBuf = this->irBuilder.CreateCall( mallocFunc, { trimAlloc }, "trim.buf" );
+							llvm::Value* srcPtr = this->irBuilder.CreateGEP( i8Type, selfValue, trimStart, "trim.src" );
+							this->irBuilder.CreateCall( memcpyFunc, { trimBuf, srcPtr, trimLen, this->irBuilder.getFalse() } );
+							llvm::Value* nullPos = this->irBuilder.CreateGEP( i8Type, trimBuf, trimLen, "trim.null" );
+							this->irBuilder.CreateStore( llvm::ConstantInt::get( i8Type, 0 ), nullPos );
+							this->setVariableValue( instruction.destinationVariable, trimBuf );
+							return;
+						}
+						if( methodName == "replace" && instruction.sourceOperands.size() >= 3 ) {
+							llvm::Value* oldStr = this->loadVariableValue( instruction.sourceOperands[1] );
+							llvm::Value* newStr = this->loadVariableValue( instruction.sourceOperands[2] );
+							if( oldStr != nullptr && newStr != nullptr ) {
+								llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+								llvm::Type* i8Type = llvm::Type::getInt8Ty( this->llvmContext );
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::Function* strlenFunc = this->getOrCreateStrlen();
+								llvm::Function* strstrFunc = this->getOrCreateStrstr();
+								llvm::Function* mallocFunc = this->getOrCreateMalloc();
+								llvm::Function* memcpyFunc = this->getOrCreateMemcpy();
+								llvm::Value* selfLen = this->irBuilder.CreateCall( strlenFunc, { selfValue }, "rep.slen" );
+								llvm::Value* oldLen = this->irBuilder.CreateCall( strlenFunc, { oldStr }, "rep.olen" );
+								llvm::Value* newLen = this->irBuilder.CreateCall( strlenFunc, { newStr }, "rep.nlen" );
+								llvm::Value* worstCase = this->irBuilder.CreateMul( selfLen,
+									this->irBuilder.CreateAdd( newLen, llvm::ConstantInt::get( i64Type, 1 ) ), "rep.worst" );
+								llvm::Value* allocSize = this->irBuilder.CreateAdd( worstCase,
+									llvm::ConstantInt::get( i64Type, 1 ), "rep.alloc" );
+								llvm::Value* buf = this->irBuilder.CreateCall( mallocFunc, { allocSize }, "rep.buf" );
+								llvm::Function* currentFunc = this->irBuilder.GetInsertBlock()->getParent();
+								llvm::BasicBlock* loopHdr = llvm::BasicBlock::Create( this->llvmContext, "rep.hdr", currentFunc );
+								llvm::BasicBlock* foundBlock = llvm::BasicBlock::Create( this->llvmContext, "rep.found", currentFunc );
+								llvm::BasicBlock* notFound = llvm::BasicBlock::Create( this->llvmContext, "rep.nf", currentFunc );
+								llvm::BasicBlock* exitBlock = llvm::BasicBlock::Create( this->llvmContext, "rep.exit", currentFunc );
+								llvm::Value* srcAlloca = this->irBuilder.CreateAlloca( ptrType, nullptr, "rep.src" );
+								llvm::Value* dstAlloca = this->irBuilder.CreateAlloca( ptrType, nullptr, "rep.dst" );
+								this->irBuilder.CreateStore( selfValue, srcAlloca );
+								this->irBuilder.CreateStore( buf, dstAlloca );
+								this->irBuilder.CreateBr( loopHdr );
+								this->irBuilder.SetInsertPoint( loopHdr );
+								llvm::Value* src = this->irBuilder.CreateLoad( ptrType, srcAlloca, "rep.csrc" );
+								llvm::Value* found = this->irBuilder.CreateCall( strstrFunc, { src, oldStr }, "rep.find" );
+								llvm::Value* isFound = this->irBuilder.CreateICmpNE( found,
+									llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) ), "rep.isf" );
+								this->irBuilder.CreateCondBr( isFound, foundBlock, notFound );
+								this->irBuilder.SetInsertPoint( foundBlock );
+								llvm::Value* dst = this->irBuilder.CreateLoad( ptrType, dstAlloca, "rep.cdst" );
+								llvm::Value* prefixLen = this->irBuilder.CreatePtrDiff( i8Type, found, src, "rep.plen" );
+								this->irBuilder.CreateCall( memcpyFunc, { dst, src, prefixLen, this->irBuilder.getFalse() } );
+								llvm::Value* dst2 = this->irBuilder.CreateGEP( i8Type, dst, prefixLen, "rep.d2" );
+								this->irBuilder.CreateCall( memcpyFunc, { dst2, newStr, newLen, this->irBuilder.getFalse() } );
+								llvm::Value* dst3 = this->irBuilder.CreateGEP( i8Type, dst2, newLen, "rep.d3" );
+								this->irBuilder.CreateStore( dst3, dstAlloca );
+								llvm::Value* nextSrc = this->irBuilder.CreateGEP( i8Type, found, oldLen, "rep.ns" );
+								this->irBuilder.CreateStore( nextSrc, srcAlloca );
+								this->irBuilder.CreateBr( loopHdr );
+								this->irBuilder.SetInsertPoint( notFound );
+								llvm::Value* finalSrc = this->irBuilder.CreateLoad( ptrType, srcAlloca, "rep.fs" );
+								llvm::Value* finalDst = this->irBuilder.CreateLoad( ptrType, dstAlloca, "rep.fd" );
+								llvm::Value* remainLen = this->irBuilder.CreateCall( strlenFunc, { finalSrc }, "rep.rlen" );
+								llvm::Value* copyLen = this->irBuilder.CreateAdd( remainLen,
+									llvm::ConstantInt::get( i64Type, 1 ), "rep.clen" );
+								this->irBuilder.CreateCall( memcpyFunc, { finalDst, finalSrc, copyLen, this->irBuilder.getFalse() } );
+								this->irBuilder.CreateBr( exitBlock );
+								this->irBuilder.SetInsertPoint( exitBlock );
+								this->setVariableValue( instruction.destinationVariable, buf );
+							}
 							return;
 						}
 						if( methodName == "String" ) {
@@ -2936,14 +3383,8 @@ namespace uranite::ir::mir {
 					if( methodName == "toString" ) {
 						llvm::Value* selfValue = loadSelf();
 						if( selfValue != nullptr ) {
-							llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
 							llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
-							llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
-							llvm::Function* snprintfFunction = this->llvmModule->getFunction( "snprintf" );
-							if( snprintfFunction == nullptr ) {
-								llvm::FunctionType* snprintfType = llvm::FunctionType::get( i32Type, { ptrType, i64Type, ptrType }, true );
-								snprintfFunction = llvm::Function::Create( snprintfType, llvm::Function::ExternalLinkage, "snprintf", this->llvmModule.get() );
-							}
+							llvm::Function* snprintfFunction = this->getOrCreateSnprintf();
 							llvm::Function* mallocFunction = this->getOrCreateMalloc();
 							llvm::Value* bufSize = llvm::ConstantInt::get( i64Type, 48 );
 							llvm::Value* bufPtr = this->irBuilder.CreateCall( mallocFunction, { bufSize }, "wrap.str.buf" );
@@ -3122,27 +3563,10 @@ namespace uranite::ir::mir {
 			if( leftValue != nullptr && rightValue != nullptr &&
 				leftValue->getType()->isPointerTy() && rightValue->getType()->isPointerTy() ) {
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
-				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-				llvm::Function* strlenFunction = this->llvmModule->getFunction( "strlen" );
-				if( strlenFunction == nullptr ) {
-					llvm::FunctionType* strlenType = llvm::FunctionType::get( i64Type, { ptrType }, false );
-					strlenFunction = llvm::Function::Create( strlenType, llvm::Function::ExternalLinkage, "strlen", this->llvmModule.get() );
-				}
-				llvm::Function* strcpyFunction = this->llvmModule->getFunction( "strcpy" );
-				if( strcpyFunction == nullptr ) {
-					llvm::FunctionType* strcpyType = llvm::FunctionType::get( ptrType, { ptrType, ptrType }, false );
-					strcpyFunction = llvm::Function::Create( strcpyType, llvm::Function::ExternalLinkage, "strcpy", this->llvmModule.get() );
-				}
-				llvm::Function* strcatFunction = this->llvmModule->getFunction( "strcat" );
-				if( strcatFunction == nullptr ) {
-					llvm::FunctionType* strcatType = llvm::FunctionType::get( ptrType, { ptrType, ptrType }, false );
-					strcatFunction = llvm::Function::Create( strcatType, llvm::Function::ExternalLinkage, "strcat", this->llvmModule.get() );
-				}
-				llvm::Function* mallocFunction = this->llvmModule->getFunction( "malloc" );
-				if( mallocFunction == nullptr ) {
-					llvm::FunctionType* mallocType = llvm::FunctionType::get( ptrType, { i64Type }, false );
-					mallocFunction = llvm::Function::Create( mallocType, llvm::Function::ExternalLinkage, "malloc", this->llvmModule.get() );
-				}
+				llvm::Function* strlenFunction = this->getOrCreateStrlen();
+				llvm::Function* strcpyFunction = this->getOrCreateStrcpy();
+				llvm::Function* strcatFunction = this->getOrCreateStrcat();
+				llvm::Function* mallocFunction = this->getOrCreateMalloc();
 				llvm::Value* lenA = this->irBuilder.CreateCall( strlenFunction, { leftValue }, "len.a" );
 				llvm::Value* lenB = this->irBuilder.CreateCall( strlenFunction, { rightValue }, "len.b" );
 				llvm::Value* totalLen = this->irBuilder.CreateAdd( lenA, lenB, "total.len" );
@@ -3163,12 +3587,7 @@ namespace uranite::ir::mir {
 			if( leftValue != nullptr && rightValue != nullptr &&
 				leftValue->getType()->isPointerTy() && rightValue->getType()->isPointerTy() ) {
 				llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
-				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-				llvm::Function* strcmpFunction = this->llvmModule->getFunction( "strcmp" );
-				if( strcmpFunction == nullptr ) {
-					llvm::FunctionType* strcmpType = llvm::FunctionType::get( i32Type, { ptrType, ptrType }, false );
-					strcmpFunction = llvm::Function::Create( strcmpType, llvm::Function::ExternalLinkage, "strcmp", this->llvmModule.get() );
-				}
+				llvm::Function* strcmpFunction = this->getOrCreateStrcmp();
 				llvm::Value* cmpResult = this->irBuilder.CreateCall( strcmpFunction, { leftValue, rightValue }, "strcmp.res" );
 				llvm::Value* isEqual = this->irBuilder.CreateICmpEQ( cmpResult, llvm::ConstantInt::get( i32Type, 0 ), "streq" );
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
@@ -3350,8 +3769,269 @@ namespace uranite::ir::mir {
 			this->functionResolutionMap[instruction.calledFunctionQualifiedName] = callee;
 		}
 
+		// Detect variadic callee from MIR definitions or semantic method info
+		int calleeVariadicIndex = -1;
+		semantic::TypeSharedPointer calleeVariadicElemType = nullptr;
+		if( this->mirFunctionDefinitionMap.count( instruction.calledFunctionQualifiedName ) > 0 ) {
+			MIRFunctionDefinition* calleeDef = this->mirFunctionDefinitionMap[instruction.calledFunctionQualifiedName];
+			calleeVariadicIndex = calleeDef->variadicParameterIndex;
+			calleeVariadicElemType = calleeDef->variadicElementType;
+		}
+		if( calleeVariadicIndex < 0 && instruction.calledFunctionQualifiedName.find( '.' ) != std::string::npos ) {
+			size_t dotPos = instruction.calledFunctionQualifiedName.find( '.' );
+			std::string ownerName = instruction.calledFunctionQualifiedName.substr( 0, dotPos );
+			std::string methName = instruction.calledFunctionQualifiedName.substr( dotPos + 1 );
+			semantic::TypeSharedPointer ownerType = this->semanticAnalyzer.types().lookupType( ownerName );
+			if( ownerType != nullptr && ownerType->kind == semantic::Type::Kind::Class ) {
+				semantic::ClassType* classPtr = static_cast<semantic::ClassType*>( ownerType.get() );
+				for( const semantic::MethodInfo& methodEntry : classPtr->methods ) {
+					if( methodEntry.name == methName && methodEntry.type != nullptr &&
+						methodEntry.type->kind == semantic::Type::Kind::Function ) {
+						semantic::FunctionType* funcType = static_cast<semantic::FunctionType*>( methodEntry.type.get() );
+						if( funcType->variadicParameterIndex >= 0 ) {
+							calleeVariadicIndex = funcType->variadicParameterIndex;
+							calleeVariadicElemType = funcType->variadicElementType;
+							break;
+						}
+					}
+				}
+			}
+		}
+
 		llvm::FunctionType* calleeType = callee->getFunctionType();
 		unsigned expectedParamCount = calleeType->getNumParams();
+
+		// Pack variadic arguments into Args<T> struct when callee has variadic parameter
+		if( calleeVariadicIndex >= 0 &&
+			static_cast<unsigned>( calleeVariadicIndex ) < expectedParamCount &&
+			instruction.sourceOperands.size() > static_cast<size_t>( calleeVariadicIndex ) ) {
+
+			std::vector<llvm::Value*> arguments;
+			llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+
+			// Fixed arguments before the variadic parameter
+			for( int fixedIdx = 0; fixedIdx < calleeVariadicIndex; fixedIdx++ ) {
+				if( static_cast<size_t>( fixedIdx ) >= instruction.sourceOperands.size() ) {
+					arguments.push_back( llvm::Constant::getNullValue( calleeType->getParamType( fixedIdx ) ) );
+					continue;
+				}
+				llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[fixedIdx] );
+				if( argValue == nullptr ) {
+					arguments.push_back( llvm::Constant::getNullValue( calleeType->getParamType( fixedIdx ) ) );
+					continue;
+				}
+				llvm::Type* expectedType = calleeType->getParamType( fixedIdx );
+				if( argValue->getType() != expectedType ) {
+					if( argValue->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
+						unsigned srcBits = argValue->getType()->getIntegerBitWidth();
+						unsigned dstBits = expectedType->getIntegerBitWidth();
+						if( srcBits < dstBits ) argValue = this->irBuilder.CreateSExt( argValue, expectedType, "farg.sext" );
+						else if( srcBits > dstBits ) argValue = this->irBuilder.CreateTrunc( argValue, expectedType, "farg.trunc" );
+					}
+					else if( argValue->getType()->isPointerTy() && expectedType->isPointerTy() ) {
+						// Opaque pointers — compatible
+					}
+					else if( argValue->getType()->isIntegerTy() && expectedType->isPointerTy() ) {
+						argValue = this->irBuilder.CreateIntToPtr( argValue, expectedType, "farg.itop" );
+					}
+					else if( argValue->getType()->isPointerTy() && expectedType->isIntegerTy() ) {
+						argValue = this->irBuilder.CreatePtrToInt( argValue, expectedType, "farg.ptoi" );
+					}
+					else if( argValue->getType()->isFloatingPointTy() && expectedType->isIntegerTy() ) {
+						argValue = this->irBuilder.CreateFPToSI( argValue, expectedType, "farg.fptoi" );
+					}
+					else if( argValue->getType()->isIntegerTy() && expectedType->isFloatingPointTy() ) {
+						argValue = this->irBuilder.CreateSIToFP( argValue, expectedType, "farg.itofp" );
+					}
+					else if( argValue->getType()->isFloatingPointTy() && expectedType->isFloatingPointTy() ) {
+						argValue = this->irBuilder.CreateFPCast( argValue, expectedType, "farg.fpcast" );
+					}
+					else if( argValue->getType()->isIntegerTy( 1 ) && expectedType->isIntegerTy() ) {
+						argValue = this->irBuilder.CreateZExt( argValue, expectedType, "farg.bext" );
+					}
+				}
+				arguments.push_back( argValue );
+			}
+
+			// Determine element type for Args<T> struct
+			llvm::Type* elemType = i64Type;
+			if( calleeVariadicElemType != nullptr ) {
+				llvm::Type* resolved = this->toLLVMType( calleeVariadicElemType );
+				if( resolved->isVoidTy() == false ) {
+					elemType = resolved;
+				}
+			}
+
+			// Count keyword-only params after the variadic slot
+			unsigned keywordOnlyCount = ( expectedParamCount > static_cast<unsigned>( calleeVariadicIndex ) + 1 )
+				? expectedParamCount - calleeVariadicIndex - 1
+				: 0;
+
+			size_t variadicArgStart = static_cast<size_t>( calleeVariadicIndex );
+			size_t totalRemainingArgs = ( instruction.sourceOperands.size() > variadicArgStart )
+				? instruction.sourceOperands.size() - variadicArgStart
+				: 0;
+			size_t variadicArgCount = ( totalRemainingArgs > keywordOnlyCount )
+				? totalRemainingArgs - keywordOnlyCount
+				: 0;
+
+			// Check for Args<T> forwarding (variadic param passed as single Args struct)
+			bool isVariadicForward = false;
+			if( variadicArgCount == 1 ) {
+				MIRVariableIdentifier forwardVar = instruction.sourceOperands[variadicArgStart];
+				if( functionDefinition.variadicParameterIndex >= 0 ) {
+					size_t callerVarIdx = static_cast<size_t>( functionDefinition.variadicParameterIndex );
+					if( callerVarIdx < functionDefinition.parameterVariableIdentifiers.size() &&
+						functionDefinition.parameterVariableIdentifiers[callerVarIdx] == forwardVar ) {
+						isVariadicForward = true;
+					}
+				}
+				if( isVariadicForward == false &&
+					functionDefinition.variableDescriptorTable.count( forwardVar ) > 0 ) {
+					MIRVariableDescriptor& forwardDesc = functionDefinition.variableDescriptorTable[forwardVar];
+					if( forwardDesc.variableType != nullptr &&
+						forwardDesc.variableType->name.find( "Args<" ) == 0 ) {
+						isVariadicForward = true;
+					}
+				}
+			}
+
+			if( isVariadicForward ) {
+				llvm::Value* forwardedArgs = this->loadVariableValue( instruction.sourceOperands[variadicArgStart] );
+				if( forwardedArgs != nullptr && forwardedArgs->getType()->isPointerTy() == false ) {
+					forwardedArgs = this->irBuilder.CreateIntToPtr(
+						forwardedArgs, llvm::PointerType::getUnqual( this->llvmContext ), "vfwd.ptr"
+					);
+				}
+				arguments.push_back( forwardedArgs );
+			}
+			else {
+				// Build Args<T> struct: { T* data, i64 count, i64 pos }
+				llvm::StructType* argsStructType = llvm::StructType::get( this->llvmContext, {
+					llvm::PointerType::getUnqual( this->llvmContext ),
+					i64Type,
+					i64Type
+				});
+
+				llvm::Function* currentFunc = this->irBuilder.GetInsertBlock()->getParent();
+				llvm::AllocaInst* argsAlloca = this->createEntryBlockAllocation(
+					currentFunc, "pack.args", argsStructType
+				);
+
+				if( variadicArgCount > 0 ) {
+					llvm::ArrayType* dataArrayType = llvm::ArrayType::get( elemType, variadicArgCount );
+					llvm::AllocaInst* dataAlloca = this->createEntryBlockAllocation(
+						currentFunc, "pack.args.data", dataArrayType
+					);
+
+					for( size_t i = 0; i < variadicArgCount; i++ ) {
+						llvm::Value* argValue = this->loadVariableValue(
+							instruction.sourceOperands[variadicArgStart + i]
+						);
+						if( argValue != nullptr ) {
+							if( argValue->getType() != elemType ) {
+								if( argValue->getType()->isIntegerTy() && elemType->isIntegerTy() ) {
+									unsigned srcBits = argValue->getType()->getIntegerBitWidth();
+									unsigned dstBits = elemType->getIntegerBitWidth();
+									if( srcBits < dstBits ) argValue = this->irBuilder.CreateSExt( argValue, elemType, "varg.sext" );
+									else if( srcBits > dstBits ) argValue = this->irBuilder.CreateTrunc( argValue, elemType, "varg.trunc" );
+								}
+								else if( argValue->getType()->isPointerTy() && elemType->isIntegerTy() ) {
+									argValue = this->irBuilder.CreatePtrToInt( argValue, elemType, "varg.ptoi" );
+								}
+								else if( argValue->getType()->isIntegerTy() && elemType->isPointerTy() ) {
+									argValue = this->irBuilder.CreateIntToPtr( argValue, elemType, "varg.itop" );
+								}
+								else if( argValue->getType()->isFloatingPointTy() && elemType->isIntegerTy() ) {
+									argValue = this->irBuilder.CreateFPToSI( argValue, elemType, "varg.fptoi" );
+								}
+								else if( argValue->getType()->isIntegerTy() && elemType->isFloatingPointTy() ) {
+									argValue = this->irBuilder.CreateSIToFP( argValue, elemType, "varg.itofp" );
+								}
+								else if( argValue->getType()->isFloatingPointTy() && elemType->isFloatingPointTy() ) {
+									argValue = this->irBuilder.CreateFPCast( argValue, elemType, "varg.fpcast" );
+								}
+							}
+							llvm::Value* elemGep = this->irBuilder.CreateConstGEP2_32(
+								dataArrayType, dataAlloca, 0, static_cast<unsigned>( i ), "pack.args.gep"
+							);
+							this->irBuilder.CreateStore( argValue, elemGep );
+						}
+					}
+
+					llvm::Value* dataFieldPtr = this->irBuilder.CreateStructGEP(
+						argsStructType, argsAlloca, 0, "pack.args.data.field"
+					);
+					this->irBuilder.CreateStore( dataAlloca, dataFieldPtr );
+				}
+				else {
+					llvm::Value* dataFieldPtr = this->irBuilder.CreateStructGEP(
+						argsStructType, argsAlloca, 0, "pack.args.data.field"
+					);
+					this->irBuilder.CreateStore(
+						llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) ),
+						dataFieldPtr
+					);
+				}
+
+				llvm::Value* countFieldPtr = this->irBuilder.CreateStructGEP(
+					argsStructType, argsAlloca, 1, "pack.args.count.field"
+				);
+				this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, variadicArgCount ), countFieldPtr );
+
+				llvm::Value* posFieldPtr = this->irBuilder.CreateStructGEP(
+					argsStructType, argsAlloca, 2, "pack.args.pos.field"
+				);
+				this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, 0 ), posFieldPtr );
+
+				arguments.push_back( argsAlloca );
+			}
+
+			// Keyword-only arguments after the variadic struct
+			size_t kwArgStart = variadicArgStart + variadicArgCount;
+			for( unsigned kwIdx = 0; kwIdx < keywordOnlyCount; kwIdx++ ) {
+				unsigned paramIdx = static_cast<unsigned>( calleeVariadicIndex ) + 1 + kwIdx;
+				size_t sourceIdx = kwArgStart + kwIdx;
+				if( sourceIdx < instruction.sourceOperands.size() ) {
+					llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[sourceIdx] );
+					if( argValue == nullptr ) {
+						arguments.push_back( llvm::Constant::getNullValue( calleeType->getParamType( paramIdx ) ) );
+						continue;
+					}
+					llvm::Type* expectedType = calleeType->getParamType( paramIdx );
+					if( argValue->getType() != expectedType ) {
+						if( argValue->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
+							unsigned srcBits = argValue->getType()->getIntegerBitWidth();
+							unsigned dstBits = expectedType->getIntegerBitWidth();
+							if( srcBits < dstBits ) argValue = this->irBuilder.CreateSExt( argValue, expectedType, "kw.sext" );
+							else if( srcBits > dstBits ) argValue = this->irBuilder.CreateTrunc( argValue, expectedType, "kw.trunc" );
+						}
+						else if( argValue->getType()->isIntegerTy() && expectedType->isPointerTy() ) {
+							argValue = this->irBuilder.CreateIntToPtr( argValue, expectedType, "kw.itop" );
+						}
+						else if( argValue->getType()->isPointerTy() && expectedType->isIntegerTy() ) {
+							argValue = this->irBuilder.CreatePtrToInt( argValue, expectedType, "kw.ptoi" );
+						}
+					}
+					arguments.push_back( argValue );
+				}
+				else {
+					arguments.push_back( llvm::Constant::getNullValue( calleeType->getParamType( paramIdx ) ) );
+				}
+			}
+
+			while( arguments.size() < expectedParamCount ) {
+				llvm::Type* paramType = calleeType->getParamType( arguments.size() );
+				arguments.push_back( llvm::Constant::getNullValue( paramType ) );
+			}
+
+			llvm::Value* result = this->irBuilder.CreateCall( callee, arguments );
+			if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER &&
+				callee->getReturnType()->isVoidTy() == false ) {
+				this->setVariableValue( instruction.destinationVariable, result );
+			}
+			return;
+		}
 
 		std::vector<llvm::Value*> arguments;
 		for( unsigned argumentIndex = 0; argumentIndex < instruction.sourceOperands.size(); argumentIndex++ ) {
@@ -4030,6 +4710,19 @@ namespace uranite::ir::mir {
 				constructorFunction = this->llvmModule->getFunction( constructorName );
 			}
 			if( constructorFunction != nullptr &&
+				constructorFunction->arg_size() != instruction.sourceOperands.size() + 1 ) {
+				std::string arityName = fmt::format( "{}#{}", constructorName, instruction.sourceOperands.size() + 1 );
+				if( this->functionResolutionMap.count( arityName ) > 0 ) {
+					constructorFunction = this->functionResolutionMap[arityName];
+				}
+				else {
+					llvm::Function* arityFunction = this->llvmModule->getFunction( arityName );
+					if( arityFunction != nullptr ) {
+						constructorFunction = arityFunction;
+					}
+				}
+			}
+			if( constructorFunction != nullptr &&
 				constructorFunction->arg_size() == instruction.sourceOperands.size() + 1 ) {
 				// Pre-validate arg types before emitting any IR
 				bool argsCompatible = true;
@@ -4095,6 +4788,105 @@ namespace uranite::ir::mir {
 				this->irBuilder.CreateCall( constructorFunction, constructorArgs );
 			} // argsCompatible
 			} // arity match
+
+			// Initialize fields with default values from class declaration
+			semantic::TypeSharedPointer constructSemanticType = this->semanticAnalyzer.types().lookupType( typeName );
+			if( constructSemanticType == nullptr ) {
+				for( const std::pair<const std::string, semantic::TypeSharedPointer>& entry :
+					 this->semanticAnalyzer.types().getUserTypes() ) {
+					if( entry.second->name == typeName && entry.second->kind == semantic::Type::Kind::Class ) {
+						constructSemanticType = entry.second;
+						break;
+					}
+				}
+			}
+			if( constructSemanticType != nullptr && constructSemanticType->kind == semantic::Type::Kind::Class ) {
+				semantic::ClassTypeSharedPointer constructClassType = std::static_pointer_cast<semantic::ClassType>( constructSemanticType );
+				if( constructClassType->astDeclaration != nullptr ) {
+					unsigned int defaultFieldIndex = 0;
+					if( constructClassType->virtualTable.empty() == false ) {
+						defaultFieldIndex = 1;
+					}
+					for( std::shared_ptr<ast::nodes::FieldDeclarationNode>& fieldDeclaration : constructClassType->astDeclaration->fields ) {
+						if( fieldDeclaration->defaultValue != nullptr && defaultFieldIndex < structType->getNumElements() ) {
+							llvm::Value* defaultFieldValue = nullptr;
+							llvm::Type* fieldLLVMType = structType->getElementType( defaultFieldIndex );
+							ast::Node::Kind defaultKind = fieldDeclaration->defaultValue->kind;
+
+							if( defaultKind == ast::Node::Kind::IntegerLiteral ) {
+								ast::nodes::IntegerLiteralExpression& intLiteral =
+									static_cast<ast::nodes::IntegerLiteralExpression&>( *fieldDeclaration->defaultValue );
+								if( fieldLLVMType->isIntegerTy() ) {
+									defaultFieldValue = llvm::ConstantInt::get( fieldLLVMType, intLiteral.value, true );
+								}
+								else if( fieldLLVMType->isFloatingPointTy() ) {
+									defaultFieldValue = llvm::ConstantFP::get( fieldLLVMType, static_cast<double>( intLiteral.value ) );
+								}
+							}
+							else if( defaultKind == ast::Node::Kind::FloatLiteral ) {
+								ast::nodes::FloatLiteralExpression& floatLiteral =
+									static_cast<ast::nodes::FloatLiteralExpression&>( *fieldDeclaration->defaultValue );
+								if( fieldLLVMType->isFloatingPointTy() ) {
+									defaultFieldValue = llvm::ConstantFP::get( fieldLLVMType, floatLiteral.value );
+								}
+								else if( fieldLLVMType->isIntegerTy() ) {
+									defaultFieldValue = llvm::ConstantInt::get( fieldLLVMType, static_cast<int64_t>( floatLiteral.value ), true );
+								}
+							}
+							else if( defaultKind == ast::Node::Kind::BooleanLiteral ) {
+								ast::nodes::BoolLiteralExpression& boolLiteral =
+									static_cast<ast::nodes::BoolLiteralExpression&>( *fieldDeclaration->defaultValue );
+								defaultFieldValue = llvm::ConstantInt::get( fieldLLVMType, boolLiteral.value ? 1 : 0 );
+							}
+							else if( defaultKind == ast::Node::Kind::CharLiteral ) {
+								ast::nodes::CharLiteralExpression& charLiteral =
+									static_cast<ast::nodes::CharLiteralExpression&>( *fieldDeclaration->defaultValue );
+								defaultFieldValue = llvm::ConstantInt::get( fieldLLVMType, static_cast<int64_t>( charLiteral.value ), true );
+							}
+							else if( defaultKind == ast::Node::Kind::NoneLiteral ) {
+								defaultFieldValue = llvm::Constant::getNullValue( fieldLLVMType );
+							}
+							else if( defaultKind == ast::Node::Kind::StringLiteral ) {
+								ast::nodes::StringLiteralExpression& strLiteral =
+									static_cast<ast::nodes::StringLiteralExpression&>( *fieldDeclaration->defaultValue );
+								defaultFieldValue = this->irBuilder.CreateGlobalStringPtr( strLiteral.value, "field.str" );
+							}
+							else if( defaultKind == ast::Node::Kind::UnaryExpression ) {
+								ast::nodes::UnaryExpression& unaryExpr =
+									static_cast<ast::nodes::UnaryExpression&>( *fieldDeclaration->defaultValue );
+								if( unaryExpr.operation == token::Type::Minus && unaryExpr.operand != nullptr ) {
+									if( unaryExpr.operand->kind == ast::Node::Kind::IntegerLiteral ) {
+										ast::nodes::IntegerLiteralExpression& intLiteral =
+											static_cast<ast::nodes::IntegerLiteralExpression&>( *unaryExpr.operand );
+										if( fieldLLVMType->isIntegerTy() ) {
+											defaultFieldValue = llvm::ConstantInt::get( fieldLLVMType, -intLiteral.value, true );
+										}
+										else if( fieldLLVMType->isFloatingPointTy() ) {
+											defaultFieldValue = llvm::ConstantFP::get( fieldLLVMType, static_cast<double>( -intLiteral.value ) );
+										}
+									}
+									else if( unaryExpr.operand->kind == ast::Node::Kind::FloatLiteral ) {
+										ast::nodes::FloatLiteralExpression& floatLiteral =
+											static_cast<ast::nodes::FloatLiteralExpression&>( *unaryExpr.operand );
+										if( fieldLLVMType->isFloatingPointTy() ) {
+											defaultFieldValue = llvm::ConstantFP::get( fieldLLVMType, -floatLiteral.value );
+										}
+									}
+								}
+							}
+
+							if( defaultFieldValue != nullptr ) {
+								std::string defaultFieldName = fmt::format( "field.default.{}", fieldDeclaration->name );
+								llvm::Value* fieldGEP = this->irBuilder.CreateStructGEP(
+									structType, typedPointer, defaultFieldIndex, defaultFieldName
+								);
+								this->irBuilder.CreateStore( defaultFieldValue, fieldGEP );
+							}
+						}
+						defaultFieldIndex++;
+					}
+				}
+			}
 		}
 		else {
 			llvm::Function* mallocFunction = this->getOrCreateMalloc();
@@ -4340,31 +5132,33 @@ namespace uranite::ir::mir {
 	}
 
 	llvm::Function* MIRCodegen::getOrCreateMalloc() {
-		llvm::Function* mallocFunction = this->llvmModule->getFunction( "malloc" );
-		if( mallocFunction == nullptr ) {
-			llvm::FunctionType* mallocType = llvm::FunctionType::get(
-				llvm::PointerType::getUnqual( this->llvmContext ),
-				{ llvm::Type::getInt64Ty( this->llvmContext ) },
-				false
-			);
-			mallocFunction = llvm::Function::Create(
-				mallocType, llvm::Function::ExternalLinkage, "malloc", this->llvmModule.get()
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getMallocFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function != nullptr && function->getFunctionType() != spec.functionSignature ) {
+			function->eraseFromParent();
+			function = nullptr;
+		}
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
 			);
 		}
-		return mallocFunction;
+		return function;
 	}
 
 	llvm::Function* MIRCodegen::getOrCreateCalloc() {
-		llvm::Function* callocFunction = this->llvmModule->getFunction( "calloc" );
-		if( callocFunction == nullptr ) {
-			llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-			llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
-			llvm::FunctionType* callocType = llvm::FunctionType::get( ptrType, { i64Type, i64Type }, false );
-			callocFunction = llvm::Function::Create(
-				callocType, llvm::Function::ExternalLinkage, "calloc", this->llvmModule.get()
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getCallocFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function != nullptr && function->getFunctionType() != spec.functionSignature ) {
+			function->eraseFromParent();
+			function = nullptr;
+		}
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
 			);
 		}
-		return callocFunction;
+		return function;
 	}
 
 	llvm::Type* MIRCodegen::resolveMemoryElementType( const semantic::TypeSharedPointer& operandType ) {
@@ -4423,35 +5217,172 @@ namespace uranite::ir::mir {
 	}
 
 	llvm::Function* MIRCodegen::getOrCreateFree() {
-		llvm::Function* freeFunction = this->llvmModule->getFunction( "free" );
-		if( freeFunction == nullptr ) {
-			llvm::FunctionType* freeType = llvm::FunctionType::get(
-				llvm::Type::getVoidTy( this->llvmContext ),
-				{ llvm::PointerType::getUnqual( this->llvmContext ) },
-				false
-			);
-			freeFunction = llvm::Function::Create(
-				freeType, llvm::Function::ExternalLinkage, "free", this->llvmModule.get()
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getFreeFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function != nullptr && function->getFunctionType() != spec.functionSignature ) {
+			function->eraseFromParent();
+			function = nullptr;
+		}
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
 			);
 		}
-		return freeFunction;
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateMemcpy() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getMemcpyFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function != nullptr && function->getFunctionType() != spec.functionSignature ) {
+			function->eraseFromParent();
+			function = nullptr;
+		}
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateStrlen() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrlenFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateStrcmp() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrcmpFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateStrcpy() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrcpyFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateStrcat() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrcatFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateStrstr() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrstrFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateStrncmp() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrncmpFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateSnprintf() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getSnprintfFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateWrite() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getWriteFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
 	}
 
 	llvm::Function* MIRCodegen::getOrCreateUraniteThrow() {
-		llvm::Function* throwFunction = this->llvmModule->getFunction( "__uranite_throw" );
-		if( throwFunction == nullptr ) {
-			llvm::Type* pointerType = llvm::PointerType::getUnqual( this->llvmContext );
-			llvm::FunctionType* throwType = llvm::FunctionType::get(
-				llvm::Type::getVoidTy( this->llvmContext ),
-				{ pointerType, pointerType },
-				false
-			);
-			throwFunction = llvm::Function::Create(
-				throwType, llvm::Function::ExternalLinkage, "__uranite_throw", this->llvmModule.get()
-			);
-			throwFunction->setDoesNotReturn();
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getThrowFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function != nullptr && function->getFunctionType() != spec.functionSignature ) {
+			function->eraseFromParent();
+			function = nullptr;
 		}
-		return throwFunction;
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+			if( spec.isNoReturn ) {
+				function->setDoesNotReturn();
+			}
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreatePersonality() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getPersonalityFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateBeginCatch() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getBeginCatchFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateExtern( const std::string& name, llvm::Type* returnType, std::vector<llvm::Type*> paramTypes ) {
+		llvm::Function* function = this->llvmModule->getFunction( name );
+		if( function == nullptr ) {
+			llvm::FunctionType* functionType = llvm::FunctionType::get( returnType, paramTypes, false );
+			function = llvm::Function::Create(
+				functionType, llvm::Function::ExternalLinkage, name, this->llvmModule.get()
+			);
+		}
+		return function;
 	}
 
 } // namespace uranite::ir::mir
