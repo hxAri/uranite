@@ -255,7 +255,8 @@ namespace uranite::ir::mir {
 		this->switchToBlock( entryBlock );
 		mirFunction->entryBlockIdentifier = entryBlock->blockIdentifier;
 		
-		for( const hir::HIRParameterDescriptor& parameterDescriptor : hirFunction.parameterDescriptors ) {
+		for( size_t paramIndex = 0; paramIndex < hirFunction.parameterDescriptors.size(); paramIndex++ ) {
+			const hir::HIRParameterDescriptor& parameterDescriptor = hirFunction.parameterDescriptors[paramIndex];
 			MIRVariableIdentifier parameterVariable = mirFunction->allocateVariable(
 				parameterDescriptor.parameterName,
 				parameterDescriptor.parameterType,
@@ -264,6 +265,34 @@ namespace uranite::ir::mir {
 			mirFunction->variableDescriptorTable[parameterVariable].isParameterVariable = true;
 			mirFunction->parameterVariableIdentifiers.push_back( parameterVariable );
 			this->variableNameMap[parameterDescriptor.parameterName] = parameterVariable;
+			if( parameterDescriptor.isVariadicParameter ) {
+				mirFunction->variadicParameterIndex = static_cast<int>( paramIndex );
+				if( parameterDescriptor.parameterType != nullptr ) {
+					semantic::TypeSharedPointer elemType = parameterDescriptor.parameterType;
+					if( elemType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassType* classType = dynamic_cast<semantic::ClassType*>( elemType.get() );
+						if( classType != nullptr && classType->typeSubstitutions.empty() == false ) {
+							for( const std::pair<const std::string, semantic::TypeSharedPointer>& sub : classType->typeSubstitutions ) {
+								if( sub.second != nullptr ) {
+									mirFunction->variadicElementType = sub.second;
+									break;
+								}
+							}
+						}
+					}
+					if( mirFunction->variadicElementType == nullptr ) {
+						std::string typeName = elemType->name;
+						size_t openBracket = typeName.find( '<' );
+						size_t closeBracket = typeName.rfind( '>' );
+						if( openBracket != std::string::npos && closeBracket != std::string::npos ) {
+							std::string elementName = typeName.substr( openBracket + 1, closeBracket - openBracket - 1 );
+							mirFunction->variadicElementType = std::make_shared<semantic::Type>(
+								semantic::Type::Kind::Class, elementName
+							);
+						}
+					}
+				}
+			}
 		}
 		
 		if( hirFunction.functionBody != nullptr ) {
@@ -1345,7 +1374,22 @@ namespace uranite::ir::mir {
 				addrInstruction.destinationVariable = resultVariable;
 				return this->emitInstruction( addrInstruction );
 			}
-			
+
+			case hir::HIRNodeKind::InstanceOf: {
+				hir::HIRInstanceOf& instanceNode = static_cast<hir::HIRInstanceOf&>( *hirExpression );
+				MIRVariableIdentifier checkedVariable = this->lowerExpression( instanceNode.checkedExpression );
+				MIRInstruction checkInstruction( MIRInstructionKind::InstanceOfCheck );
+				checkInstruction.sourceOperands.push_back( checkedVariable );
+				checkInstruction.operandType = instanceNode.checkedType;
+				checkInstruction.sourceLocation = instanceNode.sourceLocation;
+				semantic::TypeSharedPointer boolType = std::make_shared<semantic::Type>( semantic::Type::Kind::Bool, "Boolean" );
+				MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
+					"_instanceof", boolType, false
+				);
+				checkInstruction.destinationVariable = resultVariable;
+				return this->emitInstruction( checkInstruction );
+			}
+
 			default:
 				return INVALID_VARIABLE_IDENTIFIER;
 		}
