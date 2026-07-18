@@ -17,10 +17,10 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/mir-optimizer.hpp"
-
 #include <algorithm>
 #include <unordered_set>
+
+#include "uranite/ir/mir-optimizer.hpp"
 
 namespace uranite::ir::mir {
 	
