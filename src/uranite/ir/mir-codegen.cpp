@@ -8,10 +8,9 @@
 // Uranite Licence under GNU General Public Licence v3
 //
 
-#include "uranite/ir/mir-codegen.hpp"
-
 #include <fmt/format.h>
 #include <unordered_set>
+
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/MC/TargetRegistry.h>
@@ -19,6 +18,7 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetOptions.h>
 
+#include "uranite/ir/mir-codegen.hpp"
 #include "uranite/semantic/qualnames.hpp"
 
 namespace uranite::ir::mir {
@@ -2181,7 +2181,7 @@ namespace uranite::ir::mir {
 				}
 				else if( this->currentMIRFunction != nullptr ) {
 					MIRVariableIdentifier memoryVariableIdentifier = instruction.sourceOperands[0];
-					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
+					std::unordered_map<ir::mir::MIRVariableIdentifier,ir::mir::MIRVariableDescriptor>::iterator descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
 					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
 						descriptorIterator->second.variableType != nullptr ) {
 						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
@@ -2219,7 +2219,7 @@ namespace uranite::ir::mir {
 				}
 				else if( this->currentMIRFunction != nullptr ) {
 					MIRVariableIdentifier memoryVariableIdentifier = instruction.sourceOperands[0];
-					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
+					std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor>::iterator descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
 					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
 						descriptorIterator->second.variableType != nullptr ) {
 						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
@@ -2275,7 +2275,7 @@ namespace uranite::ir::mir {
 				}
 				else if( this->currentMIRFunction != nullptr ) {
 					MIRVariableIdentifier memoryVariableIdentifier = instruction.sourceOperands[0];
-					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
+					std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor>::iterator descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( memoryVariableIdentifier );
 					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
 						descriptorIterator->second.variableType != nullptr ) {
 						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
@@ -2316,7 +2316,7 @@ namespace uranite::ir::mir {
 				}
 				else if( this->currentMIRFunction != nullptr ) {
 					MIRVariableIdentifier arenaVariableIdentifier = instruction.sourceOperands[0];
-					auto descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( arenaVariableIdentifier );
+					std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor>::iterator descriptorIterator = this->currentMIRFunction->variableDescriptorTable.find( arenaVariableIdentifier );
 					if( descriptorIterator != this->currentMIRFunction->variableDescriptorTable.end() &&
 						descriptorIterator->second.variableType != nullptr ) {
 						llvm::Type* resolved = this->resolveMemoryElementType( descriptorIterator->second.variableType );
@@ -2479,7 +2479,7 @@ namespace uranite::ir::mir {
 
 				if( wrapperName == "Boolean" && dotPosition != std::string::npos ) {
 					llvm::Type* i1Type = llvm::Type::getInt1Ty( this->llvmContext );
-					auto loadBoolSelf = [&]() -> llvm::Value* {
+					std::function<llvm::Value*()> loadBoolSelf = [&]() -> llvm::Value* {
 						if( instruction.sourceOperands.empty() ) return nullptr;
 						llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
 						if( selfValue == nullptr ) return nullptr;
@@ -2490,7 +2490,7 @@ namespace uranite::ir::mir {
 						}
 						return selfValue;
 					};
-					auto loadBoolArg = [&]() -> llvm::Value* {
+					std::function<llvm::Value*()> loadBoolArg = [&]() -> llvm::Value* {
 						if( instruction.sourceOperands.size() < 2 ) return nullptr;
 						llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[1] );
 						if( argValue == nullptr ) return nullptr;
@@ -2501,7 +2501,7 @@ namespace uranite::ir::mir {
 						}
 						return argValue;
 					};
-					auto setBoolResult = [&]( llvm::Value* resultValue ) {
+					std::function<void( llvm::Value* )> setBoolResult = [&]( llvm::Value* resultValue ) {
 						if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER && resultValue != nullptr ) {
 							this->setVariableValue( instruction.destinationVariable, resultValue );
 						}
@@ -2564,7 +2564,7 @@ namespace uranite::ir::mir {
 				}
 				if( wrapperName == "Char" && dotPosition != std::string::npos ) {
 					llvm::Type* i32Type = llvm::Type::getInt32Ty( this->llvmContext );
-					auto loadCharSelf = [&]() -> llvm::Value* {
+					std::function<llvm::Value*()> loadCharSelf = [&]() -> llvm::Value* {
 						if( instruction.sourceOperands.empty() ) return nullptr;
 						llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
 						if( selfValue == nullptr ) return nullptr;
@@ -2578,7 +2578,7 @@ namespace uranite::ir::mir {
 						}
 						return selfValue;
 					};
-					auto setCharResult = [&]( llvm::Value* resultValue ) {
+					std::function<void( llvm::Value* )> setCharResult = [&]( llvm::Value* resultValue ) {
 						if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER && resultValue != nullptr ) {
 							this->setVariableValue( instruction.destinationVariable, resultValue );
 						}
@@ -3097,7 +3097,7 @@ namespace uranite::ir::mir {
 						primitiveType = llvm::Type::getDoubleTy( this->llvmContext );
 					}
 
-					auto loadSelf = [&]() -> llvm::Value* {
+					std::function<llvm::Value*()> loadSelf = [&]() -> llvm::Value* {
 						if( instruction.sourceOperands.empty() ) return nullptr;
 						llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
 						if( selfValue == nullptr ) return nullptr;
@@ -3120,7 +3120,7 @@ namespace uranite::ir::mir {
 						}
 						return selfValue;
 					};
-					auto loadArg = [&]() -> llvm::Value* {
+					std::function<llvm::Value*()> loadArg = [&]() -> llvm::Value* {
 						if( instruction.sourceOperands.size() < 2 ) return nullptr;
 						llvm::Value* argValue = this->loadVariableValue( instruction.sourceOperands[1] );
 						if( argValue == nullptr ) return nullptr;
@@ -3143,7 +3143,7 @@ namespace uranite::ir::mir {
 						}
 						return argValue;
 					};
-					auto setResult = [&]( llvm::Value* resultValue ) {
+					std::function<void( llvm::Value* )> setResult = [&]( llvm::Value* resultValue ) {
 						if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER && resultValue != nullptr ) {
 							this->setVariableValue( instruction.destinationVariable, resultValue );
 						}
@@ -3597,7 +3597,7 @@ namespace uranite::ir::mir {
 				llvm::Function* strcatFunction = this->getOrCreateStrcat();
 				llvm::Function* mallocFunction = this->getOrCreateMalloc();
 				llvm::Function* snprintfFunction = this->getOrCreateSnprintf();
-				auto ensureString = [&]( llvm::Value* value ) -> llvm::Value* {
+				std::function<llvm::Value*( llvm::Value* )> ensureString = [&]( llvm::Value* value ) -> llvm::Value* {
 					if( value->getType()->isPointerTy() ) return value;
 					if( value->getType()->isDoubleTy() ) {
 						llvm::Value* buffer = this->irBuilder.CreateCall( mallocFunction, { llvm::ConstantInt::get( i64Type, 48 ) }, "flt.buf" );
