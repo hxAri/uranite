@@ -17,9 +17,9 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/hir-lowering.hpp"
-
 #include <stdexcept>
+
+#include "uranite/ir/hir-lowering.hpp"
 
 namespace uranite::ir::hir {
 	
