@@ -135,12 +135,6 @@ namespace uranite::ir::mir {
 			childLayout.typeSizeInBytes = fieldIndex * 8;
 		}
 
-		for( std::shared_ptr<hir::HIRClassDefinition>& classDefinition : hirModule.classDefinitions ) {
-			if( classDefinition != nullptr ) {
-				this->lowerClassDefinition( *classDefinition );
-			}
-		}
-
 		for( std::shared_ptr<hir::HIRConstantDefinition>& constantDefinition : hirModule.constantDefinitions ) {
 			if( constantDefinition != nullptr && constantDefinition->initializerExpression != nullptr ) {
 				MIRModuleConstant moduleConstant;
@@ -225,6 +219,12 @@ namespace uranite::ir::mir {
 				}
 			}
 			this->currentModule->globalVariables[globalVarDefinition->variableName] = mirGlobal;
+		}
+
+		for( std::shared_ptr<hir::HIRClassDefinition>& classDefinition : hirModule.classDefinitions ) {
+			if( classDefinition != nullptr ) {
+				this->lowerClassDefinition( *classDefinition );
+			}
 		}
 
 		for( std::shared_ptr<hir::HIRFunctionDefinition>& functionDefinition : hirModule.functionDefinitions ) {
@@ -1649,6 +1649,58 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
+		if( ownerClassName.empty() && hirMethodCall.receiverObject != nullptr ) {
+			if( hirMethodCall.receiverObject->nodeKind == hir::HIRNodeKind::SelfReference ) {
+				ownerClassName = this->currentClassName;
+			}
+			else if( hirMethodCall.receiverObject->nodeKind == hir::HIRNodeKind::FieldAccess ) {
+				hir::HIRFieldAccess& fieldAccess = static_cast<hir::HIRFieldAccess&>( *hirMethodCall.receiverObject );
+				std::string objectClassName;
+				if( fieldAccess.objectExpression != nullptr ) {
+					if( fieldAccess.objectExpression->resolvedType != nullptr ) {
+						objectClassName = fieldAccess.objectExpression->resolvedType->name;
+					}
+					else if( fieldAccess.objectExpression->nodeKind == hir::HIRNodeKind::SelfReference ) {
+						objectClassName = this->currentClassName;
+					}
+				}
+				if( objectClassName.empty() == false ) {
+					size_t genericPosition = objectClassName.find( '<' );
+					if( genericPosition != std::string::npos ) {
+						objectClassName = objectClassName.substr( 0, genericPosition );
+					}
+					std::unordered_map<std::string, TypeLayoutDescriptor>::iterator layoutIterator =
+						this->currentModule->typeLayoutTable.find( objectClassName );
+					if( layoutIterator != this->currentModule->typeLayoutTable.end() ) {
+						TypeLayoutDescriptor& layout = layoutIterator->second;
+						for( size_t fieldIndex = 0; fieldIndex < layout.fieldNames.size(); fieldIndex++ ) {
+							if( layout.fieldNames[fieldIndex] == fieldAccess.fieldName &&
+								fieldIndex < layout.fieldTypes.size() &&
+								layout.fieldTypes[fieldIndex] != nullptr ) {
+								ownerClassName = layout.fieldTypes[fieldIndex]->name;
+								size_t genericPosition2 = ownerClassName.find( '<' );
+								if( genericPosition2 != std::string::npos ) {
+									ownerClassName = ownerClassName.substr( 0, genericPosition2 );
+								}
+								break;
+							}
+						}
+					}
+				}
+			}
+			else if( hirMethodCall.receiverObject->nodeKind == hir::HIRNodeKind::Identifier ) {
+				if( this->currentFunction->variableDescriptorTable.count( receiverVariable ) > 0 ) {
+					MIRVariableDescriptor& descriptor = this->currentFunction->variableDescriptorTable[receiverVariable];
+					if( descriptor.variableType != nullptr ) {
+						ownerClassName = descriptor.variableType->name;
+						size_t genericPosition = ownerClassName.find( '<' );
+						if( genericPosition != std::string::npos ) {
+							ownerClassName = ownerClassName.substr( 0, genericPosition );
+						}
+					}
+				}
+			}
+		}
 		if( ownerClassName.empty() == false ) {
 			callInstruction.calledFunctionQualifiedName = ownerClassName + "." + hirMethodCall.methodName;
 		}
@@ -1791,7 +1843,12 @@ namespace uranite::ir::mir {
 		constructInstruction.operandType = hirConstruct.constructedType;
 		constructInstruction.sourceLocation = hirConstruct.sourceLocation;
 		if( hirConstruct.constructedType != nullptr ) {
-			constructInstruction.calledFunctionQualifiedName = hirConstruct.constructedType->name;
+			std::string constructedName = hirConstruct.constructedType->name;
+			size_t genericBracketPosition = constructedName.find( '<' );
+			if( genericBracketPosition != std::string::npos ) {
+				constructedName = constructedName.substr( 0, genericBracketPosition );
+			}
+			constructInstruction.calledFunctionQualifiedName = constructedName;
 		}
 		
 		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
