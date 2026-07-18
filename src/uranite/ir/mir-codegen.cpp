@@ -1144,6 +1144,35 @@ namespace uranite::ir::mir {
 				this->setVariableValue( instruction.destinationVariable, loadedValue );
 				return;
 			}
+			if( this->currentMIRModule != nullptr && instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+				std::unordered_map<std::string, MIRModuleConstant>::iterator constantIterator =
+					this->currentMIRModule->moduleConstants.find( globalName );
+				if( constantIterator != this->currentMIRModule->moduleConstants.end() ) {
+					MIRModuleConstant& constant = constantIterator->second;
+					llvm::Value* constantValue = nullptr;
+					switch( constant.kind ) {
+						case MIRModuleConstant::Integer:
+							constantValue = llvm::ConstantInt::get(
+								llvm::Type::getInt64Ty( this->llvmContext ), constant.integerValue );
+							break;
+						case MIRModuleConstant::Float:
+							constantValue = llvm::ConstantFP::get(
+								llvm::Type::getDoubleTy( this->llvmContext ), constant.floatValue );
+							break;
+						case MIRModuleConstant::Boolean:
+							constantValue = llvm::ConstantInt::get(
+								llvm::Type::getInt1Ty( this->llvmContext ), constant.booleanValue ? 1 : 0 );
+							break;
+						case MIRModuleConstant::String:
+							constantValue = this->irBuilder.CreateGlobalStringPtr( constant.stringValue, "const.str" );
+							break;
+					}
+					if( constantValue != nullptr ) {
+						this->setVariableValue( instruction.destinationVariable, constantValue );
+						return;
+					}
+				}
+			}
 		}
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ||
 			instruction.sourceOperands.empty() ) {
@@ -3560,20 +3589,40 @@ namespace uranite::ir::mir {
 		if( calledName == "concat" && instruction.sourceOperands.size() == 2 ) {
 			llvm::Value* leftValue = this->loadVariableValue( instruction.sourceOperands[0] );
 			llvm::Value* rightValue = this->loadVariableValue( instruction.sourceOperands[1] );
-			if( leftValue != nullptr && rightValue != nullptr &&
-				leftValue->getType()->isPointerTy() && rightValue->getType()->isPointerTy() ) {
+			if( leftValue != nullptr && rightValue != nullptr ) {
 				llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+				llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
 				llvm::Function* strlenFunction = this->getOrCreateStrlen();
 				llvm::Function* strcpyFunction = this->getOrCreateStrcpy();
 				llvm::Function* strcatFunction = this->getOrCreateStrcat();
 				llvm::Function* mallocFunction = this->getOrCreateMalloc();
-				llvm::Value* lenA = this->irBuilder.CreateCall( strlenFunction, { leftValue }, "len.a" );
-				llvm::Value* lenB = this->irBuilder.CreateCall( strlenFunction, { rightValue }, "len.b" );
+				llvm::Function* snprintfFunction = this->getOrCreateSnprintf();
+				auto ensureString = [&]( llvm::Value* value ) -> llvm::Value* {
+					if( value->getType()->isPointerTy() ) return value;
+					if( value->getType()->isDoubleTy() ) {
+						llvm::Value* buffer = this->irBuilder.CreateCall( mallocFunction, { llvm::ConstantInt::get( i64Type, 48 ) }, "flt.buf" );
+						llvm::Value* fmtStr = this->irBuilder.CreateGlobalStringPtr( "%.6g", "flt.fmt" );
+						this->irBuilder.CreateCall( snprintfFunction, { buffer, llvm::ConstantInt::get( i64Type, 48 ), fmtStr, value } );
+						return buffer;
+					}
+					llvm::Value* intVal = value;
+					if( value->getType()->getIntegerBitWidth() < 64 ) {
+						intVal = this->irBuilder.CreateSExt( value, i64Type, "sext.arg" );
+					}
+					llvm::Value* buffer = this->irBuilder.CreateCall( mallocFunction, { llvm::ConstantInt::get( i64Type, 24 ) }, "int.buf" );
+					llvm::Value* fmtStr = this->irBuilder.CreateGlobalStringPtr( "%ld", "int.fmt" );
+					this->irBuilder.CreateCall( snprintfFunction, { buffer, llvm::ConstantInt::get( i64Type, 24 ), fmtStr, intVal } );
+					return buffer;
+				};
+				llvm::Value* leftStr = ensureString( leftValue );
+				llvm::Value* rightStr = ensureString( rightValue );
+				llvm::Value* lenA = this->irBuilder.CreateCall( strlenFunction, { leftStr }, "len.a" );
+				llvm::Value* lenB = this->irBuilder.CreateCall( strlenFunction, { rightStr }, "len.b" );
 				llvm::Value* totalLen = this->irBuilder.CreateAdd( lenA, lenB, "total.len" );
 				llvm::Value* allocSize = this->irBuilder.CreateAdd( totalLen, llvm::ConstantInt::get( i64Type, 1 ), "alloc.size" );
 				llvm::Value* buffer = this->irBuilder.CreateCall( mallocFunction, { allocSize }, "str.buf" );
-				this->irBuilder.CreateCall( strcpyFunction, { buffer, leftValue } );
-				this->irBuilder.CreateCall( strcatFunction, { buffer, rightValue } );
+				this->irBuilder.CreateCall( strcpyFunction, { buffer, leftStr } );
+				this->irBuilder.CreateCall( strcatFunction, { buffer, rightStr } );
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					this->setVariableValue( instruction.destinationVariable, buffer );
 				}
