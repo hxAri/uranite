@@ -17,9 +17,9 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/mir-analysis.hpp"
-
 #include <algorithm>
+
+#include "uranite/ir/mir-analysis.hpp"
 
 namespace uranite::ir::mir {
 	
