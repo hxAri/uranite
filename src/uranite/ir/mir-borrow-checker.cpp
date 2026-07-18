@@ -17,9 +17,9 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/mir-borrow-checker.hpp"
-
 #include <fmt/format.h>
+
+#include "uranite/ir/mir-borrow-checker.hpp"
 
 namespace uranite::ir::mir {
 	
