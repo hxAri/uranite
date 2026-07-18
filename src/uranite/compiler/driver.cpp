@@ -868,12 +868,23 @@ namespace uranite::compiler {
 			if( this->options.verbose || this->options.dumpHIR || this->options.dumpMIR || this->options.useMIR ) {
 				if( this->options.useMIR ) {
 					std::set<std::string> existingClassNames;
+					std::set<std::string> existingConstantNames;
+					std::set<std::string> existingEnumNames;
 					for( const ast::nodes::DeclarationSharedPointer& existingDeclaration : programRoot->declarations ) {
-						if( existingDeclaration != nullptr && existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+						if( existingDeclaration == nullptr ) {
+							continue;
+						}
+						if( existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
 							existingClassNames.insert( static_cast<const ast::nodes::ClassDeclaration&>( *existingDeclaration ).name );
 						}
-						if( existingDeclaration != nullptr && existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+						else if( existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
 							existingClassNames.insert( static_cast<const ast::nodes::StructDeclaration&>( *existingDeclaration ).name );
+						}
+						else if( existingDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
+							existingConstantNames.insert( static_cast<const ast::nodes::ConstantDeclaration&>( *existingDeclaration ).name );
+						}
+						else if( existingDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+							existingEnumNames.insert( static_cast<const ast::nodes::EnumDeclaration&>( *existingDeclaration ).name );
 						}
 					}
 					for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
@@ -896,6 +907,20 @@ namespace uranite::compiler {
 								if( existingClassNames.count( structName ) == 0 ) {
 									programRoot->declarations.push_back( moduleDeclaration );
 									existingClassNames.insert( structName );
+								}
+							}
+							else if( moduleDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
+								std::string constantName = static_cast<ast::nodes::ConstantDeclaration&>( *moduleDeclaration ).name;
+								if( existingConstantNames.count( constantName ) == 0 ) {
+									programRoot->declarations.push_back( moduleDeclaration );
+									existingConstantNames.insert( constantName );
+								}
+							}
+							else if( moduleDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+								std::string enumName = static_cast<ast::nodes::EnumDeclaration&>( *moduleDeclaration ).name;
+								if( existingEnumNames.count( enumName ) == 0 ) {
+									programRoot->declarations.push_back( moduleDeclaration );
+									existingEnumNames.insert( enumName );
 								}
 							}
 						}
