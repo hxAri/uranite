@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.0-2026.7 2026-07-16
+## v1.1.0-2026.7 2026-07-19
 
 **Added**
 - Enum variant access in MIR codegen path — backed values and discriminants resolve correctly instead of returning `0`
@@ -37,6 +37,11 @@
 - Post-generation interface method resolution pass — replaces unresolved interface method declarations (`Sequence.get`, `Set.exists`) with implementing class methods, generates type-coercing wrapper thunks when signatures differ, walks transitive interface hierarchy
 - Field default value initialization in MIR codegen — classes without explicit constructors but with field defaults (e.g., `private Int IM = 139968`) now store literal values via GEP after malloc; supports integer, float, boolean, char, string, None, and negated literals
 - Struct field GEP auto-load in `StoreVariable` — when a `ComputeFieldAddress` result (2-index struct GEP) is stored to a local variable, the field value is loaded instead of storing the raw address
+- Keyword argument (`kwargs`) infrastructure in MIR path — `MIRInstruction.keywordArgumentKeys`/`keywordArgumentValues` fields, `MIRFunctionDefinition.keywordParameterIndex`/`keywordValueType` fields, HIR→MIR lowering of `keywordArguments` in both `lowerFunctionCall` and `lowerMethodCall`, codegen packs kwargs into `{ptr keys, ptr values, i64 count, i64 pos}` struct at call sites
+- Kwargs packing in variadic code path — keyword arguments are correctly packed when the callee also has a variadic parameter
+- Extern function short-name fallback in MIR codegen — qualified call names (e.g., `uranite.functions.externs.free`) resolve to C-linkage extern functions by checking the short name against `externDeclaredNames`
+- Function reference via `addressof` in MIR codegen — `LoadVariable` with empty `sourceOperands` and non-empty `calledFunctionQualifiedName` emits `PtrToInt` on the LLVM Function pointer, with short-name fallback for qualified lookups
+- Constructor optional parameter padding in MIR codegen — constructor arity check uses `>=` instead of `==`, missing trailing arguments padded with null values matching expected parameter types
 
 **Changed**
 - MIR lowering `lowerFieldAccess` intercepts enum type field access before emitting `ComputeFieldAddress`
@@ -49,6 +54,8 @@
 - `memoryElementTypes` map cleared per-function to prevent cross-function variable ID collisions
 - MIR codegen memcpy switched from C `memcpy` to LLVM intrinsic `llvm.memcpy.p0.p0.i64` matching AST codegen path
 - `RuntimeInterface` extended with `getStrstrFunction`, `getStrncmpFunction`, `getWriteFunction` — 3 new virtual methods for MIR codegen's string intrinsics and I/O
+- Variadic argument count formula — `(totalRemainingArgs > keywordOnlyCount) ? totalRemainingArgs - keywordOnlyCount : totalRemainingArgs` correctly separates variadic args from keyword-only params when caller provides explicit keyword-only arguments, while treating all remaining args as variadic when no keyword-only args are provided
+- Variadic element type extraction from `ArrayType` in MIR lowering — when parameter type is `Kind::Array` (e.g., `Object args[]`), extracts `arrayType->elementType` instead of using the Array type itself; `Object` element type now correctly resolves to `ptr` instead of defaulting to `i64`
 
 **Fixed**
 - `DmaDirection.ToDevice` and similar enum variant accesses returning `0` regardless of actual backed value
@@ -76,16 +83,21 @@
 - Constructor overloads silently dropped — pre-registration skipped duplicate function names; only first constructor registered in LLVM IR (e.g., `HashSet(self)` registered but `HashSet(self, Int)` discarded)
 - `InstanceOfCheck` always returning false — `HIRInstanceOf` never lowered to MIR; now uses static type hierarchy resolution
 - `test-collection-hashset` FPE from uninitialized capacity — constructor overload `HashSet(self, Int)` not generated, leaving struct zero-initialized
+- `undefined reference to 'uranite.functions.externs.free'` — extern functions called via qualified module names couldn't link because codegen registered them by C-linkage short name only
+- `addressof` returning 0 for function identifiers — `generateLoadVariable` returned early when `sourceOperands` was empty, never resolving function pointers
+- `ThreadPoolExecutor` constructor segfault — constructor with optional params rejected by exact arity check; callee received 0 args when 4 were expected
+- `test-kwargs-basic` segfault — MIR path had no kwargs infrastructure; keyword arguments silently dropped during lowering
+- `test-variadic-kwargs-combined` segfault — variadic code path returned after packing variadic args without packing kwargs for keyword-only parameters
+- All tests using `putsln` crashing when called from functions with keyword-only params — `putsln` body calling `writeArgsToFd(fd, args, sep, end, stream, flush)` packed all 5 remaining args into the variadic array instead of forwarding 1 variadic arg + 4 keyword-only params
+- `putsln` printing garbled output for string arguments — `Object args[]` variadic element type resolved to `i64` (default) because `ArrayType` parameter was unhandled in MIR lowering; strings stored as `ptrtoint(ptr to i64)` then loaded back as raw integers
 
 **Issues**
 - `InlineAssembly`, `DeferPush`/`DeferEmit`, `CallVirtual` remain as no-op stubs
-- Variadic argument packing (`Args<T>` struct construction) not implemented in MIR lowering — variadic calls pass only first argument
-- `String.format` `{:b}` (binary) format not supported (no snprintf equivalent)
-
-**Notes**
-- MIR benchmark results: 11/11 compile, 11/11 pass runtime (all benchmarks pass)
-- MIR module tests: 125/212 pass, 0 compile fail, 87 runtime fail (32 segfault, 21 abort, 0 FPE, 30 timeout)
-- 152/152 unit tests pass
+- Enum `.name`/`.value` built-in properties not implemented in MIR path
+- `argv` global initialization from `main(argc, argv)` not implemented in MIR path
+- `HashSet.union`/`intersect`/`difference` hang — internal iteration over bucket chains enters infinite loop
+- Keyword-only parameter default values not passed at call sites — callers emit `null` instead of the declared defaults (e.g., `separator=" "`, `endline="\n"`)
+- `String.format` `{:b}` (binary) format produces truncated output
 
 ## v1.0.0-2026.1 2026-07-13
 
