@@ -221,6 +221,22 @@ namespace uranite::ir::mir {
 			this->currentModule->globalVariables[globalVarDefinition->variableName] = mirGlobal;
 		}
 
+		for( std::shared_ptr<hir::HIRExternFunctionDeclaration>& externDeclaration : hirModule.externFunctionDeclarations ) {
+			if( externDeclaration == nullptr ) {
+				continue;
+			}
+			MIRExternFunction mirExtern;
+			mirExtern.functionName = externDeclaration->functionName;
+			mirExtern.linkageName = externDeclaration->linkageName.empty() ?
+				externDeclaration->functionName : externDeclaration->linkageName;
+			mirExtern.returnType = externDeclaration->returnTypeDescriptor;
+			mirExtern.isVariadic = externDeclaration->isVariadicFunction;
+			for( hir::HIRParameterDescriptor& param : externDeclaration->parameterDescriptors ) {
+				mirExtern.parameterTypes.push_back( param.parameterType );
+			}
+			this->currentModule->externFunctions.push_back( std::move( mirExtern ) );
+		}
+
 		for( std::shared_ptr<hir::HIRClassDefinition>& classDefinition : hirModule.classDefinitions ) {
 			if( classDefinition != nullptr ) {
 				this->lowerClassDefinition( *classDefinition );
@@ -281,6 +297,14 @@ namespace uranite::ir::mir {
 						}
 					}
 					if( mirFunction->variadicElementType == nullptr ) {
+						if( elemType->kind == semantic::Type::Kind::Array ) {
+							semantic::ArrayType* arrayType = dynamic_cast<semantic::ArrayType*>( elemType.get() );
+							if( arrayType != nullptr && arrayType->elementType != nullptr ) {
+								mirFunction->variadicElementType = arrayType->elementType;
+							}
+						}
+					}
+					if( mirFunction->variadicElementType == nullptr ) {
 						std::string typeName = elemType->name;
 						size_t openBracket = typeName.find( '<' );
 						size_t closeBracket = typeName.rfind( '>' );
@@ -289,6 +313,26 @@ namespace uranite::ir::mir {
 							mirFunction->variadicElementType = std::make_shared<semantic::Type>(
 								semantic::Type::Kind::Class, elementName
 							);
+						}
+						else if( elemType->kind != semantic::Type::Kind::Array ) {
+							mirFunction->variadicElementType = elemType;
+						}
+					}
+				}
+			}
+			if( parameterDescriptor.isKeywordParameter ) {
+				mirFunction->keywordParameterIndex = static_cast<int>( paramIndex );
+				if( parameterDescriptor.parameterType != nullptr ) {
+					semantic::TypeSharedPointer kwType = parameterDescriptor.parameterType;
+					if( kwType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassType* classType = dynamic_cast<semantic::ClassType*>( kwType.get() );
+						if( classType != nullptr && classType->typeSubstitutions.empty() == false ) {
+							for( const std::pair<const std::string, semantic::TypeSharedPointer>& sub : classType->typeSubstitutions ) {
+								if( sub.second != nullptr ) {
+									mirFunction->keywordValueType = sub.second;
+									break;
+								}
+							}
 						}
 					}
 				}
@@ -1556,7 +1600,12 @@ namespace uranite::ir::mir {
 		if( hirCall.calleeExpression != nullptr ) {
 			if( hirCall.calleeExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
 				hir::HIRIdentifier& calleeIdentifier = static_cast<hir::HIRIdentifier&>( *hirCall.calleeExpression );
-				callInstruction.calledFunctionQualifiedName = calleeIdentifier.identifierName;
+				if( calleeIdentifier.qualifiedScopeName.empty() == false ) {
+					callInstruction.calledFunctionQualifiedName = calleeIdentifier.qualifiedScopeName;
+				}
+				else {
+					callInstruction.calledFunctionQualifiedName = calleeIdentifier.identifierName;
+				}
 			}
 			else if( hirCall.calleeExpression->nodeKind == hir::HIRNodeKind::SuperReference ) {
 				if( this->currentParentClassName.empty() == false ) {
@@ -1572,6 +1621,11 @@ namespace uranite::ir::mir {
 		callInstruction.sourceOperands = std::move( argumentVariables );
 		callInstruction.operandType = hirCall.resolvedType;
 		callInstruction.sourceLocation = hirCall.sourceLocation;
+		for( const std::pair<std::string, hir::HIRNodeSharedPointer>& keywordArgument : hirCall.keywordArguments ) {
+			callInstruction.keywordArgumentKeys.push_back( keywordArgument.first );
+			MIRVariableIdentifier valueVariable = this->lowerExpression( keywordArgument.second );
+			callInstruction.keywordArgumentValues.push_back( valueVariable );
+		}
 
 		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
 			"_call", hirCall.resolvedType, false
@@ -1710,6 +1764,11 @@ namespace uranite::ir::mir {
 		callInstruction.sourceOperands = std::move( argumentVariables );
 		callInstruction.operandType = hirMethodCall.resolvedType;
 		callInstruction.sourceLocation = hirMethodCall.sourceLocation;
+		for( const std::pair<std::string, hir::HIRNodeSharedPointer>& keywordArgument : hirMethodCall.keywordArguments ) {
+			callInstruction.keywordArgumentKeys.push_back( keywordArgument.first );
+			MIRVariableIdentifier valueVariable = this->lowerExpression( keywordArgument.second );
+			callInstruction.keywordArgumentValues.push_back( valueVariable );
+		}
 
 		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
 			"_mcall", hirMethodCall.resolvedType, false
