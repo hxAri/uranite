@@ -17,6 +17,8 @@
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
+#include <unordered_set>
+
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
@@ -148,6 +150,15 @@ namespace uranite::ir::mir {
 
 		// MIR function lookup for variadic parameter detection at call sites
 		std::unordered_map<std::string, MIRFunctionDefinition*> mirFunctionDefinitionMap;
+
+		// Names registered by extern declarations (take priority over Uranite functions)
+		std::unordered_set<std::string> externDeclaredNames;
+
+		// Tracks concrete class name for variables assigned via ConstructObject
+		std::unordered_map<MIRVariableIdentifier, std::string> concreteClassMap;
+
+		// Precomputed: functions that always return a construct of a specific class
+		std::unordered_map<std::string, std::string> functionReturnConcreteClass;
 
 		// Memory<T> element type per variable (compiler intrinsic tracking)
 		std::unordered_map<MIRVariableIdentifier, llvm::Type*> memoryElementTypes;
