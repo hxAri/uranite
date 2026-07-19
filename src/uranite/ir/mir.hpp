@@ -170,6 +170,8 @@ namespace uranite::ir::mir {
 		// Call payloads
 		std::string calledFunctionQualifiedName;
 		int virtualTableEntryIndex = -1;
+		std::vector<std::string> keywordArgumentKeys;
+		std::vector<MIRVariableIdentifier> keywordArgumentValues;
 		
 		// Branch payloads
 		MIRBlockIdentifier trueBranchTarget = INVALID_BLOCK_IDENTIFIER;
@@ -270,6 +272,8 @@ namespace uranite::ir::mir {
 		MIRBlockIdentifier entryBlockIdentifier = 0;
 		int variadicParameterIndex = -1;
 		semantic::TypeSharedPointer variadicElementType;
+		int keywordParameterIndex = -1;
+		semantic::TypeSharedPointer keywordValueType;
 		
 		/** @brief Allocates a new variable and registers it in the descriptor table. */
 		MIRVariableIdentifier allocateVariable(
@@ -330,6 +334,14 @@ namespace uranite::ir::mir {
 		bool hasInitializer = false;
 	};
 
+	struct MIRExternFunction {
+		std::string functionName;
+		std::string linkageName;
+		semantic::TypeSharedPointer returnType;
+		std::vector<semantic::TypeSharedPointer> parameterTypes;
+		bool isVariadic = false;
+	};
+
 	/** @brief Top-level MIR container holding all functions and type layouts for a module. */
 	struct MIRModuleDefinition {
 
@@ -338,6 +350,7 @@ namespace uranite::ir::mir {
 		std::unordered_map<std::string, TypeLayoutDescriptor> typeLayoutTable;
 		std::unordered_map<std::string, MIRModuleConstant> moduleConstants;
 		std::unordered_map<std::string, MIRGlobalVariable> globalVariables;
+		std::vector<MIRExternFunction> externFunctions;
 
 	};
 
