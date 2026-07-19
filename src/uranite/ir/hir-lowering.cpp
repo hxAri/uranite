@@ -19,9 +19,34 @@
 
 #include <stdexcept>
 
+#include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/Triple.h>
+
 #include "uranite/ir/hir-lowering.hpp"
 
 namespace uranite::ir::hir {
+
+	static std::string deriveModulePath( const std::string& pathname ) {
+		size_t stdlibsPos = pathname.find( "stdlibs/" );
+		if( stdlibsPos == std::string::npos ) {
+			return "";
+		}
+		std::string relative = pathname.substr( stdlibsPos + 8 );
+		size_t extPos = relative.rfind( ".urn" );
+		if( extPos != std::string::npos ) {
+			relative = relative.substr( 0, extPos );
+		}
+		std::string modulePath = "uranite.";
+		for( char c : relative ) {
+			if( c == '/' ) {
+				modulePath += '.';
+			}
+			else {
+				modulePath += c;
+			}
+		}
+		return modulePath;
+	}
 	
 	HIRLowering::HIRLowering( semantic::Analyzer& semanticAnalyzer, diagnostic::Engine& diagnosticEngine )
 		: semanticAnalyzer( semanticAnalyzer ),
@@ -147,7 +172,13 @@ namespace uranite::ir::hir {
 		hirFunction->isGeneratorFunction = declaration.isGenerator;
 		hirFunction->isNativeMethod = declaration.isNative;
 		hirFunction->isPropertyMethod = declaration.isProperty;
-		
+		if( declaration.source != nullptr ) {
+			std::string modulePath = deriveModulePath( declaration.source->filename );
+			if( modulePath.empty() == false ) {
+				hirFunction->mangledName = modulePath + "." + declaration.name;
+			}
+		}
+
 		for( const ast::nodes::FunctionParameterSharedPointer& parameter : declaration.parameters ) {
 			if( parameter != nullptr ) {
 				hirFunction->parameterDescriptors.push_back( this->lowerParameter( *parameter ) );
@@ -565,6 +596,49 @@ namespace uranite::ir::hir {
 				ast::nodes::InlineAssemblyStatement& asmStatement = static_cast<ast::nodes::InlineAssemblyStatement&>( *statement );
 				std::shared_ptr<HIRInlineAssembly> hirAsm = std::make_shared<HIRInlineAssembly>( asmStatement.source );
 				hirAsm->isVolatile = asmStatement.isVolatile;
+				if( asmStatement.archVariants.empty() == false ) {
+					llvm::Triple triple( llvm::sys::getDefaultTargetTriple() );
+					std::string targetArch;
+					switch( triple.getArch() ) {
+						case llvm::Triple::x86_64:
+							targetArch = "x86-64";
+							break;
+						case llvm::Triple::aarch64:
+						case llvm::Triple::aarch64_be:
+							targetArch = "aarch64";
+							break;
+						case llvm::Triple::riscv64:
+							targetArch = "riscv64";
+							break;
+						case llvm::Triple::arm:
+						case llvm::Triple::armeb:
+							targetArch = "arm";
+							break;
+						default:
+							targetArch = triple.getArchName().str();
+							break;
+					}
+					for( const ast::nodes::InlineAssemblyArchVariant& variant : asmStatement.archVariants ) {
+						if( variant.targetArch == targetArch ) {
+							hirAsm->assemblyTemplate = variant.asmTemplate;
+							hirAsm->clobberRegisters = variant.clobbers;
+							for( const ast::nodes::InlineAssemblyOperand& output : variant.outputs ) {
+								HIRAsmOperand hirOperand;
+								hirOperand.constraintString = output.constraint;
+								hirOperand.boundExpression = this->lowerExpression( output.expression );
+								hirAsm->outputOperands.push_back( std::move( hirOperand ) );
+							}
+							for( const ast::nodes::InlineAssemblyOperand& input : variant.inputs ) {
+								HIRAsmOperand hirOperand;
+								hirOperand.constraintString = input.constraint;
+								hirOperand.boundExpression = this->lowerExpression( input.expression );
+								hirAsm->inputOperands.push_back( std::move( hirOperand ) );
+							}
+							return hirAsm;
+						}
+					}
+					return hirAsm;
+				}
 				hirAsm->assemblyTemplate = asmStatement.asmTemplate;
 				hirAsm->clobberRegisters = asmStatement.clobbers;
 				for( const ast::nodes::InlineAssemblyOperand& output : asmStatement.outputs ) {
@@ -671,11 +745,20 @@ namespace uranite::ir::hir {
 			
 			case ast::Node::Kind::IdentifierExpression: {
 				ast::nodes::IdentifierExpression& identifierExpression = static_cast<ast::nodes::IdentifierExpression&>( *expression );
-				return std::make_shared<HIRIdentifier>(
+				std::shared_ptr<HIRIdentifier> hirIdentifier = std::make_shared<HIRIdentifier>(
 					identifierExpression.name,
 					expression->semanticType,
 					expression->source
 				);
+				if( identifierExpression.resolvedSymbol != nullptr &&
+					identifierExpression.resolvedSymbol->kind == semantic::Symbol::Kind::Function &&
+					identifierExpression.resolvedSymbol->source != nullptr ) {
+					std::string modulePath = deriveModulePath( identifierExpression.resolvedSymbol->source->filename );
+					if( modulePath.empty() == false ) {
+						hirIdentifier->qualifiedScopeName = modulePath + "." + identifierExpression.name;
+					}
+				}
+				return hirIdentifier;
 			}
 			
 			case ast::Node::Kind::SelfExpression: {
