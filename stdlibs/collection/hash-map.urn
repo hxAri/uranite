@@ -53,6 +53,7 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
     private Memory<Int> status
     private Int count
     private Int capacity
+    private Int position
     
     public function HashMap( self ) -> Void:
         
@@ -69,7 +70,8 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.valueData = new Memory<V>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
-    
+        self.position = 0
+
     public function HashMap( self, Int initialCapacity ) -> Void:
         
         """
@@ -89,7 +91,8 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.valueData = new Memory<V>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
-    
+        self.position = 0
+
     private function computeIndex( self, K key ) -> Int:
         
         """
@@ -848,7 +851,32 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         """
         
         return new HashMapIterator<V>( self.valueData, self.status, self.capacity )
-    
+
+    public property has( self ) -> Boolean:
+
+        """
+        Check whether more entries remain for iteration. Advances past
+        empty and tombstone slots before testing.
+        """
+
+        while self.position < self.capacity and self.status.get( self.position ) != 1:
+            self.position = self.position + 1
+        return self.position < self.capacity
+
+    public property next( self ) -> Pair<K, V>:
+
+        """
+        Return the current key-value pair and advance to the next
+        occupied slot.
+        """
+
+        K currentKey = self.keyData.get( self.position )
+        V currentValue = self.valueData.get( self.position )
+        self.position = self.position + 1
+        while self.position < self.capacity and self.status.get( self.position ) != 1:
+            self.position = self.position + 1
+        return new Pair<K, V>( currentKey, currentValue )
+
     public function toString( self ) -> String:
         
         """
