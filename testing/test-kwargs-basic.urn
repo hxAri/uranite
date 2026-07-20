@@ -1,18 +1,86 @@
 package testing
 
+from uranite.collection.array-list import ArrayList
+from uranite.collection.hash-map import HashMap
 from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64
 
-function greet( String name, String opts{} ) -> I64:
-    I64 count = opts.length()
-    return count
+private function orchestrateTopology( String region, HashMap<String,T> args[], HashMap<String,T> kwargs{} ) -> HashMap<String,HashMap<String,ArrayList<T>>>:
+
+    """
+    HashMap<String,T> args[] -> uranite.collection.args.Args<HashMap<String,T>>
+    HashMap<String,T> kwargs{} -> uranite.collection.kwargs.Kwargs<HashMap<String,T>>
+    """
+
+    HashMap<String,HashMap<String,ArrayList<T>>> topology = new HashMap<String,HashMap<String,ArrayList<T>>>()
+    HashMap<String,ArrayList<T>> coreNetwork = new HashMap<String,ArrayList<T>>()
+    for node in args:
+        for k, v in node:
+            ArrayList<T> edgeList = new ArrayList<T>()
+            edgeList.add( v )
+            coreNetwork.put( k, edgeList )
+    topology.put( "{}_core".format( region ), coreNetwork )
+    HashMap<String,ArrayList<T>> isolatedStates = new HashMap<String,ArrayList<T>>()
+    for propKey, propMap in kwargs:
+        for k, v in propMap:
+            ArrayList<T> stateData = new ArrayList<T>()
+            stateData.add( v )
+            isolatedStates.put( "{}_{}".format( propKey, k ), stateData )
+    topology.put( "{}_isolated".format( region ), isolatedStates )
+    return topology
 
 public function main() -> I32:
-    putsln( "=== Kwargs Basic Tests ===" )
-
-    I64 result = greet( "World", prefix="Mr", suffix="Jr" )
-    assertEqualI64( 2, result, "kwargs count = 2" )
-    putsln( "kwargs OK" )
-
-    putsln( "=== All kwargs tests passed ===" )
+    HashMap<String,ArrayList<HashMap<String,I64>>> nodeA = new HashMap<String,ArrayList<HashMap<String,I64>>>()
+    ArrayList<HashMap<String,I64>> routesA = new ArrayList<HashMap<String,I64>>()
+    HashMap<String,I64> metricA1 = new HashMap<String,I64>()
+    metricA1.put( "latency", 12 )
+    metricA1.put( "bandwidth", 1024 )
+    routesA.add( metricA1 )
+    nodeA.put( "us_east_1", routesA )
+    HashMap<String,ArrayList<HashMap<String,I64>>> nodeB = new HashMap<String,ArrayList<HashMap<String,I64>>>()
+    ArrayList<HashMap<String,I64>> routesB = new ArrayList<HashMap<String,I64>>()
+    HashMap<String,I64> metricB1 = new HashMap<String,I64>()
+    metricB1.put( "latency", 8 )
+    metricB1.put( "bandwidth", 2048 )
+    routesB.add( metricB1 )
+    nodeB.put( "us_west_1", routesB )
+    HashMap<String,ArrayList<HashMap<String,I64>>> polA = new HashMap<String,ArrayList<HashMap<String,I64>>>()
+    ArrayList<HashMap<String,I64>> rulesA = new ArrayList<HashMap<String,I64>>()
+    HashMap<String,I64> condA = new HashMap<String,I64>()
+    condA.put( "max_hops", 5 )
+    rulesA.add( condA )
+    polA.put( "strict", rulesA )
+    HashMap<String,HashMap<String,ArrayList<ArrayList<HashMap<String,I64>>>>> matrix = orchestrateTopology(
+        "global",
+        nodeA, nodeB,
+        firewall=polA
+    )
+    HashMap<String,ArrayList<ArrayList<HashMap<String,I64>>>> coreLayer = matrix.get( "global_core" )
+    assertEqualI64( 2, coreLayer.size(), "coreLayer size" )
+    HashMap<String,ArrayList<ArrayList<HashMap<String,I64>>>> isolatedLayer = matrix.get( "global_isolated" )
+    assertEqualI64( 1, isolatedLayer.size(), "isolatedLayer size" )
+    ArrayList<ArrayList<HashMap<String,I64>>> eastEdges = coreLayer.get( "us_east_1" )
+    assertEqualI64( 1, eastEdges.size(), "eastEdges size" )
+    ArrayList<HashMap<String,I64>> eastInner = eastEdges.get( 0 )
+    assertEqualI64( 1, eastInner.size(), "eastInner size" )
+    HashMap<String,I64> eastMetric = eastInner.get( 0 )
+    assertEqualI64( 2, eastMetric.size(), "eastMetric size" )
+    assertEqualI64( 12, eastMetric.get( "latency" ), "east latency" )
+    assertEqualI64( 1024, eastMetric.get( "bandwidth" ), "east bandwidth" )
+    ArrayList<ArrayList<HashMap<String,I64>>> westEdges = coreLayer.get( "us_west_1" )
+    assertEqualI64( 1, westEdges.size(), "westEdges size" )
+    ArrayList<HashMap<String,I64>> westInner = westEdges.get( 0 )
+    assertEqualI64( 1, westInner.size(), "westInner size" )
+    HashMap<String,I64> westMetric = westInner.get( 0 )
+    assertEqualI64( 2, westMetric.size(), "westMetric size" )
+    assertEqualI64( 8, westMetric.get( "latency" ), "west latency" )
+    assertEqualI64( 2048, westMetric.get( "bandwidth" ), "west bandwidth" )
+    ArrayList<ArrayList<HashMap<String,I64>>> fwEdges = isolatedLayer.get( "firewall_strict" )
+    assertEqualI64( 1, fwEdges.size(), "fwEdges size" )
+    ArrayList<HashMap<String,I64>> fwInner = fwEdges.get( 0 )
+    assertEqualI64( 1, fwInner.size(), "fwInner size" )
+    HashMap<String,I64> fwMetric = fwInner.get( 0 )
+    assertEqualI64( 1, fwMetric.size(), "fwMetric size" )
+    assertEqualI64( 5, fwMetric.get( "max_hops" ), "max_hops" )
+    putsln( "Topology orchestrated." )
     return 0
