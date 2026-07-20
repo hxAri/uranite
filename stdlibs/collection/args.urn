@@ -1,7 +1,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-28 01:00
-# @update 2026-06-21 01:44
+# @update 2026-07-20 02:14
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/args.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -21,178 +21,385 @@
 
 package uranite.collection.args
 
+from uranite.collection.collection import Collection
+from uranite.collection.immutable-sequence import ImmutableSequence
+from uranite.collection.sequence import Sequence
 from uranite.iterators.iterator import Iterator
+from uranite.language.callable import Callable
+from uranite.language.void import Void
 from uranite.memory.memory import Memory
 
-public class Args<T> implements Iterator<T>:
-    
+public class Args<T> implements ImmutableSequence<T>, Iterator<T>:
+
     """
     A read-only container for variadic function parameters. Wraps a
     contiguous Memory<T> buffer with an element count. Instances are
     constructed automatically by the compiler at call sites when a
-    function accepts a variadic parameter (Type name[]). Implements
-    the Iterator interface for sequential traversal.
+    function accepts a variadic parameter (Type name[]).
     """
-    
+
     protect Memory<T> data
-    """ The underlying memory buffer holding the variadic arguments. """
-    
     protect I64 count
-    """ The number of elements in this argument list. """
-    
     protect I64 position
-    """ The current iterator position for sequential traversal. """
-    
+
     public function Args( self, Memory<T> data, I64 count ) -> Void:
-        
+
         """
         Create a new Args wrapping a memory buffer with the given
         element count. The iterator position is initialized to zero.
-        
+
         Parameters:
             data (Memory<T>):
                 The memory buffer containing the argument values.
             count (I64):
                 The number of elements in the buffer.
         """
-        
+
         self.data = data
         self.count = count
         self.position = 0
     
-    public function get( self, I64 index ) -> T:
-        
-        """
-        Retrieve the element at the given index.
-        
-        Parameters:
-            index (I64):
-                The zero-based index of the element to retrieve.
-        
-        Returns:
-            The element at the specified index.
-        """
-        
-        return self.data.get( index )
-    
-    public function length( self ) -> I64:
-        
-        """
-        Return the number of elements in this argument list.
-        
-        Returns:
-            The element count.
-        """
-        
-        return self.count
-    
-    public function isEmpty( self ) -> Boolean:
-        
-        """
-        Check whether this argument list contains no elements.
-        
-        Returns:
-            True if the count is zero, False otherwise.
-        """
-        
-        return self.count == 0
-    
-    public function first( self ) -> T:
-        
-        """
-        Return the first element in the argument list.
-        
-        Returns:
-            The element at index zero.
-        """
-        
-        return self.data.get( 0 )
-    
-    public function last( self ) -> T:
-        
-        """
-        Return the last element in the argument list.
-        
-        Returns:
-            The element at index count minus one.
-        """
-        
-        return self.data.get( self.count - 1 )
-    
     public property has( self ) -> Boolean:
-        
-        """
-        Check whether the iterator has more elements to yield.
-        
-        Returns:
-            True if the current position is less than the count.
-        """
-        
+
+        """ Check whether the iterator has more elements to yield. """
+
         return self.position < self.count
-    
+
     public property next( self ) -> T:
-        
-        """
-        Return the next element and advance the iterator position
-        by one.
-        
-        Returns:
-            The element at the current position before advancing.
-        """
-        
+
+        """ Return the next element and advance the iterator position. """
+
         T element = self.data.get( self.position )
         self.position = self.position + 1
         return element
     
+    public function get( self, I64 index ) -> T:
+
+        """ Retrieve the element at the given index. """
+
+        return self.data.get( index )
+
+    public function set( self, I64 index, T value ) -> Void:
+
+        """ No-op for immutable variadic arguments. """
+
+    public function remove( self, I64 index ) -> Void:
+
+        """ No-op for immutable variadic arguments. """
+
     public function contains( self, T element ) -> Boolean:
-        
-        """
-        Check whether the argument list contains the given element
-        using equality comparison.
-        
-        Parameters:
-            element (T):
-                The element to search for.
-        
-        Returns:
-            True if the element is found, False otherwise.
-        
-        Complexity:
-            Time: O(n) where n is the number of elements
-        """
-        
+
+        """ Check whether the argument list contains the given element. """
+
         for I64 elementIndex=0; elementIndex<self.count; elementIndex++:
             if self.data.get( elementIndex ) == element:
                 return True
         return False
+    
+    public function append( self, T element ) -> Collection<T>:
 
+        """ No-op for immutable variadic arguments; returns self unchanged. """
+
+        return self
+
+    public function append( self, T element[] ) -> Collection<T>:
+
+        """ No-op for immutable variadic arguments; returns self unchanged. """
+
+        return self
+
+    public function clear( self ) -> Void:
+
+        """ No-op for immutable variadic arguments. """
+
+    public property copy( self ) -> Collection<T>:
+
+        """ Return a shallow copy of this argument list. """
+
+        Memory<T> buffer = new Memory<T>( self.count )
+        for I64 copyIndex=0; copyIndex<self.count; copyIndex++:
+            buffer.set( copyIndex, self.data.get( copyIndex ) )
+        return new Args<T>( buffer, self.count )
+
+    public property empty( self ) -> Boolean:
+
+        """ Check whether the argument list contains no elements. """
+
+        return self.count == 0
+
+    public function equals( self, Object object ) -> Boolean:
+
+        """ Compare this argument list with another object for structural equality. """
+
+        if object instanceof Args:
+            Args<T> other = object as Args<T>
+            if self.count != other.count:
+                return False
+            for I64 compareIndex=0; compareIndex<self.count; compareIndex++:
+                if self.data.get( compareIndex ) != other.data.get( compareIndex ):
+                    return False
+            return True
+        return False
+
+    public function exists( self, T element ) -> Boolean:
+
+        """ Check whether the given element exists in the argument list. """
+
+        return self.contains( element )
+
+    public function exists( self, T element[] ) -> Boolean:
+
+        """ Check whether all given elements exist in the argument list. """
+
+        I64 elementCount = element.length()
+        for I64 checkIndex=0; checkIndex<elementCount; checkIndex++:
+            if self.contains( element.get( checkIndex ) ) == False:
+                return False
+        return True
+
+    public function filter( self, Callable<Boolean,<T>> callback ) -> Collection<T>:
+
+        """ Return a new collection containing only elements that match the predicate. """
+
+        Memory<T> buffer = new Memory<T>( self.count )
+        I64 matchCount = 0
+        for I64 scanIndex=0; scanIndex<self.count; scanIndex++:
+            T candidate = self.data.get( scanIndex )
+            if callback( candidate ):
+                buffer.set( matchCount, candidate )
+                matchCount = matchCount + 1
+        return new Args<T>( buffer, matchCount )
+
+    public function forEach( self, Callable<Void,<T>> action ) -> Void:
+
+        """ Execute an action for each element in the argument list. """
+
+        for I64 actionIndex=0; actionIndex<self.count; actionIndex++:
+            action( self.data.get( actionIndex ) )
+
+    public property length( self ) -> I64:
+
+        """ Return the number of elements in this argument list. """
+
+        return self.count
+
+    public function isEmpty( self ) -> Boolean:
+
+        """ Check whether this argument list contains no elements. """
+
+        return self.count == 0
+
+    public function remove( self, T element ) -> Boolean:
+
+        """ No-op for immutable variadic arguments; always returns False. """
+
+        return False
+
+    public function remove( self, T element[] ) -> Boolean:
+
+        """ No-op for immutable variadic arguments; always returns False. """
+
+        return False
+    
+    public property iterator( self ) -> Iterator<T>:
+
+        """ Return a fresh iterator over the elements in this argument list. """
+
+        return new Args<T>( self.data, self.count )
+    
     public function indexOf( self, T element ) -> I64:
 
-        """
-        Find the index of the first occurrence of the given element.
-
-        Parameters:
-            element (T):
-                The element to search for.
-
-        Returns:
-            The zero-based index of the first occurrence, or -1 if
-            the element is not found.
-
-        Complexity:
-            Time: O(n) where n is the number of elements
-        """
+        """ Find the index of the first occurrence of the given element, or -1 if absent. """
 
         for I64 elementIndex=0; elementIndex<self.count; elementIndex++:
             if self.data.get( elementIndex ) == element:
                 return elementIndex
         return 0 - 1
 
+    public function lastIndexOf( self, T element ) -> I64:
+
+        """ Find the index of the last occurrence of the given element, or -1 if absent. """
+
+        I64 lastFound = 0 - 1
+        for I64 elementIndex=0; elementIndex<self.count; elementIndex++:
+            if self.data.get( elementIndex ) == element:
+                lastFound = elementIndex
+        return lastFound
+
+    public function slice( self, I64 start, I64 end ) -> Sequence<T>:
+
+        """ Return a new sequence containing elements from start up to but not including end. """
+
+        I64 sliceLength = end - start
+        if sliceLength < 0:
+            sliceLength = 0
+        Memory<T> buffer = new Memory<T>( sliceLength )
+        for I64 sliceIndex=0; sliceIndex<sliceLength; sliceIndex++:
+            buffer.set( sliceIndex, self.data.get( start + sliceIndex ) )
+        return new Args<T>( buffer, sliceLength )
+
+    public function subSequence( self, I64 start, I64 end ) -> Sequence<T>:
+
+        """ Return a sub-sequence containing elements between start and end indices. """
+
+        return self.slice( start, end )
+
+    public property first( self ) -> T:
+
+        """ Return the first element in the argument list. """
+
+        return self.data.get( 0 )
+
+    public property last( self ) -> T:
+
+        """ Return the last element in the argument list. """
+
+        return self.data.get( self.count - 1 )
+
+    public property reversed( self ) -> Sequence<T>:
+
+        """ Return a new sequence with the elements in reverse order. """
+
+        Memory<T> buffer = new Memory<T>( self.count )
+        for I64 reverseIndex=0; reverseIndex<self.count; reverseIndex++:
+            buffer.set( reverseIndex, self.data.get( self.count - 1 - reverseIndex ) )
+        return new Args<T>( buffer, self.count )
+
+    public function sorted( self, Callable<I64,<T,T>> comparator ) -> Sequence<T>:
+
+        """ Return a new sorted sequence using the provided comparator. """
+
+        Memory<T> buffer = new Memory<T>( self.count )
+        for I64 initIndex=0; initIndex<self.count; initIndex++:
+            buffer.set( initIndex, self.data.get( initIndex ) )
+        for I64 outerIndex=0; outerIndex<self.count; outerIndex++:
+            for I64 innerIndex=outerIndex + 1; innerIndex<self.count; innerIndex++:
+                if comparator( buffer.get( outerIndex ), buffer.get( innerIndex ) ) > 0:
+                    T temporary = buffer.get( outerIndex )
+                    buffer.set( outerIndex, buffer.get( innerIndex ) )
+                    buffer.set( innerIndex, temporary )
+        return new Args<T>( buffer, self.count )
+
+    public function map( self, Callable<T,<T>> transform ) -> Sequence<T>:
+
+        """ Return a new sequence with the transform applied to each element. """
+
+        Memory<T> buffer = new Memory<T>( self.count )
+        for I64 mapIndex=0; mapIndex<self.count; mapIndex++:
+            buffer.set( mapIndex, transform( self.data.get( mapIndex ) ) )
+        return new Args<T>( buffer, self.count )
+
+    public function zip( self, Sequence<T> other ) -> Sequence<T>:
+
+        """ Interleave elements from this and the other sequence. """
+
+        I64 otherLength = other.length
+        I64 totalLength = self.count + otherLength
+        Memory<T> buffer = new Memory<T>( totalLength )
+        I64 writeOffset = 0
+        I64 shorter = self.count
+        if otherLength < shorter:
+            shorter = otherLength
+        for I64 zipIndex=0; zipIndex<shorter; zipIndex++:
+            buffer.set( writeOffset, self.data.get( zipIndex ) )
+            writeOffset = writeOffset + 1
+            buffer.set( writeOffset, other.first )
+            writeOffset = writeOffset + 1
+        for I64 remainSelf=shorter; remainSelf<self.count; remainSelf++:
+            buffer.set( writeOffset, self.data.get( remainSelf ) )
+            writeOffset = writeOffset + 1
+        return new Args<T>( buffer, totalLength )
+    
+    public function with( self, I64 index, T element ) -> ImmutableSequence<T>:
+
+        """ Return a new Args with the element at the given index replaced. """
+
+        Memory<T> buffer = new Memory<T>( self.count )
+        for I64 copyIndex=0; copyIndex<self.count; copyIndex++:
+            if copyIndex == index:
+                buffer.set( copyIndex, element )
+            else:
+                buffer.set( copyIndex, self.data.get( copyIndex ) )
+        return new Args<T>( buffer, self.count )
+
+    public function appended( self, T element ) -> ImmutableSequence<T>:
+
+        """ Return a new Args with the given element appended to the end. """
+
+        I64 newCount = self.count + 1
+        Memory<T> buffer = new Memory<T>( newCount )
+        for I64 copyIndex=0; copyIndex<self.count; copyIndex++:
+            buffer.set( copyIndex, self.data.get( copyIndex ) )
+        buffer.set( self.count, element )
+        return new Args<T>( buffer, newCount )
+
+    public function prepended( self, T element ) -> ImmutableSequence<T>:
+
+        """ Return a new Args with the given element prepended to the front. """
+
+        I64 newCount = self.count + 1
+        Memory<T> buffer = new Memory<T>( newCount )
+        buffer.set( 0, element )
+        for I64 copyIndex=0; copyIndex<self.count; copyIndex++:
+            buffer.set( copyIndex + 1, self.data.get( copyIndex ) )
+        return new Args<T>( buffer, newCount )
+
+    public function concatenated( self, Sequence<T> other ) -> ImmutableSequence<T>:
+
+        """ Return a new Args with the other sequence concatenated to the end. """
+
+        I64 otherLength = other.length
+        I64 newCount = self.count + otherLength
+        Memory<T> buffer = new Memory<T>( newCount )
+        for I64 copyIndex=0; copyIndex<self.count; copyIndex++:
+            buffer.set( copyIndex, self.data.get( copyIndex ) )
+        for I64 otherIndex=0; otherIndex<otherLength; otherIndex++:
+            buffer.set( self.count + otherIndex, other.first )
+        return new Args<T>( buffer, newCount )
+
+    public function filtered( self, Callable<Boolean,<T>> predicate ) -> ImmutableSequence<T>:
+
+        """ Return a new Args containing only elements that match the predicate. """
+
+        Memory<T> buffer = new Memory<T>( self.count )
+        I64 matchCount = 0
+        for I64 scanIndex=0; scanIndex<self.count; scanIndex++:
+            T candidate = self.data.get( scanIndex )
+            if predicate( candidate ):
+                buffer.set( matchCount, candidate )
+                matchCount = matchCount + 1
+        return new Args<T>( buffer, matchCount )
+
+    public function dropped( self, I64 dropCount ) -> ImmutableSequence<T>:
+
+        """ Return a new Args with the first dropCount elements removed. """
+
+        I64 remaining = self.count - dropCount
+        if remaining < 0:
+            remaining = 0
+        Memory<T> buffer = new Memory<T>( remaining )
+        for I64 copyIndex=0; copyIndex<remaining; copyIndex++:
+            buffer.set( copyIndex, self.data.get( copyIndex + dropCount ) )
+        return new Args<T>( buffer, remaining )
+
+    public function taken( self, I64 takeCount ) -> ImmutableSequence<T>:
+
+        """ Return a new Args containing only the first takeCount elements. """
+
+        I64 actual = takeCount
+        if actual > self.count:
+            actual = self.count
+        Memory<T> buffer = new Memory<T>( actual )
+        for I64 copyIndex=0; copyIndex<actual; copyIndex++:
+            buffer.set( copyIndex, self.data.get( copyIndex ) )
+        return new Args<T>( buffer, actual )
+    
     public function destroy( self ) -> Void:
 
         """ Release the heap-allocated data buffer held by this variadic container. """
 
         self.data.free()
+
 
 export {
     Args
