@@ -107,29 +107,11 @@ namespace uranite::compiler {
 		
 		private:
 			
-			/** @brief Performs memory safety and ownership verification on the AST. */
-			int borrowCheck();
-			
-			/** @brief Translates the optimized AST into LLVM Intermediate Representation. */
-			int generateCode();
-			
-			/** @brief Invokes the linker to produce the final executable or library binary. */
-			int link();
-			
-			/** @brief Runs the optimization passes configured in the compilation options. */
-			int optimize();
-			
-			/** @brief Constructs the Abstract Syntax Tree from the stream of tokens. */
-			int parseAST();
-			
 			/** @brief Reads the raw source code from the input file into memory. */
 			int readSource();
-			
-			/** @brief Performs type checking and scope verification on the AST. */
-			int semanticAnalysis();
-			
-			/** @brief Converts the raw source string into a sequence of lexical tokens. */
-			int tokenize();
+
+			/** @brief Compiles IR to object or executable, links runtime, optionally runs. */
+			int linkFromIR( const std::string& inputIrFile );
 			
 			/** @brief Diagnostic engine instance for reporting errors and warnings. */
 			diagnostic::Engine diagnostic;
