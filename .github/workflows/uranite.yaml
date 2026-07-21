@@ -48,10 +48,10 @@ jobs:
             run: |
                 chmod +x scripts/uranite-testing.sh
                 export PATH="$GITHUB_WORKSPACE/build:$PATH"
-                ./scripts/uranite-testing.sh ./examples
-                ./scripts/uranite-testing.sh ./examples/benchmarks
-                ./scripts/uranite-testing.sh ./examples/tutorials
-                ./scripts/uranite-testing.sh ./testing
+                ./scripts/uranite-testing.sh --mir ./examples
+                ./scripts/uranite-testing.sh --mir ./examples/benchmarks
+                ./scripts/uranite-testing.sh --mir ./examples/tutorials
+                ./scripts/uranite-testing.sh --mir ./testing
         -   name: "Package Uranite Distribution (Prod Only)"
             if: github.ref == 'refs/heads/prod' && github.event_name == 'push'
             run: |
