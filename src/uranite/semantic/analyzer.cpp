@@ -477,15 +477,11 @@ namespace uranite::semantic {
 		if( program.module != nullptr ) {
 			this->currentPackageName = program.module->name;
 		}
-		// First pass: register all type declarations (including nested)
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration != nullptr ) {
 				this->registerTypeDeclaration( declaration );
 			}
 		}
-		
-		// Pass 1.1: Pre-register interface own method signatures before any resolveType
-		// calls that could trigger monomorphization (which copies from base type methods)
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr || declaration->kind != ast::Node::Kind::InterfaceDeclaration ) {
 				continue;
@@ -495,14 +491,11 @@ namespace uranite::semantic {
 			if( interfaceType == nullptr || interfaceType->methods.empty() == false ) {
 				continue;
 			}
-			
-			// Register generic parameters temporarily for method type resolution
 			for( ast::nodes::GenericParameterSharedPointer& genericParameter : interfaceDeclaration.genericParameters ) {
 				GenericParameterTypeSharedPointer genericParameterType = std::make_shared<GenericParameterType>( genericParameter->name );
 				interfaceType->genericParameters.push_back( genericParameterType );
 				this->typeRegistry.registerType( genericParameter->name, genericParameterType );
 			}
-			
 			for( ast::nodes::DeclarationSharedPointer& method : interfaceDeclaration.methods ) {
 				if( method->kind != ast::Node::Kind::FunctionDeclaration ) {
 					continue;
@@ -534,8 +527,6 @@ namespace uranite::semantic {
 				interfaceType->methods.push_back( methodInformation );
 			}
 		}
-		
-		// Pass 1.2: Resolve interfaces for all types early
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr ) {
 				continue;
@@ -597,8 +588,6 @@ namespace uranite::semantic {
 				this->popScope();
 			}
 		}
-		
-		// Pass 1.3: Inherit super-interface methods (repeat until stable for deep chains)
 		{
 			bool hasChanges = true;
 			int interfaceMethodPropagationIteration = 0;
@@ -639,8 +628,6 @@ namespace uranite::semantic {
 				}
 			}
 		}
-
-		// Pass 1.4: Assign itable indices to interface methods
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr || declaration->kind != ast::Node::Kind::InterfaceDeclaration ) {
 				continue;
@@ -655,8 +642,6 @@ namespace uranite::semantic {
 				interfaceType->methodOrder.push_back( interfaceType->methods[methodIndex].name );
 			}
 		}
-		
-		// Register functions and externs
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr ) {
 				continue;
@@ -796,22 +781,16 @@ namespace uranite::semantic {
 					break;
 			}
 		}
-		
-		// Analyze traits before other declarations
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration && declaration->kind == ast::Node::Kind::TraitDeclaration ) {
 				this->analyzeTraitDeclaration( static_cast<ast::nodes::TraitDeclaration&>( *declaration ) );
 			}
 		}
-		
-		// Analyze interfaces before classes
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration && declaration->kind == ast::Node::Kind::InterfaceDeclaration ) {
 				this->analyzeInterfaceDeclaration( static_cast<ast::nodes::InterfaceDeclaration&>( *declaration ) );
 			}
 		}
-		
-		// Pre-register class method signatures
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr || declaration->kind != ast::Node::Kind::ClassDeclaration ) {
 				continue;
@@ -858,15 +837,12 @@ namespace uranite::semantic {
 			}
 			this->popScope();
 		}
-		
-		// Second pass: analyze type declarations first
 		for( size_t passIndex = 0; passIndex < program.declarations.size(); passIndex++ ) {
 			ast::nodes::DeclarationSharedPointer& declaration = program.declarations[passIndex];
 			if( declaration != nullptr && declaration->kind == ast::Node::Kind::StructDeclaration ) {
 				this->analyzeDeclaration( declaration );
 			}
 		}
-		// Analyze base classes first, then derived classes, then enums
 		for( size_t passIndex = 0; passIndex < program.declarations.size(); passIndex++ ) {
 			ast::nodes::DeclarationSharedPointer& declaration = program.declarations[passIndex];
 			if( declaration != nullptr && declaration->kind == ast::Node::Kind::ClassDeclaration ) {
@@ -2224,8 +2200,6 @@ namespace uranite::semantic {
 				else {
 					TypeSharedPointer nextReturnType = hasIteratorInterface( iterableType );
 					if( nextReturnType ) {
-						
-						// Iterable protocol: next() returns ?T, unwrap to T
 						if( nextReturnType->kind == Type::Kind::Optional ) {
 							variableType = std::static_pointer_cast<OptionalType>( nextReturnType )->inner;
 						}
@@ -2246,20 +2220,64 @@ namespace uranite::semantic {
 					}
 				}
 			}
+			TypeSharedPointer pairValueType = nullptr;
+			if( statement.variable2.empty() == false && variableType != nullptr &&
+				variableType->kind == Type::Kind::Struct ) {
+				StructTypeSharedPointer pairStructType = std::static_pointer_cast<StructType>( variableType );
+				std::string structBaseName = pairStructType->name;
+				size_t angleBracketPosition = structBaseName.find( '<' );
+				if( angleBracketPosition != std::string::npos ) {
+					structBaseName = structBaseName.substr( 0, angleBracketPosition );
+				}
+				if( structBaseName == "Pair" ) {
+					FieldInfo* keyField = pairStructType->findField( "key" );
+					FieldInfo* valueField = pairStructType->findField( "value" );
+					if( keyField != nullptr && valueField != nullptr &&
+						keyField->type != nullptr && valueField->type != nullptr ) {
+						TypeSharedPointer resolvedKeyType = keyField->type;
+						TypeSharedPointer resolvedValueType = valueField->type;
+						if( iterableType != nullptr && iterableType->kind == Type::Kind::Class ) {
+							ClassTypeSharedPointer iterableClassType = std::static_pointer_cast<ClassType>( iterableType );
+							if( resolvedKeyType->kind == Type::Kind::GenericParameter ) {
+								std::unordered_map<std::string,TypeSharedPointer>::iterator substitution =
+									iterableClassType->typeSubstitutions.find( resolvedKeyType->name );
+								if( substitution != iterableClassType->typeSubstitutions.end() ) {
+									resolvedKeyType = substitution->second;
+								}
+							}
+							if( resolvedValueType->kind == Type::Kind::GenericParameter ) {
+								std::unordered_map<std::string,TypeSharedPointer>::iterator substitution =
+									iterableClassType->typeSubstitutions.find( resolvedValueType->name );
+								if( substitution != iterableClassType->typeSubstitutions.end() ) {
+									resolvedValueType = substitution->second;
+								}
+							}
+						}
+						variableType = resolvedKeyType;
+						pairValueType = resolvedValueType;
+					}
+					else if( pairStructType->genericParameters.size() >= 2 ) {
+						variableType = pairStructType->genericParameters[0];
+						pairValueType = pairStructType->genericParameters[1];
+					}
+				}
+			}
+
 			SymbolSharedPointer variableSymbol = std::make_shared<Symbol>( statement.variable, Symbol::Kind::Variable, statement.source, variableType );
 			variableSymbol->isInitialized = true;
 			this->currentScope->define( statement.variable, variableSymbol );
-			
-			// Multi-variable for-in: register second variable (index for arrays/ranges)
+
+			// Multi-variable for-in: register second variable
 			if( statement.variable2.empty() == false ) {
 				TypeSharedPointer secondaryVariableType = this->typeRegistry.getInteger64();
-				if( statement.variableType2 ) {
+				if( pairValueType != nullptr ) {
+					secondaryVariableType = pairValueType;
+				}
+				else if( statement.variableType2 ) {
 					secondaryVariableType = this->resolveType( statement.variableType2 );
 				}
 				else if( iterableType && iterableType->kind == Type::Kind::Array ) {
 					secondaryVariableType = variableType;
-					// Swap: first var is index, second var is value for tuples
-					// For arrays: first=index, second=element
 				}
 				SymbolSharedPointer secondaryVariableSymbol = std::make_shared<Symbol>( statement.variable2, Symbol::Kind::Variable, statement.source, secondaryVariableType );
 				secondaryVariableSymbol->isInitialized = true;
@@ -4525,6 +4543,9 @@ namespace uranite::semantic {
 	
 	void Analyzer::validateAccessControl( const SymbolSharedPointer& symbol, const lookup::SourceSharedPointer& source ) {
 		if( symbol == nullptr ) {
+			return;
+		}
+		if( symbol->kind != Symbol::Kind::Field ) {
 			return;
 		}
 		switch( symbol->access ) {
