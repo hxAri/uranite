@@ -33,15 +33,15 @@
 
 #include "uranite/codegen/codegen.hpp"
 #include "uranite/compiler/driver.hpp"
-#include "uranite/ir/hir-lowering.hpp"
-#include "uranite/ir/hir-printer.hpp"
-#include "uranite/ir/hir-validator.hpp"
-#include "uranite/ir/mir-analysis.hpp"
-#include "uranite/ir/mir-borrow-checker.hpp"
-#include "uranite/ir/mir-lowering.hpp"
-#include "uranite/ir/mir-codegen.hpp"
-#include "uranite/ir/mir-optimizer.hpp"
-#include "uranite/ir/mir-printer.hpp"
+#include "uranite/ir/hir/lowering.hpp"
+#include "uranite/ir/hir/printer.hpp"
+#include "uranite/ir/hir/validator.hpp"
+#include "uranite/ir/mir/analyzer.hpp"
+#include "uranite/ir/mir/borrow.hpp"
+#include "uranite/ir/mir/lowering.hpp"
+#include "uranite/ir/mir/codegen.hpp"
+#include "uranite/ir/mir/optimizer.hpp"
+#include "uranite/ir/mir/printer.hpp"
 #include "uranite/version.hpp"
 #include "uranite/lexer/lexer.hpp"
 #include "uranite/parser/parser.hpp"
@@ -55,12 +55,6 @@ namespace uranite::compiler {
 	Driver::Driver( const Options& options ) : options( options ) {
 		this->diagnostic.setMaxErrors( options.maximumErrorCount );
 	}
-	
-	// int Driver::borrowCheck() {
-	// }
-	
-	// int Driver::generateCode() {
-	// }
 	
 	static std::string getExecutableDirectory() {
 		char executablePathBuffer[4096];
@@ -160,14 +154,10 @@ namespace uranite::compiler {
 				break;
 			}
 		}
-		
 		this->cachedModulesDirectory_ = "";
 		this->modulesDirectoryCached_ = true;
 		return "";
 	}
-	
-	// int Driver::link() {
-	// }
 	
 	bool Driver::loadModule( const std::string& filePath, ast::nodes::Program& targetProgram, const ast::nodes::ImportDeclaration* importDeclaration ) {
 		std::string canonicalPath = std::filesystem::canonical( filePath ).string();
@@ -426,12 +416,6 @@ namespace uranite::compiler {
 		return true;
 	}
 	
-	// int Driver::optimize() {
-	// }
-	
-	// int Driver::parseAST() {
-	// }
-	
 	int Driver::readSource() {
 		std::ifstream sourceFile( this->options.output.source );
 		if( sourceFile.is_open() == false ) {
@@ -502,7 +486,7 @@ namespace uranite::compiler {
 			}
 		}
 	}
-
+	
 	std::string Driver::targetArchSegment() const {
 		std::string triple = this->options.targetTriple.empty()
 			? llvm::sys::getDefaultTargetTriple()
@@ -523,23 +507,20 @@ namespace uranite::compiler {
 				return parsedTriple.getArchName().str();
 		}
 	}
-
+	
 	std::string Driver::resolveModulePath( const std::vector<std::string>& modulePath ) {
 		if( modulePath.empty() ) {
 			return "";
 		}
-
 		std::function<std::string( const std::filesystem::path& )> checkPathExists = []( const std::filesystem::path& candidatePath ) -> std::string {
 			if( std::filesystem::exists( candidatePath ) ) {
 				return candidatePath.string();
 			}
 			return "";
 		};
-
 		bool isStdlibImport = ( modulePath[0] == "uranite" );
-
 		std::vector<std::string> effectivePathSegments = modulePath;
-
+		
 		// Rewrite the reserved "native" segment onto the active target architecture
 		// directory (e.g. uranite.os.arch.native.syscall -> .../os/arch/aarch64/syscall).
 		// This lets arch-neutral stdlib modules import architecture-specific primitives
@@ -555,7 +536,6 @@ namespace uranite::compiler {
 		if( isStdlibImport ) {
 			effectivePathSegments.erase( effectivePathSegments.begin() );
 		}
-		
 		std::string relativePathBase;
 		for( size_t segmentIndex = 0; segmentIndex < effectivePathSegments.size(); segmentIndex++ ) {
 			if( segmentIndex > 0 ) {
@@ -565,9 +545,7 @@ namespace uranite::compiler {
 				relativePathBase = effectivePathSegments[segmentIndex];
 			}
 		}
-		
 		std::string relativePathWithExtension = fmt::format( "{}.urn", relativePathBase );
-		
 		std::string directoryPatternPath;
 		if( effectivePathSegments.empty() == false ) {
 			std::string lastNameSegment = effectivePathSegments.back();
@@ -576,12 +554,10 @@ namespace uranite::compiler {
 			}
 			directoryPatternPath = fmt::format( "{}/{}.urn", relativePathBase, lastNameSegment );
 		}
-		
 		std::string moduleInitializerPath;
 		if( effectivePathSegments.empty() == false ) {
 			moduleInitializerPath = fmt::format( "{}/__mod__.urn", relativePathBase );
 		}
-		
 		std::function<std::string( const std::filesystem::path& )> tryAllModuleVariants = [&]( const std::filesystem::path& baseSearchPath ) -> std::string {
 			std::string resolvedPath = checkPathExists( baseSearchPath / relativePathWithExtension );
 			if( resolvedPath.empty() == false ) {
@@ -626,7 +602,7 @@ namespace uranite::compiler {
 			this->resolveIncludePathPrefixes();
 			if( modulePath.empty() == false ) {
 				std::string firstSegment = modulePath[0];
-				for( const auto& prefixEntry : this->includePathPackagePrefix_ ) {
+				for( const std::pair<std::string,std::string>& prefixEntry : this->includePathPackagePrefix_ ) {
 					std::string packagePrefix = prefixEntry.second;
 					size_t dotPosition = packagePrefix.find( '.' );
 					std::string rootPackageName = ( dotPosition != std::string::npos ) ? packagePrefix.substr( 0, dotPosition ) : packagePrefix;
@@ -669,6 +645,183 @@ namespace uranite::compiler {
 			}
 		}
 		return "";
+	}
+	
+	static bool findRuntimeLibraries( const std::filesystem::path& runtimeDirectory, std::string& linkerCommand ) {
+		if( std::filesystem::exists( runtimeDirectory ) == false || std::filesystem::is_directory( runtimeDirectory ) == false ) {
+			return false;
+		}
+		bool foundAnyLibrary = false;
+		for( const std::filesystem::directory_entry& directoryEntry : std::filesystem::directory_iterator( runtimeDirectory ) ) {
+			if( directoryEntry.is_regular_file() == false ) {
+				continue;
+			}
+			std::string entryFilename = directoryEntry.path().filename().string();
+			if( entryFilename.find( "liburanite-" ) == 0 && entryFilename.size() > 2 &&
+				entryFilename.substr( entryFilename.size() - 2 ) == ".a" ) {
+				linkerCommand = fmt::format( "{} {}", linkerCommand, directoryEntry.path().string() );
+				foundAnyLibrary = true;
+			}
+		}
+		return foundAnyLibrary;
+	}
+	
+	int Driver::linkFromIR( const std::string& inputIrFile ) {
+		std::string outputFilePath = this->options.output.target;
+		switch( this->options.output.kind ) {
+			case Output::Kind::Object: {
+				if( outputFilePath.empty() ) {
+					outputFilePath = this->options.output.source;
+					size_t lastDotPosition = outputFilePath.rfind( '.' );
+					if( lastDotPosition != std::string::npos ) {
+						outputFilePath = outputFilePath.substr( 0, lastDotPosition );
+					}
+					outputFilePath = fmt::format( "{}.o", outputFilePath );
+				}
+				std::string llcCommand;
+				if( this->options.targetTriple.empty() == false ) {
+					llcCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -filetype=obj -o {} {}", this->options.targetTriple, outputFilePath, inputIrFile );
+				}
+				else {
+					llcCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -o {} {}", outputFilePath, inputIrFile );
+				}
+				if( this->options.verbose ) {
+					spdlog::info( "Running: {}", llcCommand );
+				}
+				int returnCode = system( llcCommand.c_str() );
+				std::remove( inputIrFile.c_str() );
+				if( returnCode != 0 ) {
+					fmt::print( stderr, "error: llc failed with code {}\n", returnCode );
+					return 1;
+				}
+				if( this->options.verbose ) {
+					spdlog::info( "Object file written to \"{}\"", outputFilePath );
+				}
+				return 0;
+			}
+			case Output::Kind::Executable: {
+				if( outputFilePath.empty() ) {
+					outputFilePath = this->options.output.source;
+					size_t lastDotPosition = outputFilePath.rfind( '.' );
+					if( lastDotPosition != std::string::npos ) {
+						outputFilePath = outputFilePath.substr( 0, lastDotPosition );
+					}
+				}
+				std::string tempOptFile = fmt::format( "{}.opt.ll", inputIrFile );
+				std::string tempObjFile = fmt::format( "{}.obj", inputIrFile );
+				std::string optCommand = fmt::format( _URANITE_OPT_ " -O2 -S -o {} {}", tempOptFile, inputIrFile );
+				if( this->options.verbose ) {
+					spdlog::info( "Running: {}", optCommand );
+				}
+				int optReturnCode = system( optCommand.c_str() );
+				std::string llcInputFile = ( optReturnCode == 0 ) ? tempOptFile : inputIrFile;
+				std::string llcCommand;
+				if( this->options.targetTriple.empty() == false ) {
+					llcCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -relocation-model=pic -filetype=obj -o {} {}", this->options.targetTriple, tempObjFile, llcInputFile );
+				}
+				else {
+					llcCommand = fmt::format( _URANITE_LLC_ " -O2 -relocation-model=pic -filetype=obj -o {} {}", tempObjFile, llcInputFile );
+				}
+				if( this->options.verbose ) {
+					spdlog::info( "Running: {}", llcCommand );
+				}
+				int llcReturnCode = system( llcCommand.c_str() );
+				std::remove( inputIrFile.c_str() );
+				std::remove( tempOptFile.c_str() );
+				if( llcReturnCode != 0 ) {
+					fmt::print( stderr, "error: llc failed\n" );
+					return 1;
+				}
+				std::string linkerCompiler = "cc";
+				if( this->options.targetTriple.empty() == false ) {
+					linkerCompiler = fmt::format( "{}-gcc", this->options.targetTriple );
+				}
+				std::string linkerCommand = fmt::format( "{} -o {} {}", linkerCompiler, outputFilePath, tempObjFile );
+				bool runtimeResolved = false;
+				std::string crtDir = _URANITE_C_RUNTIME_DIR_;
+				if( crtDir.empty() == false ) {
+					runtimeResolved = findRuntimeLibraries( std::filesystem::path( crtDir ), linkerCommand );
+				}
+				if( runtimeResolved == false ) {
+					std::string executableDirectory = getExecutableDirectory();
+					if( executableDirectory.empty() == false ) {
+						std::filesystem::path exeRelativeRuntimePath = std::filesystem::path( executableDirectory ) / ".." / "lib" / "uranite" / "runtime";
+						if( std::filesystem::exists( exeRelativeRuntimePath ) ) {
+							runtimeResolved = findRuntimeLibraries( std::filesystem::canonical( exeRelativeRuntimePath ), linkerCommand );
+						}
+					}
+				}
+				if( runtimeResolved == false ) {
+					std::filesystem::path runtimeSearchPath = std::filesystem::current_path();
+					for( int searchDepth = 0; searchDepth < 5; searchDepth++ ) {
+						if( findRuntimeLibraries( runtimeSearchPath / "build" / "runtime", linkerCommand ) ) {
+							runtimeResolved = true;
+							break;
+						}
+						if( findRuntimeLibraries( runtimeSearchPath / "runtime", linkerCommand ) ) {
+							runtimeResolved = true;
+							break;
+						}
+						if( runtimeSearchPath.has_parent_path() && runtimeSearchPath.parent_path() != runtimeSearchPath ) {
+							runtimeSearchPath = runtimeSearchPath.parent_path();
+						}
+						else {
+							break;
+						}
+					}
+				}
+				linkerCommand = fmt::format( "{} -lpthread -lrt -lm", linkerCommand );
+				bool needsFfi = false;
+				for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
+					if( moduleEntry.first.find( "/ffi/" ) != std::string::npos ||
+						moduleEntry.second.packageName.find( "uranite.ffi" ) == 0 ) {
+						needsFfi = true;
+						break;
+					}
+				}
+				if( needsFfi ) {
+					linkerCommand = fmt::format( "{} -ldl", linkerCommand );
+				}
+				for( const std::string& additionalLibrary : this->options.linkLibraries ) {
+					linkerCommand = fmt::format( "{} -l{}", linkerCommand, additionalLibrary );
+				}
+				if( this->options.verbose ) {
+					spdlog::info( "Running: {}", linkerCommand );
+				}
+				int linkReturnCode = system( linkerCommand.c_str() );
+				std::remove( tempObjFile.c_str() );
+				if( linkReturnCode != 0 ) {
+					fmt::print( stderr, "error: linker failed\n" );
+					return 1;
+				}
+				if( this->options.stripDebugInfo ) {
+					std::string stripBinary = "strip";
+					if( this->options.targetTriple.empty() == false ) {
+						stripBinary = fmt::format( "{}-strip", this->options.targetTriple );
+					}
+					std::string stripCommand = fmt::format( "{} --strip-debug {} 2>/dev/null", stripBinary, outputFilePath );
+					system( stripCommand.c_str() );
+				}
+				if( this->options.verbose ) {
+					spdlog::info( "Executable written to \"{}\"", outputFilePath );
+				}
+				if( this->options.executeAfterCompilation && this->options.targetTriple.empty() ) {
+					std::string executionCommand = outputFilePath;
+					for( std::string& executionArgument : this->options.arguments ) {
+						executionCommand = fmt::format( "{} {}", executionCommand, executionArgument );
+					}
+					int exitCode = system( executionCommand.c_str() );
+					if( this->options.output.target.empty() ) {
+						std::remove( outputFilePath.c_str() );
+					}
+					return WIFEXITED( exitCode ) ? WEXITSTATUS( exitCode ) : 1;
+				}
+				fmt::print( "Compiled successfully: {}\n", outputFilePath );
+				return 0;
+			}
+			default:
+				return 0;
+		}
 	}
 	
 	int Driver::run() {
@@ -719,6 +872,7 @@ namespace uranite::compiler {
 			}
 			bool needsArgsModule = false;
 			bool needsKwargsModule = false;
+			bool needsAsyncRuntime = false;
 			for( ast::nodes::DeclarationSharedPointer& decl : programRoot->declarations ) {
 				if( decl == nullptr ) {
 					continue;
@@ -726,6 +880,7 @@ namespace uranite::compiler {
 				std::vector<ast::nodes::DeclarationSharedPointer>* methodsList = nullptr;
 				if( decl->kind == ast::Node::Kind::FunctionDeclaration ) {
 					ast::nodes::FunctionDeclaration& funcDecl = static_cast<ast::nodes::FunctionDeclaration&>( *decl );
+					if( funcDecl.isAsync ) needsAsyncRuntime = true;
 					for( ast::nodes::FunctionParameterSharedPointer& param : funcDecl.parameters ) {
 						if( param->isVariadic ) needsArgsModule = true;
 						if( param->isKeyword ) needsKwargsModule = true;
@@ -744,6 +899,7 @@ namespace uranite::compiler {
 					for( ast::nodes::DeclarationSharedPointer& methodDecl : *methodsList ) {
 						if( methodDecl && methodDecl->kind == ast::Node::Kind::FunctionDeclaration ) {
 							ast::nodes::FunctionDeclaration& funcDecl = static_cast<ast::nodes::FunctionDeclaration&>( *methodDecl );
+							if( funcDecl.isAsync ) needsAsyncRuntime = true;
 							for( ast::nodes::FunctionParameterSharedPointer& param : funcDecl.parameters ) {
 								if( param->isVariadic ) needsArgsModule = true;
 								if( param->isKeyword ) needsKwargsModule = true;
@@ -751,64 +907,25 @@ namespace uranite::compiler {
 						}
 					}
 				}
-				if( needsArgsModule && needsKwargsModule ) {
+				if( needsArgsModule && needsKwargsModule && needsAsyncRuntime ) {
 					break;
 				}
 			}
-			if( needsArgsModule || needsKwargsModule ) {
-				std::string modulesDir = this->findModulesDirectory();
-				if( modulesDir.empty() == false ) {
-					if( needsArgsModule ) {
-						std::filesystem::path argsModulePath = std::filesystem::path( modulesDir ) / "collection" / "args.urn";
-						if( std::filesystem::exists( argsModulePath ) ) {
-							this->loadModule( argsModulePath.string(), *programRoot );
-						}
-					}
-					if( needsKwargsModule ) {
-						std::filesystem::path kwargsModulePath = std::filesystem::path( modulesDir ) / "collection" / "kwargs.urn";
-						if( std::filesystem::exists( kwargsModulePath ) ) {
-							this->loadModule( kwargsModulePath.string(), *programRoot );
-						}
+			std::string modulesDir = this->findModulesDirectory();
+			if( modulesDir.empty() == false ) {
+				if( needsArgsModule ) {
+					std::filesystem::path argsModulePath = std::filesystem::path( modulesDir ) / "collection" / "args.urn";
+					if( std::filesystem::exists( argsModulePath ) ) {
+						this->loadModule( argsModulePath.string(), *programRoot );
 					}
 				}
-			}
-			bool needsAsyncRuntime = false;
-			for( ast::nodes::DeclarationSharedPointer& decl : programRoot->declarations ) {
-				if( decl == nullptr ) {
-					continue;
-				}
-				if( decl->kind == ast::Node::Kind::FunctionDeclaration ) {
-					ast::nodes::FunctionDeclaration& funcDecl = static_cast<ast::nodes::FunctionDeclaration&>( *decl );
-					if( funcDecl.isAsync ) {
-						needsAsyncRuntime = true;
-						break;
-					}
-				}
-				std::vector<ast::nodes::DeclarationSharedPointer>* methodsList = nullptr;
-				if( decl->kind == ast::Node::Kind::ClassDeclaration ) {
-					methodsList = &static_cast<ast::nodes::ClassDeclaration&>( *decl ).methods;
-				}
-				else if( decl->kind == ast::Node::Kind::StructDeclaration ) {
-					methodsList = &static_cast<ast::nodes::StructDeclaration&>( *decl ).methods;
-				}
-				if( methodsList != nullptr ) {
-					for( ast::nodes::DeclarationSharedPointer& methodDecl : *methodsList ) {
-						if( methodDecl && methodDecl->kind == ast::Node::Kind::FunctionDeclaration ) {
-							ast::nodes::FunctionDeclaration& funcDecl = static_cast<ast::nodes::FunctionDeclaration&>( *methodDecl );
-							if( funcDecl.isAsync ) {
-								needsAsyncRuntime = true;
-								break;
-							}
-						}
+				if( needsKwargsModule ) {
+					std::filesystem::path kwargsModulePath = std::filesystem::path( modulesDir ) / "collection" / "kwargs.urn";
+					if( std::filesystem::exists( kwargsModulePath ) ) {
+						this->loadModule( kwargsModulePath.string(), *programRoot );
 					}
 				}
 				if( needsAsyncRuntime ) {
-					break;
-				}
-			}
-			if( needsAsyncRuntime ) {
-				std::string modulesDir = this->findModulesDirectory();
-				if( modulesDir.empty() == false ) {
 					std::filesystem::path asyncRuntimePath = std::filesystem::path( modulesDir ) / "async" / "runtime.urn";
 					if( std::filesystem::exists( asyncRuntimePath ) ) {
 						this->loadModule( asyncRuntimePath.string(), *programRoot );
@@ -817,21 +934,14 @@ namespace uranite::compiler {
 						}
 					}
 				}
-			}
-			
-			{
-				std::string modulesDir = this->findModulesDirectory();
-				if( modulesDir.empty() == false ) {
-					std::filesystem::path mathErrorsPath = std::filesystem::path( modulesDir ) / "math" / "errors.urn";
-					if( std::filesystem::exists( mathErrorsPath ) ) {
-						this->loadModule( mathErrorsPath.string(), *programRoot );
-						if( this->options.verbose ) {
-							spdlog::info( "Auto-imported math errors module" );
-						}
+				std::filesystem::path mathErrorsPath = std::filesystem::path( modulesDir ) / "math" / "errors.urn";
+				if( std::filesystem::exists( mathErrorsPath ) ) {
+					this->loadModule( mathErrorsPath.string(), *programRoot );
+					if( this->options.verbose ) {
+						spdlog::info( "Auto-imported math errors module" );
 					}
 				}
 			}
-			
 			if( this->options.dumpAST ) {
 				visitors::ASTPrinter astPrinterInstance;
 				fmt::print( "=== Abstract Syntax Tree ===\n" );
@@ -963,7 +1073,7 @@ namespace uranite::compiler {
 					if( this->options.verbose ) {
 						spdlog::info( "Stage 4.7: MIR Liveness Analysis" );
 					}
-					ir::mir::MIRLivenessAnalysis mirLivenessPass;
+					ir::mir::MIRLivenessAnalyzer mirLivenessPass;
 					for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
 						if( mirFunction != nullptr ) {
 							mirLivenessPass.analyze( *mirFunction );
@@ -1015,131 +1125,19 @@ namespace uranite::compiler {
 							fmt::print( "=== LLVM IR (MIR) ===\n" );
 							mirCodegenInstance.getModule()->print( llvm::errs(), nullptr );
 						}
-						std::string mirOutputFilePath = this->options.output.target;
 						if( this->options.output.kind == Output::Kind::LLVMIR ) {
-							if( mirOutputFilePath.empty() ) {
-								mirOutputFilePath = fmt::format( "{}.ll", this->options.output.source );
+							std::string irOutputPath = this->options.output.target;
+							if( irOutputPath.empty() ) {
+								irOutputPath = fmt::format( "{}.ll", this->options.output.source );
 							}
-							if( mirCodegenInstance.writeIR( mirOutputFilePath ) == false ) {
+							if( mirCodegenInstance.writeIR( irOutputPath ) == false ) {
 								return 1;
 							}
 							return 0;
 						}
 						std::string mirTempIrFile = fmt::format( "/tmp/uranite-mir-{}.ll", getpid() );
-						std::string mirTempOptFile = fmt::format( "/tmp/uranite-mir-{}.opt.ll", getpid() );
 						mirCodegenInstance.writeIR( mirTempIrFile );
-						std::string optMirCommand = fmt::format( _URANITE_OPT_ " -O2 -S -o {} {}", mirTempOptFile, mirTempIrFile );
-						if( this->options.verbose ) {
-							spdlog::info( "Running: {}", optMirCommand );
-						}
-						int optMirReturnCode = system( optMirCommand.c_str() );
-						std::string llcMirInputFile = mirTempIrFile;
-						if( optMirReturnCode == 0 ) {
-							llcMirInputFile = mirTempOptFile;
-						}
-						std::string mirTempObjFile = fmt::format( "/tmp/uranite-mir-{}.o", getpid() );
-						std::string llcMirCommand = fmt::format( _URANITE_LLC_ " -O2 -relocation-model=pic -filetype=obj -o {} {}", mirTempObjFile, llcMirInputFile );
-						if( this->options.targetTriple.empty() == false ) {
-							llcMirCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -relocation-model=pic -filetype=obj -o {} {}", this->options.targetTriple, mirTempObjFile, llcMirInputFile );
-						}
-						if( this->options.verbose ) {
-							spdlog::info( "Running: {}", llcMirCommand );
-						}
-						int llcMirReturnCode = system( llcMirCommand.c_str() );
-						std::remove( mirTempIrFile.c_str() );
-						std::remove( mirTempOptFile.c_str() );
-						if( llcMirReturnCode != 0 ) {
-							fmt::print( stderr, "error: llc failed with code {}\n", llcMirReturnCode );
-							return 1;
-						}
-						if( mirOutputFilePath.empty() ) {
-							mirOutputFilePath = "a.out";
-						}
-						std::string ccMirLinker = "cc";
-						if( this->options.targetTriple.empty() == false ) {
-							ccMirLinker = fmt::format( "{}-gcc", this->options.targetTriple );
-						}
-						std::string ccMirCommand = fmt::format( "{} -o {} {}", ccMirLinker, mirOutputFilePath, mirTempObjFile );
-						auto mirScanRuntimeDirectory = [&]( const std::filesystem::path& runtimeDirectory ) -> bool {
-							if( std::filesystem::exists( runtimeDirectory ) == false || std::filesystem::is_directory( runtimeDirectory ) == false ) {
-								return false;
-							}
-							bool foundAnyLibrary = false;
-							for( const std::filesystem::directory_entry& directoryEntry : std::filesystem::directory_iterator( runtimeDirectory ) ) {
-								if( directoryEntry.is_regular_file() == false ) {
-									continue;
-								}
-								std::string entryFilename = directoryEntry.path().filename().string();
-								if( entryFilename.find( "liburanite-" ) == 0 && entryFilename.size() > 2 &&
-									entryFilename.substr( entryFilename.size() - 2 ) == ".a" ) {
-									ccMirCommand = fmt::format( "{} {}", ccMirCommand, directoryEntry.path().string() );
-									foundAnyLibrary = true;
-								}
-							}
-							return foundAnyLibrary;
-						};
-						bool mirRuntimeResolved = false;
-						std::string mirCrtDir = _URANITE_C_RUNTIME_DIR_;
-						if( mirCrtDir.empty() == false ) {
-							mirRuntimeResolved = mirScanRuntimeDirectory( std::filesystem::path( mirCrtDir ) );
-						}
-						if( mirRuntimeResolved == false ) {
-							std::string executableDirectory = getExecutableDirectory();
-							if( executableDirectory.empty() == false ) {
-								std::filesystem::path exeRelativeRuntimePath = std::filesystem::path( executableDirectory ) / ".." / "lib" / "uranite" / "runtime";
-								if( std::filesystem::exists( exeRelativeRuntimePath ) ) {
-									mirRuntimeResolved = mirScanRuntimeDirectory( std::filesystem::canonical( exeRelativeRuntimePath ) );
-								}
-							}
-						}
-						if( mirRuntimeResolved == false ) {
-							std::filesystem::path runtimeSearchPath = std::filesystem::current_path();
-							for( int searchDepth = 0; searchDepth < 5; searchDepth++ ) {
-								if( mirScanRuntimeDirectory( runtimeSearchPath / "build" / "runtime" ) ) {
-									mirRuntimeResolved = true;
-									break;
-								}
-								if( mirScanRuntimeDirectory( runtimeSearchPath / "runtime" ) ) {
-									mirRuntimeResolved = true;
-									break;
-								}
-								if( runtimeSearchPath.has_parent_path() && runtimeSearchPath.parent_path() != runtimeSearchPath ) {
-									runtimeSearchPath = runtimeSearchPath.parent_path();
-								}
-								else {
-									break;
-								}
-							}
-						}
-						ccMirCommand = fmt::format( "{} -lpthread -lrt -lm", ccMirCommand );
-						bool mirNeedsFfi = false;
-						for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
-							if( moduleEntry.first.find( "/ffi/" ) != std::string::npos ||
-								moduleEntry.second.packageName.find( "uranite.ffi" ) == 0 ) {
-								mirNeedsFfi = true;
-								break;
-							}
-						}
-						if( mirNeedsFfi ) {
-							ccMirCommand = fmt::format( "{} -ldl", ccMirCommand );
-						}
-						for( const std::string& additionalLibrary : this->options.linkLibraries ) {
-							ccMirCommand = fmt::format( "{} -l{}", ccMirCommand, additionalLibrary );
-						}
-						if( this->options.verbose ) {
-							spdlog::info( "Running: {}", ccMirCommand );
-						}
-						int ccMirReturnCode = system( ccMirCommand.c_str() );
-						std::remove( mirTempObjFile.c_str() );
-						if( ccMirReturnCode != 0 ) {
-							fmt::print( stderr, "error: linker failed with code {}\n", ccMirReturnCode );
-							return 1;
-						}
-						if( this->options.verbose ) {
-							spdlog::info( "MIR codegen: compiled to \"{}\"", mirOutputFilePath );
-						}
-						fmt::print( "Compiled successfully to \"{}\"\n", mirOutputFilePath );
-						return 0;
+						return this->linkFromIR( mirTempIrFile );
 					}
 				}
 			}
@@ -1170,203 +1168,22 @@ namespace uranite::compiler {
 				fmt::print( "=== LLVM IR ===\n" );
 				llvmCodegenInstance.dump();
 			}
-			std::string finalOutputFilePath = this->options.output.target;
-			switch( this->options.output.kind ) {
-				case Output::Kind::LLVMIR: {
-					if( finalOutputFilePath.empty() ) {
-						finalOutputFilePath = fmt::format( "{}.ll", this->options.output.source );
-					}
-					if( llvmCodegenInstance.writeIR( finalOutputFilePath ) == false ) {
-						return 1;
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "LLVM IR written to \"{}\"", finalOutputFilePath );
-					}
-					return 0;
+			if( this->options.output.kind == Output::Kind::LLVMIR ) {
+				std::string irOutputPath = this->options.output.target;
+				if( irOutputPath.empty() ) {
+					irOutputPath = fmt::format( "{}.ll", this->options.output.source );
 				}
-				case Output::Kind::Object: {
-					if( finalOutputFilePath.empty() ) {
-						finalOutputFilePath = this->options.output.source;
-						size_t lastDotPosition = finalOutputFilePath.rfind( '.' );
-						if( lastDotPosition != std::string::npos ) {
-							finalOutputFilePath = finalOutputFilePath.substr( 0, lastDotPosition );
-						}
-						finalOutputFilePath = fmt::format( "{}.o", finalOutputFilePath );
-					}
-					std::string temporaryIrFile = fmt::format( "{}.ll", finalOutputFilePath );
-					llvmCodegenInstance.writeIR( temporaryIrFile );
-					std::string llcCommand;
-					if( this->options.targetTriple.empty() == false ) {
-						llcCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -filetype=obj -o {} {}", this->options.targetTriple, finalOutputFilePath, temporaryIrFile );
-					}
-					else {
-						llcCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -o {} {}", finalOutputFilePath, temporaryIrFile );
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "Running: {}", llcCommand );
-					}
-					int shellReturnCode = system( llcCommand.c_str() );
-					std::remove( temporaryIrFile.c_str() );
-					if( shellReturnCode != 0 ) {
-						fmt::print( stderr, "error: llc failed with code {}\n", shellReturnCode );
-						return 1;
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "Object file written to \"{}\"", finalOutputFilePath );
-					}
-					return 0;
+				if( llvmCodegenInstance.writeIR( irOutputPath ) == false ) {
+					return 1;
 				}
-				case Output::Kind::Executable: {
-					if( finalOutputFilePath.empty() ) {
-						finalOutputFilePath = this->options.output.source;
-						size_t lastDotPosition = finalOutputFilePath.rfind( '.' );
-						if( lastDotPosition != std::string::npos ) {
-							finalOutputFilePath = finalOutputFilePath.substr( 0, lastDotPosition );
-						}
-					}
-					std::string temporaryIrFile = fmt::format( "{}.tmp.ll", finalOutputFilePath );
-					std::string temporaryOptFile = fmt::format( "{}.tmp.opt.ll", finalOutputFilePath );
-					std::string temporaryObjectFile = fmt::format( "{}.tmp.o", finalOutputFilePath );
-					llvmCodegenInstance.writeIR( temporaryIrFile );
-					std::string optCommand = fmt::format( _URANITE_OPT_ " -O2 -S -o {} {}", temporaryOptFile, temporaryIrFile );
-					if( this->options.verbose ) {
-						spdlog::info( "Running: {}", optCommand );
-					}
-					int optReturnCode = system( optCommand.c_str() );
-					std::string llcInputFile = temporaryIrFile;
-					if( optReturnCode == 0 ) {
-						llcInputFile = temporaryOptFile;
-					}
-					std::string llcCompileCommand;
-					if( this->options.targetTriple.empty() == false ) {
-						llcCompileCommand = fmt::format( _URANITE_LLC_ " -mtriple={} -O2 -filetype=obj -relocation-model=pic -o {} {}", this->options.targetTriple, temporaryObjectFile, llcInputFile );
-					}
-					else {
-						llcCompileCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -relocation-model=pic -o {} {}", temporaryObjectFile, llcInputFile );
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "Running: {}", llcCompileCommand );
-					}
-					int compileReturnCode = system( llcCompileCommand.c_str() );
-					if( compileReturnCode != 0 ) {
-						std::remove( temporaryIrFile.c_str() );
-						std::remove( temporaryOptFile.c_str() );
-						fmt::print( stderr, "error: llc failed\n" );
-						return 1;
-					}
-					std::string linkerCompiler = "cc";
-					if( this->options.targetTriple.empty() == false ) {
-						linkerCompiler = fmt::format( "{}-gcc", this->options.targetTriple );
-					}
-					std::string linkerCommand = fmt::format( "{} -o {}", linkerCompiler, finalOutputFilePath );
-					linkerCommand = fmt::format( "{} {}", linkerCommand, temporaryObjectFile );
-					auto scanRuntimeDirectory = [&]( const std::filesystem::path& runtimeDirectory ) -> bool {
-						if( std::filesystem::exists( runtimeDirectory ) == false || std::filesystem::is_directory( runtimeDirectory ) == false ) {
-							return false;
-						}
-						bool foundAnyLibrary = false;
-						for( const std::filesystem::directory_entry& directoryEntry : std::filesystem::directory_iterator( runtimeDirectory ) ) {
-							if( directoryEntry.is_regular_file() == false ) {
-								continue;
-							}
-							std::string entryFilename = directoryEntry.path().filename().string();
-							if( entryFilename.find( "liburanite-" ) == 0 && entryFilename.size() > 2 &&
-								entryFilename.substr( entryFilename.size() - 2 ) == ".a" ) {
-								linkerCommand = fmt::format( "{} {}", linkerCommand, directoryEntry.path().string() );
-								foundAnyLibrary = true;
-							}
-						}
-						return foundAnyLibrary;
-					};
-					bool runtimeLibrariesResolved = false;
-					std::string compileTimeCRuntimeDir = _URANITE_C_RUNTIME_DIR_;
-					if( compileTimeCRuntimeDir.empty() == false ) {
-						runtimeLibrariesResolved = scanRuntimeDirectory( std::filesystem::path( compileTimeCRuntimeDir ) );
-					}
-					if( runtimeLibrariesResolved == false ) {
-						std::string executableDirectory = getExecutableDirectory();
-						if( executableDirectory.empty() == false ) {
-							std::filesystem::path exeRelativeRuntimePath = std::filesystem::path( executableDirectory ) / ".." / "lib" / "uranite" / "runtime";
-							if( std::filesystem::exists( exeRelativeRuntimePath ) ) {
-								runtimeLibrariesResolved = scanRuntimeDirectory( std::filesystem::canonical( exeRelativeRuntimePath ) );
-							}
-						}
-					}
-					if( runtimeLibrariesResolved == false ) {
-						std::filesystem::path runtimeSearchPath = std::filesystem::current_path();
-						for( int searchDepth = 0; searchDepth < 5; searchDepth++ ) {
-							if( scanRuntimeDirectory( runtimeSearchPath / "build" / "runtime" ) ) {
-								runtimeLibrariesResolved = true;
-								break;
-							}
-							if( scanRuntimeDirectory( runtimeSearchPath / "runtime" ) ) {
-								runtimeLibrariesResolved = true;
-								break;
-							}
-							if( runtimeSearchPath.has_parent_path() && runtimeSearchPath.parent_path() != runtimeSearchPath ) {
-								runtimeSearchPath = runtimeSearchPath.parent_path();
-							}
-							else {
-								break;
-							}
-						}
-					}
-					linkerCommand = fmt::format( "{} -lpthread -lrt -lm", linkerCommand );
-					bool needsFfiRuntime = false;
-					for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
-						if( moduleEntry.first.find( "/ffi/" ) != std::string::npos ||
-							moduleEntry.second.packageName.find( "uranite.ffi" ) == 0 ) {
-							needsFfiRuntime = true;
-							break;
-						}
-					}
-					if( needsFfiRuntime ) {
-						linkerCommand = fmt::format( "{} -ldl", linkerCommand );
-					}
-					for( const std::string& additionalLibrary : this->options.linkLibraries ) {
-						linkerCommand = fmt::format( "{} -l{}", linkerCommand, additionalLibrary );
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "Running: {}", linkerCommand );
-					}
-					int linkReturnCode = system( linkerCommand.c_str() );
-					std::remove( temporaryIrFile.c_str() );
-					std::remove( temporaryOptFile.c_str() );
-					std::remove( temporaryObjectFile.c_str() );
-					if( linkReturnCode != 0 ) {
-						fmt::print( stderr, "error: linker failed\n" );
-						return 1;
-					}
-					if( this->options.stripDebugInfo ) {
-						std::string stripBinary = "strip";
-						if( this->options.targetTriple.empty() == false ) {
-							stripBinary = fmt::format( "{}-strip", this->options.targetTriple );
-						}
-						std::string stripCommand = fmt::format( "{} --strip-debug {} 2>/dev/null", stripBinary, finalOutputFilePath );
-						system( stripCommand.c_str() );
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "Executable written to \"{}\"", finalOutputFilePath );
-					}
-					if( this->options.executeAfterCompilation && this->options.targetTriple.empty() ) {
-						std::string binaryExecutionCommand = finalOutputFilePath;
-						for( std::string& executionArgument : this->options.arguments ) {
-							binaryExecutionCommand = fmt::format( "{} {}", binaryExecutionCommand, executionArgument );
-						}
-						int applicationExitCode = system( binaryExecutionCommand.c_str() );
-						if( this->options.output.target.empty() ) {
-							std::remove( finalOutputFilePath.c_str() );
-						}
-						return WIFEXITED( applicationExitCode ) ? WEXITSTATUS( applicationExitCode ) : 1;
-					}
-					fmt::print( "Compiled successfully: {}\n", finalOutputFilePath );
-					return 0;
+				if( this->options.verbose ) {
+					spdlog::info( "LLVM IR written to \"{}\"", irOutputPath );
 				}
-				default: {
-					return 0;
-				}
+				return 0;
 			}
-			return 0;
+			std::string tempIrFile = fmt::format( "/tmp/uranite-{}.ll", getpid() );
+			llvmCodegenInstance.writeIR( tempIrFile );
+			return this->linkFromIR( tempIrFile );
 		}
 		catch( const diagnostic::DiagnosticLimitReachedError& ) {
 			size_t totalErrorCount = this->diagnostic.errorCount();
@@ -1597,11 +1414,5 @@ namespace uranite::compiler {
 		}
 		return 0;
 	}
-	
-	// int Driver::semanticAnalysis() {
-	// }
-	
-	// int Driver::tokenize() {
-	// }
 	
 }
