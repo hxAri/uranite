@@ -40,12 +40,9 @@ namespace uranite::ir::mir {
 	static constexpr MIRBlockIdentifier INVALID_BLOCK_IDENTIFIER = std::numeric_limits<MIRBlockIdentifier>::max();
 	static constexpr MIRVariableIdentifier INVALID_VARIABLE_IDENTIFIER = std::numeric_limits<MIRVariableIdentifier>::max();
 	
-	// ===================================================================
-	// Instruction Kind
-	// ===================================================================
-	
 	/** @brief Categorizes each MIR instruction into exactly one operational role. */
 	enum class MIRInstructionKind {
+		
 		// Variable lifecycle
 		AllocateLocal,
 		LoadVariable,
@@ -143,12 +140,9 @@ namespace uranite::ir::mir {
 		InlineAssembly,
 		
 		// No-op
-		NoOperation,
+		NoOperation
+		
 	};
-	
-	// ===================================================================
-	// Instruction
-	// ===================================================================
 	
 	/** @brief Single MIR instruction within a basic block. */
 	struct MIRInstruction {
@@ -210,10 +204,6 @@ namespace uranite::ir::mir {
 	
 	};
 	
-	// ===================================================================
-	// Basic Block
-	// ===================================================================
-	
 	/** @brief Linear sequence of instructions terminated by a single control flow op. */
 	struct MIRBasicBlock {
 		
@@ -236,10 +226,6 @@ namespace uranite::ir::mir {
 	
 	};
 	
-	// ===================================================================
-	// Variable Descriptor
-	// ===================================================================
-	
 	/** @brief Tracks type, mutability, and ownership state for a single MIR variable. */
 	struct MIRVariableDescriptor {
 		
@@ -253,11 +239,16 @@ namespace uranite::ir::mir {
 		int ownershipScopeDepth = 0;
 	
 	};
-	
-	// ===================================================================
-	// Function Definition
-	// ===================================================================
-	
+
+	struct MIRModuleConstant {
+		enum ConstantKind { Integer, Float, Boolean, String, Null };
+		ConstantKind kind = Integer;
+		int64_t integerValue = 0;
+		double floatValue = 0.0;
+		bool booleanValue = false;
+		std::string stringValue;
+	};
+
 	/** @brief MIR representation of a single function/method with its CFG. */
 	struct MIRFunctionDefinition {
 		
@@ -274,6 +265,7 @@ namespace uranite::ir::mir {
 		semantic::TypeSharedPointer variadicElementType;
 		int keywordParameterIndex = -1;
 		semantic::TypeSharedPointer keywordValueType;
+		std::unordered_map<int, MIRModuleConstant> parameterDefaultValues;
 		
 		/** @brief Allocates a new variable and registers it in the descriptor table. */
 		MIRVariableIdentifier allocateVariable(
@@ -302,10 +294,6 @@ namespace uranite::ir::mir {
 	
 	};
 	
-	// ===================================================================
-	// Module Definition
-	// ===================================================================
-	
 	/** @brief Describes the memory layout of a user-defined type. */
 	struct TypeLayoutDescriptor {
 		std::string typeQualifiedName;
@@ -316,15 +304,6 @@ namespace uranite::ir::mir {
 		std::vector<semantic::TypeSharedPointer> fieldTypes;
 		bool hasVirtualTable = false;
 		int virtualTableEntryCount = 0;
-	};
-	
-	struct MIRModuleConstant {
-		enum ConstantKind { Integer, Float, Boolean, String };
-		ConstantKind kind = Integer;
-		int64_t integerValue = 0;
-		double floatValue = 0.0;
-		bool booleanValue = false;
-		std::string stringValue;
 	};
 
 	struct MIRGlobalVariable {
