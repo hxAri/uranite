@@ -21,7 +21,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package main
+package uranite.examples.benchmarks.binary-trees
 
 from uranite.io.console import puts
 from uranite.language.int import Int
