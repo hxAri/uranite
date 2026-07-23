@@ -23,6 +23,7 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <unordered_set>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <sys/wait.h>
@@ -867,6 +868,7 @@ namespace uranite::compiler {
 			if( this->options.verbose ) {
 				spdlog::info( "Stage 2.5: Prelude + Module Resolution" );
 			}
+			size_t userDeclCount = programRoot->declarations.size();
 			this->loadPrelude( *programRoot );
 			if( this->resolveImports( *programRoot ) == false ) {
 				if( this->diagnostic.hasErrors() ) {
@@ -960,6 +962,59 @@ namespace uranite::compiler {
 			semantic::Analyzer semanticAnalyzer( this->diagnostic );
 			semanticAnalyzer.importModuleTypes( this->accumulatedModuleTypes_ );
 			semanticAnalyzer.importModuleSymbols( this->accumulatedModuleSymbols_ );
+			{
+				std::unordered_set<std::string> userImportedIdentifiers;
+				for( const ast::nodes::ImportDeclarationSharedPointer& importDecl : programRoot->imports ) {
+					if( importDecl == nullptr ) {
+						continue;
+					}
+					if( importDecl->isFromImport && importDecl->importAll == false ) {
+						for( const ast::nodes::ImportItem& importItem : importDecl->importItems ) {
+							userImportedIdentifiers.insert( importItem.name );
+						}
+					}
+				}
+				for( size_t declIndex = 0; declIndex < userDeclCount && declIndex < programRoot->declarations.size(); declIndex++ ) {
+					const ast::nodes::DeclarationSharedPointer& decl = programRoot->declarations[declIndex];
+					if( decl == nullptr ) {
+						continue;
+					}
+					if( decl->kind == ast::Node::Kind::FunctionDeclaration ) {
+						userImportedIdentifiers.insert( static_cast<const ast::nodes::FunctionDeclaration&>( *decl ).name );
+					}
+					else if( decl->kind == ast::Node::Kind::ClassDeclaration ) {
+						userImportedIdentifiers.insert( static_cast<const ast::nodes::ClassDeclaration&>( *decl ).name );
+					}
+					else if( decl->kind == ast::Node::Kind::StructDeclaration ) {
+						userImportedIdentifiers.insert( static_cast<const ast::nodes::StructDeclaration&>( *decl ).name );
+					}
+					else if( decl->kind == ast::Node::Kind::EnumDeclaration ) {
+						userImportedIdentifiers.insert( static_cast<const ast::nodes::EnumDeclaration&>( *decl ).name );
+					}
+					else if( decl->kind == ast::Node::Kind::InterfaceDeclaration ) {
+						userImportedIdentifiers.insert( static_cast<const ast::nodes::InterfaceDeclaration&>( *decl ).name );
+					}
+					else if( decl->kind == ast::Node::Kind::ConstantDeclaration ) {
+						userImportedIdentifiers.insert( static_cast<const ast::nodes::ConstantDeclaration&>( *decl ).name );
+					}
+					else if( decl->kind == ast::Node::Kind::ExternDeclaration ) {
+						userImportedIdentifiers.insert( static_cast<const ast::nodes::ExternDeclaration&>( *decl ).name );
+					}
+				}
+				std::vector<std::string> builtinNames = {
+					"I64", "I32", "I16", "I8", "U64", "U32", "U16", "U8",
+					"Int", "UInt", "Float", "Double", "String", "Boolean", "Char", "Void",
+					"Object", "Memory", "Byte", "Bool",
+					"Args", "Kwargs", "Future", "Generator",
+					"Error", "Exception", "Warning", "Throwable", "Traceback",
+					"ArithmeticError", "ZeroDivisionError", "OverflowError", "UnderflowError",
+					"None", "true", "false"
+				};
+				for( const std::string& builtinName : builtinNames ) {
+					userImportedIdentifiers.insert( builtinName );
+				}
+				semanticAnalyzer.setUserImportScope( this->options.output.source, userImportedIdentifiers );
+			}
 			if( semanticAnalyzer.analyze( *programRoot ) == false ) {
 				fmt::print( stderr, "Compilation failed with {} error(s) during semantic analysis.\n", this->diagnostic.errorCount() );
 				return 1;
