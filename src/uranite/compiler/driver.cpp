@@ -198,6 +198,7 @@ namespace uranite::compiler {
 			if( moduleProgram->module != nullptr ) {
 				moduleInfo.packageName = moduleProgram->module->name;
 			}
+			size_t originalDeclCount = moduleProgram->declarations.size();
 			this->resolveImports( *moduleProgram );
 			if( moduleInfo.state == ModuleInfo::State::Parsed ) {
 				moduleInfo.state = ModuleInfo::State::Analyzing;
@@ -205,7 +206,10 @@ namespace uranite::compiler {
 				semantic::Analyzer moduleAnalyzer( moduleDiagnostic );
 				moduleAnalyzer.importModuleTypes( this->accumulatedModuleTypes_ );
 				moduleAnalyzer.importModuleSymbols( this->accumulatedModuleSymbols_ );
+				std::vector<ast::nodes::DeclarationSharedPointer> allDeclarations = moduleProgram->declarations;
+				moduleProgram->declarations.resize( originalDeclCount );
 				moduleAnalyzer.analyzeModuleRegistration( *moduleProgram );
+				moduleProgram->declarations = std::move( allDeclarations );
 				std::unordered_map<std::string, semantic::TypeSharedPointer> allTypes = moduleAnalyzer.getRegisteredTypes();
 				std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>> allSymbols = moduleAnalyzer.getRegisteredSymbols();
 				for( std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator typeIterator = allTypes.begin(); typeIterator != allTypes.end(); ++typeIterator ) {
