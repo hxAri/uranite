@@ -28,7 +28,7 @@
 #include "fmt/format.h"
 
 namespace uranite::descriptor {
-
+	
 	static llvm::Type* getPointeeType( llvm::Value* value ) {
 		if( auto* alloca = llvm::dyn_cast<llvm::AllocaInst>( value ) )
 			return alloca->getAllocatedType();
@@ -321,7 +321,6 @@ namespace uranite::descriptor {
 		llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
 		llvm::Type* i64Type = llvm::Type::getInt64Ty( context );
 		llvm::Module* mod = builder.GetInsertBlock()->getParent()->getParent();
-		
 		if( arg->getType() == i8PtrType ) {
 			return arg;
 		}
@@ -341,7 +340,7 @@ namespace uranite::descriptor {
 					if( toStringFn && toStringFn->getReturnType() == i8PtrType ) {
 						return builder.CreateCall( toStringFn, { arg }, "obj.str" );
 					}
-					std::string metaGlobalName = "_AE_meta_" + className;
+					std::string metaGlobalName = "_UR_meta_" + className;
 					llvm::GlobalVariable* metaGlobal = mod->getGlobalVariable( metaGlobalName, true );
 					std::string reprPrefix;
 					if( metaGlobal && metaGlobal->hasInitializer() ) {
@@ -1925,7 +1924,6 @@ namespace uranite::descriptor {
 				llvm::FunctionCallee snprintfFn = currentModule->getOrInsertFunction( "snprintf", llvm::FunctionType::get( llvm::Type::getInt32Ty( context ), { i8PtrType, i64Type, i8PtrType }, true ) );
 				llvm::FunctionCallee strlenFn = currentModule->getOrInsertFunction( "strlen", llvm::FunctionType::get( i64Type, { i8PtrType }, false ) );
 				llvm::FunctionCallee memcpyFn = currentModule->getOrInsertFunction( "memcpy", llvm::FunctionType::get( i8PtrType, { i8PtrType, i8PtrType, i64Type }, false ) );
-				
 				std::string fmtStr;
 				if( extractStringLiteral( self, fmtStr ) ) {
 					std::vector<FormatPlaceholder> placeholders = parseFormatString( fmtStr );
@@ -1963,7 +1961,6 @@ namespace uranite::descriptor {
 							hasBinary = true;
 						}
 					}
-					
 					if( hasBinary == false && hasCenterAlign == false && hasNamedPlaceholder == false ) {
 						std::vector<int> argOrder;
 						std::string snprintfFmt = buildSnprintfFormat( fmtStr, placeholders, arguments, argOrder );
@@ -1980,7 +1977,6 @@ namespace uranite::descriptor {
 							}
 						}
 						llvm::Value* bufSizeVal = llvm::ConstantInt::get( i64Type, bufSize );
-						
 						bool hasStringArgs = false;
 						for( int idx : argOrder ) {
 							if( idx >= 0 && idx < static_cast<int>( arguments.size() ) ) {
@@ -1991,7 +1987,6 @@ namespace uranite::descriptor {
 								}
 							}
 						}
-						
 						if( hasStringArgs ) {
 							llvm::Value* totalSize = llvm::ConstantInt::get( i64Type, fmtStr.size() + 64 );
 							for( int idx : argOrder ) {
@@ -2008,10 +2003,8 @@ namespace uranite::descriptor {
 							totalSize = builder.CreateAdd( totalSize, llvm::ConstantInt::get( i64Type, 1 ), "total.len" );
 							bufSizeVal = totalSize;
 						}
-						
 						llvm::Value* buffer = builder.CreateCall( mallocFn, { bufSizeVal }, "fmt.buf" );
 						llvm::Constant* fmtGlobal = builder.CreateGlobalStringPtr( snprintfFmt, "fmt.str" );
-						
 						std::vector<llvm::Value*> snprintfArgs;
 						snprintfArgs.push_back( buffer );
 						snprintfArgs.push_back( bufSizeVal );
@@ -2039,8 +2032,6 @@ namespace uranite::descriptor {
 						builder.CreateCall( snprintfFn, snprintfArgs );
 						return buffer;
 					}
-					
-					// Binary, center-align, or named: piece-by-piece assembly
 					std::vector<llvm::Value*> pieces;
 					std::vector<llvm::Value*> pieceLens;
 					size_t pos = 0;
@@ -2073,7 +2064,6 @@ namespace uranite::descriptor {
 							if( arg != nullptr ) {
 								llvm::Value* piece = nullptr;
 								llvm::Value* pieceLen = nullptr;
-								
 								if( ph.type == 'b' || ( ph.type == 0 && false ) ) {
 									llvm::Function* parentFn = builder.GetInsertBlock()->getParent();
 									llvm::Value* val = arg;
@@ -2086,26 +2076,21 @@ namespace uranite::descriptor {
 									builder.CreateStore( idxVal, idxAlloca );
 									llvm::AllocaInst* valAlloca = builder.CreateAlloca( i64Type, nullptr, "bin.val" );
 									builder.CreateStore( val, valAlloca );
-									
 									llvm::BasicBlock* zeroBB = llvm::BasicBlock::Create( context, "bin.zero", parentFn );
 									llvm::BasicBlock* loopBB = llvm::BasicBlock::Create( context, "bin.loop", parentFn );
 									llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create( context, "bin.body", parentFn );
 									llvm::BasicBlock* doneBB = llvm::BasicBlock::Create( context, "bin.done", parentFn );
-									
 									llvm::Value* isZero = builder.CreateICmpEQ( val, llvm::ConstantInt::get( i64Type, 0 ), "is.zero" );
 									builder.CreateCondBr( isZero, zeroBB, loopBB );
-									
 									builder.SetInsertPoint( zeroBB );
 									llvm::Value* zeroChar = llvm::ConstantInt::get( llvm::Type::getInt8Ty( context ), '0' );
 									builder.CreateStore( zeroChar, builder.CreateGEP( llvm::Type::getInt8Ty( context ), tmpBuf, llvm::ConstantInt::get( i64Type, 0 ) ) );
 									builder.CreateStore( llvm::ConstantInt::get( llvm::Type::getInt8Ty( context ), 0 ), builder.CreateGEP( llvm::Type::getInt8Ty( context ), tmpBuf, llvm::ConstantInt::get( i64Type, 1 ) ) );
 									builder.CreateBr( doneBB );
-									
 									builder.SetInsertPoint( loopBB );
 									llvm::Value* curVal = builder.CreateLoad( i64Type, valAlloca, "cur.val" );
 									llvm::Value* loopCond = builder.CreateICmpNE( curVal, llvm::ConstantInt::get( i64Type, 0 ), "loop.cond" );
 									builder.CreateCondBr( loopCond, bodyBB, doneBB );
-									
 									builder.SetInsertPoint( bodyBB );
 									llvm::Value* curVal2 = builder.CreateLoad( i64Type, valAlloca, "cur.val2" );
 									llvm::Value* bit = builder.CreateAnd( curVal2, llvm::ConstantInt::get( i64Type, 1 ), "bit" );
@@ -2118,7 +2103,6 @@ namespace uranite::descriptor {
 									llvm::Value* shifted = builder.CreateLShr( curVal2, llvm::ConstantInt::get( i64Type, 1 ), "shifted" );
 									builder.CreateStore( shifted, valAlloca );
 									builder.CreateBr( loopBB );
-									
 									builder.SetInsertPoint( doneBB );
 									llvm::Value* finalIdx = builder.CreateLoad( i64Type, idxAlloca, "final.idx" );
 									llvm::Value* startPos = builder.CreateAdd( finalIdx, llvm::ConstantInt::get( i64Type, 1 ), "start.pos" );
@@ -2175,7 +2159,6 @@ namespace uranite::descriptor {
 									piece = numBuf;
 									pieceLen = builder.CreateCall( strlenFn, { numBuf }, "num.len" );
 								}
-								
 								if( ph.width > 0 ) {
 									llvm::Value* widthVal = llvm::ConstantInt::get( i64Type, ph.width );
 									llvm::Value* needsPad = builder.CreateICmpSLT( pieceLen, widthVal, "needs.pad" );
@@ -2184,7 +2167,6 @@ namespace uranite::descriptor {
 									llvm::BasicBlock* noPadBB = llvm::BasicBlock::Create( context, "nopad", parentFn );
 									llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create( context, "pad.merge", parentFn );
 									builder.CreateCondBr( needsPad, padBB, noPadBB );
-									
 									builder.SetInsertPoint( padBB );
 									llvm::Value* padBuf = builder.CreateCall( mallocFn, { builder.CreateAdd( widthVal, llvm::ConstantInt::get( i64Type, 1 ) ) }, "pad.buf" );
 									llvm::FunctionCallee memsetFn = currentModule->getOrInsertFunction( "memset", llvm::FunctionType::get( i8PtrType, { i8PtrType, llvm::Type::getInt32Ty( context ), i64Type }, false ) );
@@ -2204,10 +2186,8 @@ namespace uranite::descriptor {
 									builder.CreateCall( memcpyFn, { destPtr, piece, pieceLen } );
 									builder.CreateStore( llvm::ConstantInt::get( llvm::Type::getInt8Ty( context ), 0 ), builder.CreateGEP( llvm::Type::getInt8Ty( context ), padBuf, widthVal ) );
 									builder.CreateBr( mergeBB );
-									
 									builder.SetInsertPoint( noPadBB );
 									builder.CreateBr( mergeBB );
-									
 									builder.SetInsertPoint( mergeBB );
 									llvm::PHINode* mergedPiece = builder.CreatePHI( i8PtrType, 2, "merged.piece" );
 									mergedPiece->addIncoming( padBuf, padBB );
@@ -2248,11 +2228,9 @@ namespace uranite::descriptor {
 							}
 						}
 					}
-					
 					if( pieces.empty() ) {
 						return builder.CreateGlobalStringPtr( "", "empty.fmt" );
 					}
-					
 					llvm::Value* totalLen = llvm::ConstantInt::get( i64Type, 0 );
 					for( llvm::Value* len : pieceLens ) {
 						totalLen = builder.CreateAdd( totalLen, len, "total" );
@@ -2268,10 +2246,6 @@ namespace uranite::descriptor {
 					builder.CreateStore( llvm::ConstantInt::get( llvm::Type::getInt8Ty( context ), 0 ), builder.CreateGEP( llvm::Type::getInt8Ty( context ), resultBuf, offset ) );
 					return resultBuf;
 				}
-				
-				// Dynamic format string — piece-by-piece runtime walk
-				// For now, return self unchanged (format string as-is)
-				// TODO: generate _uranite_format_impl runtime helper
 				return self;
 			}
 		});
@@ -2288,7 +2262,6 @@ namespace uranite::descriptor {
 	}
 	
 	void Builtin::registerType( BuiltinTypeDescriptor descriptor ) {
-		// this->types[descriptor.name] = std::move( descriptor );
 		this->types.insert_or_assign( descriptor.name, std::move( descriptor ) );
 	}
 	
