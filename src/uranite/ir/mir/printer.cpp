@@ -201,6 +201,7 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::DeferPush:            return "defer.push";
 			case MIRInstructionKind::DeferEmit:            return "defer.emit";
 			case MIRInstructionKind::InlineAssembly:       return "asm";
+			case MIRInstructionKind::Yield:                return "yield";
 			case MIRInstructionKind::NoOperation:          return "nop";
 			default:                                       return "unknown";
 		}
