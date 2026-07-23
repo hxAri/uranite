@@ -87,6 +87,32 @@ namespace uranite::ir::mir {
 				? classDefinition->classQualifiedName : classDefinition->className;
 			typeLayout.typeQualifiedName = layoutKeyName;
 			typeLayout.hasVirtualTable = ( classDefinition->implementedInterfaceQualifiedNames.empty() == false );
+			if( typeLayout.hasVirtualTable ) {
+				std::string shortName = classDefinition->className;
+				if( shortName == "Args" || shortName.find( "Args<" ) == 0 ) {
+					typeLayout.hasVirtualTable = false;
+				}
+				if( typeLayout.hasVirtualTable && this->typeRegistry != nullptr ) {
+					semantic::TypeSharedPointer semaType = this->typeRegistry->lookupType( shortName );
+					if( semaType != nullptr && semaType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassType* classTypePtr = static_cast<semantic::ClassType*>( semaType.get() );
+						semantic::TypeSharedPointer walkType = classTypePtr->baseClass;
+						while( walkType != nullptr ) {
+							if( walkType->name == "Error" || walkType->name == "Exception" ||
+								walkType->name == "Warning" || walkType->name == "Throwable" ) {
+								typeLayout.hasVirtualTable = false;
+								break;
+							}
+							if( walkType->kind == semantic::Type::Kind::Class ) {
+								walkType = static_cast<semantic::ClassType*>( walkType.get() )->baseClass;
+							}
+							else {
+								break;
+							}
+						}
+					}
+				}
+			}
 			int fieldIndex = 0;
 			if( typeLayout.hasVirtualTable ) {
 				typeLayout.fieldByteOffsets.push_back( 0 );
