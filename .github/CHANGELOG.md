@@ -52,6 +52,8 @@
 - Defer statement support in MIR path — deferred HIR statements accumulated during function lowering, emitted inline in LIFO order before every explicit `return` and implicit end-of-function return, cleared per function entry
 - Virtual dispatch via interface tables (itables) in MIR codegen — vtable pointer prepended as field 0 in struct layout for classes implementing interfaces, global constant itable arrays generated with function pointers per class+interface pair, itable pointer stored at construction time, indirect call through itable at dispatch sites when concrete type is unknown
 - `implementedInterfaceQualifiedNames` population in AST→HIR class lowering — resolves interface names to qualified names via semantic registry for downstream vtable generation
+- `self` parameter validation in semantic analyzer — rejects `self` in free functions and static methods (class and struct) with descriptive error messages
+- User import scope enforcement in semantic analyzer — tracks explicitly imported identifiers per source file, errors on use of unimported transitive module symbols (e.g., `alloc` used without `from uranite.memory.allocator import alloc`)
 
 **Changed**
 - IR source files restructured from flat `src/uranite/ir/` to hierarchical `src/uranite/ir/hir/` and `src/uranite/ir/mir/` subdirectories
@@ -110,6 +112,10 @@
 - `test-collection-hashset` FPE from uninitialized capacity — constructor overload `HashSet(self, Int)` not generated, leaving struct zero-initialized
 - `undefined reference to 'uranite.functions.externs.free'` — extern functions called via qualified module names couldn't link because codegen registered them by C-linkage short name only
 - `addressof` returning 0 for function identifiers — `generateLoadVariable` returned early when `sourceOperands` was empty, never resolving function pointers
+- `self` parameter silently accepted in free functions — semantic analyzer skipped validation when `currentScope->classType` was null, allowing `self` in any function without error
+- `self` parameter silently accepted in static methods — no check existed for `isStatic` methods with `self`; now errors for both class and struct static methods
+- Transitive module symbols leaking into user scope — `accumulatedModuleSymbols_` imported all symbols from all transitively loaded modules into main analyzer; functions like `alloc` callable without explicit import when any module in the dependency chain loaded them
+- `stress-memory.urn` missing `alloc` import — used `alloc` without importing from `uranite.memory.allocator`; also fixed duplicate `readByteAt` import and wrong `writeByteAt` import path
 - `ThreadPoolExecutor` constructor segfault — constructor with optional params rejected by exact arity check; callee received 0 args when 4 were expected
 - `test-kwargs-basic` segfault — MIR path had no kwargs infrastructure; keyword arguments silently dropped during lowering
 - `test-variadic-kwargs-combined` segfault — variadic code path returned after packing variadic args without packing kwargs for keyword-only parameters
@@ -119,7 +125,7 @@
 - Interface dispatch always resolving to first concrete class — `concreteClassMap` tracking fails across function boundaries (e.g., `callGreet(Greeter g)` compiled once, can't know concrete type of parameter); replaced with embedded vtable/itable indirect dispatch
 
 **Issues**
-- None
+- Type names from `populateSemaTypes` builtin descriptors (e.g., `ArrayList`) resolve without explicit import — type registry lookup in `resolveType` bypasses the user import scope check; only identifier expression resolution is guarded
 
 ## v1.0.0-2026.1 2026-07-13
 
