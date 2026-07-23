@@ -3,6 +3,13 @@
 ## v1.1.0-2026.7 2026-07-19
 
 **Added**
+- Shared descriptor system for MIR codegen — builtin OOP wrapper methods (Boolean, Char, String, Int, Float, UInt, Byte) routed through `descriptor::Builtin` registry with qualname validation via `semantic::qname::isOopWrapper`, eliminating duplicated inline implementations
+- `tryBuiltinDescriptor()` bridge in MIR codegen — dispatches MIR instructions to descriptor `IRGenerator` lambdas with keyword argument forwarding
+- Per-call-site interface dispatch in MIR codegen — `concreteClassMap` tracks concrete class per variable from `ConstructObject` instructions, propagated through `LoadVariable`/`StoreVariable`/`CopyValue` and function return types via `functionReturnConcreteClass`
+- Static method dispatch in MIR lowering — `ClassType::findMethod()` + `MethodInfo::isStatic` detection strips receiver from source operands for static calls
+- Class-name identifier resolution fallback in MIR lowering — type registry lookup resolves intra-class static method calls when `resolvedType` is null on receiver
+- Shadow call stack for MIR codegen path — `__uranite_push_frame`/`__uranite_pop_frame` emitted at function entry/exit, `injectTracebackInfo` populates Throwable file/line at throw sites
+- Float type propagation fallback in MIR codegen — creates Float result type when `resolvedType` is null and operation involves float operands
 - Enum variant access in MIR codegen path — backed values and discriminants resolve correctly instead of returning `0`
 - C ABI-compliant `main` function in MIR codegen — returns `i32` with `(i32, ptr)` parameters
 - Enum variant registration as module constants during MIR lowering phase
@@ -42,8 +49,16 @@
 - Extern function short-name fallback in MIR codegen — qualified call names (e.g., `uranite.functions.externs.free`) resolve to C-linkage extern functions by checking the short name against `externDeclaredNames`
 - Function reference via `addressof` in MIR codegen — `LoadVariable` with empty `sourceOperands` and non-empty `calledFunctionQualifiedName` emits `PtrToInt` on the LLVM Function pointer, with short-name fallback for qualified lookups
 - Constructor optional parameter padding in MIR codegen — constructor arity check uses `>=` instead of `==`, missing trailing arguments padded with null values matching expected parameter types
+- Defer statement support in MIR path — deferred HIR statements accumulated during function lowering, emitted inline in LIFO order before every explicit `return` and implicit end-of-function return, cleared per function entry
+- Virtual dispatch via interface tables (itables) in MIR codegen — vtable pointer prepended as field 0 in struct layout for classes implementing interfaces, global constant itable arrays generated with function pointers per class+interface pair, itable pointer stored at construction time, indirect call through itable at dispatch sites when concrete type is unknown
+- `implementedInterfaceQualifiedNames` population in AST→HIR class lowering — resolves interface names to qualified names via semantic registry for downstream vtable generation
 
 **Changed**
+- IR source files restructured from flat `src/uranite/ir/` to hierarchical `src/uranite/ir/hir/` and `src/uranite/ir/mir/` subdirectories
+- MIR codegen function pre-registration includes free functions in arity-suffix overload scheme (previously only class methods)
+- Arity-based call resolution (`Name#N`) extended to all function calls in MIR codegen (previously methods only)
+- Main function exempted from arity-mismatch parameter count check during function generation
+- Removed ~400 lines of redundant MIR special-case handlers for Boolean (getValue, negate, logicalAnd/Or/Xor, equals, toString, constructor), Char (getValue, isAlpha, isDigit, isAlphanumeric, isWhitespace, toUpper, toLower, toString, constructor), and String.format — replaced by shared descriptor registry
 - MIR lowering `lowerFieldAccess` intercepts enum type field access before emitting `ComputeFieldAddress`
 - MIR codegen pre-registration loop and `generateFunction` both detect `main` and override signature
 - `AddressOf`, `TakeReference`, `DereferencePointer`, `InstanceOfCheck` separated from `InlineAssembly` no-op fall-through handler
@@ -58,6 +73,16 @@
 - Variadic element type extraction from `ArrayType` in MIR lowering — when parameter type is `Kind::Array` (e.g., `Object args[]`), extracts `arrayType->elementType` instead of using the Array type itself; `Object` element type now correctly resolves to `ptr` instead of defaulting to `i64`
 
 **Fixed**
+- `HashSet` iterator dispatch picking wrong `Iterator` implementation — RAUW post-pass globally replaced unresolved interface methods with first matching implementation regardless of receiver type; replaced with per-call-site concrete dispatch using `concreteClassMap`
+- `makedirs` stack overflow — 2-arg overload `makedirs(String, I64)` missing from IR because free function overloads skipped arity-suffix registration; 1-arg version called itself infinitely
+- `DnsResolver.resolveWith` segfault — static method received null self pointer because MIR lowering included class reference as source operand; hostname shifted to nameserverIp position
+- Intra-class static method calls resolving to bare method name — class-name identifier receiver lacked `resolvedType` inside owning class; type registry fallback added
+- SIGFPE in CMYK float division chain — `resolvedType` null for intermediate results caused float division to emit integer `sdiv`; float type propagation fallback prevents mistyped arithmetic
+- Exception tracebacks missing function names and source locations in MIR-compiled binaries — shadow call stack not emitted in MIR codegen path
+- `HashSet.union`/`intersect`/`difference` hanging — interface method resolution picked wrong concrete implementation causing infinite iteration
+- Enum `.name`/`.value` built-in properties not working in MIR path — `generateComputeFieldAddress` now detects enum-typed sources and generates select-chain for `.name` or passes through discriminant for `.value`
+- `String.format` `{:b}` (binary) format producing truncated output — shared descriptor handles binary, center-align, and boolean conversion correctly
+- Keyword-only parameter default values not passed at call sites — callers now emit declared defaults instead of `null`
 - `DmaDirection.ToDevice` and similar enum variant accesses returning `0` regardless of actual backed value
 - MIR-compiled binaries exiting with garbage codes (e.g. `176`) due to `main` returning `void` instead of `i32 0`
 - Hello-world example returning non-zero exit code (e.g. `176`) when compiled with `--use-mir` — now exits `0`
@@ -90,14 +115,11 @@
 - `test-variadic-kwargs-combined` segfault — variadic code path returned after packing variadic args without packing kwargs for keyword-only parameters
 - All tests using `putsln` crashing when called from functions with keyword-only params — `putsln` body calling `writeArgsToFd(fd, args, sep, end, stream, flush)` packed all 5 remaining args into the variadic array instead of forwarding 1 variadic arg + 4 keyword-only params
 - `putsln` printing garbled output for string arguments — `Object args[]` variadic element type resolved to `i64` (default) because `ArrayType` parameter was unhandled in MIR lowering; strings stored as `ptrtoint(ptr to i64)` then loaded back as raw integers
+- Defer statements silently skipped in MIR path — `lowerDefer()` only emitted a no-op `DeferPush` instruction; replaced with actual deferred body accumulation and LIFO emission before returns
+- Interface dispatch always resolving to first concrete class — `concreteClassMap` tracking fails across function boundaries (e.g., `callGreet(Greeter g)` compiled once, can't know concrete type of parameter); replaced with embedded vtable/itable indirect dispatch
 
 **Issues**
-- `InlineAssembly`, `DeferPush`/`DeferEmit`, `CallVirtual` remain as no-op stubs
-- Enum `.name`/`.value` built-in properties not implemented in MIR path
-- `argv` global initialization from `main(argc, argv)` not implemented in MIR path
-- `HashSet.union`/`intersect`/`difference` hang — internal iteration over bucket chains enters infinite loop
-- Keyword-only parameter default values not passed at call sites — callers emit `null` instead of the declared defaults (e.g., `separator=" "`, `endline="\n"`)
-- `String.format` `{:b}` (binary) format produces truncated output
+- None
 
 ## v1.0.0-2026.1 2026-07-13
 
@@ -131,6 +153,5 @@
 - Diagnostic dump modes: `--dump-tokens`, `--dump-ast`, `--dump-hir`, `--dump-mir`, `--emit-llvm`
 
 **Notes**
-- MIR codegen path is experimental — passes 11/11 benchmarks and 164/203 module tests on AST path
-- OOP wrapper classes not yet supported on MIR codegen path
+- MIR codegen path is experimental
 - Language is research-oriented and not production-ready
