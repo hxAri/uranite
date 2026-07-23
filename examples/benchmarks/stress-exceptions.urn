@@ -1,4 +1,4 @@
-package testing
+package uranite.examples.benchmarks.stress-exceptions
 
 from uranite.convert.convert import intToString
 from uranite.errors.error import Error
@@ -15,8 +15,6 @@ function throwAtDepth( I64 depth ) -> I64:
 
 public function main() -> I32:
     putsln( "=== Stress Exceptions Test ===" )
-    
-    # throw/catch across 10 frames
     I64 caught = 0
     I64 i = 0
     while i < 1000:
@@ -28,8 +26,6 @@ public function main() -> I32:
     
     String caughtStr = intToString( caught )
     putsln( "caught " + caughtStr + " exceptions across 10-deep frames" )
-    
-    # Different depths
     i = 1
     while i <= 20:
         try:
@@ -39,6 +35,5 @@ public function main() -> I32:
         i = i + 1
     
     putsln( "variable depth throw/catch OK" )
-    
     putsln( "=== Stress exceptions test PASSED ===" )
     return 0
