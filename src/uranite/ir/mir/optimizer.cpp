@@ -70,11 +70,22 @@ namespace uranite::ir::mir {
 
 			// Collect variables produced by GEP — stores to these are pointer stores (never dead)
 			std::unordered_set<MIRVariableIdentifier> gepResultVariables;
+			std::unordered_set<MIRVariableIdentifier> indirectCallTargetVariables;
 			for( const MIRInstruction& instruction : basicBlock->blockInstructions ) {
 				if( ( instruction.instructionKind == MIRInstructionKind::ComputeFieldAddress ||
 					  instruction.instructionKind == MIRInstructionKind::ComputeIndexAddress ) &&
 					instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					gepResultVariables.insert( instruction.destinationVariable );
+				}
+				if( instruction.instructionKind == MIRInstructionKind::CallFunction &&
+					instruction.calledFunctionQualifiedName.empty() == false ) {
+					for( const std::pair<const MIRVariableIdentifier, MIRVariableDescriptor>& entry :
+						functionDefinition.variableDescriptorTable ) {
+						if( entry.second.variableName == instruction.calledFunctionQualifiedName ) {
+							indirectCallTargetVariables.insert( entry.first );
+							break;
+						}
+					}
 				}
 			}
 
@@ -94,7 +105,8 @@ namespace uranite::ir::mir {
 				if( instruction.instructionKind == MIRInstructionKind::StoreVariable &&
 					instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER &&
 					neededAfter.count( instruction.destinationVariable ) == 0 &&
-					gepResultVariables.count( instruction.destinationVariable ) == 0 ) {
+					gepResultVariables.count( instruction.destinationVariable ) == 0 &&
+					indirectCallTargetVariables.count( instruction.destinationVariable ) == 0 ) {
 					isDeadStore = true;
 				}
 				
