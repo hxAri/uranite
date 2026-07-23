@@ -117,8 +117,11 @@ namespace uranite::ir::mir {
 					addEdge( lastInstruction.landingPadTarget );
 					break;
 				
-				case MIRInstructionKind::ReturnValue:
 				case MIRInstructionKind::ThrowException:
+					addEdge( lastInstruction.landingPadTarget );
+					break;
+
+				case MIRInstructionKind::ReturnValue:
 				case MIRInstructionKind::Unreachable:
 					break;
 				
