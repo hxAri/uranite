@@ -45,6 +45,7 @@ namespace uranite::ir::mir {
 		this->interfaceTableMap.clear();
 		this->interfaceMethodOrder.clear();
 		this->classesWithVtable.clear();
+		this->interfacesWithDirectItable.clear();
 		this->currentMIRModule = &mirModule;
 		this->mirFunctionDefinitionMap.clear();
 		this->functionReturnConcreteClass.clear();
@@ -371,6 +372,10 @@ namespace uranite::ir::mir {
 				);
 				this->interfaceTableMap[classQualified] = itableGlobal;
 				this->interfaceTableMap[className] = itableGlobal;
+				this->interfacesWithDirectItable.insert( interfaceType->name );
+				if( interfaceType->qualified.empty() == false ) {
+					this->interfacesWithDirectItable.insert( interfaceType->qualified );
+				}
 			}
 		}
 		for( std::shared_ptr<MIRFunctionDefinition>& functionDefinition : mirModule.functionDefinitions ) {
@@ -3955,6 +3960,9 @@ namespace uranite::ir::mir {
 				std::vector<std::string> interfaceLookupKeys = { interfaceQualified, interfaceShortName };
 				for( const std::string& ifaceLookupKey : interfaceLookupKeys ) {
 					if( this->interfaceMethodOrder.count( ifaceLookupKey ) == 0 ) {
+						continue;
+					}
+					if( this->interfacesWithDirectItable.count( ifaceLookupKey ) == 0 ) {
 						continue;
 					}
 					const std::vector<std::string>& methodOrder = this->interfaceMethodOrder[ifaceLookupKey];
