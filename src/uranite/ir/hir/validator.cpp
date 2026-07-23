@@ -29,7 +29,6 @@ namespace uranite::ir::hir {
 	
 	bool HIRValidator::validate( const HIRModule& hirModule ) {
 		this->collectedErrors.clear();
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& functionDefinition : hirModule.functionDefinitions ) {
 			if( functionDefinition == nullptr ) {
 				this->addError( "null function definition in module", hirModule.sourceLocation );
@@ -37,7 +36,6 @@ namespace uranite::ir::hir {
 			}
 			this->validateFunctionDefinition( *functionDefinition );
 		}
-		
 		for( const std::shared_ptr<HIRClassDefinition>& classDefinition : hirModule.classDefinitions ) {
 			if( classDefinition == nullptr ) {
 				this->addError( "null class definition in module", hirModule.sourceLocation );
@@ -45,7 +43,6 @@ namespace uranite::ir::hir {
 			}
 			this->validateClassDefinition( *classDefinition );
 		}
-		
 		for( const std::shared_ptr<HIRStructDefinition>& structDefinition : hirModule.structDefinitions ) {
 			if( structDefinition == nullptr ) {
 				this->addError( "null struct definition in module", hirModule.sourceLocation );
@@ -53,7 +50,6 @@ namespace uranite::ir::hir {
 			}
 			this->validateStructDefinition( *structDefinition );
 		}
-		
 		for( const std::shared_ptr<HIREnumDefinition>& enumDefinition : hirModule.enumDefinitions ) {
 			if( enumDefinition == nullptr ) {
 				this->addError( "null enum definition in module", hirModule.sourceLocation );
@@ -61,7 +57,6 @@ namespace uranite::ir::hir {
 			}
 			this->validateEnumDefinition( *enumDefinition );
 		}
-		
 		for( const std::shared_ptr<HIRInterfaceDefinition>& interfaceDefinition : hirModule.interfaceDefinitions ) {
 			if( interfaceDefinition == nullptr ) {
 				this->addError( "null interface definition in module", hirModule.sourceLocation );
@@ -69,7 +64,6 @@ namespace uranite::ir::hir {
 			}
 			this->validateInterfaceDefinition( *interfaceDefinition );
 		}
-		
 		for( const std::shared_ptr<HIRExternFunctionDeclaration>& externDeclaration : hirModule.externFunctionDeclarations ) {
 			if( externDeclaration == nullptr ) {
 				this->addError( "null extern declaration in module", hirModule.sourceLocation );
@@ -79,7 +73,6 @@ namespace uranite::ir::hir {
 				this->addError( "extern function has empty name", externDeclaration->sourceLocation );
 			}
 		}
-		
 		return this->collectedErrors.empty();
 	}
 	
@@ -91,7 +84,6 @@ namespace uranite::ir::hir {
 		if( functionDefinition.functionName.empty() ) {
 			this->addError( "function definition has empty name", functionDefinition.sourceLocation );
 		}
-		
 		for( const HIRParameterDescriptor& parameter : functionDefinition.parameterDescriptors ) {
 			if( parameter.parameterName.empty() && parameter.isSelfParameter == false ) {
 				this->addError(
@@ -100,7 +92,6 @@ namespace uranite::ir::hir {
 				);
 			}
 		}
-		
 		if( functionDefinition.functionBody != nullptr ) {
 			this->validateBlock( *functionDefinition.functionBody );
 		}
@@ -115,7 +106,6 @@ namespace uranite::ir::hir {
 		if( classDefinition.className.empty() ) {
 			this->addError( "class definition has empty name", classDefinition.sourceLocation );
 		}
-		
 		for( const HIRFieldDescriptor& field : classDefinition.fieldDescriptors ) {
 			if( field.fieldName.empty() ) {
 				this->addError(
@@ -124,7 +114,6 @@ namespace uranite::ir::hir {
 				);
 			}
 		}
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : classDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
@@ -141,7 +130,6 @@ namespace uranite::ir::hir {
 		if( structDefinition.structName.empty() ) {
 			this->addError( "struct definition has empty name", structDefinition.sourceLocation );
 		}
-		
 		for( const HIRFieldDescriptor& field : structDefinition.fieldDescriptors ) {
 			if( field.fieldName.empty() ) {
 				this->addError(
@@ -150,7 +138,6 @@ namespace uranite::ir::hir {
 				);
 			}
 		}
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : structDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
@@ -167,7 +154,6 @@ namespace uranite::ir::hir {
 		if( enumDefinition.enumName.empty() ) {
 			this->addError( "enum definition has empty name", enumDefinition.sourceLocation );
 		}
-		
 		for( const HIREnumVariantDescriptor& variant : enumDefinition.variantDescriptors ) {
 			if( variant.variantName.empty() ) {
 				this->addError(
@@ -176,7 +162,6 @@ namespace uranite::ir::hir {
 				);
 			}
 		}
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : enumDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
@@ -193,7 +178,6 @@ namespace uranite::ir::hir {
 		if( interfaceDefinition.interfaceName.empty() ) {
 			this->addError( "interface definition has empty name", interfaceDefinition.sourceLocation );
 		}
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : interfaceDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
@@ -220,14 +204,12 @@ namespace uranite::ir::hir {
 		if( node == nullptr ) {
 			return;
 		}
-		
 		switch( node->nodeKind ) {
 			case HIRNodeKind::Block: {
 				HIRBlock& block = static_cast<HIRBlock&>( *node );
 				this->validateBlock( block );
 				break;
 			}
-			
 			case HIRNodeKind::VariableBinding: {
 				HIRVariableBinding& binding = static_cast<HIRVariableBinding&>( *node );
 				if( binding.variableName.empty() ) {
@@ -238,7 +220,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Assignment: {
 				HIRAssignment& assignment = static_cast<HIRAssignment&>( *node );
 				if( assignment.targetExpression == nullptr ) {
@@ -255,7 +236,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Return: {
 				HIRReturn& returnNode = static_cast<HIRReturn&>( *node );
 				if( returnNode.returnValueExpression != nullptr ) {
@@ -263,7 +243,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::If: {
 				HIRIf& ifNode = static_cast<HIRIf&>( *node );
 				if( ifNode.branchCondition == nullptr ) {
@@ -283,7 +262,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Loop: {
 				HIRLoop& loop = static_cast<HIRLoop&>( *node );
 				if( loop.loopCondition != nullptr ) {
@@ -306,7 +284,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Match: {
 				HIRMatch& matchNode = static_cast<HIRMatch&>( *node );
 				if( matchNode.matchSubject == nullptr ) {
@@ -325,7 +302,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Switch: {
 				HIRSwitch& switchNode = static_cast<HIRSwitch&>( *node );
 				if( switchNode.switchSubject == nullptr ) {
@@ -341,7 +317,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Defer: {
 				HIRDefer& deferNode = static_cast<HIRDefer&>( *node );
 				if( deferNode.deferredStatement == nullptr ) {
@@ -352,7 +327,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Delete: {
 				HIRDelete& deleteNode = static_cast<HIRDelete&>( *node );
 				if( deleteNode.targetExpression == nullptr ) {
@@ -363,7 +337,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Throw: {
 				HIRThrow& throwNode = static_cast<HIRThrow&>( *node );
 				if( throwNode.thrownExpression == nullptr ) {
@@ -374,7 +347,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::TryCatch: {
 				HIRTryCatch& tryCatchNode = static_cast<HIRTryCatch&>( *node );
 				if( tryCatchNode.tryBody == nullptr ) {
@@ -393,7 +365,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::UnsafeBlock: {
 				HIRUnsafeBlock& unsafeBlock = static_cast<HIRUnsafeBlock&>( *node );
 				if( unsafeBlock.unsafeBody != nullptr ) {
@@ -401,7 +372,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::ExpressionStatement: {
 				HIRExpressionStatement& exprStatement = static_cast<HIRExpressionStatement&>( *node );
 				if( exprStatement.expression == nullptr ) {
@@ -412,14 +382,12 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Break:
 			case HIRNodeKind::Continue:
 			case HIRNodeKind::Pass:
 			case HIRNodeKind::InlineAssembly:
 			case HIRNodeKind::Drop:
 				break;
-			
 			default:
 				break;
 		}
@@ -429,7 +397,6 @@ namespace uranite::ir::hir {
 		if( expression == nullptr ) {
 			return;
 		}
-		
 		switch( expression->nodeKind ) {
 			case HIRNodeKind::BinaryOperation: {
 				HIRBinaryOperation& binaryOp = static_cast<HIRBinaryOperation&>( *expression );
@@ -447,7 +414,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::UnaryOperation: {
 				HIRUnaryOperation& unaryOp = static_cast<HIRUnaryOperation&>( *expression );
 				if( unaryOp.operandExpression == nullptr ) {
@@ -458,7 +424,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::FunctionCall: {
 				HIRFunctionCall& functionCall = static_cast<HIRFunctionCall&>( *expression );
 				if( functionCall.calleeExpression == nullptr ) {
@@ -472,7 +437,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::MethodCall: {
 				HIRMethodCall& methodCall = static_cast<HIRMethodCall&>( *expression );
 				if( methodCall.receiverObject == nullptr ) {
@@ -489,7 +453,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::FieldAccess: {
 				HIRFieldAccess& fieldAccess = static_cast<HIRFieldAccess&>( *expression );
 				if( fieldAccess.objectExpression == nullptr ) {
@@ -503,7 +466,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::IndexAccess: {
 				HIRIndexAccess& indexAccess = static_cast<HIRIndexAccess&>( *expression );
 				if( indexAccess.objectExpression == nullptr ) {
@@ -520,7 +482,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Construct: {
 				HIRConstruct& construct = static_cast<HIRConstruct&>( *expression );
 				for( const std::pair<std::string, HIRNodeSharedPointer>& field : construct.constructorFields ) {
@@ -530,7 +491,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Cast: {
 				HIRCast& castNode = static_cast<HIRCast&>( *expression );
 				if( castNode.sourceExpression == nullptr ) {
@@ -541,7 +501,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Lambda: {
 				HIRLambda& lambda = static_cast<HIRLambda&>( *expression );
 				if( lambda.lambdaBody != nullptr ) {
@@ -549,7 +508,6 @@ namespace uranite::ir::hir {
 				}
 				break;
 			}
-			
 			case HIRNodeKind::Reference:
 			case HIRNodeKind::Dereference:
 			case HIRNodeKind::MoveTransfer:
@@ -574,7 +532,6 @@ namespace uranite::ir::hir {
 			case HIRNodeKind::SubclassOf:
 			case HIRNodeKind::Comprehension:
 				break;
-			
 			default:
 				break;
 		}
@@ -587,5 +544,5 @@ namespace uranite::ir::hir {
 		}
 		this->collectedErrors.push_back( fullMessage );
 	}
-
+	
 } // namespace uranite::ir::hir
