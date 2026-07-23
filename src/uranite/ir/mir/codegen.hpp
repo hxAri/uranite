@@ -14,11 +14,10 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
-#include <unordered_set>
-
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
@@ -33,6 +32,7 @@
 #include <llvm/Target/TargetMachine.h>
 
 #include "uranite/codegen/default-runtime.hpp"
+#include "uranite/descriptor/descriptor.hpp"
 #include "uranite/diagnostic/diagnostic.hpp"
 #include "uranite/ir/mir.hpp"
 #include "uranite/semantic/analyzer.hpp"
@@ -84,6 +84,7 @@ namespace uranite::ir::mir {
 		void generateBitwise( const MIRInstruction& instruction );
 		void generateCastType( const MIRInstruction& instruction );
 		void generateCallFunction( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
+		llvm::Value* emitCallOrInvoke( const MIRInstruction& instruction, llvm::Function* callee, std::vector<llvm::Value*>& arguments );
 		void generateReturnValue( const MIRInstruction& instruction );
 		void generateBranchConditional( const MIRInstruction& instruction );
 		void generateJumpUnconditional( const MIRInstruction& instruction );
@@ -94,6 +95,9 @@ namespace uranite::ir::mir {
 		void generateHeapFree( const MIRInstruction& instruction );
 		void generatePhiNode( const MIRInstruction& instruction );
 		void generateConstructObject( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
+		void generateYield( const MIRInstruction& instruction );
+		void generateGeneratorFunction( MIRFunctionDefinition& functionDefinition, const std::string& llvmFunctionName, llvm::Function* llvmFunction );
+		void generateAsyncFunction( MIRFunctionDefinition& functionDefinition, const std::string& llvmFunctionName, llvm::Function* llvmFunction );
 
 		// Helpers
 		llvm::Type* toLLVMType( const semantic::TypeSharedPointer& semanticType );
@@ -123,9 +127,15 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreateBeginCatch();
 		llvm::Function* getOrCreateExtern( const std::string& name, llvm::Type* returnType, std::vector<llvm::Type*> paramTypes );
 		llvm::Type* resolveMemoryElementType( const semantic::TypeSharedPointer& operandType );
+		bool tryBuiltinDescriptor( const std::string& typeName, const std::string& methodName, const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
+		llvm::Function* getOrCreatePushFrame();
+		llvm::Function* getOrCreatePopFrame();
+		void emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName );
+		void emitPopFrame();
 
 		semantic::Analyzer& semanticAnalyzer;
 		diagnostic::Engine& diagnosticEngine;
+		descriptor::Builtin builtinRegistry;
 		std::shared_ptr<codegen::RuntimeInterface> runtimeInterface_;
 
 		llvm::LLVMContext llvmContext;
@@ -165,6 +175,34 @@ namespace uranite::ir::mir {
 
 		// Memory<T> element type per variable (compiler intrinsic tracking)
 		std::unordered_map<MIRVariableIdentifier, llvm::Type*> memoryElementTypes;
+
+		struct GeneratorContext {
+			llvm::AllocaInst* stateVar = nullptr;
+			llvm::AllocaInst* valueVar = nullptr;
+			llvm::AllocaInst* doneVar = nullptr;
+			llvm::BasicBlock* exitBlock = nullptr;
+			llvm::StructType* structType = nullptr;
+			llvm::Value* structPointer = nullptr;
+			llvm::SwitchInst* dispatchSwitch = nullptr;
+			int nextStateId = 1;
+			std::string prefix;
+			std::unordered_set<MIRVariableIdentifier> parameterVariables;
+			std::unordered_map<std::string, llvm::GlobalVariable*> persistedLocals;
+		};
+
+		GeneratorContext* currentGeneratorContext = nullptr;
+		bool isGeneratingAsyncWrapper = false;
+		bool programHasAsyncFunctions = false;
+		llvm::BasicBlock* asyncWrapperCatchBlock = nullptr;
+
+		// Interface dispatch: class name → itable global variable
+		std::unordered_map<std::string, llvm::GlobalVariable*> interfaceTableMap;
+
+		// Interface dispatch: interface qualified name → ordered method names
+		std::unordered_map<std::string, std::vector<std::string>> interfaceMethodOrder;
+
+		// Classes that have vtable pointers (implement interfaces)
+		std::unordered_set<std::string> classesWithVtable;
 
 	};
 
