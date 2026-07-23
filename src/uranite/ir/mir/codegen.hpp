@@ -204,6 +204,9 @@ namespace uranite::ir::mir {
 		// Classes that have vtable pointers (implement interfaces)
 		std::unordered_set<std::string> classesWithVtable;
 
+		// Interfaces that have direct itable implementations (safe for vtable dispatch)
+		std::unordered_set<std::string> interfacesWithDirectItable;
+
 	};
 
 } // namespace uranite::ir::mir
