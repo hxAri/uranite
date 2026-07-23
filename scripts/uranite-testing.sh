@@ -61,20 +61,23 @@ function main() {
 	local arguments=()
 	local compiled=0
 	local debugable=0
+	local executed=0
 	local faileds=()
 	local foutputs=()
+	local mir=0
+	local timeout=10
+	local totals=0
+	local temporary=$(mktemp)
 	local warnings=()
 	local woutputs=()
-	local executed=0
-	local timeout=10
-	local temporary=$(mktemp)
 	for argument in "$@"; do
 		case "$argument" in
 			--gdb) debugable=1 ;;
+			--mir) mir=1 ;;
 			*) arguments+=( "$argument" ) ;;
 		esac
 	done
-	for pathname in "$@"; do
+	for pathname in "${arguments[@]}"; do
 		if [[ "$pathname" =~ \/$ ]]; then
 			pathname="${pathname::-1}"
 		fi
@@ -87,7 +90,12 @@ function main() {
 				fi
 				cd "$basepath" || continue
 				local binary="${filename%.urn}"
-				timeout $timeout "$basepath/build/uranite" -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
+				local totals=$((totals+1))
+				if [[ $mir -eq 1 ]]; then
+					timeout $timeout "$basepath/build/uranite" --use-mir -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
+				else
+					timeout $timeout "$basepath/build/uranite" -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
+				fi
 				executed=${PIPESTATUS[0]}
 				if [[ "$(cat "$temporary")" =~ [Ww]arning\: ]]; then
 					warnings+=( "$filename" )
@@ -163,12 +171,11 @@ function main() {
 	clear
 	puts "$temporary: removing temporary file"
 	rm "$temporary"
-	clear
 	puts "=========================================="
-	puts "$compiled: successfully compiled .urn codes"
+	puts "$compiled: successfully compiled of $totals .urn codes"
 	if [[ ${#faileds[@]} -ge 1 ]]; then
 		puts "=========================================="
-		puts "${#faileds[@]}: files has been error occurred"
+		puts "${#faileds[@]}: files has been error occurred of $totals totals"
 		puts "=========================================="
 		for i in "${!faileds[@]}"; do
 			puts "${faileds[$i]/${basepath}\//}"
@@ -184,7 +191,7 @@ function main() {
 		if [[ ${#faileds[@]} -le 0 ]]; then
 			puts "=========================================="
 		fi
-		puts "${#warnings[@]}: files has been warning occurred"
+		puts "${#warnings[@]}: files has been warning occurred of $totals totals"
 		puts "=========================================="
 		for i in "${!warnings[@]}"; do
 			puts "${warnings[$i]/${basepath}\//}"

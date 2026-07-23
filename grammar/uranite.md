@@ -2,7 +2,7 @@
 <!--
 @author hxAri (hxari)
 @create 2025-02-24 15:15
-@update 2026-06-17 20:03
+@update 2026-07-19 20:05
 @github https://github.com/uranite-lang/uranite
 
 Uranite - Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # Uranite Language Grammar
 
-Uranite (Advanced Execution Through Endless Recursion) is an indentation-based, compiled language with a focus on ownership-based memory safety and high performance.
+Uranite (Accelerated Execution Through Quantum Precision) is an indentation-based, compiled language with a focus on ownership-based memory safety and high performance.
 
 ## 1. Lexical Structure
 
@@ -34,7 +34,7 @@ IDENTIFIER = [a-zA-Z_][a-zA-Z0-9_]*
 - **Integer**: `123`, `0xABC`, `0b101`, `0o123`
 - **Float**: `123.456`
 - **String**: `"Hello, World!"`, `"""Multi-line string"""`
-- **Char**: `'A'`
+- **Char**: `'A'`, `'\n'`, `'\x41'`
 - **Boolean**: `True`, `False`
 - **None**: `None`
 
@@ -47,16 +47,24 @@ IDENTIFIER = [a-zA-Z_][a-zA-Z0-9_]*
 - **Logic**: `and`, `or`, `not`
 - **Error Handling**: `try`, `except`, `raise`, `raises`, `finally`
 - **Primitive Types**: `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `Bool`, `Boolean`, `Byte`, `Bytes`, `Char`, `Integer`, `Long`, `String`, `Void`, `NoneType`, `Object`, `Callable`, `Meta`
-- **Other**: `as`, `in`, `is`, `where`, `defer`, `async`, `await`, `use`, `asm`, `volatile`
+- **Other**: `as`, `in`, `is`, `defer`, `async`, `await`, `use`, `asm`, `volatile`
 
 ### 1.4 Operators & Punctuation
 - **Arithmetic**: `+`, `-`, `*`, `/`, `%`, `**`, `++`, `--`
 - **Bitwise**: `&`, `|`, `^`, `~`, `<<`, `>>`
 - **Comparison**: `==`, `!=`, `<`, `>`, `<=`, `>=`, `is`, `is not`, `in`, `not in`, `instanceof`, `subclassof`
 - **Assignment**: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`
-- **Range**: `..`, `...`
-- **Punctuation**: `->`, `=>`, `.`, `..`, `...`, `:`, `,`, `;`, `@`, `#`, `?`, `!`
+- **Range**: `..` (exclusive), `...` (inclusive)
+- **Punctuation**: `->`, `=>`, `.`, `:`, `,`, `;`, `@`, `#`, `?`
 - **Delimiters**: `(`, `)`, `[`, `]`, `{`, `}`
+
+### 1.5 Line Continuation
+- **Explicit**: A backslash `\` immediately before a newline joins two physical lines into one logical line.
+- **Implicit**: Newlines inside matched `()`, `[]`, `{}` pairs are suppressed by the lexer.
+
+### 1.6 Comments & Doccomments
+- **Line comments**: `# comment text`
+- **Doccomments**: Triple-quoted strings (`"""..."""` or `'''...'''`) placed after declarations serve as documentation.
 
 ---
 
@@ -65,36 +73,45 @@ IDENTIFIER = [a-zA-Z_][a-zA-Z0-9_]*
 ### 2.1 Top-Level
 ```ebnf
 Program         ::= PackageDecl? Statement*
-PackageDecl     ::= "package" IDENTIFIER ("." IDENTIFIER)* NEWLINE
+PackageDecl     ::= "package" PackageName NEWLINE
+PackageName     ::= PackageSegment ("." PackageSegment)*
+PackageSegment  ::= (IDENTIFIER | KEYWORD) ("-" (IDENTIFIER | KEYWORD | INTEGER))*
 Statement       ::= CompoundStmt | SimpleStmt
 ```
 
+Package segments accept keywords and hyphenated names (e.g., `uranite.async.context`, `uranite.os.vfs.file-descriptor`, `x86-64`).
+
 ### 2.2 Declarations
 ```ebnf
-ImportDecl      ::= "import" IDENTIFIER ("." IDENTIFIER)* ("as" IDENTIFIER)? NEWLINE
-                  | "from" IDENTIFIER ("." IDENTIFIER)* "import" ("*" | "{" ImportItem ("," ImportItem)* "}" | ImportItem) NEWLINE
+ImportDecl      ::= "import" ImportPath ("as" IDENTIFIER)? NEWLINE
+                  | "from" ImportPath "import" ("*" | "{" ImportItem ("," ImportItem)* "}" | ImportItem ("," ImportItem)*) NEWLINE
+ImportPath      ::= PackageSegment ("." PackageSegment)*
 ImportItem      ::= IDENTIFIER ("as" IDENTIFIER)?
 
 ExternDecl      ::= "extern" "function" IDENTIFIER "(" Params? ")" ("->" Type)? ";" NEWLINE
 
-FunctionDecl    ::= AccessModifier? ("virtual" | "override" | "abstract" | "static" | "final" | "async")* 
-                    "function" IDENTIFIER GenericParams? "(" Params? ")" ("->" Type)? ("raises" Type ("|" Type)*)? (":" Block | NEWLINE)
+FunctionDecl    ::= Modifiers "function" IDENTIFIER GenericParams? "(" Params? ")" ("->" Type)? ("raises" Type ("|" Type)*)? (":" Block | ";")
 
-ClassDecl       ::= AccessModifier? "Readonly"? "final"? "class" IDENTIFIER GenericParams? 
+ClassDecl       ::= Modifiers "class" IDENTIFIER GenericParams? 
                     ("extends" Type)? ("implements" Type ("," Type)*)? (":" Block | ";")
 
-StructDecl      ::= AccessModifier? "struct" IDENTIFIER GenericParams? (":" Block | ";")
+StructDecl      ::= Modifiers "struct" IDENTIFIER GenericParams? (":" Block | ";")
 
-EnumDecl        ::= AccessModifier? "enum" IDENTIFIER ("backed" Type)? ":" INDENT EnumVariant+ DEDENT
+EnumDecl        ::= Modifiers "enum" IDENTIFIER ("backed" Type)? ":" INDENT EnumBody DEDENT
+EnumBody        ::= (EnumVariant | EnumMethod | EnumField)+
 EnumVariant     ::= "unit" IDENTIFIER Expression?
+EnumMethod      ::= Modifiers ("function" | "property") IDENTIFIER GenericParams? "(" Params? ")" ("->" Type)? (":" Block | ";")
+EnumField       ::= Modifiers Type IDENTIFIER ("=" Expression)? NEWLINE
 
-InterfaceDecl   ::= AccessModifier? "interface" IDENTIFIER GenericParams? ("extends" Type ("," Type)*)? (":" Block | ";")
+InterfaceDecl   ::= Modifiers "interface" IDENTIFIER GenericParams? ("extends" Type ("," Type)*)? (":" Block | ";")
 
-TraitDecl       ::= AccessModifier? "trait" IDENTIFIER GenericParams? ":" Block
+TraitDecl       ::= Modifiers "trait" IDENTIFIER GenericParams? ":" Block
 
 ImplementDecl   ::= "implements" GenericParams? Type "for" Type ":" Block
 
-TypeAliasDecl   ::= AccessModifier? "type" IDENTIFIER GenericParams? "=" Type NEWLINE
+TypeAliasDecl   ::= Modifiers "type" IDENTIFIER GenericParams? "=" Type NEWLINE
+
+ConstDecl       ::= "const" Type IDENTIFIER "=" Expression NEWLINE
 
 ExportBlock     ::= "export" "{" IDENTIFIER ("," IDENTIFIER)* "}"
 ```
@@ -104,25 +121,9 @@ ExportBlock     ::= "export" "{" IDENTIFIER ("," IDENTIFIER)* "}"
 Block           ::= NEWLINE INDENT Statement* DEDENT
                   | SimpleStmt
 
-Statement       ::= ReturnStmt 
-                  | IfStmt 
-                  | MatchStmt 
-                  | SwitchStmt
-                  | ForStmt 
-                  | WhileStmt 
-                  | VarDecl 
-                  | Assignment
-                  | ExpressionStmt 
-                  | UnsafeBlock 
-                  | DeferStmt 
-                  | TryStmt
-                  | SpawnStmt
-                  | "break" NEWLINE
-                  | "continue" NEWLINE
-                  | "pass" NEWLINE
-                  | "delete" Expression NEWLINE
-                  | "raise" Expression NEWLINE
-                  | AsmStmt NEWLINE
+SimpleStmt      ::= ReturnStmt | VarDecl | Assignment | ExpressionStmt
+                  | BreakStmt | ContinueStmt | DeleteStmt | RaiseStmt
+                  | DeferStmt | YieldStmt | PassStmt | AsmStmt
 
 ReturnStmt      ::= "return" Expression? NEWLINE
 
@@ -130,37 +131,110 @@ IfStmt          ::= "if" Expression ":" Block ("elif" Expression ":" Block)* ("e
 
 WhileStmt       ::= "while" Expression ":" Block
 
-ForStmt         ::= "for" VarDecl ";" Expression ";" Expression ":" Block
+ForStmt         ::= "for" Type? IDENTIFIER "=" Expression ";" Expression ";" ForUpdate ":" Block
                   | "for" Type? IDENTIFIER "in" Expression ":" Block
+ForUpdate       ::= Expression (AugAssign Expression | "++" | "--")?
 
 MatchStmt       ::= "match" Expression ":" INDENT MatchCase* DEDENT
 MatchCase       ::= Pattern "=>" (Block | SimpleStmt)
 
-VarDecl         ::= AccessModifier? Type IDENTIFIER ("=" Expression)? NEWLINE
+SwitchStmt      ::= "switch" Expression ":" INDENT SwitchCase+ DEDENT
+SwitchCase      ::= "case" (Pattern | "*") ":" Block
 
+Pattern         ::= IDENTIFIER ("." IDENTIFIER)*
+                  | Literal
+                  | "*"
+
+TryStmt         ::= "try" ":" Block ExceptClause+ FinallyClause?
+ExceptClause    ::= "except" (Type ("as" IDENTIFIER)?)? ":" Block
+FinallyClause   ::= "finally" ":" Block
+
+UnsafeBlock     ::= "unsafe" ":" Block
+
+VarDecl         ::= Modifiers? Type IDENTIFIER ("=" Expression)? NEWLINE
+
+Assignment      ::= Primary AugAssign Expression
+                  | Primary "=" Expression
+AugAssign       ::= "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>="
+
+DeleteStmt      ::= "delete" Expression NEWLINE
+RaiseStmt       ::= "raise" Expression NEWLINE
 DeferStmt       ::= "defer" (Block | Statement)
-
-AsmStmt         ::= "asm" "volatile" LIT_STRING ":" AsmOutput ":" AsmInput ":" AsmClobber
-AsmOutput       ::= "output" "(" AsmOperand ("," AsmOperand)* ")" | ε
-AsmInput        ::= "input" "(" AsmOperand ("," AsmOperand)* ")" | ε
-AsmClobber      ::= "clobber" "(" LIT_STRING ("," LIT_STRING)* ")" | ε
-AsmOperand      ::= LIT_STRING IDENTIFIER
+YieldStmt       ::= "yield" ("from")? Expression NEWLINE
+PassStmt        ::= "pass" NEWLINE
+BreakStmt       ::= "break" NEWLINE
+ContinueStmt    ::= "continue" NEWLINE
 ```
 
 ### 2.4 Expressions
 ```ebnf
-Expression      ::= LogicalExpr | MatchExpr | LambdaExpr
-LogicalExpr     ::= ComparisonExpr (("and" | "or") ComparisonExpr)*
-ComparisonExpr  ::= RangeExpr (CompareOp RangeExpr)*
-RangeExpr       ::= ArithmeticExpr (RangeOp ArithmeticExpr)?
-ArithmeticExpr  ::= Term (("+" | "-") Term)*
+Expression      ::= Disjunction | MatchExpr | LambdaExpr
+
+Disjunction     ::= Conjunction ("or" Conjunction)*
+Conjunction     ::= Inversion ("and" Inversion)*
+Inversion       ::= "not" Inversion | Comparison
+
+Comparison      ::= RangeExpr (CompareOp RangeExpr)*
+CompareOp       ::= "==" | "!=" | "<=" | ">=" | "<" | ">" 
+                  | "is" "not" | "is" | "not" "in" | "in" 
+                  | "instanceof" | "subclassof"
+
+RangeExpr       ::= BitwiseOr ((".." | "...") BitwiseOr)?
+
+BitwiseOr       ::= BitwiseXor ("|" BitwiseXor)*
+BitwiseXor      ::= BitwiseAnd ("^" BitwiseAnd)*
+BitwiseAnd      ::= Shift ("&" Shift)*
+Shift           ::= Sum (("<<" | ">>") Sum)*
+Sum             ::= Term (("+" | "-") Term)*
 Term            ::= Factor (("*" | "/" | "%") Factor)*
-Factor          ::= ("addressof" | "move") Primary | ("+" | "-" | "~" | "not") Factor | Primary
-Primary         ::= Atom ("." IDENTIFIER | "(" Args? ")" | "[" Expression "]" | "++" | "--")*
-Atom            ::= IDENTIFIER | Literal | "(" Expression ")" | "self" | "parent" | "new" Type "(" Args? ")"
+
+Factor          ::= ("addressof" | "move") Primary
+                  | ("+" | "-" | "~") Factor
+                  | Power
+Power           ::= AwaitExpr | Primary ("**" Factor)?
+
+AwaitExpr       ::= "await" Expression
+
+Primary         ::= Primary "." IDENTIFIER
+                  | Primary "(" Args? ")"
+                  | Primary "[" Expression "]"
+                  | Primary "++"
+                  | Primary "--"
+                  | Atom
+
+Atom            ::= IDENTIFIER
+                  | Literal
+                  | "(" Expression ")"
+                  | "(" ")"
+                  | "(" Expression "," Expression* ")"
+                  | "[" Expression ("for" Type? IDENTIFIER "in" Expression ("if" Expression)?)? "]"
+                  | "[" (Expression ("," Expression)*)? "]"
+                  | "self"
+                  | "parent"
+                  | "new" Type "(" Args? ")"
+                  | "True"
+                  | "False"
+                  | "None"
+
+MatchExpr       ::= "match" Expression "in" MatchArm ("," MatchArm)* ("," "*" "=>" Expression)?
+MatchArm        ::= Expression "=>" Expression
+
+LambdaExpr      ::= "lambda" LambdaParam ("," LambdaParam)* ":" Expression
+                  | "async"? "function" "(" Params? ")" ("->" Type)? ":" (Block | Expression)
+                  | "async"? "lambda" LambdaParam ("," LambdaParam)* ":" Expression
+LambdaParam     ::= "final"? Type IDENTIFIER
 ```
 
-### 2.5 Types
+### 2.5 Inline Assembly
+```ebnf
+AsmStmt         ::= "asm" "volatile"? STRING ":" AsmOutput ":" AsmInput ":" AsmClobber
+AsmOutput       ::= "output" "(" AsmOperand ("," AsmOperand)* ")" | ε
+AsmInput        ::= "input" "(" AsmOperand ("," AsmOperand)* ")" | ε
+AsmClobber      ::= "clobber" "(" STRING ("," STRING)* ")" | ε
+AsmOperand      ::= STRING IDENTIFIER
+```
+
+### 2.6 Types
 ```ebnf
 Type            ::= UnionType
 UnionType       ::= IntersectionType ("|" IntersectionType)*
@@ -170,6 +244,30 @@ BaseType        ::= IDENTIFIER GenericArgs?
                   | BaseType "[]"
                   | "(" Type ")"
                   | "Callable" "<" Type "," "<" Type ("," Type)* ">" ">"
+                  | "Meta" "<" Type ">"
+```
+
+### 2.7 Parameters & Arguments
+```ebnf
+Params          ::= Param ("," Param)*
+Param           ::= "self"
+                  | "&" "self"
+                  | PropertyMod? "mut"? Type IDENTIFIER ("[]" | "{}")? ("=" Expression)?
+PropertyMod     ::= ("public" | "private" | "protect") "Readonly"?
+
+Args            ::= Expression ("," Expression)*
+
+GenericParams   ::= "<" GenericParam ("," GenericParam)* ">"
+GenericParam    ::= IDENTIFIER (":" Type ("," Type)*)?
+
+GenericArgs     ::= "<" Type? ("," Type)* ">"
+```
+
+### 2.8 Modifiers
+```ebnf
+Modifiers       ::= AccessModifier? OopModifier*
+AccessModifier  ::= "public" | "private" | "protect"
+OopModifier     ::= "virtual" | "override" | "abstract" | "static" | "final" | "Readonly" | "const" | "async" | "property" | "native"
 ```
 
 ---
@@ -178,8 +276,24 @@ BaseType        ::= IDENTIFIER GenericArgs?
 
 - **Indentation Scoping**: Uses `:` and INDENT/DEDENT (like Python) instead of curly braces for blocks.
 - **Ownership/Borrowing**: Keywords `ref`, `own`, `move`, `mut` indicate memory management semantics.
-- **Uniform Function Call Syntax (UFCS)**: Supports both `func(obj, arg)` and `obj.func(arg)`.
-- **Expression-based**: Many constructs are expressions.
-- **Nullable types**: `?Type` prefix for optional values, with `None` as the null literal.
+- **Nullable Types**: `?Type` prefix for optional values, with `None` as the null literal.
+- **Expression-based**: `match expr in pattern => value, ...` is an expression.
+- **Line Continuation**: Backslash before newline joins lines; implicit inside delimiters.
+- **Variadic Parameters**: `Type name[]` declares a variadic parameter. Only one per function. Parameters with defaults after the variadic are keyword-only.
+- **Keyword Parameters**: `Type name{}` declares a keyword parameter (must be last).
+- **Constructor Property Declaration**: Parameters prefixed with access modifiers (`public Type name`) auto-declare class fields.
+- **Self Parameter**: Methods take `self` or `&self` as first parameter.
 - **Inline Assembly**: `asm volatile` with output/input/clobber operand syntax for direct hardware access.
 - **Export Blocks**: `export { Name1, Name2 }` to make declarations importable by other modules.
+- **Async/Await**: `async function` declarations return `Future<T>`. `await` suspends execution.
+- **Range Expressions**: `a..b` (exclusive end), `a...b` (inclusive end).
+- **Tuple Expressions**: `(a, b, c)` creates a tuple; `()` is an empty tuple.
+- **Comprehensions**: `[expr for var in iterable if condition]` for list comprehension.
+- **Enum Variants**: Require `unit` keyword. Backed enums: `enum Name backed I64:` with `unit Variant 0`.
+- **Addressof**: `addressof expr` returns the memory address as `I64`.
+- **Move Semantics**: `move expr` transfers ownership.
+- **Identity Check**: `is` for identity/None comparison. `is not` as compound operator.
+- **Switch Statement**: `switch expr:` with `case pattern:` branches and `case *:` for default.
+- **Property Methods**: `property` modifier on methods for getter/setter access syntax.
+- **Doccomments**: `"""..."""` after declarations for documentation.
+- **Hyphenated Imports**: Module paths support hyphens (`uranite.os.vfs.file-descriptor`).

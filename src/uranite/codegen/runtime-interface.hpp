@@ -54,6 +54,9 @@ namespace uranite::codegen {
 			virtual RuntimeFunctionSpec getStrcpyFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getStrcatFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getStrcmpFunction( llvm::LLVMContext& context ) = 0;
+			virtual RuntimeFunctionSpec getStrstrFunction( llvm::LLVMContext& context ) = 0;
+			virtual RuntimeFunctionSpec getStrncmpFunction( llvm::LLVMContext& context ) = 0;
+			virtual RuntimeFunctionSpec getWriteFunction( llvm::LLVMContext& context ) = 0;
 	};
 
 } // namespace uranite::codegen

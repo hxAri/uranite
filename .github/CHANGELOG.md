@@ -1,0 +1,163 @@
+# Changelog
+
+## v1.1.0-2026.7 2026-07-19
+
+**Added**
+- Shared descriptor system for MIR codegen — builtin OOP wrapper methods (Boolean, Char, String, Int, Float, UInt, Byte) routed through `descriptor::Builtin` registry with qualname validation via `semantic::qname::isOopWrapper`, eliminating duplicated inline implementations
+- `tryBuiltinDescriptor()` bridge in MIR codegen — dispatches MIR instructions to descriptor `IRGenerator` lambdas with keyword argument forwarding
+- Per-call-site interface dispatch in MIR codegen — `concreteClassMap` tracks concrete class per variable from `ConstructObject` instructions, propagated through `LoadVariable`/`StoreVariable`/`CopyValue` and function return types via `functionReturnConcreteClass`
+- Static method dispatch in MIR lowering — `ClassType::findMethod()` + `MethodInfo::isStatic` detection strips receiver from source operands for static calls
+- Class-name identifier resolution fallback in MIR lowering — type registry lookup resolves intra-class static method calls when `resolvedType` is null on receiver
+- Shadow call stack for MIR codegen path — `__uranite_push_frame`/`__uranite_pop_frame` emitted at function entry/exit, `injectTracebackInfo` populates Throwable file/line at throw sites
+- Float type propagation fallback in MIR codegen — creates Float result type when `resolvedType` is null and operation involves float operands
+- Enum variant access in MIR codegen path — backed values and discriminants resolve correctly instead of returning `0`
+- C ABI-compliant `main` function in MIR codegen — returns `i32` with `(i32, ptr)` parameters
+- Enum variant registration as module constants during MIR lowering phase
+- Imported enum variant resolution via `EnumType` semantic info with AST backed value fallback
+- `Memory<T>` compiler intrinsic in MIR codegen — constructor emits `calloc(capacity, sizeof(T))`, `get`/`set`/`free`/`copyTo` emit inline GEP+load/store
+- `Arena<T>` compiler intrinsic in MIR codegen — struct `{ptr, i64 count, i64 capacity}` with `alloc`/`freeAll`/`destroy`/`count` inlined
+- `String.format` intrinsic in MIR codegen — compile-time placeholder rewrite with snprintf: `{}` positional, `{0}` indexed, `{:x}`/`{:X}` hex, `{:o}` octal, `{:.2f}` precision, `{{`/`}}` escaped braces
+- `Object.toString` stub in MIR codegen — identity function returning self pointer, unblocks `writeArgsToFd` linkage
+- Inline `puts`/`putsln`/`putserr`/`putserrln` in MIR codegen — direct `write` syscalls with snprintf-based type coercion (integer `%ld`, float `%f`, bool `True`/`False`)
+- Compound assignment operators (`+=`, `-=`, `*=`, `/=`) in MIR lowering — emits load+arithmetic+store instead of plain store
+- `AddressOf` instruction handler — emits `ptrtoint` for pointers, `sext` for integers
+- `TakeReference` instruction handler — returns raw pointer value
+- `DereferencePointer` instruction handler — loads from pointer with proper type
+- Variable descriptor fallback for `Memory<T>` and `Arena<T>` element type resolution — `get`/`set`/`copyTo`/`alloc` resolve element type from MIR variable semantic type when `memoryElementTypes` map misses (function parameters, loaded variables)
+- OOP wrapper method intrinsics for integer types (Int, I64, I32, I16, I8, UInt, U64, U32, U16, U8, Long, Integer, Byte, Char) — all arithmetic uses i64 matching AST codegen semantics
+- OOP wrapper method intrinsics for float types (Float, Double, F64, F32) — math ops, special value checks (isInfinite, isNaN, isFinite), floor/ceil/round/sqrt/power
+- Boolean wrapper intrinsics — `logicalAnd`, `logicalOr`, `logicalXor`, `negate`, `equals`, `toString`
+- Char wrapper intrinsics — `isAlpha`, `isDigit`, `isAlphanumeric`, `isWhitespace`, `toUpper`, `toLower`, `toString` with inline range-check logic
+- Global mutable variable support in MIR path — `MIRGlobalVariable` struct, HIR→MIR lowering, LLVM `GlobalVariable` generation, load/store via `@`-prefixed name markers
+- `InvokeFunction` instruction handler — resolves callee, builds arguments with type coercion, emits `CreateInvoke` with normal/unwind destinations, sets personality function
+- `LandingPad` instruction handler — emits LLVM `landingpad` with catch-all clause, extracts exception via `__uranite_begin_catch`
+- `is` operator support in MIR lowering — maps `KeywordIs` to `CompareEqual` for identity/None checks
+- Generic type parameter method resolution in MIR lowering — scans semantic registry for monomorphized class types, builds substitution map with transitive resolution, resolves `K.hashCode` to `String.hashCode` at method call sites
+- Universal bare method intrinsics (`hashCode`, `toString`) in MIR codegen — handles calls from imported generic module code without class prefix
+- String wrapper method intrinsics in MIR codegen — `hashCode` (ptrtoint), `toString` (identity), `substring` (malloc+memcpy), `equals` (strcmp), `length` (strlen), `charCodeAt` (GEP+load+zext), `getValue`/`value` (identity), `isEmpty` (strlen==0), `concat` (strlen+malloc+strcpy+strcat), `startsWith` (strncmp), `endsWith` (strlen+strcmp tail), `contains` (strstr), `indexOf` (strstr offset), `charAt` (GEP+load), `toUpper`/`toLower` (inline char loop), `trim` (whitespace skip loop), `replace` (strstr+memcpy loop)
+- `Arena<T>.capacity` intrinsic in MIR codegen — reads struct field index 2
+- Constructor overload resolution in MIR codegen — arity-based suffix (`ClassName.ClassName#N`) disambiguates overloaded constructors during pre-registration and call-site lookup
+- `InstanceOfCheck` instruction lowering from HIR to MIR — `HIRInstanceOf` now emits `InstanceOfCheck` with target type in `operandType`
+- `InstanceOfCheck` static type hierarchy resolution in MIR codegen — checks variable descriptor type against target type, walks class inheritance chain, returns true for `Object`-typed sources
+- `RuntimeInterface` abstraction in MIR codegen — all C runtime functions (malloc, free, calloc, memcpy, strlen, strcmp, strcpy, strcat, strstr, strncmp, snprintf, write) and Uranite CRT functions (__uranite_throw, __uranite_personality_v0, __uranite_begin_catch) resolved through swappable `RuntimeInterface`, matching AST codegen architecture
+- `getOrCreateExtern` helper in MIR codegen — generic extern function declaration factory for functions not yet in `RuntimeInterface`
+- Post-generation interface method resolution pass — replaces unresolved interface method declarations (`Sequence.get`, `Set.exists`) with implementing class methods, generates type-coercing wrapper thunks when signatures differ, walks transitive interface hierarchy
+- Field default value initialization in MIR codegen — classes without explicit constructors but with field defaults (e.g., `private Int IM = 139968`) now store literal values via GEP after malloc; supports integer, float, boolean, char, string, None, and negated literals
+- Struct field GEP auto-load in `StoreVariable` — when a `ComputeFieldAddress` result (2-index struct GEP) is stored to a local variable, the field value is loaded instead of storing the raw address
+- Keyword argument (`kwargs`) infrastructure in MIR path — `MIRInstruction.keywordArgumentKeys`/`keywordArgumentValues` fields, `MIRFunctionDefinition.keywordParameterIndex`/`keywordValueType` fields, HIR→MIR lowering of `keywordArguments` in both `lowerFunctionCall` and `lowerMethodCall`, codegen packs kwargs into `{ptr keys, ptr values, i64 count, i64 pos}` struct at call sites
+- Kwargs packing in variadic code path — keyword arguments are correctly packed when the callee also has a variadic parameter
+- Extern function short-name fallback in MIR codegen — qualified call names (e.g., `uranite.functions.externs.free`) resolve to C-linkage extern functions by checking the short name against `externDeclaredNames`
+- Function reference via `addressof` in MIR codegen — `LoadVariable` with empty `sourceOperands` and non-empty `calledFunctionQualifiedName` emits `PtrToInt` on the LLVM Function pointer, with short-name fallback for qualified lookups
+- Constructor optional parameter padding in MIR codegen — constructor arity check uses `>=` instead of `==`, missing trailing arguments padded with null values matching expected parameter types
+- Defer statement support in MIR path — deferred HIR statements accumulated during function lowering, emitted inline in LIFO order before every explicit `return` and implicit end-of-function return, cleared per function entry
+- Virtual dispatch via interface tables (itables) in MIR codegen — vtable pointer prepended as field 0 in struct layout for classes implementing interfaces, global constant itable arrays generated with function pointers per class+interface pair, itable pointer stored at construction time, indirect call through itable at dispatch sites when concrete type is unknown
+- `implementedInterfaceQualifiedNames` population in AST→HIR class lowering — resolves interface names to qualified names via semantic registry for downstream vtable generation
+- `self` parameter validation in semantic analyzer — rejects `self` in free functions and static methods (class and struct) with descriptive error messages
+- User import scope enforcement in semantic analyzer — tracks explicitly imported identifiers per source file, errors on use of unimported transitive module symbols (e.g., `alloc` used without `from uranite.memory.allocator import alloc`)
+
+**Changed**
+- IR source files restructured from flat `src/uranite/ir/` to hierarchical `src/uranite/ir/hir/` and `src/uranite/ir/mir/` subdirectories
+- MIR codegen function pre-registration includes free functions in arity-suffix overload scheme (previously only class methods)
+- Arity-based call resolution (`Name#N`) extended to all function calls in MIR codegen (previously methods only)
+- Main function exempted from arity-mismatch parameter count check during function generation
+- Removed ~400 lines of redundant MIR special-case handlers for Boolean (getValue, negate, logicalAnd/Or/Xor, equals, toString, constructor), Char (getValue, isAlpha, isDigit, isAlphanumeric, isWhitespace, toUpper, toLower, toString, constructor), and String.format — replaced by shared descriptor registry
+- MIR lowering `lowerFieldAccess` intercepts enum type field access before emitting `ComputeFieldAddress`
+- MIR codegen pre-registration loop and `generateFunction` both detect `main` and override signature
+- `AddressOf`, `TakeReference`, `DereferencePointer`, `InstanceOfCheck` separated from `InlineAssembly` no-op fall-through handler
+- MIR codegen function pre-registration uses arity-suffixed names for overloaded methods instead of skipping duplicates
+- `generateFunction` matches pre-registered functions by arity when base name collides
+- `InstanceOfCheck` codegen upgraded from constant-false stub to static type hierarchy checker
+- `resolveMemoryElementType()` returns actual struct types for user-defined class element types (not opaque pointer) — uses `structTypeCache`/`StructType::getTypeByName` lookup
+- `memoryElementTypes` map cleared per-function to prevent cross-function variable ID collisions
+- MIR codegen memcpy switched from C `memcpy` to LLVM intrinsic `llvm.memcpy.p0.p0.i64` matching AST codegen path
+- `RuntimeInterface` extended with `getStrstrFunction`, `getStrncmpFunction`, `getWriteFunction` — 3 new virtual methods for MIR codegen's string intrinsics and I/O
+- Variadic argument count formula — `(totalRemainingArgs > keywordOnlyCount) ? totalRemainingArgs - keywordOnlyCount : totalRemainingArgs` correctly separates variadic args from keyword-only params when caller provides explicit keyword-only arguments, while treating all remaining args as variadic when no keyword-only args are provided
+- Variadic element type extraction from `ArrayType` in MIR lowering — when parameter type is `Kind::Array` (e.g., `Object args[]`), extracts `arrayType->elementType` instead of using the Array type itself; `Object` element type now correctly resolves to `ptr` instead of defaulting to `i64`
+
+**Fixed**
+- `HashSet` iterator dispatch picking wrong `Iterator` implementation — RAUW post-pass globally replaced unresolved interface methods with first matching implementation regardless of receiver type; replaced with per-call-site concrete dispatch using `concreteClassMap`
+- `makedirs` stack overflow — 2-arg overload `makedirs(String, I64)` missing from IR because free function overloads skipped arity-suffix registration; 1-arg version called itself infinitely
+- `DnsResolver.resolveWith` segfault — static method received null self pointer because MIR lowering included class reference as source operand; hostname shifted to nameserverIp position
+- Intra-class static method calls resolving to bare method name — class-name identifier receiver lacked `resolvedType` inside owning class; type registry fallback added
+- SIGFPE in CMYK float division chain — `resolvedType` null for intermediate results caused float division to emit integer `sdiv`; float type propagation fallback prevents mistyped arithmetic
+- Exception tracebacks missing function names and source locations in MIR-compiled binaries — shadow call stack not emitted in MIR codegen path
+- `HashSet.union`/`intersect`/`difference` hanging — interface method resolution picked wrong concrete implementation causing infinite iteration
+- Enum `.name`/`.value` built-in properties not working in MIR path — `generateComputeFieldAddress` now detects enum-typed sources and generates select-chain for `.name` or passes through discriminant for `.value`
+- `String.format` `{:b}` (binary) format producing truncated output — shared descriptor handles binary, center-align, and boolean conversion correctly
+- Keyword-only parameter default values not passed at call sites — callers now emit declared defaults instead of `null`
+- `DmaDirection.ToDevice` and similar enum variant accesses returning `0` regardless of actual backed value
+- MIR-compiled binaries exiting with garbage codes (e.g. `176`) due to `main` returning `void` instead of `i32 0`
+- Hello-world example returning non-zero exit code (e.g. `176`) when compiled with `--use-mir` — now exits `0`
+- All C-style for-loops (`for I64 i = 0; i < n; i++`) hanging infinitely — compound assignment `i += 1` was stored as literal `1` instead of `i + 1`
+- `Memory<Double>` element type resolution — `Memory.set` infers element type from stored value when `memoryElementTypes` has no entry (fixes `-nan` in spectral-norm)
+- `undefined reference to 'Object.toString'` linker error caused by valid IR in `writeArgsToFd` exposing unresolved method call
+- `binary-trees` segfault — `Arena<Node>` GEP used `i64` (8 bytes) stride instead of `%Node` struct (24 bytes), causing overlapping memory and corrupted null pointers in recursive `check()`
+- `mandelbrot` segfault — `Memory<U8>` GEP used `i64` (8 bytes) stride instead of `i8` (1 byte), writing out of bounds during bitmap construction
+- `memoryElementTypes` cross-function leak — variable ID v3 in function A (e.g. `Memory<I64>`) shadowed v3 in function B (e.g. `Arena<Node>` parameter), causing wrong element type resolution
+- OOP wrapper method segfaults — `inttoptr i64 42 to ptr` then GEP into address 42; replaced with inline intrinsics that operate on primitive values directly
+- I8/U8/Byte arithmetic overflow — `42 * 10 = 420` overflows i8; all integer wrapper intrinsics now use i64 matching AST codegen behavior
+- Float wrapper crashes — `isInfinite`, `isNaN`, `isFinite`, `floor`, `ceil`, `round`, `sqrt`, `power` were unhandled and fell through to broken compiled method path
+- Char wrapper crashes — `isAlpha`, `isDigit` etc. received pointer-typed self value; added `PtrToInt` conversion in `loadCharSelf`
+- Global mutable variables always reading zero — `getGlobalVariable()` with `AllowInternal=false` (default) couldn't find `InternalLinkage` globals; fixed with `AllowInternal=true`
+- `test-language-void` abort — global `callCount` variable not generated or referenced in MIR path; fixed by adding full global variable support
+- `stress-exceptions` abort — try/catch blocks had no exception routing; implemented `InvokeFunction`/`LandingPad` code generation
+- `__uranite_personality_v0` linker errors — `Function::Create` auto-suffixed duplicates (`.126`, `.127`); fixed to reuse existing declaration via `getFunction`
+- `__unnamed_1` linker errors in `writeArgsToFd`/`writeI64ArgsToFd` — `is None` checks emitted as `NoOperation` which fell through to `InvokeFunction` handler; fixed by separating `NoOperation` from `InvokeFunction` case group and mapping `KeywordIs` to `CompareEqual`
+- `fasta` FPE — `Fasta` class had no explicit constructor but had field defaults (`Int IM = 139968`); malloc'd memory stayed zero-initialized, causing division by zero on `% self.IM`
+- `stress-collections` and `k-nucleotide` segfault — `HashMap.grow` stored field addresses (GEP pointers) into local variables instead of loading field values; `oldCapacity` contained a heap address instead of `16`, causing out-of-bounds iteration during rehash
+- `String.format` printing raw pointer addresses for String arguments — internal snprintf rewrite used `%ld` for all non-float types; now correctly maps pointer-typed args to `%s`
+- `Arena.capacity` returning 0 — intrinsic handler missing for `capacity` method; field index 2 never read
+- Constructor overloads silently dropped — pre-registration skipped duplicate function names; only first constructor registered in LLVM IR (e.g., `HashSet(self)` registered but `HashSet(self, Int)` discarded)
+- `InstanceOfCheck` always returning false — `HIRInstanceOf` never lowered to MIR; now uses static type hierarchy resolution
+- `test-collection-hashset` FPE from uninitialized capacity — constructor overload `HashSet(self, Int)` not generated, leaving struct zero-initialized
+- `undefined reference to 'uranite.functions.externs.free'` — extern functions called via qualified module names couldn't link because codegen registered them by C-linkage short name only
+- `addressof` returning 0 for function identifiers — `generateLoadVariable` returned early when `sourceOperands` was empty, never resolving function pointers
+- `self` parameter silently accepted in free functions — semantic analyzer skipped validation when `currentScope->classType` was null, allowing `self` in any function without error
+- `self` parameter silently accepted in static methods — no check existed for `isStatic` methods with `self`; now errors for both class and struct static methods
+- Transitive module symbols leaking into user scope — `accumulatedModuleSymbols_` imported all symbols from all transitively loaded modules into main analyzer; functions like `alloc` callable without explicit import when any module in the dependency chain loaded them
+- `stress-memory.urn` missing `alloc` import — used `alloc` without importing from `uranite.memory.allocator`; also fixed duplicate `readByteAt` import and wrong `writeByteAt` import path
+- `ThreadPoolExecutor` constructor segfault — constructor with optional params rejected by exact arity check; callee received 0 args when 4 were expected
+- `test-kwargs-basic` segfault — MIR path had no kwargs infrastructure; keyword arguments silently dropped during lowering
+- `test-variadic-kwargs-combined` segfault — variadic code path returned after packing variadic args without packing kwargs for keyword-only parameters
+- All tests using `putsln` crashing when called from functions with keyword-only params — `putsln` body calling `writeArgsToFd(fd, args, sep, end, stream, flush)` packed all 5 remaining args into the variadic array instead of forwarding 1 variadic arg + 4 keyword-only params
+- `putsln` printing garbled output for string arguments — `Object args[]` variadic element type resolved to `i64` (default) because `ArrayType` parameter was unhandled in MIR lowering; strings stored as `ptrtoint(ptr to i64)` then loaded back as raw integers
+- Defer statements silently skipped in MIR path — `lowerDefer()` only emitted a no-op `DeferPush` instruction; replaced with actual deferred body accumulation and LIFO emission before returns
+- Interface dispatch always resolving to first concrete class — `concreteClassMap` tracking fails across function boundaries (e.g., `callGreet(Greeter g)` compiled once, can't know concrete type of parameter); replaced with embedded vtable/itable indirect dispatch
+
+**Issues**
+- Type names from `populateSemaTypes` builtin descriptors (e.g., `ArrayList`) resolve without explicit import — type registry lookup in `resolveType` bypasses the user import scope check; only identifier expression resolution is guarded
+
+## v1.0.0-2026.1 2026-07-13
+
+**Added**
+- Full compilation pipeline: Source → Lexer → Parser → Semantic Analyzer → Borrow Checker → AST Optimizer → LLVM Codegen → Linker
+- Indentation-based syntax with INDENT/DEDENT token emission
+- Ownership and move semantics with compile-time borrow checker (use-after-move, double-free detection)
+- Object-oriented type system: classes, interfaces, traits, structs, enums (unit variants, backed values), generics (monomorphized)
+- Single class inheritance, multiple interface implementation, virtual dispatch, `Readonly`/`final` modifiers, abstract methods
+- Nullable types (`?Type`), pattern matching (`match`), range expressions (`..`/`...`), comprehension expressions
+- Unified exception hierarchy: `Throwable`, `Error`, `Exception`, `Warning`, domain-specific errors (`LookupError`, `IndexError`, `KeyError`, `TypeError`, `ValueError`, `StateError`)
+- Shadow call stack with full diagnostic on unhandled exceptions (file:line:column per frame, source context window)
+- Runtime arithmetic safety checks: zero-division guard before every `div`/`mod` operation
+- Inline assembly with full LLVM constraint syntax
+- Multi-architecture inline assembly via arch blocks (x86-64, aarch64) across 46 stdlib modules
+- C FFI through `extern function` declarations
+- `addressof` operator returning raw `I64` address
+- AST optimizer: constant folding, dead code elimination, strength reduction, tail-call optimization
+- HIR pipeline: AST → HIR lowering → HIR validation (60 node types, preserves high-level semantics)
+- MIR pipeline: HIR → MIR CFG lowering → liveness analysis → MIR borrow checker → MIR optimization (5 passes)
+- Experimental MIR → LLVM codegen path (`--use-mir` flag)
+- Six C11 static runtime libraries: exception handling, async event loop, thread spawning, subprocess management, IPC, FFI
+- Pure-Uranite async runtime via raw Linux syscalls (epoll, timerfd, context switching) — zero C runtime dependency
+- Standard library written entirely in Uranite with zero C runtime dependency: `collection/`, `io/`, `threading/`, `net/`, `crypto/`, `regexp/`, `subprocess/`, `process/`, `ffi/`, `fiber/`, `coroutine/`, `convert/`, `datetime/`, `string/`, `logging/`, `testing/`, `os/`, `web/`, `ipc/`, `security/`, `sys/`, `kernel/`, `adelia/`
+- OOP wrapper types for primitives: `I64`, `String`, `Float`, `Boolean`, `Char`, `U8`, `Double`, etc.
+- Five compiler binaries: `uranite`, `uranite-tests`, `uranite-fmt`, `uranite-doc`, `uranite-pkg`
+- 152 GoogleTest unit tests across 12 test suites (100% pass rate)
+- 212 module integration tests covering all major language features (100% pass rate)
+- Cross-compilation target triple support with architecture-specific inline assembly block selection
+- REPL mode (`--repl`)
+- Diagnostic dump modes: `--dump-tokens`, `--dump-ast`, `--dump-hir`, `--dump-mir`, `--emit-llvm`
+
+**Notes**
+- MIR codegen path is experimental
+- Language is research-oriented and not production-ready

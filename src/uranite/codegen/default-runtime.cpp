@@ -230,4 +230,48 @@ namespace uranite::codegen {
 		return spec;
 	}
 
+	RuntimeFunctionSpec DefaultRuntime::getStrstrFunction( llvm::LLVMContext& context ) {
+		RuntimeFunctionSpec spec;
+		spec.functionName = "strstr";
+		spec.functionSignature = llvm::FunctionType::get(
+			llvm::PointerType::getUnqual( context ),
+			{
+				llvm::PointerType::getUnqual( context ),
+				llvm::PointerType::getUnqual( context )
+			},
+			false
+		);
+		return spec;
+	}
+
+	RuntimeFunctionSpec DefaultRuntime::getStrncmpFunction( llvm::LLVMContext& context ) {
+		RuntimeFunctionSpec spec;
+		spec.functionName = "strncmp";
+		spec.functionSignature = llvm::FunctionType::get(
+			llvm::Type::getInt32Ty( context ),
+			{
+				llvm::PointerType::getUnqual( context ),
+				llvm::PointerType::getUnqual( context ),
+				llvm::Type::getInt64Ty( context )
+			},
+			false
+		);
+		return spec;
+	}
+
+	RuntimeFunctionSpec DefaultRuntime::getWriteFunction( llvm::LLVMContext& context ) {
+		RuntimeFunctionSpec spec;
+		spec.functionName = "write";
+		spec.functionSignature = llvm::FunctionType::get(
+			llvm::Type::getInt64Ty( context ),
+			{
+				llvm::Type::getInt32Ty( context ),
+				llvm::PointerType::getUnqual( context ),
+				llvm::Type::getInt64Ty( context )
+			},
+			false
+		);
+		return spec;
+	}
+
 } // namespace uranite::codegen

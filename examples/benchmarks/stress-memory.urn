@@ -1,15 +1,12 @@
-package testing
+package uranite.examples.benchmarks.stress-memory
 
 from uranite.convert.convert import intToString
 from uranite.io.console import putsln
-from uranite.io.syscall import readByteAt
-from uranite.io.syscall import readByteAt
-from uranite.memory.allocator import dealloc
-from uranite.memory.allocator import dealloc
+from uranite.memory.allocator import alloc, dealloc
+from uranite.os.arch.native.memory import readByteAt, writeByteAt
 
 public function main() -> I32:
     putsln( "=== Stress Memory Test: 100K allocations ===" )
-    
     I64 iterations = 100000
     I64 i = 0
     while i < iterations:
@@ -21,10 +18,7 @@ public function main() -> I32:
         I64 v2 = readByteAt( ptr, size - 1 )
         dealloc( ptr )
         i = i + 1
-    
     putsln( "100K alloc/dealloc cycles complete" )
-    
-    # Nested scope allocations
     I64 outer = 0
     while outer < 1000:
         I64 p1 = alloc( 64 )
@@ -36,10 +30,7 @@ public function main() -> I32:
             inner = inner + 1
         dealloc( p1 )
         outer = outer + 1
-    
     putsln( "nested scope allocations complete" )
-    
-    # Large + small interleaved
     i = 0
     while i < 500:
         I64 big = alloc( 4096 )
@@ -49,7 +40,6 @@ public function main() -> I32:
         dealloc( small )
         dealloc( big )
         i = i + 1
-    
     putsln( "interleaved large/small complete" )
     putsln( "=== Stress memory test PASSED ===" )
     return 0

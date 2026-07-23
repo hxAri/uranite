@@ -40,12 +40,9 @@ namespace uranite::ir::mir {
 	static constexpr MIRBlockIdentifier INVALID_BLOCK_IDENTIFIER = std::numeric_limits<MIRBlockIdentifier>::max();
 	static constexpr MIRVariableIdentifier INVALID_VARIABLE_IDENTIFIER = std::numeric_limits<MIRVariableIdentifier>::max();
 	
-	// ===================================================================
-	// Instruction Kind
-	// ===================================================================
-	
 	/** @brief Categorizes each MIR instruction into exactly one operational role. */
 	enum class MIRInstructionKind {
+		
 		// Variable lifecycle
 		AllocateLocal,
 		LoadVariable,
@@ -141,14 +138,14 @@ namespace uranite::ir::mir {
 		
 		// Inline assembly
 		InlineAssembly,
-		
+
+		// Generator
+		Yield,
+
 		// No-op
-		NoOperation,
+		NoOperation
+		
 	};
-	
-	// ===================================================================
-	// Instruction
-	// ===================================================================
 	
 	/** @brief Single MIR instruction within a basic block. */
 	struct MIRInstruction {
@@ -170,6 +167,8 @@ namespace uranite::ir::mir {
 		// Call payloads
 		std::string calledFunctionQualifiedName;
 		int virtualTableEntryIndex = -1;
+		std::vector<std::string> keywordArgumentKeys;
+		std::vector<MIRVariableIdentifier> keywordArgumentValues;
 		
 		// Branch payloads
 		MIRBlockIdentifier trueBranchTarget = INVALID_BLOCK_IDENTIFIER;
@@ -208,10 +207,6 @@ namespace uranite::ir::mir {
 	
 	};
 	
-	// ===================================================================
-	// Basic Block
-	// ===================================================================
-	
 	/** @brief Linear sequence of instructions terminated by a single control flow op. */
 	struct MIRBasicBlock {
 		
@@ -234,10 +229,6 @@ namespace uranite::ir::mir {
 	
 	};
 	
-	// ===================================================================
-	// Variable Descriptor
-	// ===================================================================
-	
 	/** @brief Tracks type, mutability, and ownership state for a single MIR variable. */
 	struct MIRVariableDescriptor {
 		
@@ -251,11 +242,16 @@ namespace uranite::ir::mir {
 		int ownershipScopeDepth = 0;
 	
 	};
-	
-	// ===================================================================
-	// Function Definition
-	// ===================================================================
-	
+
+	struct MIRModuleConstant {
+		enum ConstantKind { Integer, Float, Boolean, String, Null };
+		ConstantKind kind = Integer;
+		int64_t integerValue = 0;
+		double floatValue = 0.0;
+		bool booleanValue = false;
+		std::string stringValue;
+	};
+
 	/** @brief MIR representation of a single function/method with its CFG. */
 	struct MIRFunctionDefinition {
 		
@@ -263,11 +259,21 @@ namespace uranite::ir::mir {
 		std::string mangledFunctionName;
 		std::string ownerClassQualifiedName;
 		semantic::TypeSharedPointer returnTypeDescriptor;
+		lookup::SourceSharedPointer sourceLocation;
 		std::vector<MIRVariableIdentifier> parameterVariableIdentifiers;
 		std::vector<std::shared_ptr<MIRBasicBlock>> controlFlowBlocks;
 		std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor> variableDescriptorTable;
 		MIRVariableIdentifier nextAvailableVariableIdentifier = 0;
 		MIRBlockIdentifier entryBlockIdentifier = 0;
+		int variadicParameterIndex = -1;
+		semantic::TypeSharedPointer variadicElementType;
+		int keywordParameterIndex = -1;
+		semantic::TypeSharedPointer keywordValueType;
+		std::unordered_map<int, MIRModuleConstant> parameterDefaultValues;
+		bool isGeneratorFunction = false;
+		semantic::TypeSharedPointer generatorYieldType;
+		bool isAsyncFunction = false;
+		semantic::TypeSharedPointer asyncInnerReturnType;
 		
 		/** @brief Allocates a new variable and registers it in the descriptor table. */
 		MIRVariableIdentifier allocateVariable(
@@ -296,10 +302,6 @@ namespace uranite::ir::mir {
 	
 	};
 	
-	// ===================================================================
-	// Module Definition
-	// ===================================================================
-	
 	/** @brief Describes the memory layout of a user-defined type. */
 	struct TypeLayoutDescriptor {
 		std::string typeQualifiedName;
@@ -311,14 +313,32 @@ namespace uranite::ir::mir {
 		bool hasVirtualTable = false;
 		int virtualTableEntryCount = 0;
 	};
-	
+
+	struct MIRGlobalVariable {
+		std::string variableName;
+		semantic::TypeSharedPointer variableType;
+		MIRModuleConstant initialValue;
+		bool hasInitializer = false;
+	};
+
+	struct MIRExternFunction {
+		std::string functionName;
+		std::string linkageName;
+		semantic::TypeSharedPointer returnType;
+		std::vector<semantic::TypeSharedPointer> parameterTypes;
+		bool isVariadic = false;
+	};
+
 	/** @brief Top-level MIR container holding all functions and type layouts for a module. */
 	struct MIRModuleDefinition {
-		
+
 		std::string moduleName;
 		std::vector<std::shared_ptr<MIRFunctionDefinition>> functionDefinitions;
 		std::unordered_map<std::string, TypeLayoutDescriptor> typeLayoutTable;
-	
+		std::unordered_map<std::string, MIRModuleConstant> moduleConstants;
+		std::unordered_map<std::string, MIRGlobalVariable> globalVariables;
+		std::vector<MIRExternFunction> externFunctions;
+
 	};
 
 } // namespace uranite::ir::mir

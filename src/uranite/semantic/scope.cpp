@@ -121,7 +121,7 @@ namespace uranite::semantic {
 		}
 		return nullptr;
 	}
-
+	
 	SymbolSharedPointer Scope::lookupLocal( const std::string& name ) const {
 		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::const_iterator symbolIterator = this->symbolsT.find( name );
 		if( symbolIterator != this->symbolsT.end() && symbolIterator->second.empty() == false ) {
@@ -129,7 +129,7 @@ namespace uranite::semantic {
 		}
 		return nullptr;
 	}
-
+	
 	std::vector<SymbolSharedPointer> Scope::lookupAll( const std::string& name ) const {
 		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::const_iterator symbolIterator = this->symbolsT.find( name );
 		if( symbolIterator != this->symbolsT.end() ) {
@@ -140,7 +140,7 @@ namespace uranite::semantic {
 		}
 		return {};
 	}
-
+	
 	std::vector<SymbolSharedPointer> Scope::lookupAllLocal( const std::string& name ) const {
 		std::unordered_map<std::string, std::vector<SymbolSharedPointer>>::const_iterator symbolIterator = this->symbolsT.find( name );
 		if( symbolIterator != this->symbolsT.end() ) {

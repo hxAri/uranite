@@ -25,7 +25,7 @@
 namespace uranite::ir::mir {
 	
 	/** @brief Backward dataflow analysis computing live variable sets per basic block. */
-	class MIRLivenessAnalysis {
+	class MIRLivenessAnalyzer {
 	public:
 		
 		/** @brief Runs liveness analysis on all blocks, populating live-in/live-out sets. */

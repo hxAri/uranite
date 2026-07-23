@@ -2,7 +2,7 @@
 <!--
 @author hxAri (hxari)
 @create 2025-02-24 15:15
-@update 12-07-2026
+@update 2026-07-19 20:03
 @github https://github.com/uranite-lang/uranite
 
 Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>

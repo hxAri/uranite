@@ -150,9 +150,10 @@ function main() {
 	function execute() {
 		compile
 		local builded=$?
+		local command="$basepath/build/uranite $@"
 		if [[ $builded -eq 0 ]]; then
 			listing
-			subshell "$basepath/build/uranite $@"
+			subshell "$command"
 			return $SUBSHELLSTATUS
 		fi
 		return $builded

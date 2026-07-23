@@ -9,10 +9,16 @@
 # ==========================================
 
 program:
-    | [package_decl] [statements] ENDMARKER 
+    | [package_decl] [statements] ENDMARKER
 
 package_decl:
-    | 'package' name=dotted_name NEWLINE 
+    | 'package' package_name NEWLINE
+
+package_name:
+    | package_segment ('.' package_segment)*
+
+package_segment:
+    | (IDENTIFIER | KEYWORD) ('-' (IDENTIFIER | KEYWORD | LIT_INTEGER))*
 
 dotted_name:
     | IDENTIFIER ('.' IDENTIFIER)*
@@ -25,7 +31,7 @@ statement:
     | simple_stmt
 
 simple_stmt:
-    | (import_stmt | extern_stmt | type_alias_stmt | var_decl | assignment | expression_stmt | return_stmt | break_stmt | continue_stmt | delete_stmt | raise_stmt | defer_stmt | yield_stmt | pass_stmt | asm_stmt) NEWLINE
+    | (import_stmt | extern_stmt | type_alias_stmt | const_decl | var_decl | assignment | expression_stmt | return_stmt | break_stmt | continue_stmt | delete_stmt | raise_stmt | defer_stmt | yield_stmt | pass_stmt | asm_stmt) NEWLINE
     | NEWLINE
 
 compound_stmt:
@@ -42,7 +48,6 @@ compound_stmt:
     | match_stmt
     | switch_stmt
     | try_stmt
-    | with_stmt
     | unsafe_block
     | export_block
 
@@ -51,8 +56,11 @@ compound_stmt:
 # ==========================================
 
 import_stmt:
-    | access_modifier? 'import' dotted_name ['as' IDENTIFIER]
-    | access_modifier? 'from' dotted_name 'import' ('*' | '{' ','.import_item+ '}' | import_item)
+    | access_modifier? 'import' import_path ['as' IDENTIFIER]
+    | access_modifier? 'from' import_path 'import' ('*' | '{' NEWLINE? INDENT? import_item (',' NEWLINE? import_item)* NEWLINE? DEDENT? '}' | import_item (',' import_item)*)
+
+import_path:
+    | package_segment ('.' package_segment)*
 
 import_item:
     | IDENTIFIER ['as' IDENTIFIER]
@@ -61,22 +69,31 @@ extern_stmt:
     | 'extern' 'function' IDENTIFIER '(' [params] ')' ['->' type] ';'
 
 function_def:
-    | modifiers 'function' IDENTIFIER [generic_params] '(' [params] ')' ['->' type] ['raises' '|'.type+] [':' block]
+    | modifiers 'function' IDENTIFIER [generic_params] '(' [params] ')' ['->' type] ['raises' '|'.type+] (':' block | ';')
 
 class_def:
-    | modifiers 'class' IDENTIFIER [generic_params] ['extends' type] ['implements' ','.type+] [':' block | ';']
+    | modifiers 'class' IDENTIFIER [generic_params] ['extends' type] ['implements' ','.type+] (':' block | ';')
 
 struct_def:
-    | modifiers 'struct' IDENTIFIER [generic_params] [':' block | ';']
+    | modifiers 'struct' IDENTIFIER [generic_params] (':' block | ';')
 
 enum_def:
-    | modifiers 'enum' IDENTIFIER ['backed' type] ':' INDENT enum_variant+ DEDENT
+    | modifiers 'enum' IDENTIFIER ['backed' type] ':' INDENT enum_body DEDENT
+
+enum_body:
+    | (enum_variant | enum_method | enum_field)+
 
 enum_variant:
     | 'unit' IDENTIFIER [expression]
 
+enum_method:
+    | modifiers ('function' | 'property') IDENTIFIER [generic_params] '(' [params] ')' ['->' type] ['raises' '|'.type+] (':' block | ';')
+
+enum_field:
+    | modifiers type IDENTIFIER ['=' expression] NEWLINE
+
 interface_def:
-    | modifiers 'interface' IDENTIFIER [generic_params] ['extends' ','.type+] [':' block | ';']
+    | modifiers 'interface' IDENTIFIER [generic_params] ['extends' ','.type+] (':' block | ';')
 
 trait_def:
     | modifiers 'trait' IDENTIFIER [generic_params] ':' block
@@ -117,8 +134,11 @@ while_stmt:
     | 'while' expression ':' block
 
 for_stmt:
-    | 'for' var_decl ';' expression ';' expression ':' block
+    | 'for' [type] IDENTIFIER '=' expression ';' expression ';' for_update ':' block
     | 'for' [type] IDENTIFIER 'in' expression ':' block
+
+for_update:
+    | expression (augassign expression | '++' | '--')?
 
 match_stmt:
     | 'match' expression ':' INDENT match_case+ DEDENT
@@ -130,10 +150,10 @@ switch_stmt:
     | 'switch' expression ':' INDENT switch_case+ DEDENT
 
 switch_case:
-    | 'case' pattern ':' block
+    | 'case' (pattern | '*') ':' block
 
 pattern:
-    | IDENTIFIER ['.' IDENTIFIER]
+    | IDENTIFIER ('.' IDENTIFIER)*
     | literal
     | '*'
 
@@ -145,9 +165,6 @@ except_clause:
 
 finally_clause:
     | 'finally' ':' block
-
-with_stmt:
-    | 'with' expression ':' block
 
 unsafe_block:
     | 'unsafe' ':' block
@@ -216,13 +233,13 @@ inversion:
     | comparison
 
 comparison:
-    | range (compare_op range)*
+    | range_expr (compare_op range_expr)*
 
 compare_op:
     | '==' | '!=' | '<=' | '>=' | '<' | '>' | 'is' 'not' | 'is' | 'not' 'in' | 'in' | 'instanceof' | 'subclassof'
 
-range:
-    | bitwise_or (range_op bitwise_or)*
+range_expr:
+    | bitwise_or (range_op bitwise_or)?
 
 range_op:
     | '..' | '...'
@@ -255,7 +272,7 @@ power:
     | primary ['**' factor]
 
 await_expr:
-    | 'await' primary
+    | 'await' expression
 
 primary:
     | primary '.' IDENTIFIER
@@ -269,40 +286,36 @@ atom:
     | IDENTIFIER
     | literal
     | '(' expression ')'
-    | '[' [','.expression*] ']'
-    | '{' [','.dict_item*] '}'
-    | comprehension
+    | '(' ')'
+    | '(' expression ',' [','.expression*] ')'
+    | '[' [expression ('for' [type] IDENTIFIER 'in' expression ['if' expression] | (',' expression)*)] ']'
     | 'self'
     | 'parent'
-    | 'new' type '(' [args] ')'
+    | 'new' type '(' [','.expression*] ')'
     | 'True'
     | 'False'
     | 'None'
 
-dict_item:
-    | expression ':' expression
-
-comprehension:
-    | '[' expression 'for' IDENTIFIER 'in' expression ['if' expression] ']'
-    | '{' expression ':' expression 'for' IDENTIFIER 'in' expression ['if' expression] '}'
-    | '{' expression 'for' IDENTIFIER 'in' expression ['if' expression] '}'
-
 match_expr:
-    | 'match' expression 'in' '{' ','.match_arm+ '}'
+    | 'match' expression 'in' match_arm (',' match_arm)* [',' '*' '=>' expression]
 
 match_arm:
-    | pattern '=>' expression
+    | expression '=>' expression
 
 lambda_expr:
-    | 'lambda' [params] ':' expression
-    | 'fn' '(' [params] ')' ['->' type] ':' block
+    | 'lambda' ','.lambda_param+ ':' expression
+    | 'async'? 'function' '(' [params] ')' ['->' type] ':' (block | expression)
+    | 'async'? 'lambda' ','.lambda_param+ ':' expression
+
+lambda_param:
+    | ['final'] type IDENTIFIER
 
 # ==========================================
 # Inline Assembly
 # ==========================================
 
 asm_stmt:
-    | 'asm' 'volatile' LIT_STRING ':' asm_output ':' asm_input ':' asm_clobber
+    | 'asm' ['volatile'] LIT_STRING ':' asm_output ':' asm_input ':' asm_clobber
 
 asm_output:
     | 'output' '(' ','.asm_operand+ ')' | ε
@@ -353,15 +366,18 @@ block:
     | simple_stmt
 
 params:
-    | ','.param+ [',' '...']
-    | '...'
+    | ','.param+
 
 param:
-    | modifiers? type IDENTIFIER ['=' expression]
+    | 'self'
+    | '&' 'self'
+    | property_modifier? 'mut'? type IDENTIFIER ('[]' | '{}')? ['=' expression]
+
+property_modifier:
+    | ('public' | 'private' | 'protect') ['Readonly']
 
 args:
-    | ','.expression+ [',' '...']
-    | '...'
+    | ','.expression+
 
 generic_params:
     | '<' ','.generic_param+ '>'
@@ -372,11 +388,18 @@ generic_param:
 generic_args:
     | '<' [','.type+] '>'
 
+literal:
+    | LIT_INTEGER
+    | LIT_FLOAT
+    | LIT_STRING
+    | LIT_CHAR
+
 # ==========================================
 # Terminals (Lexer tokens)
 # ==========================================
 
 IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+KEYWORD: (any reserved keyword token)
 LIT_INTEGER: /[0-9]+|0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+/
 LIT_FLOAT: /[0-9]+\.[0-9]+/
 LIT_STRING: /"([^"\\]|\\.)*"/ | /"""(.|\n)*?"""/
@@ -385,3 +408,21 @@ NEWLINE: /\n/
 INDENT: /<INDENT>/
 DEDENT: /<DEDENT>/
 ENDMARKER: /<EOF>/
+
+# ==========================================
+# Lexer notes
+# ==========================================
+
+# Line continuation: backslash immediately before newline (\<newline>) is consumed
+# by the lexer, joining physical lines into one logical line.
+#
+# Implicit continuation: newlines inside matched (), [], {} pairs are suppressed
+# by the lexer (parenDepth tracking).
+#
+# Indentation: the lexer emits INDENT/DEDENT tokens based on leading whitespace
+# changes (consistent spaces per level). Tabs and spaces cannot be mixed.
+#
+# Doccomments: triple-quoted strings (""" or ''') appearing after declarations
+# are captured by the lexer as documentation strings.
+#
+# Comments: single-line comments start with '#' and extend to end of line.

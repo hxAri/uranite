@@ -13,12 +13,12 @@
 
 #include "uranite/diagnostic/diagnostic.hpp"
 #include "uranite/ir/hir.hpp"
-#include "uranite/ir/hir-lowering.hpp"
+#include "uranite/ir/hir/lowering.hpp"
 #include "uranite/ir/mir.hpp"
-#include "uranite/ir/mir-lowering.hpp"
-#include "uranite/ir/mir-analysis.hpp"
-#include "uranite/ir/mir-borrow-checker.hpp"
-#include "uranite/ir/mir-optimizer.hpp"
+#include "uranite/ir/mir/lowering.hpp"
+#include "uranite/ir/mir/analyzer.hpp"
+#include "uranite/ir/mir/borrow.hpp"
+#include "uranite/ir/mir/optimizer.hpp"
 #include "uranite/lexer/lexer.hpp"
 #include "uranite/parser/parser.hpp"
 #include "uranite/semantic/analyzer.hpp"
@@ -73,7 +73,7 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisSimpleFunction ) {
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
 	
-	uranite::ir::mir::MIRLivenessAnalysis livenessAnalysis;
+	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
 	
 	// Entry block should have parameters live at entry (they're used in the add)
@@ -96,7 +96,7 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisDeadVariable ) {
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
 	
-	uranite::ir::mir::MIRLivenessAnalysis livenessAnalysis;
+	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
 	
 	// The unused variable should NOT be in liveVariablesAtExit of entry block
@@ -120,7 +120,7 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisIfBranch ) {
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
 	
-	uranite::ir::mir::MIRLivenessAnalysis livenessAnalysis;
+	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
 	
 	// Should have multiple blocks (entry/cond, then, else, merge)
@@ -139,7 +139,7 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisBuildsPredecessorSuccessorEdges ) {
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
 	
-	uranite::ir::mir::MIRLivenessAnalysis livenessAnalysis;
+	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
 	
 	uranite::ir::mir::MIRFunctionDefinition& functionDef = *mirModule->functionDefinitions[0];
@@ -403,7 +403,7 @@ TEST_F( MIRAnalysisTest, FullAnalysisPipelineNoErrors ) {
 	uranite::ir::mir::MIRFunctionDefinition& functionDef = *mirModule->functionDefinitions[0];
 	
 	// 1. Liveness analysis
-	uranite::ir::mir::MIRLivenessAnalysis livenessAnalysis;
+	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	EXPECT_NO_THROW( livenessAnalysis.analyze( functionDef ) );
 	
 	// 2. Borrow checker

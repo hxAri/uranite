@@ -17,7 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package main
+package uranite.examples.benchmarks.k-nucleotide
 
 from uranite.collection.hash-map import HashMap
 from uranite.io.console import puts
