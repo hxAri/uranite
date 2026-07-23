@@ -125,6 +125,11 @@ namespace uranite::semantic {
 		builtinRegistry.populateSemaTypes( this->typeRegistry );
 	}
 	
+	void Analyzer::setUserImportScope( const std::string& sourceFile, const std::unordered_set<std::string>& importedIdentifiers ) {
+		this->userSourceFile_ = sourceFile;
+		this->userImportedIdentifiers_ = importedIdentifiers;
+	}
+
 	void Analyzer::importModuleTypes( const std::unordered_map<std::string, TypeSharedPointer>& types ) {
 		for( const std::pair<const std::string, TypeSharedPointer>& entry : types ) {
 			if( entry.second->kind == Type::Kind::Class ) {
@@ -1529,6 +1534,15 @@ namespace uranite::semantic {
 						this->diagnostic.error( functionMethod.source, selfErrorMessage );
 					}
 				}
+				else {
+					for( ast::nodes::FunctionParameterSharedPointer& parameter : functionMethod.parameters ) {
+						if( parameter->isSelf ) {
+							std::string selfErrorMessage = fmt::format( "static method \"{}\" in class \"{}\" must not have 'self' parameter", functionMethod.name, declaration.name );
+							this->diagnostic.error( parameter->source, selfErrorMessage );
+							break;
+						}
+					}
+				}
 				std::vector<TypeSharedPointer> methodParameterTypes;
 				std::vector<std::string> methodParameterNames;
 				for( ast::nodes::FunctionParameterSharedPointer& parameter : functionMethod.parameters ) {
@@ -2241,9 +2255,24 @@ namespace uranite::semantic {
 		int paramTypeIndex = 0;
 		for( ast::nodes::FunctionParameterSharedPointer& parameter : declaration.parameters ) {
 			if( parameter->isSelf ) {
-				if( this->currentScope->isInsideClass() && this->currentScope->classType ) {
+				bool isInsideTypeContext = this->currentScope->isInsideClass();
+				if( isInsideTypeContext == false ) {
+					ScopeSharedPointer searchScope = this->currentScope->parent();
+					while( searchScope ) {
+						if( searchScope->kind() == Scope::Kind::Class ) {
+							isInsideTypeContext = true;
+							break;
+						}
+						searchScope = searchScope->parent();
+					}
+				}
+				if( isInsideTypeContext && this->currentScope->classType ) {
 					parameterTypes.push_back( this->currentScope->classType );
 					paramTypeIndex++;
+				}
+				else if( isInsideTypeContext == false ) {
+					std::string selfErrorMessage = fmt::format( "parameter 'self' is not allowed in free function \"{}\"; 'self' can only be used in class or struct methods", declaration.name );
+					this->diagnostic.error( parameter->source, selfErrorMessage );
 				}
 				continue;
 			}
@@ -2302,6 +2331,10 @@ namespace uranite::semantic {
 		functionSymbol->isInitialized = true;
 		this->currentScope->define( declaration.name, functionSymbol );
 		this->pushScope( Scope::Kind::Function );
+		bool savedUserCodeStatus = this->isInUserCode_;
+		if( this->userSourceFile_.empty() == false && declaration.source != nullptr ) {
+			this->isInUserCode_ = ( declaration.source->pathname == this->userSourceFile_ || declaration.source->filename == this->userSourceFile_ );
+		}
 		TypeSharedPointer bodyReturnType = returnType;
 		if( declaration.isAsync && returnType->kind == Type::Kind::Future ) {
 			bodyReturnType = std::static_pointer_cast<FutureType>( returnType )->innerType;
@@ -2347,12 +2380,18 @@ namespace uranite::semantic {
 		this->popScope();
 		this->currentReturnType = nullptr;
 		this->isInsideAsyncFunction = savedAsyncStatus;
+		this->isInUserCode_ = savedUserCodeStatus;
 		this->currentExceptionTypes = savedRaisesTypes;
 	}
 	
 	TypeSharedPointer Analyzer::analyzeIdentifierExpression( ast::nodes::IdentifierExpression& expression ) {
 		TypeSharedPointer typeFromRegistry = this->typeRegistry.lookupType( expression.name );
 		if( typeFromRegistry ) {
+			if( this->isInUserCode_ && this->userImportedIdentifiers_.empty() == false && this->userImportedIdentifiers_.count( expression.name ) == 0 ) {
+				std::string importErrorMessage = fmt::format( "\"{}\" is not imported; add 'import' statement to use this type", expression.name );
+				this->diagnostic.error( expression.source, importErrorMessage );
+				return this->typeRegistry.getError();
+			}
 			return typeFromRegistry;
 		}
 		SymbolSharedPointer variableSymbol = this->currentScope->lookup( expression.name );
@@ -2360,6 +2399,13 @@ namespace uranite::semantic {
 			std::string undefinedErrorMessage = fmt::format( "undefined identifier \"{}\"", expression.name );
 			this->diagnostic.error( expression.source, undefinedErrorMessage );
 			return this->typeRegistry.getError();
+		}
+		if( this->isInUserCode_ && this->userImportedIdentifiers_.empty() == false && this->userImportedIdentifiers_.count( expression.name ) == 0 ) {
+			if( variableSymbol->source != nullptr && variableSymbol->source->pathname != this->userSourceFile_ && variableSymbol->source->filename != this->userSourceFile_ ) {
+				std::string importErrorMessage = fmt::format( "\"{}\" is not imported; add 'import' statement to use this identifier", expression.name );
+				this->diagnostic.error( expression.source, importErrorMessage );
+				return this->typeRegistry.getError();
+			}
 		}
 		expression.resolvedSymbol = variableSymbol;
 		if( variableSymbol->ownership->isMoved ) {
@@ -3043,6 +3089,15 @@ namespace uranite::semantic {
 					if( hasSelf == false ) {
 						std::string selfErrorMessage = fmt::format( "non-static method \"{}\" in struct \"{}\" must have 'self' as first parameter, or be declared 'static'", functionMethod.name, declaration.name );
 						this->diagnostic.error( functionMethod.source, selfErrorMessage );
+					}
+				}
+				else {
+					for( ast::nodes::FunctionParameterSharedPointer& parameter : functionMethod.parameters ) {
+						if( parameter->isSelf ) {
+							std::string selfErrorMessage = fmt::format( "static method \"{}\" in struct \"{}\" must not have 'self' parameter", functionMethod.name, declaration.name );
+							this->diagnostic.error( parameter->source, selfErrorMessage );
+							break;
+						}
 					}
 				}
 			}
