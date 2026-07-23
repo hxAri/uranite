@@ -417,16 +417,12 @@ namespace uranite::optimizer {
 		if( statement->kind == ast::Node::Kind::ReturnStatement ) {
 			ast::nodes::ReturnStatement& returns = static_cast<ast::nodes::ReturnStatement&>( *statement );
 			if( returns.value && returns.value->kind == ast::Node::Kind::CallExpression ) {
-				
-				// Mark for tail call optimization - codegen will emit 'tail call'
 				spdlog::debug( "TCO: marked recursive call to '{}' as tail call", functionName );
 			}
 		}
 	}
 	
 	void Optimizer::devirtualize( ast::nodes::Program& program ) {
-		
-		// Build map of sealed classes( classes with no subclasses )
 		std::unordered_map<std::string,bool> classHasSubclass;
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration && declaration->kind == ast::Node::Kind::ClassDeclaration ) {
@@ -434,8 +430,6 @@ namespace uranite::optimizer {
 				classHasSubclass[classDeclaration.name] = false;
 			}
 		}
-		
-		// Mark classes that are subclassed
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr || declaration->kind != ast::Node::Kind::ClassDeclaration ) continue;
 			ast::nodes::ClassDeclaration& classDeclaration = static_cast<ast::nodes::ClassDeclaration&>( *declaration );
@@ -446,13 +440,10 @@ namespace uranite::optimizer {
 				}
 			}
 		}
-		
-		// Sealed classes( no subclasses ) can have their virtual calls devirtualized
 		std::unordered_map<std::string,bool> sealedClasses;
 		for( std::pair<std::string,bool> pair : classHasSubclass ) {
 			sealedClasses[pair.first] = pair.second == false;
 		}
-		
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr || declaration->kind != ast::Node::Kind::FunctionDeclaration ) {
 				continue;
@@ -477,8 +468,6 @@ namespace uranite::optimizer {
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr || declaration->kind != ast::Node::Kind::FunctionDeclaration ) continue;
 			ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *declaration );
-			
-			// Remove dead branches in if statements
 			std::vector<ast::nodes::StatementSharedPointer>::iterator iterator = functionDeclaration.body.begin();
 			while( iterator != functionDeclaration.body.end() ) {
 				if( *iterator && ( *iterator )->kind == ast::Node::Kind::IfStatement ) {
@@ -507,8 +496,6 @@ namespace uranite::optimizer {
 				}
 				++iterator;
 			}
-			
-			// Remove code after return statements
 			bool foundReturn = false;
 			std::vector<ast::nodes::StatementSharedPointer>::iterator removeStart = std::remove_if( 
 				functionDeclaration.body.begin(), 
@@ -554,8 +541,6 @@ namespace uranite::optimizer {
 				}
 			}
 		}
-		
-		// Transitively collect — functions called by called functions
 		bool changed = true;
 		while( changed ) {
 			changed = false;
@@ -632,8 +617,6 @@ namespace uranite::optimizer {
 						}
 					}
 				}
-				
-				// Also fold expressions in return statements
 				if( statement->kind == ast::Node::Kind::ReturnStatement ) {
 					ast::nodes::ReturnStatement& returns = static_cast<ast::nodes::ReturnStatement&>( *statement );
 					if( returns.value ) {
@@ -644,8 +627,6 @@ namespace uranite::optimizer {
 						}
 					}
 				}
-				
-				// Fold expressions in expression statements
 				if( statement->kind == ast::Node::Kind::ExpressionStatement ) {
 					ast::nodes::ExpressionStatement& expressionStatement = static_cast<ast::nodes::ExpressionStatement&>( *statement );
 					if( expressionStatement.expression ) {
@@ -662,16 +643,12 @@ namespace uranite::optimizer {
 			ast::nodes::BinaryExpression& binaryExpression = static_cast<ast::nodes::BinaryExpression&>( *expression );
 			this->foldSubExpressions( binaryExpression.left );
 			this->foldSubExpressions( binaryExpression.right );
-			
-			// Try to fold after children are folded
 			ast::nodes::ExpressionSharedPointer result = this->tryEvaluateConstExpression( expression );
 			if( result ) {
 				expression = result;
 				this->statistic.constantExpressionResionEvaluated++;
 				return;
 			}
-			
-			// Strength reduction: x * 2 -> x << 1, x * 1 -> x, x + 0 -> x
 			if( binaryExpression.operation == token::Type::Star && binaryExpression.right->kind == ast::Node::Kind::IntegerLiteral ) {
 				int64_t value = static_cast<ast::nodes::IntegerLiteralExpression&>( *binaryExpression.right ).value;
 				if( value == 1 ) { expression = binaryExpression.left; return; }
@@ -743,14 +720,10 @@ namespace uranite::optimizer {
 	
 	bool Optimizer::isTailCall( const ast::nodes::StatementSharedPointer& statement, const std::string& functionName ) {
 		if( statement ) {
-			
-			// A return statement with a recursive call is a tail call
 			if( statement->kind == ast::Node::Kind::ReturnStatement ) {
 				ast::nodes::ReturnStatement& returns = static_cast<ast::nodes::ReturnStatement&>( *statement );
 				return returns.value && this->isTailPosition( returns.value, functionName );
 			}
-			
-			// Last statement in if/else branches
 			if( statement->kind == ast::Node::Kind::IfStatement ) {
 				ast::nodes::IfStatement& ifStatement = static_cast<ast::nodes::IfStatement&>( *statement );
 				bool tailInThen = ifStatement.thenBody.empty() == false && this->isTailCall( ifStatement.thenBody.back(), functionName );
@@ -779,8 +752,6 @@ namespace uranite::optimizer {
 			}
 			ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *declaration );
 			if( this->shouldInline( functionDeclaration ) ) {
-				
-				// Mark function for inlining - codegen will use LLVM's inlining attributes
 				this->statistic.inlinedFunctions++;
 				spdlog::debug( "Marked function '{}' as inline candidate", functionDeclaration.name );
 			}
@@ -792,8 +763,6 @@ namespace uranite::optimizer {
 			return;
 		}
 		spdlog::info( "Running optimization passes( level: O{} )", this->level == Level::O1 ? "1" : this->level == Level::O2 ? "2" : this->level == Level::O3 ? "3" : "fast" );
-		
-		// Always run these
 		this->evaluateConstExpressions( program );
 		this->optimizeTailCalls( program );
 		if( this->level >= Level::O2 ) {
@@ -826,13 +795,9 @@ namespace uranite::optimizer {
 	}
 	
 	bool Optimizer::shouldInline( const ast::nodes::FunctionDeclaration& declaration ) {
-		
-		// Small functions( < 5 statements ) are inline candidates
 		if( declaration.body.size() <= 4 && declaration.isVirtual == false ) {
 			return true;
 		}
-		
-		// Single-expression functions
 		if( declaration.body.size() == 1 && 
 			declaration.body[0]->kind == ast::Node::Kind::ReturnStatement ) {
 			return true;
@@ -846,8 +811,6 @@ namespace uranite::optimizer {
 		}
 		if( expression->kind == ast::Node::Kind::BinaryExpression ) {
 			ast::nodes::BinaryExpression& binaryExpression = static_cast<ast::nodes::BinaryExpression&>( *expression );
-			
-			// Integer constant folding
 			if( binaryExpression.left->kind == ast::Node::Kind::IntegerLiteral &&
 				binaryExpression.right->kind == ast::Node::Kind::IntegerLiteral ) {
 				int64_t integerLiteralExpressionLeft = static_cast<ast::nodes::IntegerLiteralExpression&>( *binaryExpression.left ).value;
@@ -859,7 +822,7 @@ namespace uranite::optimizer {
 					case token::Type::Star: result = integerLiteralExpressionLeft * integerLiteralExpressionRight; break;
 					case token::Type::Slash:
 						if( integerLiteralExpressionRight == 0 ) {
-							return nullptr; // division by zero
+							return nullptr;
 						}
 						result = integerLiteralExpressionLeft / integerLiteralExpressionRight;
 						break;
@@ -890,8 +853,6 @@ namespace uranite::optimizer {
 				}
 				return std::make_shared<ast::nodes::IntegerLiteralExpression>( result, std::to_string( result ), binaryExpression.source );
 			}
-			
-			// Float constant folding
 			if( binaryExpression.left->kind == ast::Node::Kind::FloatLiteral &&
 				binaryExpression.right->kind == ast::Node::Kind::FloatLiteral ) {
 				double floatLiteralExpressionLeft = static_cast<ast::nodes::FloatLiteralExpression&>( *binaryExpression.left ).value;
@@ -911,8 +872,6 @@ namespace uranite::optimizer {
 				}
 				return std::make_shared<ast::nodes::FloatLiteralExpression>( std::to_string( result ),binaryExpression.source,result );
 			}
-			
-			// Boolean constant folding
 			if( binaryExpression.left->kind == ast::Node::Kind::BooleanLiteral &&
 				binaryExpression.right->kind == ast::Node::Kind::BooleanLiteral ) {
 				bool booleanLiteralExpressionLeft = static_cast<ast::nodes::BoolLiteralExpression&>( *binaryExpression.left ).value;
@@ -931,8 +890,6 @@ namespace uranite::optimizer {
 				}
 				return std::make_shared<ast::nodes::BoolLiteralExpression>( result, binaryExpression.source );
 			}
-			
-			// Comparison constant folding( int )
 			if( binaryExpression.left->kind == ast::Node::Kind::IntegerLiteral &&
 				binaryExpression.right->kind == ast::Node::Kind::IntegerLiteral ) {
 				int64_t l = static_cast<ast::nodes::IntegerLiteralExpression&>( *binaryExpression.left ).value;
