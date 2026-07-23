@@ -135,14 +135,12 @@ namespace uranite::ir::mir {
 				this->structTypeCache[typeName] = structType;
 			}
 		}
-		// Track which classes have vtable pointers and generate itable globals
 		for( const std::pair<const std::string, TypeLayoutDescriptor>& typeEntry : mirModule.typeLayoutTable ) {
 			if( typeEntry.second.hasVirtualTable ) {
 				this->classesWithVtable.insert( typeEntry.first );
 				this->classesWithVtable.insert( typeEntry.second.typeQualifiedName );
 			}
 		}
-		// Collect interface method orders from semantic types
 		for( const std::pair<const std::string, semantic::TypeSharedPointer>& entry : this->semanticAnalyzer.types().getUserTypes() ) {
 			if( entry.second != nullptr && entry.second->kind == semantic::Type::Kind::Interface ) {
 				semantic::InterfaceType* interfaceType = static_cast<semantic::InterfaceType*>( entry.second.get() );
@@ -162,7 +160,6 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-
 		for( const std::pair<const std::string, MIRGlobalVariable>& globalEntry : mirModule.globalVariables ) {
 			const MIRGlobalVariable& mirGlobal = globalEntry.second;
 			llvm::Type* globalType = this->toLLVMType( mirGlobal.variableType );
@@ -219,7 +216,6 @@ namespace uranite::ir::mir {
 				this->externDeclaredNames.insert( externFunc.functionName );
 			}
 		}
-
 		for( std::shared_ptr<MIRFunctionDefinition>& functionDefinition : mirModule.functionDefinitions ) {
 			if( functionDefinition == nullptr ) {
 				continue;
@@ -316,7 +312,6 @@ namespace uranite::ir::mir {
 			stubBuilder.CreateRet( toStringFunction->getArg( 0 ) );
 			this->functionResolutionMap["uranite.builtin.Object.toString"] = toStringFunction;
 		}
-		// Generate interface tables (itables) for classes implementing interfaces
 		for( const std::pair<const std::string, semantic::TypeSharedPointer>& entry : this->semanticAnalyzer.types().getUserTypes() ) {
 			if( entry.second == nullptr || entry.second->kind != semantic::Type::Kind::Class ) {
 				continue;
@@ -378,7 +373,6 @@ namespace uranite::ir::mir {
 				this->interfaceTableMap[className] = itableGlobal;
 			}
 		}
-
 		for( std::shared_ptr<MIRFunctionDefinition>& functionDefinition : mirModule.functionDefinitions ) {
 			if( functionDefinition != nullptr && functionDefinition->isAsyncFunction ) {
 				this->programHasAsyncFunctions = true;
@@ -390,8 +384,6 @@ namespace uranite::ir::mir {
 				this->generateFunction( *functionDefinition );
 			}
 		}
-		
-		// Remove dead basic blocks (no predecessors and not entry)
 		for( llvm::Function& function : *this->llvmModule ) {
 			if( function.isDeclaration() ) {
 				continue;
@@ -535,7 +527,6 @@ namespace uranite::ir::mir {
 				deadFunction->eraseFromParent();
 			}
 		}
-		
 		size_t functionCount = 0;
 		for( llvm::Function& function : *this->llvmModule ) {
 			functionCount++;
@@ -583,10 +574,7 @@ namespace uranite::ir::mir {
 			this->llvmModule->getTargetTriple(), targetError
 		);
 		if( target == nullptr ) {
-			this->diagnosticEngine.error(
-				nullptr,
-				fmt::format( "MIR codegen: target lookup failed: {}", targetError )
-			);
+			this->diagnosticEngine.error( nullptr, fmt::format( "MIR codegen: target lookup failed: {}", targetError ) );
 			return false;
 		}
 		llvm::TargetOptions targetOptions;
@@ -625,8 +613,7 @@ namespace uranite::ir::mir {
 				this->externDeclaredNames.count( llvmFunctionName ) > 0 ) {
 				return;
 			}
-			bool isMainFunc = ( llvmFunctionName == "main" &&
-				functionDefinition.ownerClassQualifiedName.empty() );
+			bool isMainFunc = ( llvmFunctionName == "main" && functionDefinition.ownerClassQualifiedName.empty() );
 			if( llvmFunction != nullptr && isMainFunc == false &&
 				llvmFunction->arg_size() != functionDefinition.parameterVariableIdentifiers.size() ) {
 				std::string aritySuffix = fmt::format( "{}#{}", llvmFunctionName,
@@ -647,8 +634,7 @@ namespace uranite::ir::mir {
 		this->blockMap.clear();
 		this->memoryElementTypes.clear();
 		this->currentMIRFunction = &functionDefinition;
-		bool isMainFunction = ( llvmFunctionName == "main" &&
-			functionDefinition.ownerClassQualifiedName.empty() );
+		bool isMainFunction = ( llvmFunctionName == "main" && functionDefinition.ownerClassQualifiedName.empty() );
 		if( llvmFunction == nullptr ) {
 			semantic::TypeSharedPointer returnTypeDesc = functionDefinition.returnTypeDescriptor != nullptr
 				? functionDefinition.returnTypeDescriptor
@@ -829,7 +815,6 @@ namespace uranite::ir::mir {
 			}
 			this->irBuilder.CreateCall( schedulerInitFunc );
 		}
-
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock != nullptr ) {
 				this->generateBasicBlock( *basicBlock, functionDefinition );
@@ -850,10 +835,7 @@ namespace uranite::ir::mir {
 		}
 	}
 	
-	void MIRCodegen::generateBasicBlock(
-		MIRBasicBlock& basicBlock,
-		MIRFunctionDefinition& functionDefinition
-	) {
+	void MIRCodegen::generateBasicBlock( MIRBasicBlock& basicBlock, MIRFunctionDefinition& functionDefinition ) {
 		llvm::BasicBlock* llvmBlock = this->blockMap[basicBlock.blockIdentifier];
 		if( llvmBlock == nullptr ) {
 			return;
@@ -867,10 +849,7 @@ namespace uranite::ir::mir {
 		}
 	}
 	
-	void MIRCodegen::generateInstruction(
-		const MIRInstruction& instruction,
-		MIRFunctionDefinition& functionDefinition
-	) {
+	void MIRCodegen::generateInstruction( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition ) {
 		switch( instruction.instructionKind ) {
 			case MIRInstructionKind::AllocateLocal:
 				this->generateAllocateLocal( instruction, functionDefinition );
@@ -1330,10 +1309,7 @@ namespace uranite::ir::mir {
 		}
 	}
 	
-	void MIRCodegen::generateAllocateLocal(
-		const MIRInstruction& instruction,
-		MIRFunctionDefinition& functionDefinition
-	) {
+	void MIRCodegen::generateAllocateLocal( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition ) {
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ) {
 			return;
 		}
@@ -1630,7 +1606,7 @@ namespace uranite::ir::mir {
 				this->concreteClassMap[instruction.sourceOperands[0]];
 		}
 	}
-
+	
 	void MIRCodegen::generateCopyValue( const MIRInstruction& instruction ) {
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ||
 			instruction.sourceOperands.empty() ) {
@@ -1953,7 +1929,6 @@ namespace uranite::ir::mir {
 			}
 			mayBeStringComparison = ( stringLikeCount >= 1 ) && ( hasSmallConstant == false );
 		}
-
 		llvm::Value* result = nullptr;
 		bool isFloat = leftOperand->getType()->isFloatingPointTy();
 		switch( instruction.instructionKind ) {
@@ -2284,10 +2259,7 @@ namespace uranite::ir::mir {
 		}
 	}
 	
-	void MIRCodegen::generateCallFunction(
-		const MIRInstruction& instruction,
-		MIRFunctionDefinition& functionDefinition
-	) {
+	void MIRCodegen::generateCallFunction( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition ) {
 		std::string calledName = instruction.calledFunctionQualifiedName;
 		std::string shortCalledName = calledName;
 		std::string bareMethodName = calledName;
@@ -2544,6 +2516,7 @@ namespace uranite::ir::mir {
 			}
 			return;
 		}
+		
 		// Memory<T> intrinsic method calls
 		if( shortCalledName == "Memory.get" && instruction.sourceOperands.size() >= 2 ) {
 			llvm::Value* selfPointer = this->loadVariableValue( instruction.sourceOperands[0] );
@@ -2776,8 +2749,6 @@ namespace uranite::ir::mir {
 		if( shortCalledName == "Arena.Arena" ) {
 			return;
 		}
-		
-		// Universal methods without class prefix (from imported generic module code)
 		if( isBareOrObjectCall && bareMethodName == "hashCode" && instruction.sourceOperands.empty() == false ) {
 			llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
 			if( selfValue != nullptr ) {
@@ -2886,11 +2857,9 @@ namespace uranite::ir::mir {
 			if( dotPosition != std::string::npos ) {
 				std::string wrapperName = shortCalledName.substr( 0, dotPosition );
 				std::string methodName = shortCalledName.substr( dotPosition + 1 );
-
 				if( this->tryBuiltinDescriptor( wrapperName, methodName, instruction, functionDefinition ) ) {
 					return;
 				}
-
 				bool isIntegerWrapper = integerWrapperBitWidths.count( wrapperName ) > 0;
 				bool isFloatWrapper = floatWrapperNames.count( wrapperName ) > 0;
 				bool isUnsigned = unsignedWrapperNames.count( wrapperName ) > 0;
@@ -3982,7 +3951,6 @@ namespace uranite::ir::mir {
 					}
 				}
 			}
-			// Vtable-based interface dispatch when concrete class is unknown
 			if( callee == nullptr && instruction.sourceOperands.empty() == false ) {
 				std::vector<std::string> interfaceLookupKeys = { interfaceQualified, interfaceShortName };
 				for( const std::string& ifaceLookupKey : interfaceLookupKeys ) {
@@ -4005,14 +3973,12 @@ namespace uranite::ir::mir {
 					if( receiverPtr == nullptr || receiverPtr->getType()->isPointerTy() == false ) {
 						break;
 					}
-					// Load vtable pointer from field 0
 					llvm::Type* vtablePtrType = llvm::PointerType::getUnqual( this->llvmContext );
 					std::vector<llvm::Type*> vtableWrapperFields = { vtablePtrType };
 					llvm::Value* vtableSlotPtr = this->irBuilder.CreateStructGEP(
 						llvm::StructType::get( this->llvmContext, vtableWrapperFields ), receiverPtr, 0, "vtable.slot.ptr"
 					);
 					llvm::Value* vtablePtr = this->irBuilder.CreateLoad( vtablePtrType, vtableSlotPtr, "vtable.ptr" );
-					// Index into vtable at method slot
 					llvm::FunctionType* voidFuncType = llvm::FunctionType::get( llvm::Type::getVoidTy( this->llvmContext ), false );
 					llvm::PointerType* funcPtrType = llvm::PointerType::getUnqual( voidFuncType );
 					llvm::Value* funcSlotPtr = this->irBuilder.CreateGEP(
@@ -4021,7 +3987,6 @@ namespace uranite::ir::mir {
 						"vfunc.slot.ptr"
 					);
 					llvm::Value* funcPtr = this->irBuilder.CreateLoad( funcPtrType, funcSlotPtr, "vfunc.ptr" );
-					// Build argument list (receiver + rest)
 					std::vector<llvm::Value*> dispatchArgs;
 					dispatchArgs.push_back( receiverPtr );
 					for( size_t argIdx = 1; argIdx < instruction.sourceOperands.size(); argIdx++ ) {
@@ -4030,7 +3995,6 @@ namespace uranite::ir::mir {
 							dispatchArgs.push_back( argVal );
 						}
 					}
-					// Build function type for indirect call
 					std::vector<llvm::Type*> argTypes;
 					for( llvm::Value* arg : dispatchArgs ) {
 						argTypes.push_back( arg->getType() );
@@ -4056,7 +4020,6 @@ namespace uranite::ir::mir {
 					return;
 				}
 			}
-
 			if( callee == nullptr )
 			for( const std::pair<const std::string, llvm::Function*>& entry : this->functionResolutionMap ) {
 				size_t entryLastDot = entry.first.rfind( '.' );
@@ -4494,8 +4457,6 @@ namespace uranite::ir::mir {
 				this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, 0 ), posFieldPtr );
 				arguments.push_back( argsAlloca );
 			}
-			
-			// Keyword-only arguments after the variadic struct
 			size_t kwArgStart = variadicArgStart + variadicArgCount;
 			for( unsigned kwIdx = 0; kwIdx < keywordOnlyCount; kwIdx++ ) {
 				unsigned paramIdx = static_cast<unsigned>( calleeVariadicIndex ) + 1 + kwIdx;
@@ -4845,7 +4806,7 @@ namespace uranite::ir::mir {
 			}
 		}
 	}
-
+	
 	void MIRCodegen::generateReturnValue( const MIRInstruction& instruction ) {
 		llvm::BasicBlock* insertBlock = this->irBuilder.GetInsertBlock();
 		if( insertBlock == nullptr ) {
@@ -5311,7 +5272,7 @@ namespace uranite::ir::mir {
 			this->setVariableValue( instruction.destinationVariable, basePointer );
 		}
 	}
-
+	
 	void MIRCodegen::generateComputeIndexAddress( const MIRInstruction& instruction ) {
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ||
 			instruction.sourceOperands.size() < 2 ) {
@@ -5421,7 +5382,7 @@ namespace uranite::ir::mir {
 				shortTypeName = typeName.substr( lastDot + 1 );
 			}
 		}
-
+		
 		// Memory<T> is a compiler intrinsic — raw calloc'd array, not a struct
 		if( shortTypeName == "Memory" ) {
 			llvm::Type* elementType = this->resolveMemoryElementType( instruction.operandType );
@@ -5559,7 +5520,6 @@ namespace uranite::ir::mir {
 			);
 			this->setVariableValue( instruction.destinationVariable, typedPointer );
 			this->concreteClassMap[instruction.destinationVariable] = typeName;
-			// Store vtable pointer at field 0 for classes implementing interfaces
 			if( this->classesWithVtable.count( typeName ) > 0 || this->classesWithVtable.count( shortTypeName ) > 0 ) {
 				std::string itableKey = typeName;
 				if( this->interfaceTableMap.count( itableKey ) == 0 ) {
@@ -6227,7 +6187,7 @@ namespace uranite::ir::mir {
 		hashBuilder.CreateRet( resultPhi );
 		return function;
 	}
-
+	
 	llvm::Function* MIRCodegen::getOrCreateIntToBinStr() {
 		llvm::Function* function = this->llvmModule->getFunction( "__uranite_int_to_bin" );
 		if( function != nullptr ) {
@@ -6303,7 +6263,7 @@ namespace uranite::ir::mir {
 		binBuilder.CreateRet( resultBuf );
 		return function;
 	}
-
+	
 	llvm::Function* MIRCodegen::getOrCreateStrCenter() {
 		llvm::Function* function = this->llvmModule->getFunction( "__uranite_str_center" );
 		if( function != nullptr ) {
@@ -6374,7 +6334,7 @@ namespace uranite::ir::mir {
 		centerBuilder.CreateRet( resultBuf );
 		return function;
 	}
-
+	
 	llvm::Function* MIRCodegen::getOrCreateStrcpy() {
 		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrcpyFunction( this->llvmContext );
 		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
@@ -6491,7 +6451,7 @@ namespace uranite::ir::mir {
 		}
 		return function;
 	}
-
+	
 	llvm::Function* MIRCodegen::getOrCreatePopFrame() {
 		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getPopFrameFunction( this->llvmContext );
 		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
@@ -6502,7 +6462,7 @@ namespace uranite::ir::mir {
 		}
 		return function;
 	}
-
+	
 	void MIRCodegen::emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName ) {
 		llvm::Function* pushFrame = this->getOrCreatePushFrame();
 		llvm::Value* fileStr = this->irBuilder.CreateGlobalStringPtr( file, "frame.file" );
@@ -6511,12 +6471,12 @@ namespace uranite::ir::mir {
 		llvm::Value* funcStr = this->irBuilder.CreateGlobalStringPtr( functionName, "frame.func" );
 		this->irBuilder.CreateCall( pushFrame, { fileStr, lineVal, colVal, funcStr } );
 	}
-
+	
 	void MIRCodegen::emitPopFrame() {
 		llvm::Function* popFrame = this->getOrCreatePopFrame();
 		this->irBuilder.CreateCall( popFrame, {} );
 	}
-
+	
 	llvm::Value* MIRCodegen::emitCallOrInvoke( const MIRInstruction& instruction, llvm::Function* callee, std::vector<llvm::Value*>& arguments ) {
 		if( instruction.instructionKind == MIRInstructionKind::InvokeFunction &&
 			this->blockMap.count( instruction.trueBranchTarget ) > 0 &&
@@ -6545,7 +6505,7 @@ namespace uranite::ir::mir {
 		}
 		return this->irBuilder.CreateCall( callee, arguments );
 	}
-
+	
 	llvm::Function* MIRCodegen::getOrCreateExtern( const std::string& name, llvm::Type* returnType, std::vector<llvm::Type*> paramTypes ) {
 		llvm::Function* function = this->llvmModule->getFunction( name );
 		if( function == nullptr ) {
@@ -6556,17 +6516,11 @@ namespace uranite::ir::mir {
 		}
 		return function;
 	}
-
-	bool MIRCodegen::tryBuiltinDescriptor(
-		const std::string& typeName,
-		const std::string& methodName,
-		const MIRInstruction& instruction,
-		MIRFunctionDefinition& functionDefinition
-	) {
+	
+	bool MIRCodegen::tryBuiltinDescriptor( const std::string& typeName, const std::string& methodName, const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition ) {
 		if( instruction.sourceOperands.empty() ) {
 			return false;
 		}
-
 		MIRVariableIdentifier receiverIdentifier = instruction.sourceOperands[0];
 		if( this->currentMIRFunction != nullptr ) {
 			std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor>::iterator descriptorIterator =
@@ -6583,20 +6537,16 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-
 		const descriptor::BuiltinMethodDescriptor* methodDescriptor =
 			this->builtinRegistry.lookupMethod( typeName, methodName );
 		if( methodDescriptor == nullptr ) {
 			return false;
 		}
-
 		llvm::Type* expectedSelfType = this->builtinRegistry.getLLVMType( typeName, this->llvmContext );
-
 		llvm::Value* selfValue = this->loadVariableValue( instruction.sourceOperands[0] );
 		if( selfValue == nullptr ) {
 			return false;
 		}
-
 		if( expectedSelfType != nullptr && selfValue->getType() != expectedSelfType ) {
 			if( expectedSelfType->isIntegerTy() && selfValue->getType()->isPointerTy() ) {
 				selfValue = this->irBuilder.CreatePtrToInt( selfValue, expectedSelfType, "self.ptoi" );
@@ -6611,7 +6561,6 @@ namespace uranite::ir::mir {
 				selfValue = this->irBuilder.CreateIntToPtr( selfValue, expectedSelfType, "self.itop" );
 			}
 		}
-
 		std::vector<llvm::Value*> arguments;
 		for( size_t operandIndex = 1; operandIndex < instruction.sourceOperands.size(); operandIndex++ ) {
 			llvm::Value* argumentValue = this->loadVariableValue( instruction.sourceOperands[operandIndex] );
@@ -6619,7 +6568,6 @@ namespace uranite::ir::mir {
 				arguments.push_back( argumentValue );
 			}
 		}
-
 		std::vector<std::pair<std::string, llvm::Value*>> keywordArguments;
 		for( size_t keywordIndex = 0; keywordIndex < instruction.keywordArgumentKeys.size(); keywordIndex++ ) {
 			llvm::Value* keywordValue = this->loadVariableValue( instruction.keywordArgumentValues[keywordIndex] );
@@ -6627,11 +6575,9 @@ namespace uranite::ir::mir {
 				keywordArguments.push_back( { instruction.keywordArgumentKeys[keywordIndex], keywordValue } );
 			}
 		}
-
 		llvm::Value* result = methodDescriptor->irGenerator(
 			this->irBuilder, this->llvmContext, selfValue, arguments, keywordArguments
 		);
-
 		if( result != nullptr && instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 			llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
 			if( result->getType()->isIntegerTy() && result->getType() != i64Type &&
@@ -6650,17 +6596,15 @@ namespace uranite::ir::mir {
 			}
 			this->setVariableValue( instruction.destinationVariable, result );
 		}
-
 		return true;
 	}
-
+	
 	void MIRCodegen::generateYield( const MIRInstruction& instruction ) {
 		if( this->currentGeneratorContext == nullptr ) {
 			return;
 		}
 		GeneratorContext& genCtx = *this->currentGeneratorContext;
 		llvm::LLVMContext& ctx = this->llvmContext;
-
 		llvm::Value* yieldedValue = nullptr;
 		if( instruction.sourceOperands.empty() == false ) {
 			yieldedValue = this->loadVariableValue( instruction.sourceOperands[0] );
@@ -6684,25 +6628,19 @@ namespace uranite::ir::mir {
 			genCtx.stateVar
 		);
 		this->irBuilder.CreateBr( genCtx.exitBlock );
-
 		llvm::Function* currentFunction = this->irBuilder.GetInsertBlock()->getParent();
 		llvm::BasicBlock* resumeBlock = llvm::BasicBlock::Create(
 			ctx, fmt::format( "resume.{}", stateId ), currentFunction
 		);
 		this->irBuilder.SetInsertPoint( resumeBlock );
 	}
-
-	void MIRCodegen::generateGeneratorFunction(
-		MIRFunctionDefinition& functionDefinition,
-		const std::string& llvmFunctionName,
-		llvm::Function* llvmFunction
-	) {
+	
+	void MIRCodegen::generateGeneratorFunction( MIRFunctionDefinition& functionDefinition, const std::string& llvmFunctionName, llvm::Function* llvmFunction ) {
 		llvm::LLVMContext& ctx = this->llvmContext;
 		llvm::Type* i32Type = llvm::Type::getInt32Ty( ctx );
 		llvm::Type* i1Type = llvm::Type::getInt1Ty( ctx );
 		llvm::Type* i64Type = llvm::Type::getInt64Ty( ctx );
 		llvm::Type* ptrType = llvm::PointerType::getUnqual( ctx );
-
 		llvm::Type* yieldType = i64Type;
 		if( functionDefinition.generatorYieldType != nullptr ) {
 			yieldType = this->toLLVMType( functionDefinition.generatorYieldType );
@@ -6710,7 +6648,6 @@ namespace uranite::ir::mir {
 		if( yieldType->isVoidTy() ) {
 			yieldType = i64Type;
 		}
-
 		std::vector<llvm::Type*> paramLLVMTypes;
 		std::vector<std::string> paramNames;
 		std::vector<MIRVariableIdentifier> paramVarIds;
@@ -6731,7 +6668,6 @@ namespace uranite::ir::mir {
 			paramNames.push_back( paramName );
 			paramVarIds.push_back( paramVar );
 		}
-
 		std::vector<llvm::Type*> structFields = { i32Type, yieldType, i1Type };
 		for( llvm::Type* paramType : paramLLVMTypes ) {
 			structFields.push_back( paramType );
@@ -6739,36 +6675,27 @@ namespace uranite::ir::mir {
 		std::string structName = fmt::format( "__gen_{}", llvmFunctionName );
 		llvm::StructType* genStructType = llvm::StructType::create( ctx, structFields, structName );
 		this->structTypeCache[structName] = genStructType;
-
 		std::string nextFuncName = fmt::format( "{}.next", llvmFunctionName );
-		llvm::FunctionType* nextFuncType = llvm::FunctionType::get(
-			llvm::Type::getVoidTy( ctx ), { ptrType }, false
-		);
+		llvm::FunctionType* nextFuncType = llvm::FunctionType::get( llvm::Type::getVoidTy( ctx ), { ptrType }, false );
 		llvm::Function* nextFunction = llvm::Function::Create(
 			nextFuncType, llvm::Function::InternalLinkage,
 			nextFuncName, this->llvmModule.get()
 		);
 		nextFunction->setPersonalityFn( this->getOrCreatePersonality() );
 		this->functionResolutionMap[nextFuncName] = nextFunction;
-
 		std::unordered_map<MIRVariableIdentifier, llvm::Value*> savedVariableMap = this->variableValueMap;
 		std::unordered_map<MIRBlockIdentifier, llvm::BasicBlock*> savedBlockMap = this->blockMap;
 		this->variableValueMap.clear();
 		this->blockMap.clear();
-
 		llvm::BasicBlock* nextEntry = llvm::BasicBlock::Create( ctx, "entry", nextFunction );
 		llvm::BasicBlock* doneBlock = llvm::BasicBlock::Create( ctx, "done", nextFunction );
 		llvm::BasicBlock* exitBlock = llvm::BasicBlock::Create( ctx, "exit", nextFunction );
-
 		this->irBuilder.SetInsertPoint( nextEntry );
-
 		llvm::Argument* genArgument = nextFunction->arg_begin();
 		genArgument->setName( "gen" );
-
 		llvm::Value* statePtr = this->irBuilder.CreateStructGEP( genStructType, genArgument, 0, "state.ptr" );
 		llvm::Value* valuePtr = this->irBuilder.CreateStructGEP( genStructType, genArgument, 1, "value.ptr" );
 		llvm::Value* donePtr = this->irBuilder.CreateStructGEP( genStructType, genArgument, 2, "done.ptr" );
-
 		GeneratorContext genCtx;
 		genCtx.stateVar = this->createEntryBlockAllocation( nextFunction, "state.local", i32Type );
 		genCtx.valueVar = this->createEntryBlockAllocation( nextFunction, "value.local", yieldType );
@@ -6778,11 +6705,9 @@ namespace uranite::ir::mir {
 		genCtx.structPointer = genArgument;
 		genCtx.nextStateId = 1;
 		genCtx.prefix = llvmFunctionName;
-
 		llvm::Value* loadedState = this->irBuilder.CreateLoad( i32Type, statePtr, "state" );
 		this->irBuilder.CreateStore( loadedState, genCtx.stateVar );
 		this->irBuilder.CreateStore( llvm::ConstantInt::getFalse( ctx ), genCtx.doneVar );
-
 		for( size_t paramIndex = 0; paramIndex < paramVarIds.size(); paramIndex++ ) {
 			std::string paramPtrName = fmt::format( "{}.ptr", paramNames[paramIndex] );
 			llvm::Value* paramFieldPtr = this->irBuilder.CreateStructGEP(
@@ -6798,7 +6723,6 @@ namespace uranite::ir::mir {
 			this->variableValueMap[paramVarIds[paramIndex]] = paramAlloca;
 			genCtx.parameterVariables.insert( paramVarIds[paramIndex] );
 		}
-
 		for( std::shared_ptr<MIRBasicBlock>& mirBlock : functionDefinition.controlFlowBlocks ) {
 			if( mirBlock != nullptr ) {
 				llvm::BasicBlock* llvmBlock = llvm::BasicBlock::Create(
@@ -6807,26 +6731,21 @@ namespace uranite::ir::mir {
 				this->blockMap[mirBlock->blockIdentifier] = llvmBlock;
 			}
 		}
-
 		llvm::BasicBlock* bodyStart = this->blockMap[functionDefinition.entryBlockIdentifier];
 		llvm::SwitchInst* dispatchSwitch = this->irBuilder.CreateSwitch( loadedState, doneBlock, 16 );
 		dispatchSwitch->addCase( llvm::ConstantInt::get( llvm::cast<llvm::IntegerType>( i32Type ), 0 ), bodyStart );
 		genCtx.dispatchSwitch = dispatchSwitch;
-
 		this->irBuilder.SetInsertPoint( doneBlock );
 		this->irBuilder.CreateStore( llvm::ConstantInt::getTrue( ctx ), genCtx.doneVar );
 		this->irBuilder.CreateBr( exitBlock );
-
 		GeneratorContext* savedGenCtx = this->currentGeneratorContext;
 		this->currentGeneratorContext = &genCtx;
-
 		this->irBuilder.SetInsertPoint( bodyStart );
 		for( std::shared_ptr<MIRBasicBlock>& mirBlock : functionDefinition.controlFlowBlocks ) {
 			if( mirBlock != nullptr ) {
 				this->generateBasicBlock( *mirBlock, functionDefinition );
 			}
 		}
-
 		for( llvm::BasicBlock& llvmBlock : *nextFunction ) {
 			if( llvmBlock.getTerminator() == nullptr &&
 				&llvmBlock != exitBlock ) {
@@ -6835,7 +6754,6 @@ namespace uranite::ir::mir {
 				this->irBuilder.CreateBr( exitBlock );
 			}
 		}
-
 		std::vector<std::pair<MIRVariableIdentifier, llvm::AllocaInst*>> localAllocas;
 		for( std::pair<const MIRVariableIdentifier, llvm::Value*>& entry : this->variableValueMap ) {
 			if( genCtx.parameterVariables.count( entry.first ) > 0 ) {
@@ -6847,7 +6765,6 @@ namespace uranite::ir::mir {
 				localAllocas.push_back( { entry.first, alloca } );
 			}
 		}
-
 		for( std::pair<MIRVariableIdentifier, llvm::AllocaInst*>& localEntry : localAllocas ) {
 			std::string globalName = fmt::format( "{}.local.v{}", genCtx.prefix, localEntry.first );
 			llvm::AllocaInst* alloca = localEntry.second;
@@ -6859,13 +6776,11 @@ namespace uranite::ir::mir {
 			);
 			genCtx.persistedLocals[globalName] = globalVar;
 		}
-
 		for( llvm::BasicBlock& llvmBlock : *nextFunction ) {
 			llvm::StringRef blockName = llvmBlock.getName();
 			if( blockName.starts_with( "resume." ) ) {
 				std::string stateIdStr = blockName.substr( 7 ).str();
 				int stateId = std::stoi( stateIdStr );
-
 				std::string restoreName = fmt::format( "restore.{}", stateId );
 				llvm::BasicBlock* restoreBlock = llvm::BasicBlock::Create(
 					ctx, restoreName, nextFunction
@@ -6873,7 +6788,6 @@ namespace uranite::ir::mir {
 				dispatchSwitch->addCase(
 					llvm::ConstantInt::get( llvm::cast<llvm::IntegerType>( i32Type ), stateId ), restoreBlock
 				);
-
 				this->irBuilder.SetInsertPoint( restoreBlock );
 				for( std::pair<MIRVariableIdentifier, llvm::AllocaInst*>& localEntry : localAllocas ) {
 					std::string globalName = fmt::format( "{}.local.v{}", genCtx.prefix, localEntry.first );
@@ -6904,7 +6818,6 @@ namespace uranite::ir::mir {
 				this->irBuilder.CreateBr( &llvmBlock );
 			}
 		}
-
 		this->irBuilder.SetInsertPoint( exitBlock );
 		for( std::pair<MIRVariableIdentifier, llvm::AllocaInst*>& localEntry : localAllocas ) {
 			std::string globalName = fmt::format( "{}.local.v{}", genCtx.prefix, localEntry.first );
@@ -6923,15 +6836,11 @@ namespace uranite::ir::mir {
 		llvm::Value* finalDone = this->irBuilder.CreateLoad( i1Type, genCtx.doneVar, "final.done" );
 		this->irBuilder.CreateStore( finalDone, donePtr );
 		this->irBuilder.CreateRetVoid();
-
 		this->currentGeneratorContext = savedGenCtx;
-
 		this->variableValueMap = savedVariableMap;
 		this->blockMap = savedBlockMap;
-
 		llvm::BasicBlock* initEntry = llvm::BasicBlock::Create( ctx, "entry", llvmFunction );
 		this->irBuilder.SetInsertPoint( initEntry );
-
 		llvm::Value* structSize = llvm::ConstantInt::get( i64Type,
 			this->llvmModule->getDataLayout().getTypeAllocSize( genStructType ) );
 		llvm::Value* genPtr = this->irBuilder.CreateCall(
@@ -6939,12 +6848,10 @@ namespace uranite::ir::mir {
 			{ llvm::ConstantInt::get( i64Type, 1 ), structSize },
 			"gen.ptr"
 		);
-
 		llvm::Value* initStatePtr = this->irBuilder.CreateStructGEP( genStructType, genPtr, 0, "init.state" );
 		this->irBuilder.CreateStore( llvm::ConstantInt::get( i32Type, 0 ), initStatePtr );
 		llvm::Value* initDonePtr = this->irBuilder.CreateStructGEP( genStructType, genPtr, 2, "init.done" );
 		this->irBuilder.CreateStore( llvm::ConstantInt::getFalse( ctx ), initDonePtr );
-
 		unsigned argIndex = 0;
 		for( llvm::Argument& arg : llvmFunction->args() ) {
 			if( argIndex < paramNames.size() ) {
@@ -6965,23 +6872,16 @@ namespace uranite::ir::mir {
 			}
 			argIndex++;
 		}
-
 		this->irBuilder.CreateCall( nextFunction, { genPtr } );
 		this->irBuilder.CreateRet( genPtr );
 	}
-
-	void MIRCodegen::generateAsyncFunction(
-		MIRFunctionDefinition& functionDefinition,
-		const std::string& llvmFunctionName,
-		llvm::Function* llvmFunction
-	) {
+	
+	void MIRCodegen::generateAsyncFunction( MIRFunctionDefinition& functionDefinition, const std::string& llvmFunctionName, llvm::Function* llvmFunction ) {
 		std::unordered_map<MIRVariableIdentifier, llvm::Value*> savedVariableValueMap = this->variableValueMap;
 		std::unordered_map<MIRBlockIdentifier, llvm::BasicBlock*> savedBlockMap = this->blockMap;
 		MIRFunctionDefinition* savedMIRFunction = this->currentMIRFunction;
-
 		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
 		llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-
 		std::vector<llvm::Type*> paramLLVMTypes;
 		std::vector<std::string> paramNames;
 		std::vector<MIRVariableIdentifier> paramVarIds;
@@ -7005,7 +6905,6 @@ namespace uranite::ir::mir {
 			paramNames.push_back( paramName );
 			paramVarIds.push_back( paramVar );
 		}
-
 		std::vector<llvm::GlobalVariable*> argGlobals;
 		for( size_t i = 0; i < paramNames.size(); i++ ) {
 			std::string globalName = fmt::format( "{}.arg.{}", llvmFunctionName, paramNames[i] );
@@ -7017,7 +6916,6 @@ namespace uranite::ir::mir {
 			);
 			argGlobals.push_back( globalVar );
 		}
-
 		std::string wrapperName = fmt::format( "{}.async", llvmFunctionName );
 		llvm::FunctionType* wrapperType = llvm::FunctionType::get(
 			llvm::Type::getVoidTy( this->llvmContext ), { ptrType }, false
@@ -7027,11 +6925,9 @@ namespace uranite::ir::mir {
 		);
 		wrapperFunction->setPersonalityFn( this->getOrCreatePersonality() );
 		wrapperFunction->getArg( 0 )->setName( "task" );
-
 		this->variableValueMap.clear();
 		this->blockMap.clear();
 		this->currentMIRFunction = &functionDefinition;
-
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock != nullptr ) {
 				llvm::BasicBlock* llvmBlock = llvm::BasicBlock::Create(
@@ -7040,7 +6936,6 @@ namespace uranite::ir::mir {
 				this->blockMap[basicBlock->blockIdentifier] = llvmBlock;
 			}
 		}
-
 		llvm::BasicBlock* entryBlock = this->blockMap[functionDefinition.entryBlockIdentifier];
 		if( entryBlock == nullptr ) {
 			this->variableValueMap = savedVariableValueMap;
@@ -7049,7 +6944,6 @@ namespace uranite::ir::mir {
 			return;
 		}
 		this->irBuilder.SetInsertPoint( entryBlock );
-
 		for( size_t i = 0; i < paramNames.size(); i++ ) {
 			llvm::Value* loadedValue = this->irBuilder.CreateLoad(
 				paramLLVMTypes[i], argGlobals[i], paramNames[i]
@@ -7060,7 +6954,6 @@ namespace uranite::ir::mir {
 			this->irBuilder.CreateStore( loadedValue, paramAlloca );
 			this->variableValueMap[paramVarIds[i]] = paramAlloca;
 		}
-
 		std::string sourceFile = "unknown";
 		int64_t sourceLine = 0;
 		int64_t sourceColumn = 0;
@@ -7072,11 +6965,9 @@ namespace uranite::ir::mir {
 			}
 		}
 		this->emitPushFrame( sourceFile, sourceLine, sourceColumn, wrapperName );
-
 		llvm::BasicBlock* asyncCatchBlock = llvm::BasicBlock::Create(
 			this->llvmContext, "async.catch", wrapperFunction
 		);
-
 		this->isGeneratingAsyncWrapper = true;
 		this->asyncWrapperCatchBlock = asyncCatchBlock;
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
@@ -7086,7 +6977,6 @@ namespace uranite::ir::mir {
 		}
 		this->asyncWrapperCatchBlock = nullptr;
 		this->isGeneratingAsyncWrapper = false;
-
 		for( llvm::BasicBlock& llvmBlock : *wrapperFunction ) {
 			if( &llvmBlock == asyncCatchBlock ) {
 				continue;
@@ -7114,7 +7004,6 @@ namespace uranite::ir::mir {
 				this->irBuilder.CreateRetVoid();
 			}
 		}
-
 		this->irBuilder.SetInsertPoint( asyncCatchBlock );
 		{
 			llvm::LandingPadInst* landingPad = this->irBuilder.CreateLandingPad(
@@ -7152,23 +7041,18 @@ namespace uranite::ir::mir {
 			this->emitPopFrame();
 			this->irBuilder.CreateRetVoid();
 		}
-
 		this->variableValueMap = savedVariableValueMap;
 		this->blockMap = savedBlockMap;
 		this->currentMIRFunction = savedMIRFunction;
-
 		if( llvmFunction->empty() == false ) {
 			return;
 		}
-
 		this->variableValueMap.clear();
 		this->blockMap.clear();
-
 		llvm::BasicBlock* spawnerEntry = llvm::BasicBlock::Create(
 			this->llvmContext, "entry", llvmFunction
 		);
 		this->irBuilder.SetInsertPoint( spawnerEntry );
-
 		for( size_t i = 0; i < paramVarIds.size(); i++ ) {
 			if( i >= llvmFunction->arg_size() ) {
 				break;
@@ -7181,7 +7065,6 @@ namespace uranite::ir::mir {
 			this->irBuilder.CreateStore( arg, paramAlloca );
 			this->variableValueMap[paramVarIds[i]] = paramAlloca;
 		}
-
 		for( size_t i = 0; i < paramNames.size(); i++ ) {
 			if( i >= llvmFunction->arg_size() ) {
 				break;
@@ -7192,7 +7075,6 @@ namespace uranite::ir::mir {
 			);
 			this->irBuilder.CreateStore( loadedArg, argGlobals[i] );
 		}
-
 		llvm::Function* spawnFunc = this->llvmModule->getFunction( "runtimeSpawn" );
 		if( spawnFunc != nullptr ) {
 			llvm::Value* wrapperPtr = this->irBuilder.CreatePtrToInt( wrapperFunction, i64Type, "wrapper.i64" );
@@ -7223,9 +7105,8 @@ namespace uranite::ir::mir {
 			llvm::CallInst* taskId = this->irBuilder.CreateCall( spawnFunc, { spawnArg0, spawnArg1 }, "taskId" );
 			this->irBuilder.CreateRet( taskId );
 		}
-
 		this->variableValueMap = savedVariableValueMap;
 		this->blockMap = savedBlockMap;
 	}
-
+	
 } // namespace uranite::ir::mir
