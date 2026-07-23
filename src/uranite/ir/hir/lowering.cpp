@@ -79,6 +79,16 @@ namespace uranite::ir::hir {
 					if( hirFunction != nullptr ) {
 						hirModule->functionDefinitions.push_back( std::move( hirFunction ) );
 					}
+					for( const ast::nodes::DeclarationSharedPointer& nestedDeclaration : functionDeclaration.nestedFunctions ) {
+						if( nestedDeclaration != nullptr && nestedDeclaration->kind == ast::Node::Kind::FunctionDeclaration ) {
+							ast::nodes::FunctionDeclaration& nestedFunction =
+								static_cast<ast::nodes::FunctionDeclaration&>( *nestedDeclaration );
+							std::shared_ptr<HIRFunctionDefinition> hirNested = this->lowerFunctionDeclaration( nestedFunction );
+							if( hirNested != nullptr ) {
+								hirModule->functionDefinitions.push_back( std::move( hirNested ) );
+							}
+						}
+					}
 					break;
 				}
 				case ast::Node::Kind::ClassDeclaration: {
@@ -125,7 +135,18 @@ namespace uranite::ir::hir {
 					ast::nodes::ConstantDeclaration& constantDeclaration = static_cast<ast::nodes::ConstantDeclaration&>( *declaration );
 					std::shared_ptr<HIRGlobalVariableDefinition> hirGlobal = this->lowerConstantDeclaration( constantDeclaration );
 					if( hirGlobal != nullptr ) {
-						if( constantDeclaration.isGlobalVariable ) {
+						bool treatAsGlobalVariable = constantDeclaration.isGlobalVariable;
+						if( treatAsGlobalVariable == false && constantDeclaration.initializer != nullptr ) {
+							ast::Node::Kind initializerKind = constantDeclaration.initializer->kind;
+							if( initializerKind != ast::Node::Kind::IntegerLiteral &&
+								initializerKind != ast::Node::Kind::FloatLiteral &&
+								initializerKind != ast::Node::Kind::BooleanLiteral &&
+								initializerKind != ast::Node::Kind::StringLiteral &&
+								initializerKind != ast::Node::Kind::NoneLiteral ) {
+								treatAsGlobalVariable = true;
+							}
+						}
+						if( treatAsGlobalVariable ) {
 							hirModule->globalVariableDefinitions.push_back( std::move( hirGlobal ) );
 						}
 						else {
@@ -214,6 +235,12 @@ namespace uranite::ir::hir {
 			ast::nodes::SimpleTypeNode& baseType =
 				static_cast<ast::nodes::SimpleTypeNode&>( *declaration.baseClassType );
 			hirClass->parentClassQualifiedName = baseType.name;
+			{
+				semantic::TypeSharedPointer parentType = this->semanticAnalyzer.types().lookupType( baseType.name );
+				if( parentType != nullptr && parentType->qualified.empty() == false ) {
+					hirClass->parentClassQualifiedName = parentType->qualified;
+				}
+			}
 		}
 		
 		int fieldIndex = 0;
@@ -230,13 +257,28 @@ namespace uranite::ir::hir {
 		}
 		
 		semantic::TypeSharedPointer classType = this->semanticAnalyzer.types().lookupType( declaration.name );
+		std::string classQualifiedName = ( classType != nullptr && classType->qualified.empty() == false )
+			? classType->qualified : declaration.name;
+		hirClass->classQualifiedName = classQualifiedName;
+
+		for( const ast::nodes::TypeNodeSharedPointer& interfaceNode : declaration.interfaces ) {
+			if( interfaceNode != nullptr && interfaceNode->kind == ast::Node::Kind::SimpleType ) {
+				ast::nodes::SimpleTypeNode& simpleType = static_cast<ast::nodes::SimpleTypeNode&>( *interfaceNode );
+				std::string interfaceQualified = simpleType.name;
+				semantic::TypeSharedPointer interfaceSemaType = this->semanticAnalyzer.types().lookupType( simpleType.name );
+				if( interfaceSemaType != nullptr && interfaceSemaType->qualified.empty() == false ) {
+					interfaceQualified = interfaceSemaType->qualified;
+				}
+				hirClass->implementedInterfaceQualifiedNames.push_back( interfaceQualified );
+			}
+		}
 
 		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
 			if( method != nullptr && method->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
 				std::shared_ptr<HIRFunctionDefinition> hirMethod = this->lowerFunctionDeclaration( functionDeclaration );
 				if( hirMethod != nullptr ) {
-					hirMethod->ownerClassName = declaration.name;
+					hirMethod->ownerClassName = classQualifiedName;
 					for( HIRParameterDescriptor& parameterDescriptor : hirMethod->parameterDescriptors ) {
 						if( parameterDescriptor.isSelfParameter && parameterDescriptor.parameterType == nullptr ) {
 							parameterDescriptor.parameterType = classType;
@@ -251,34 +293,37 @@ namespace uranite::ir::hir {
 	}
 	
 	std::shared_ptr<HIRStructDefinition> HIRLowering::lowerStructDefinition( ast::nodes::StructDeclaration& declaration ) {
+		semantic::TypeSharedPointer structType = this->semanticAnalyzer.types().lookupType( declaration.name );
+		std::string structQualifiedName = ( structType != nullptr && structType->qualified.empty() == false )
+			? structType->qualified : declaration.name;
+
 		std::shared_ptr<HIRStructDefinition> hirStruct = std::make_shared<HIRStructDefinition>(
 			declaration.name,
 			declaration.source
 		);
 		hirStruct->accessModifier = declaration.access;
 		hirStruct->usedTraitNames = declaration.usedTraits;
-		
+		hirStruct->structQualifiedName = structQualifiedName;
+
 		int fieldIndex = 0;
 		for( const ast::nodes::FieldDeclarationSharedPointer& field : declaration.fields ) {
 			if( field != nullptr ) {
 				hirStruct->fieldDescriptors.push_back( this->lowerFieldDeclaration( *field, fieldIndex++ ) );
 			}
 		}
-		
+
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirStruct->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
 			}
 		}
-		
-		semantic::TypeSharedPointer structType = this->semanticAnalyzer.types().lookupType( declaration.name );
 
 		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
 			if( method != nullptr && method->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
 				std::shared_ptr<HIRFunctionDefinition> hirMethod = this->lowerFunctionDeclaration( functionDeclaration );
 				if( hirMethod != nullptr ) {
-					hirMethod->ownerClassName = declaration.name;
+					hirMethod->ownerClassName = structQualifiedName;
 					for( HIRParameterDescriptor& parameterDescriptor : hirMethod->parameterDescriptors ) {
 						if( parameterDescriptor.isSelfParameter && parameterDescriptor.parameterType == nullptr ) {
 							parameterDescriptor.parameterType = structType;
@@ -298,7 +343,10 @@ namespace uranite::ir::hir {
 			declaration.source
 		);
 		hirEnum->accessModifier = declaration.access;
-		
+		semantic::TypeSharedPointer enumType = this->semanticAnalyzer.types().lookupType( declaration.name );
+		std::string enumQualifiedName = ( enumType != nullptr && enumType->qualified.empty() == false )
+			? enumType->qualified : declaration.name;
+
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirEnum->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
@@ -340,7 +388,7 @@ namespace uranite::ir::hir {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
 				std::shared_ptr<HIRFunctionDefinition> hirMethod = this->lowerFunctionDeclaration( functionDeclaration );
 				if( hirMethod != nullptr ) {
-					hirMethod->ownerClassName = declaration.name;
+					hirMethod->ownerClassName = enumQualifiedName;
 					hirEnum->methodDefinitions.push_back( std::move( hirMethod ) );
 				}
 			}
@@ -356,19 +404,22 @@ namespace uranite::ir::hir {
 		);
 		hirInterface->accessModifier = declaration.access;
 		hirInterface->isFinalInterface = declaration.isFinal;
-		
+		semantic::TypeSharedPointer interfaceType = this->semanticAnalyzer.types().lookupType( declaration.name );
+		std::string interfaceQualifiedName = ( interfaceType != nullptr && interfaceType->qualified.empty() == false )
+			? interfaceType->qualified : declaration.name;
+
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirInterface->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
 			}
 		}
-		
+
 		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
 			if( method != nullptr && method->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
 				std::shared_ptr<HIRFunctionDefinition> hirMethod = this->lowerFunctionDeclaration( functionDeclaration );
 				if( hirMethod != nullptr ) {
-					hirMethod->ownerClassName = declaration.name;
+					hirMethod->ownerClassName = interfaceQualifiedName;
 					hirInterface->methodDefinitions.push_back( std::move( hirMethod ) );
 				}
 			}
@@ -855,6 +906,41 @@ namespace uranite::ir::hir {
 			case ast::Node::Kind::MemberAccessExpression: {
 				ast::nodes::MemberAccessExpression& memberAccess = static_cast<ast::nodes::MemberAccessExpression&>( *expression );
 				HIRNodeSharedPointer objectExpression = this->lowerExpression( memberAccess.object );
+				bool isPropertyAccess = false;
+				if( memberAccess.object->semanticType != nullptr ) {
+					semantic::TypeSharedPointer objectType = memberAccess.object->semanticType;
+					semantic::MethodInfo* methodInfo = nullptr;
+					bool hasField = false;
+					if( objectType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassTypeSharedPointer classType = std::static_pointer_cast<semantic::ClassType>( objectType );
+						methodInfo = classType->findMethod( memberAccess.member );
+						hasField = ( classType->findField( memberAccess.member ) != nullptr );
+					}
+					else if( objectType->kind == semantic::Type::Kind::Interface ) {
+						methodInfo = std::static_pointer_cast<semantic::InterfaceType>( objectType )->findMethod( memberAccess.member );
+					}
+					else if( objectType->kind == semantic::Type::Kind::Trait ) {
+						methodInfo = std::static_pointer_cast<semantic::TraitType>( objectType )->findMethod( memberAccess.member );
+					}
+					else if( objectType->kind == semantic::Type::Kind::Struct ) {
+						semantic::StructTypeSharedPointer structType = std::static_pointer_cast<semantic::StructType>( objectType );
+						methodInfo = structType->findMethod( memberAccess.member );
+						hasField = ( structType->findField( memberAccess.member ) != nullptr );
+					}
+					if( methodInfo != nullptr && methodInfo->isProperty && hasField == false ) {
+						isPropertyAccess = true;
+					}
+				}
+				if( isPropertyAccess ) {
+					std::vector<HIRNodeSharedPointer> emptyArguments;
+					return std::make_shared<HIRMethodCall>(
+						std::move( objectExpression ),
+						memberAccess.member,
+						std::move( emptyArguments ),
+						expression->semanticType,
+						expression->source
+					);
+				}
 				return std::make_shared<HIRFieldAccess>(
 					std::move( objectExpression ),
 					memberAccess.member,
