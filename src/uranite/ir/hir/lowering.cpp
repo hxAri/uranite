@@ -246,10 +246,19 @@ namespace uranite::ir::hir {
 			? classType->qualified : declaration.name;
 		hirClass->classQualifiedName = classQualifiedName;
 		for( const ast::nodes::TypeNodeSharedPointer& interfaceNode : declaration.interfaces ) {
-			if( interfaceNode != nullptr && interfaceNode->kind == ast::Node::Kind::SimpleType ) {
-				ast::nodes::SimpleTypeNode& simpleType = static_cast<ast::nodes::SimpleTypeNode&>( *interfaceNode );
-				std::string interfaceQualified = simpleType.name;
-				semantic::TypeSharedPointer interfaceSemaType = this->semanticAnalyzer.types().lookupType( simpleType.name );
+			if( interfaceNode == nullptr ) {
+				continue;
+			}
+			std::string interfaceName;
+			if( interfaceNode->kind == ast::Node::Kind::SimpleType ) {
+				interfaceName = static_cast<ast::nodes::SimpleTypeNode&>( *interfaceNode ).name;
+			}
+			else if( interfaceNode->kind == ast::Node::Kind::GenericType ) {
+				interfaceName = static_cast<ast::nodes::GenericTypeNode&>( *interfaceNode ).name;
+			}
+			if( interfaceName.empty() == false ) {
+				std::string interfaceQualified = interfaceName;
+				semantic::TypeSharedPointer interfaceSemaType = this->semanticAnalyzer.types().lookupType( interfaceName );
 				if( interfaceSemaType != nullptr && interfaceSemaType->qualified.empty() == false ) {
 					interfaceQualified = interfaceSemaType->qualified;
 				}
