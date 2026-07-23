@@ -25,7 +25,7 @@
 #include "uranite/ir/hir/lowering.hpp"
 
 namespace uranite::ir::hir {
-
+	
 	static std::string deriveModulePath( const std::string& pathname ) {
 		size_t stdlibsPos = pathname.find( "stdlibs/" );
 		if( stdlibsPos == std::string::npos ) {
@@ -66,12 +66,10 @@ namespace uranite::ir::hir {
 			moduleName = programRoot.module->name;
 		}
 		std::shared_ptr<HIRModule> hirModule = std::make_shared<HIRModule>( moduleName, programRoot.source );
-		
 		for( const ast::nodes::DeclarationSharedPointer& declaration : programRoot.declarations ) {
 			if( declaration == nullptr ) {
 				continue;
 			}
-			
 			switch( declaration->kind ) {
 				case ast::Node::Kind::FunctionDeclaration: {
 					ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *declaration );
@@ -166,17 +164,11 @@ namespace uranite::ir::hir {
 					break;
 			}
 		}
-		
 		return hirModule;
 	}
 	
-	// ===================================================================
-	// Declaration Lowering
-	// ===================================================================
-	
 	std::shared_ptr<HIRFunctionDefinition> HIRLowering::lowerFunctionDeclaration( ast::nodes::FunctionDeclaration& declaration ) {
 		semantic::TypeSharedPointer returnType = this->resolveTypeNode( declaration.returnType );
-		
 		std::shared_ptr<HIRFunctionDefinition> hirFunction = std::make_shared<HIRFunctionDefinition>(
 			declaration.name,
 			returnType,
@@ -199,23 +191,19 @@ namespace uranite::ir::hir {
 				hirFunction->mangledName = modulePath + "." + declaration.name;
 			}
 		}
-
 		for( const ast::nodes::FunctionParameterSharedPointer& parameter : declaration.parameters ) {
 			if( parameter != nullptr ) {
 				hirFunction->parameterDescriptors.push_back( this->lowerParameter( *parameter ) );
 			}
 		}
-		
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirFunction->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
 			}
 		}
-		
 		if( declaration.body.empty() == false ) {
 			hirFunction->functionBody = this->lowerStatementBlock( declaration.body, declaration.source );
 		}
-		
 		return hirFunction;
 	}
 	
@@ -242,25 +230,21 @@ namespace uranite::ir::hir {
 				}
 			}
 		}
-		
 		int fieldIndex = 0;
 		for( const ast::nodes::FieldDeclarationSharedPointer& field : declaration.fields ) {
 			if( field != nullptr ) {
 				hirClass->fieldDescriptors.push_back( this->lowerFieldDeclaration( *field, fieldIndex++ ) );
 			}
 		}
-		
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirClass->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
 			}
 		}
-		
 		semantic::TypeSharedPointer classType = this->semanticAnalyzer.types().lookupType( declaration.name );
 		std::string classQualifiedName = ( classType != nullptr && classType->qualified.empty() == false )
 			? classType->qualified : declaration.name;
 		hirClass->classQualifiedName = classQualifiedName;
-
 		for( const ast::nodes::TypeNodeSharedPointer& interfaceNode : declaration.interfaces ) {
 			if( interfaceNode != nullptr && interfaceNode->kind == ast::Node::Kind::SimpleType ) {
 				ast::nodes::SimpleTypeNode& simpleType = static_cast<ast::nodes::SimpleTypeNode&>( *interfaceNode );
@@ -272,7 +256,6 @@ namespace uranite::ir::hir {
 				hirClass->implementedInterfaceQualifiedNames.push_back( interfaceQualified );
 			}
 		}
-
 		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
 			if( method != nullptr && method->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
@@ -288,7 +271,6 @@ namespace uranite::ir::hir {
 				}
 			}
 		}
-
 		return hirClass;
 	}
 	
@@ -296,7 +278,6 @@ namespace uranite::ir::hir {
 		semantic::TypeSharedPointer structType = this->semanticAnalyzer.types().lookupType( declaration.name );
 		std::string structQualifiedName = ( structType != nullptr && structType->qualified.empty() == false )
 			? structType->qualified : declaration.name;
-
 		std::shared_ptr<HIRStructDefinition> hirStruct = std::make_shared<HIRStructDefinition>(
 			declaration.name,
 			declaration.source
@@ -304,20 +285,17 @@ namespace uranite::ir::hir {
 		hirStruct->accessModifier = declaration.access;
 		hirStruct->usedTraitNames = declaration.usedTraits;
 		hirStruct->structQualifiedName = structQualifiedName;
-
 		int fieldIndex = 0;
 		for( const ast::nodes::FieldDeclarationSharedPointer& field : declaration.fields ) {
 			if( field != nullptr ) {
 				hirStruct->fieldDescriptors.push_back( this->lowerFieldDeclaration( *field, fieldIndex++ ) );
 			}
 		}
-
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirStruct->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
 			}
 		}
-
 		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
 			if( method != nullptr && method->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
@@ -333,7 +311,6 @@ namespace uranite::ir::hir {
 				}
 			}
 		}
-		
 		return hirStruct;
 	}
 	
@@ -346,13 +323,11 @@ namespace uranite::ir::hir {
 		semantic::TypeSharedPointer enumType = this->semanticAnalyzer.types().lookupType( declaration.name );
 		std::string enumQualifiedName = ( enumType != nullptr && enumType->qualified.empty() == false )
 			? enumType->qualified : declaration.name;
-
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirEnum->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
 			}
 		}
-		
 		for( const ast::nodes::EnumVariantSharedPointer& variant : declaration.variants ) {
 			if( variant == nullptr ) {
 				continue;
@@ -382,7 +357,6 @@ namespace uranite::ir::hir {
 			}
 			hirEnum->variantDescriptors.push_back( std::move( variantDescriptor ) );
 		}
-		
 		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
 			if( method != nullptr && method->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
@@ -393,7 +367,6 @@ namespace uranite::ir::hir {
 				}
 			}
 		}
-		
 		return hirEnum;
 	}
 	
@@ -407,13 +380,11 @@ namespace uranite::ir::hir {
 		semantic::TypeSharedPointer interfaceType = this->semanticAnalyzer.types().lookupType( declaration.name );
 		std::string interfaceQualifiedName = ( interfaceType != nullptr && interfaceType->qualified.empty() == false )
 			? interfaceType->qualified : declaration.name;
-
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirInterface->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
 			}
 		}
-
 		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
 			if( method != nullptr && method->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *method );
@@ -424,7 +395,6 @@ namespace uranite::ir::hir {
 				}
 			}
 		}
-		
 		return hirInterface;
 	}
 	
@@ -436,27 +406,22 @@ namespace uranite::ir::hir {
 		);
 		hirExtern->accessModifier = declaration.access;
 		hirExtern->isVariadicFunction = declaration.isVariadic;
-		
 		for( const ast::nodes::ExternParameter& parameter : declaration.parameters ) {
 			HIRParameterDescriptor parameterDescriptor;
 			parameterDescriptor.parameterName = parameter.name;
 			parameterDescriptor.parameterType = this->resolveTypeNode( parameter.type );
 			hirExtern->parameterDescriptors.push_back( std::move( parameterDescriptor ) );
 		}
-		
 		hirExtern->returnTypeDescriptor = this->resolveTypeNode( declaration.returnType );
-		
 		return hirExtern;
 	}
 	
 	std::shared_ptr<HIRGlobalVariableDefinition> HIRLowering::lowerConstantDeclaration( ast::nodes::ConstantDeclaration& declaration ) {
 		semantic::TypeSharedPointer variableType = this->resolveTypeNode( declaration.type );
-		
 		HIRNodeSharedPointer initializerExpression = nullptr;
 		if( declaration.initializer != nullptr ) {
 			initializerExpression = this->lowerExpression( declaration.initializer );
 		}
-		
 		std::shared_ptr<HIRGlobalVariableDefinition> hirGlobal = std::make_shared<HIRGlobalVariableDefinition>(
 			declaration.name,
 			variableType,
@@ -465,13 +430,8 @@ namespace uranite::ir::hir {
 		);
 		hirGlobal->accessModifier = declaration.access;
 		hirGlobal->isGlobalVariable = declaration.isGlobalVariable;
-		
 		return hirGlobal;
 	}
-	
-	// ===================================================================
-	// Statement Lowering
-	// ===================================================================
 	
 	std::shared_ptr<HIRBlock> HIRLowering::lowerStatementBlock(
 		const std::vector<ast::nodes::StatementSharedPointer>& statements,
@@ -494,7 +454,6 @@ namespace uranite::ir::hir {
 		if( statement == nullptr ) {
 			return nullptr;
 		}
-		
 		switch( statement->kind ) {
 			case ast::Node::Kind::VariableStatement: {
 				ast::nodes::VariableStatement& variableStatement = static_cast<ast::nodes::VariableStatement&>( *statement );
@@ -516,7 +475,6 @@ namespace uranite::ir::hir {
 				}
 				return hirVariable;
 			}
-			
 			case ast::Node::Kind::AssignmentStatement: {
 				ast::nodes::AssignStatement& assignStatement = static_cast<ast::nodes::AssignStatement&>( *statement );
 				HIRNodeSharedPointer targetExpression = this->lowerExpression( assignStatement.target );
@@ -528,7 +486,6 @@ namespace uranite::ir::hir {
 					assignStatement.source
 				);
 			}
-			
 			case ast::Node::Kind::ReturnStatement: {
 				ast::nodes::ReturnStatement& returnStatement = static_cast<ast::nodes::ReturnStatement&>( *statement );
 				HIRNodeSharedPointer returnValue = nullptr;
@@ -537,53 +494,43 @@ namespace uranite::ir::hir {
 				}
 				return std::make_shared<HIRReturn>( std::move( returnValue ), returnStatement.source );
 			}
-			
 			case ast::Node::Kind::IfStatement: {
 				ast::nodes::IfStatement& ifStatement = static_cast<ast::nodes::IfStatement&>( *statement );
 				return this->desugarIfStatement( ifStatement );
 			}
-			
 			case ast::Node::Kind::ForStatement: {
 				ast::nodes::ForStatement& forStatement = static_cast<ast::nodes::ForStatement&>( *statement );
 				return this->desugarForStatement( forStatement );
 			}
-			
 			case ast::Node::Kind::WhileStatement: {
 				ast::nodes::WhileStatement& whileStatement = static_cast<ast::nodes::WhileStatement&>( *statement );
 				return this->desugarWhileStatement( whileStatement );
 			}
-			
 			case ast::Node::Kind::BreakStatement: {
 				return std::make_shared<HIRBreak>( statement->source );
 			}
-			
 			case ast::Node::Kind::ContinueStatement: {
 				return std::make_shared<HIRContinue>( statement->source );
 			}
-			
 			case ast::Node::Kind::DeferStatement: {
 				ast::nodes::DeferStatement& deferStatement = static_cast<ast::nodes::DeferStatement&>( *statement );
 				HIRNodeSharedPointer deferredBody = this->lowerStatement( deferStatement.body );
 				return std::make_shared<HIRDefer>( std::move( deferredBody ), deferStatement.source );
 			}
-			
 			case ast::Node::Kind::DeleteStatement: {
 				ast::nodes::DeleteStatement& deleteStatement = static_cast<ast::nodes::DeleteStatement&>( *statement );
 				HIRNodeSharedPointer targetExpression = this->lowerExpression( deleteStatement.expression );
 				return std::make_shared<HIRDelete>( std::move( targetExpression ), deleteStatement.source );
 			}
-			
 			case ast::Node::Kind::ThrowStatement: {
 				ast::nodes::ThrowStatement& throwStatement = static_cast<ast::nodes::ThrowStatement&>( *statement );
 				HIRNodeSharedPointer thrownExpression = this->lowerExpression( throwStatement.expression );
 				return std::make_shared<HIRThrow>( std::move( thrownExpression ), throwStatement.source );
 			}
-			
 			case ast::Node::Kind::TryCatchStatement: {
 				ast::nodes::TryCatchStatement& tryCatchStatement = static_cast<ast::nodes::TryCatchStatement&>( *statement );
 				std::shared_ptr<HIRTryCatch> hirTryCatch = std::make_shared<HIRTryCatch>( tryCatchStatement.source );
 				hirTryCatch->tryBody = this->lowerStatementBlock( tryCatchStatement.tryBody, tryCatchStatement.source );
-				
 				for( const ast::nodes::ExceptionClause& clause : tryCatchStatement.exceptionClauses ) {
 					HIRExceptionHandler handler;
 					handler.exceptionVariableName = clause.variableName;
@@ -597,14 +544,11 @@ namespace uranite::ir::hir {
 					handler.handlerBody = this->lowerStatementBlock( clause.body, clause.source );
 					hirTryCatch->exceptionHandlers.push_back( std::move( handler ) );
 				}
-				
 				if( tryCatchStatement.finallyBody.empty() == false ) {
 					hirTryCatch->finallyBody = this->lowerStatementBlock( tryCatchStatement.finallyBody, tryCatchStatement.source );
 				}
-				
 				return hirTryCatch;
 			}
-			
 			case ast::Node::Kind::MatchStatement: {
 				ast::nodes::MatchStatement& matchStatement = static_cast<ast::nodes::MatchStatement&>( *statement );
 				HIRNodeSharedPointer matchSubject = this->lowerExpression( matchStatement.subject );
@@ -623,7 +567,6 @@ namespace uranite::ir::hir {
 				}
 				return std::make_shared<HIRMatch>( std::move( matchSubject ), std::move( matchArms ), matchStatement.source );
 			}
-			
 			case ast::Node::Kind::SwitchStatement: {
 				ast::nodes::SwitchStatement& switchStatement = static_cast<ast::nodes::SwitchStatement&>( *statement );
 				HIRNodeSharedPointer switchSubject = this->lowerExpression( switchStatement.subject );
@@ -642,7 +585,6 @@ namespace uranite::ir::hir {
 				}
 				return std::make_shared<HIRSwitch>( std::move( switchSubject ), std::move( switchCases ), switchStatement.source );
 			}
-			
 			case ast::Node::Kind::InlineAssemblyStatement: {
 				ast::nodes::InlineAssemblyStatement& asmStatement = static_cast<ast::nodes::InlineAssemblyStatement&>( *statement );
 				std::shared_ptr<HIRInlineAssembly> hirAsm = std::make_shared<HIRInlineAssembly>( asmStatement.source );
@@ -706,42 +648,32 @@ namespace uranite::ir::hir {
 				}
 				return hirAsm;
 			}
-			
 			case ast::Node::Kind::UnsafeBlock: {
 				ast::nodes::UnsafeBlockStatement& unsafeBlock = static_cast<ast::nodes::UnsafeBlockStatement&>( *statement );
 				std::shared_ptr<HIRBlock> unsafeBody = this->lowerStatementBlock( unsafeBlock.body, unsafeBlock.source );
 				return std::make_shared<HIRUnsafeBlock>( std::move( unsafeBody ), unsafeBlock.source );
 			}
-			
 			case ast::Node::Kind::ExpressionStatement: {
 				ast::nodes::ExpressionStatement& expressionStatement = static_cast<ast::nodes::ExpressionStatement&>( *statement );
 				HIRNodeSharedPointer expression = this->lowerExpression( expressionStatement.expression );
 				return std::make_shared<HIRExpressionStatement>( std::move( expression ), expressionStatement.source );
 			}
-			
 			case ast::Node::Kind::PassStatement: {
 				return std::make_shared<HIRPass>( statement->source );
 			}
-			
 			case ast::Node::Kind::BlockStatement: {
 				ast::nodes::BlockStatement& blockStatement = static_cast<ast::nodes::BlockStatement&>( *statement );
 				return this->lowerStatementBlock( blockStatement.statements, blockStatement.source );
 			}
-			
 			default:
 				return nullptr;
 		}
 	}
 	
-	// ===================================================================
-	// Expression Lowering
-	// ===================================================================
-	
 	HIRNodeSharedPointer HIRLowering::lowerExpression( const ast::nodes::ExpressionSharedPointer& expression ) {
 		if( expression == nullptr ) {
 			return nullptr;
 		}
-		
 		switch( expression->kind ) {
 			case ast::Node::Kind::IntegerLiteral: {
 				ast::nodes::IntegerLiteralExpression& integerLiteral = static_cast<ast::nodes::IntegerLiteralExpression&>( *expression );
@@ -752,7 +684,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::FloatLiteral: {
 				ast::nodes::FloatLiteralExpression& floatLiteral = static_cast<ast::nodes::FloatLiteralExpression&>( *expression );
 				return std::make_shared<HIRFloatLiteral>(
@@ -762,7 +693,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::BooleanLiteral: {
 				ast::nodes::BoolLiteralExpression& boolLiteral = static_cast<ast::nodes::BoolLiteralExpression&>( *expression );
 				return std::make_shared<HIRBooleanLiteral>(
@@ -771,7 +701,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::StringLiteral: {
 				ast::nodes::StringLiteralExpression& stringLiteral = static_cast<ast::nodes::StringLiteralExpression&>( *expression );
 				return std::make_shared<HIRStringLiteral>(
@@ -780,7 +709,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::CharLiteral: {
 				ast::nodes::CharLiteralExpression& charLiteral = static_cast<ast::nodes::CharLiteralExpression&>( *expression );
 				return std::make_shared<HIRCharLiteral>(
@@ -789,11 +717,9 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::NoneLiteral: {
 				return std::make_shared<HIRNoneLiteral>( expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::IdentifierExpression: {
 				ast::nodes::IdentifierExpression& identifierExpression = static_cast<ast::nodes::IdentifierExpression&>( *expression );
 				std::shared_ptr<HIRIdentifier> hirIdentifier = std::make_shared<HIRIdentifier>(
@@ -811,15 +737,12 @@ namespace uranite::ir::hir {
 				}
 				return hirIdentifier;
 			}
-			
 			case ast::Node::Kind::SelfExpression: {
 				return std::make_shared<HIRSelfReference>( expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::SuperExpression: {
 				return std::make_shared<HIRSuperReference>( expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::BinaryExpression: {
 				ast::nodes::BinaryExpression& binaryExpression = static_cast<ast::nodes::BinaryExpression&>( *expression );
 				HIRNodeSharedPointer leftOperand = this->lowerExpression( binaryExpression.left );
@@ -832,11 +755,8 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::UnaryExpression: {
 				ast::nodes::UnaryExpression& unaryExpression = static_cast<ast::nodes::UnaryExpression&>( *expression );
-				
-				// Handle special unary operators as dedicated HIR nodes
 				if( unaryExpression.operation == token::Type::KeywordMove ) {
 					HIRNodeSharedPointer operand = this->lowerExpression( unaryExpression.operand );
 					return std::make_shared<HIRMoveTransfer>( std::move( operand ), expression->semanticType, expression->source );
@@ -853,7 +773,6 @@ namespace uranite::ir::hir {
 					HIRNodeSharedPointer operand = this->lowerExpression( unaryExpression.operand );
 					return std::make_shared<HIRDereference>( std::move( operand ), expression->semanticType, expression->source );
 				}
-				
 				HIRNodeSharedPointer operand = this->lowerExpression( unaryExpression.operand );
 				return std::make_shared<HIRUnaryOperation>(
 					unaryExpression.operation,
@@ -863,7 +782,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::CallExpression: {
 				ast::nodes::CallExpression& callExpression = static_cast<ast::nodes::CallExpression&>( *expression );
 				HIRNodeSharedPointer calleeExpression = this->lowerExpression( callExpression.callee );
@@ -882,7 +800,6 @@ namespace uranite::ir::hir {
 				}
 				return hirCall;
 			}
-			
 			case ast::Node::Kind::MethodCallExpression: {
 				ast::nodes::MethodCallExpression& methodCallExpression = static_cast<ast::nodes::MethodCallExpression&>( *expression );
 				HIRNodeSharedPointer receiverObject = this->lowerExpression( methodCallExpression.object );
@@ -902,7 +819,6 @@ namespace uranite::ir::hir {
 				}
 				return hirMethodCall;
 			}
-			
 			case ast::Node::Kind::MemberAccessExpression: {
 				ast::nodes::MemberAccessExpression& memberAccess = static_cast<ast::nodes::MemberAccessExpression&>( *expression );
 				HIRNodeSharedPointer objectExpression = this->lowerExpression( memberAccess.object );
@@ -948,7 +864,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::IndexExpression: {
 				ast::nodes::IndexExpression& indexExpression = static_cast<ast::nodes::IndexExpression&>( *expression );
 				HIRNodeSharedPointer objectExpression = this->lowerExpression( indexExpression.object );
@@ -960,7 +875,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::ConstructExpression: {
 				ast::nodes::ConstructExpression& constructExpression = static_cast<ast::nodes::ConstructExpression&>( *expression );
 				std::vector<std::pair<std::string, HIRNodeSharedPointer>> constructorFields;
@@ -986,26 +900,22 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::CastExpression: {
 				ast::nodes::CastExpression& castExpression = static_cast<ast::nodes::CastExpression&>( *expression );
 				HIRNodeSharedPointer sourceExpression = this->lowerExpression( castExpression.expression );
 				semantic::TypeSharedPointer targetType = this->resolveTypeNode( castExpression.targetType );
 				return std::make_shared<HIRCast>( std::move( sourceExpression ), targetType, expression->source );
 			}
-			
 			case ast::Node::Kind::AwaitExpression: {
 				ast::nodes::AwaitExpression& awaitExpression = static_cast<ast::nodes::AwaitExpression&>( *expression );
 				HIRNodeSharedPointer awaitedExpression = this->lowerExpression( awaitExpression.operand );
 				return std::make_shared<HIRAwait>( std::move( awaitedExpression ), expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::YieldExpression: {
 				ast::nodes::YieldExpression& yieldExpression = static_cast<ast::nodes::YieldExpression&>( *expression );
 				HIRNodeSharedPointer yieldedExpression = this->lowerExpression( yieldExpression.value );
 				return std::make_shared<HIRYield>( std::move( yieldedExpression ), expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::LambdaExpression: {
 				ast::nodes::LambdaExpression& lambdaExpression = static_cast<ast::nodes::LambdaExpression&>( *expression );
 				std::shared_ptr<HIRLambda> hirLambda = std::make_shared<HIRLambda>( expression->semanticType, expression->source );
@@ -1019,7 +929,6 @@ namespace uranite::ir::hir {
 				hirLambda->lambdaBody = this->lowerStatementBlock( lambdaExpression.body, lambdaExpression.source );
 				return hirLambda;
 			}
-			
 			case ast::Node::Kind::MatchExpression: {
 				ast::nodes::MatchExpression& matchExpression = static_cast<ast::nodes::MatchExpression&>( *expression );
 				std::shared_ptr<HIRMatchExpression> hirMatch = std::make_shared<HIRMatchExpression>(
@@ -1038,7 +947,6 @@ namespace uranite::ir::hir {
 				}
 				return hirMatch;
 			}
-			
 			case ast::Node::Kind::ArrayExpression: {
 				ast::nodes::ArrayExpression& arrayExpression = static_cast<ast::nodes::ArrayExpression&>( *expression );
 				std::vector<HIRNodeSharedPointer> elementExpressions;
@@ -1047,7 +955,6 @@ namespace uranite::ir::hir {
 				}
 				return std::make_shared<HIRArrayLiteral>( std::move( elementExpressions ), expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::TupleExpression: {
 				ast::nodes::TupleExpression& tupleExpression = static_cast<ast::nodes::TupleExpression&>( *expression );
 				std::vector<HIRNodeSharedPointer> elementExpressions;
@@ -1056,26 +963,22 @@ namespace uranite::ir::hir {
 				}
 				return std::make_shared<HIRTupleLiteral>( std::move( elementExpressions ), expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::TypeReferenceExpression: {
 				ast::nodes::TypeReferenceExpression& typeReference = static_cast<ast::nodes::TypeReferenceExpression&>( *expression );
 				return std::make_shared<HIRTypeReference>( typeReference.typeName, expression->semanticType, expression->source );
 			}
-			
 			case ast::Node::Kind::InstanceofExpression: {
 				ast::nodes::InstanceofExpression& instanceofExpression = static_cast<ast::nodes::InstanceofExpression&>( *expression );
 				HIRNodeSharedPointer checkedExpression = this->lowerExpression( instanceofExpression.object );
 				semantic::TypeSharedPointer checkedType = this->resolveTypeNode( instanceofExpression.targetType );
 				return std::make_shared<HIRInstanceOf>( std::move( checkedExpression ), checkedType, expression->source );
 			}
-			
 			case ast::Node::Kind::SubclassofExpression: {
 				ast::nodes::SubclassofExpression& subclassofExpression = static_cast<ast::nodes::SubclassofExpression&>( *expression );
 				semantic::TypeSharedPointer childType = this->resolveTypeNode( subclassofExpression.sourceType );
 				semantic::TypeSharedPointer parentType = this->resolveTypeNode( subclassofExpression.targetType );
 				return std::make_shared<HIRSubclassOf>( childType, parentType, expression->source );
 			}
-			
 			case ast::Node::Kind::RangeExpression: {
 				ast::nodes::RangeExpression& rangeExpression = static_cast<ast::nodes::RangeExpression&>( *expression );
 				HIRNodeSharedPointer rangeStart = this->lowerExpression( rangeExpression.start );
@@ -1088,7 +991,6 @@ namespace uranite::ir::hir {
 					expression->source
 				);
 			}
-			
 			case ast::Node::Kind::ComprehensionExpression: {
 				ast::nodes::ComprehensionExpression& comprehensionExpression = static_cast<ast::nodes::ComprehensionExpression&>( *expression );
 				std::shared_ptr<HIRComprehension> hirComprehension = std::make_shared<HIRComprehension>( expression->semanticType, expression->source );
@@ -1099,31 +1001,20 @@ namespace uranite::ir::hir {
 				hirComprehension->iteratorVariableType = this->resolveTypeNode( comprehensionExpression.variableType );
 				return hirComprehension;
 			}
-			
 			default:
 				return nullptr;
 		}
 	}
 	
-	// ===================================================================
-	// Desugaring
-	// ===================================================================
-	
 	std::shared_ptr<HIRIf> HIRLowering::desugarIfStatement( ast::nodes::IfStatement& ifStatement ) {
 		HIRNodeSharedPointer branchCondition = this->lowerExpression( ifStatement.condition );
 		std::shared_ptr<HIRBlock> thenBranch = this->lowerStatementBlock( ifStatement.thenBody, ifStatement.source );
-		
 		HIRNodeSharedPointer elseBranch = nullptr;
-		
-		// Process elif branches from innermost to outermost, building nested HIRIf chain
 		if( ifStatement.elifBranches.empty() == false ) {
-			// Start from the last elif and work backwards
-			// The final else body (if any) becomes the else of the last elif
 			HIRNodeSharedPointer currentElse = nullptr;
 			if( ifStatement.elseBody.empty() == false ) {
 				currentElse = this->lowerStatementBlock( ifStatement.elseBody, ifStatement.source );
 			}
-			
 			for( int elifIndex = static_cast<int>( ifStatement.elifBranches.size() ) - 1; elifIndex >= 0; elifIndex-- ) {
 				const std::pair<ast::nodes::ExpressionSharedPointer, std::vector<ast::nodes::StatementSharedPointer>>& elifBranch = ifStatement.elifBranches[elifIndex];
 				HIRNodeSharedPointer elifCondition = this->lowerExpression( elifBranch.first );
@@ -1140,7 +1031,6 @@ namespace uranite::ir::hir {
 		else if( ifStatement.elseBody.empty() == false ) {
 			elseBranch = this->lowerStatementBlock( ifStatement.elseBody, ifStatement.source );
 		}
-		
 		return std::make_shared<HIRIf>(
 			std::move( branchCondition ),
 			std::move( thenBranch ),
@@ -1153,10 +1043,8 @@ namespace uranite::ir::hir {
 		std::shared_ptr<HIRLoop> hirLoop = std::make_shared<HIRLoop>( forStatement.source );
 		hirLoop->loopVariableName = forStatement.variable;
 		hirLoop->loopVariableName2 = forStatement.variable2;
-		
 		hirLoop->loopVariableType = this->resolveTypeNode( forStatement.variableType );
 		hirLoop->loopVariableType2 = this->resolveTypeNode( forStatement.variableType2 );
-		
 		if( forStatement.isCStyle ) {
 			hirLoop->loopInitializer = this->lowerExpression( forStatement.initializer );
 			hirLoop->loopCondition = this->lowerExpression( forStatement.condition );
@@ -1168,7 +1056,6 @@ namespace uranite::ir::hir {
 			hirLoop->isIteratorLoop = true;
 			hirLoop->iterableExpression = this->lowerExpression( forStatement.iterable );
 		}
-		
 		hirLoop->loopBody = this->lowerStatementBlock( forStatement.body, forStatement.source );
 		return hirLoop;
 	}
@@ -1179,10 +1066,6 @@ namespace uranite::ir::hir {
 		hirLoop->loopBody = this->lowerStatementBlock( whileStatement.body, whileStatement.source );
 		return hirLoop;
 	}
-	
-	// ===================================================================
-	// Helper Methods
-	// ===================================================================
 	
 	HIRParameterDescriptor HIRLowering::lowerParameter( ast::nodes::FunctionParameterNode& parameter ) {
 		HIRParameterDescriptor descriptor;
@@ -1229,5 +1112,5 @@ namespace uranite::ir::hir {
 		}
 		return descriptor;
 	}
-
+	
 } // namespace uranite::ir::hir
