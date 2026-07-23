@@ -46,6 +46,7 @@ namespace uranite::ir::mir {
 		void lowerFunctionDefinition( hir::HIRFunctionDefinition& hirFunction );
 		void lowerClassDefinition( hir::HIRClassDefinition& hirClass );
 		void lowerStructDefinition( hir::HIRStructDefinition& hirStruct );
+		void lowerEnumMethodDefinitions( hir::HIREnumDefinition& hirEnum );
 		
 		// Statement lowering — emits instructions into current block
 		void lowerStatement( const hir::HIRNodeSharedPointer& hirStatement );
@@ -91,6 +92,14 @@ namespace uranite::ir::mir {
 
 		// Maps variable names to their MIR variable identifiers within current function
 		std::unordered_map<std::string, MIRVariableIdentifier> variableNameMap;
+
+		// Lambda counter for generating unique names
+		unsigned int lambdaCounter = 0;
+
+		// Deferred statements accumulated during function lowering (emitted LIFO before returns)
+		std::vector<hir::HIRNodeSharedPointer> deferredStatements;
+
+		void emitDeferredStatements();
 
 		// Active landing pad for try/catch — when set, calls emit InvokeFunction instead of CallFunction
 		MIRBlockIdentifier activeLandingPad = INVALID_BLOCK_IDENTIFIER;
