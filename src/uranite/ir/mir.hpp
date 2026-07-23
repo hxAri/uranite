@@ -138,7 +138,10 @@ namespace uranite::ir::mir {
 		
 		// Inline assembly
 		InlineAssembly,
-		
+
+		// Generator
+		Yield,
+
 		// No-op
 		NoOperation
 		
@@ -256,6 +259,7 @@ namespace uranite::ir::mir {
 		std::string mangledFunctionName;
 		std::string ownerClassQualifiedName;
 		semantic::TypeSharedPointer returnTypeDescriptor;
+		lookup::SourceSharedPointer sourceLocation;
 		std::vector<MIRVariableIdentifier> parameterVariableIdentifiers;
 		std::vector<std::shared_ptr<MIRBasicBlock>> controlFlowBlocks;
 		std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor> variableDescriptorTable;
@@ -266,6 +270,10 @@ namespace uranite::ir::mir {
 		int keywordParameterIndex = -1;
 		semantic::TypeSharedPointer keywordValueType;
 		std::unordered_map<int, MIRModuleConstant> parameterDefaultValues;
+		bool isGeneratorFunction = false;
+		semantic::TypeSharedPointer generatorYieldType;
+		bool isAsyncFunction = false;
+		semantic::TypeSharedPointer asyncInnerReturnType;
 		
 		/** @brief Allocates a new variable and registers it in the descriptor table. */
 		MIRVariableIdentifier allocateVariable(
