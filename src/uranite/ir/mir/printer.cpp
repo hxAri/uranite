@@ -26,9 +26,7 @@ namespace uranite::ir::mir {
 	std::string MIRPrinter::print( const MIRModuleDefinition& mirModule ) {
 		this->outputStream.str( "" );
 		this->outputStream.clear();
-		
 		this->outputStream << "MIRModule \"" << mirModule.moduleName << "\"\n";
-		
 		if( mirModule.typeLayoutTable.empty() == false ) {
 			this->outputStream << "\n  Type Layouts:\n";
 			for( const std::pair<const std::string, TypeLayoutDescriptor>& typeEntry : mirModule.typeLayoutTable ) {
@@ -39,13 +37,11 @@ namespace uranite::ir::mir {
 					<< ", vtable=" << ( typeLayout.hasVirtualTable ? "yes" : "no" ) << ")\n";
 			}
 		}
-		
 		for( const std::shared_ptr<MIRFunctionDefinition>& functionDefinition : mirModule.functionDefinitions ) {
 			if( functionDefinition != nullptr ) {
 				this->printFunction( *functionDefinition );
 			}
 		}
-		
 		return this->outputStream.str();
 	}
 	
@@ -57,7 +53,6 @@ namespace uranite::ir::mir {
 		this->outputStream << " (params=" << functionDefinition.parameterVariableIdentifiers.size()
 			<< ", blocks=" << functionDefinition.controlFlowBlocks.size()
 			<< ", vars=" << functionDefinition.variableDescriptorTable.size() << ")\n";
-		
 		for( const std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock != nullptr ) {
 				this->printBasicBlock( *basicBlock );
@@ -67,7 +62,6 @@ namespace uranite::ir::mir {
 	
 	void MIRPrinter::printBasicBlock( const MIRBasicBlock& basicBlock ) {
 		this->outputStream << "    " << basicBlock.blockLabel << " [bb" << basicBlock.blockIdentifier << "]:\n";
-
 		for( const MIRInstruction& instruction : basicBlock.blockInstructions ) {
 			this->printInstruction( instruction );
 		}
@@ -75,17 +69,13 @@ namespace uranite::ir::mir {
 	
 	void MIRPrinter::printInstruction( const MIRInstruction& instruction ) {
 		this->outputStream << "      ";
-		
 		if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 			this->outputStream << "v" << instruction.destinationVariable << " = ";
 		}
-		
 		this->outputStream << this->instructionKindToString( instruction.instructionKind );
-		
 		for( MIRVariableIdentifier sourceOperand : instruction.sourceOperands ) {
 			this->outputStream << " v" << sourceOperand;
 		}
-		
 		switch( instruction.instructionKind ) {
 			case MIRInstructionKind::ConstantInteger:
 				this->outputStream << " " << instruction.integerConstantValue;
@@ -129,7 +119,6 @@ namespace uranite::ir::mir {
 			default:
 				break;
 		}
-		
 		this->outputStream << "\n";
 	}
 	
@@ -212,5 +201,5 @@ namespace uranite::ir::mir {
 			this->outputStream << "  ";
 		}
 	}
-
+	
 } // namespace uranite::ir::mir
