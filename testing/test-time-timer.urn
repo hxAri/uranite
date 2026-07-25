@@ -5,35 +5,28 @@ from uranite.testing.assertions import assertEqualI64, assertTrue
 from uranite.time.timer import TIMER_ACTIVE, TIMER_EXPIRED, TIMER_INACTIVE, Timer
 
 public function main() -> I32:
-    putsln( "=== Time Timer Tests ===" )
-
+    putsln( "Time Timer Tests" )
     Timer timer = new Timer( 16, 1000 )
     assertEqualI64( 0, timer.getActiveCount(), "no timers initially" )
     assertEqualI64( 0, timer.getCurrentTick(), "tick 0" )
     putsln( "Timer constructed OK" )
-
     I64 timerId = timer.scheduleOnce( 42, 5 )
     assertTrue( timerId > 0, "timer id positive" )
     assertEqualI64( 1, timer.getActiveCount(), "1 active" )
     putsln( "scheduleOnce OK" )
-
     I64 fired1 = timer.tick()
     assertEqualI64( 0, fired1, "no fire at tick 1" )
     I64 fired2 = timer.tick()
     assertEqualI64( 0, fired2, "no fire at tick 2" )
     putsln( "early ticks OK" )
-
     I64 fired5 = timer.advanceTicks( 3 )
     assertEqualI64( 1, fired5, "fired at tick 5" )
     putsln( "fire at deadline OK" )
-
     I64 drained = timer.drain()
     assertEqualI64( 1, drained, "drained 1 expired" )
     assertEqualI64( 0, timer.getActiveCount(), "0 active after drain" )
     putsln( "drain OK" )
-
     timer.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All Time Timer Tests Passed ===" )
+    putsln( "All Time Timer Tests Passed" )
     return 0
