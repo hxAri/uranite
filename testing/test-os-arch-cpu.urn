@@ -6,17 +6,14 @@ from uranite.os.arch.registers import Registers
 from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
-    putsln( "=== OS Arch CPU Tests ===" )
-
+    putsln( "OS Arch CPU Tests" )
     Registers regs = new Registers()
     assertEqualI64( 0, regs.rax, "rax init 0" )
     assertEqualI64( 0, regs.rsp, "rsp init 0" )
     assertEqualI64( 0, regs.rip, "rip init 0" )
     putsln( "Registers OK" )
-
     I64 tsc = readTsc()
     assertGreaterThan( tsc, 0, "TSC > 0" )
     putsln( "readTsc OK" )
-
-    putsln( "=== All CPU tests passed ===" )
+    putsln( "All CPU tests passed" )
     return 0
