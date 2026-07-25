@@ -9,28 +9,22 @@
 #
 # HashMap<K,V> compilation and runtime test.
 #
-
 package main
 
 from uranite.collection.hash-map import HashMap
 from uranite.io.console import puts
 
-
 public function main() -> I32:
-    puts( "=== HashMap Test ===" )
-
+    puts( "HashMap Test" )
     HashMap<Int, Int> map = new HashMap<Int, Int>()
     map.put( 1, 100 )
     map.put( 2, 200 )
     map.put( 3, 300 )
-
     puts( "Size: ", map.length )
     puts( "Get 2: ", map.get( 2 ) )
     puts( "Contains 3: ", map.containsKey( 3 ) )
     puts( "Contains 99: ", map.containsKey( 99 ) )
-
     map.remove( 2 )
     puts( "Size after remove: ", map.length )
-
     puts( "Done." )
     return 0
