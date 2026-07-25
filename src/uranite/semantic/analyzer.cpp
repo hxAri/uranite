@@ -957,18 +957,25 @@ namespace uranite::semantic {
 				if( leftSideType->kind == Type::Kind::Class || leftSideType->kind == Type::Kind::Struct ) {
 					ClassTypeSharedPointer leftSideClassType = std::dynamic_pointer_cast<ClassType>( leftSideType );
 					if( leftSideClassType ) {
-						static const std::unordered_map<int,std::string> comparisonMethodNames = {
-							{ ( int ) token::Type::Equal, "equals" },
-							{ ( int ) token::Type::GreaterThan, "greaterThan" },
-							{ ( int ) token::Type::LessThan, "lessThan" },
-							{ ( int ) token::Type::NotEqual, "notEquals" }
-						};
-						std::unordered_map<int,std::string>::const_iterator methodIterator = comparisonMethodNames.find( (int)expression.operation );
-						if( methodIterator != comparisonMethodNames.end() ) {
-							MethodInfo* methodInformation = leftSideClassType->findMethod( methodIterator->second );
-							if( methodInformation ) {
-								return this->typeRegistry.getBool();
-							}
+						bool isEqualityOp = expression.operation == token::Type::Equal || expression.operation == token::Type::NotEqual;
+						bool isRelationalOp = expression.operation == token::Type::LessThan || expression.operation == token::Type::GreaterThan ||
+							expression.operation == token::Type::LessThanEqual || expression.operation == token::Type::GreaterThanEqual;
+						bool isOopWrapperType = qname::isOopWrapper( leftSideClassType->qualified );
+						if( isEqualityOp && ( leftSideClassType->implementsInterface( qname::EQUATABLE ) || isOopWrapperType ) ) {
+							return this->typeRegistry.getBool();
+						}
+						if( isRelationalOp && ( leftSideClassType->implementsInterface( qname::COMPARABLE ) || isOopWrapperType ) ) {
+							return this->typeRegistry.getBool();
+						}
+						if( isEqualityOp && leftSideClassType->findMethod( "equals" ) ) {
+							std::string missingInterfaceError = fmt::format( "class \"{}\" has equality methods but does not implement Equatable interface", leftSideClassType->name );
+							this->diagnostic.error( expression.source, missingInterfaceError );
+							return this->typeRegistry.getBool();
+						}
+						if( isRelationalOp && ( leftSideClassType->findMethod( "greaterThan" ) || leftSideClassType->findMethod( "lessThan" ) ) ) {
+							std::string missingInterfaceError = fmt::format( "class \"{}\" has comparison methods but does not implement Comparable interface", leftSideClassType->name );
+							this->diagnostic.error( expression.source, missingInterfaceError );
+							return this->typeRegistry.getBool();
 						}
 					}
 				}
@@ -982,8 +989,12 @@ namespace uranite::semantic {
 				if( rightSideType->kind == Type::Kind::Class || rightSideType->kind == Type::Kind::Struct ) {
 					ClassTypeSharedPointer rightSideClassType = std::dynamic_pointer_cast<ClassType>( rightSideType );
 					if( rightSideClassType ) {
-						MethodInfo* containsMethod = rightSideClassType->findMethod( "contains" );
-						if( containsMethod ) {
+						if( rightSideClassType->implementsInterface( qname::INDEXABLE ) ) {
+							return this->typeRegistry.getBool();
+						}
+						if( rightSideClassType->findMethod( "contains" ) ) {
+							std::string missingInterfaceError = fmt::format( "class \"{}\" has 'contains' method but does not implement Indexable interface", rightSideClassType->name );
+							this->diagnostic.error( expression.source, missingInterfaceError );
 							return this->typeRegistry.getBool();
 						}
 					}
@@ -1034,19 +1045,30 @@ namespace uranite::semantic {
 				if( leftSideType->kind == Type::Kind::Class || leftSideType->kind == Type::Kind::Struct ) {
 					ClassTypeSharedPointer leftSideClassType = std::dynamic_pointer_cast<ClassType>( leftSideType );
 					if( leftSideClassType ) {
-						static const std::unordered_map<int,std::string> operatorMethodNames = {
-							{ ( int ) token::Type::Percent, "modulo" },
-							{ ( int ) token::Type::Star, "multiply" },
-							{ ( int ) token::Type::Slash, "divide" },
-							{ ( int ) token::Type::Plus, "add" },
-							{ ( int ) token::Type::Minus, "subtract" }
+						struct OperatorInterfaceMapping {
+							int tokenType;
+							std::string qualifiedName;
+							std::string methodName;
+							std::string interfaceName;
 						};
-						std::unordered_map<int,std::string>::const_iterator methodIterator = operatorMethodNames.find( (int)expression.operation );
-						if( methodIterator != operatorMethodNames.end() ) {
-							MethodInfo* methodInformation = leftSideClassType->findMethod( methodIterator->second );
-							if( methodInformation ) {
+						static const OperatorInterfaceMapping arithmeticInterfaceMappings[] = {
+							{ ( int ) token::Type::Plus, qname::ADDABLE, "add", "Addable" },
+							{ ( int ) token::Type::Minus, qname::SUBTRACTABLE, "subtract", "Subtractable" },
+							{ ( int ) token::Type::Star, qname::MULTIPLIABLE, "multiply", "Multipliable" },
+							{ ( int ) token::Type::Slash, qname::DIVIDABLE, "divide", "Dividable" },
+							{ ( int ) token::Type::Percent, qname::MODULABLE, "modulo", "Modulable" }
+						};
+						for( const OperatorInterfaceMapping& mapping : arithmeticInterfaceMappings ) {
+							if( mapping.tokenType != ( int ) expression.operation ) continue;
+							if( leftSideClassType->implementsInterface( mapping.qualifiedName ) ) {
 								return leftSideType;
 							}
+							if( leftSideClassType->findMethod( mapping.methodName ) ) {
+								std::string missingInterfaceError = fmt::format( "class \"{}\" has '{}' method but does not implement {} interface", leftSideClassType->name, mapping.methodName, mapping.interfaceName );
+								this->diagnostic.error( expression.source, missingInterfaceError );
+								return leftSideType;
+							}
+							break;
 						}
 					}
 				}
@@ -2101,6 +2123,22 @@ namespace uranite::semantic {
 					MethodInfo* nextMethod = classType->findMethod( "next" );
 					if( nextMethod && nextMethod->type && nextMethod->type->kind == Type::Kind::Function ) {
 						return std::static_pointer_cast<FunctionType>( nextMethod->type )->returnType;
+					}
+					MethodInfo* iteratorMethod = classType->findMethod( "iterator" );
+					if( iteratorMethod && iteratorMethod->type && iteratorMethod->type->kind == Type::Kind::Function ) {
+						TypeSharedPointer iteratorReturnType = std::static_pointer_cast<FunctionType>( iteratorMethod->type )->returnType;
+						if( iteratorReturnType ) {
+							MethodInfo* iteratorNextMethod = nullptr;
+							if( iteratorReturnType->kind == Type::Kind::Class ) {
+								iteratorNextMethod = std::static_pointer_cast<ClassType>( iteratorReturnType )->findMethod( "next" );
+							}
+							else if( iteratorReturnType->kind == Type::Kind::Interface ) {
+								iteratorNextMethod = std::static_pointer_cast<InterfaceType>( iteratorReturnType )->findMethod( "next" );
+							}
+							if( iteratorNextMethod && iteratorNextMethod->type && iteratorNextMethod->type->kind == Type::Kind::Function ) {
+								return std::static_pointer_cast<FunctionType>( iteratorNextMethod->type )->returnType;
+							}
+						}
 					}
 				}
 				return TypeSharedPointer( nullptr );
@@ -3209,8 +3247,15 @@ namespace uranite::semantic {
 				}
 				if( operandType->kind == Type::Kind::Class || operandType->kind == Type::Kind::Struct ) {
 					ClassTypeSharedPointer classType = std::dynamic_pointer_cast<ClassType>( operandType );
-					if( classType && classType->findMethod( "negate" ) ) {
-						return operandType;
+					if( classType ) {
+						if( classType->implementsInterface( qname::NEGATABLE ) ) {
+							return operandType;
+						}
+						if( classType->findMethod( "negate" ) ) {
+							std::string missingInterfaceError = fmt::format( "class \"{}\" has 'negate' method but does not implement Negatable interface", classType->name );
+							this->diagnostic.error( expression.source, missingInterfaceError );
+							return operandType;
+						}
 					}
 				}
 				std::string cannotNegateErrorMessage = fmt::format( "cannot negate type \"{}\"", operandType->toString() );
