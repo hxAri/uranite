@@ -213,6 +213,13 @@ namespace uranite::compiler {
 				moduleProgram->declarations = std::move( allDeclarations );
 				std::unordered_map<std::string, semantic::TypeSharedPointer> allTypes = moduleAnalyzer.getRegisteredTypes();
 				std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>> allSymbols = moduleAnalyzer.getRegisteredSymbols();
+				std::set<std::string> moduleSelectiveImports;
+				bool isModuleSelectiveImport = ( importDeclaration != nullptr && importDeclaration->isFromImport && importDeclaration->importAll == false );
+				if( isModuleSelectiveImport ) {
+					for( const ast::nodes::ImportItem& importItem : importDeclaration->importItems ) {
+						moduleSelectiveImports.insert( importItem.name );
+					}
+				}
 				for( std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator typeIterator = allTypes.begin(); typeIterator != allTypes.end(); ++typeIterator ) {
 					if( this->accumulatedModuleTypes_.find( typeIterator->first ) == this->accumulatedModuleTypes_.end() ) {
 						moduleInfo.analyzedTypes[typeIterator->first] = typeIterator->second;
@@ -222,7 +229,9 @@ namespace uranite::compiler {
 				for( std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>>::iterator symbolIterator = allSymbols.begin(); symbolIterator != allSymbols.end(); ++symbolIterator ) {
 					for( const semantic::SymbolSharedPointer& symbol : symbolIterator->second ) {
 						moduleInfo.analyzedSymbols[symbolIterator->first].push_back( symbol );
-						this->accumulatedModuleSymbols_[symbolIterator->first].push_back( symbol );
+						if( isModuleSelectiveImport == false || moduleSelectiveImports.count( symbolIterator->first ) > 0 ) {
+							this->accumulatedModuleSymbols_[symbolIterator->first].push_back( symbol );
+						}
 					}
 				}
 				moduleInfo.state = ModuleInfo::State::Analyzed;
@@ -360,7 +369,7 @@ namespace uranite::compiler {
 				continue;
 			}
 			if( isSelectiveImportOperation && declarationIdentifier.empty() == false && selectivelyImportedIdentifiers.count( declarationIdentifier ) == 0 ) {
-				if( moduleDeclaration->kind != ast::Node::Kind::ConstantDeclaration && moduleDeclaration->kind != ast::Node::Kind::FunctionDeclaration && moduleDeclaration->kind != ast::Node::Kind::ExternDeclaration ) {
+				if( moduleDeclaration->kind != ast::Node::Kind::ConstantDeclaration && moduleDeclaration->kind != ast::Node::Kind::FunctionDeclaration ) {
 					continue;
 				}
 			}
