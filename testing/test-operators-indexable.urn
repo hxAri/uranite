@@ -7,49 +7,44 @@ from uranite.operators.indexable import Indexable
 from uranite.testing.assertions import assertEqualI64
 
 public class IntArray implements Indexable<Int, Int>:
+    
     private Memory<Int> data
     private Int size
-
+    
     public function IntArray( self, Int size ) -> Void:
         self.size = size
         self.data = new Memory<Int>( size )
-
+    
     public function get( self, Int key ) -> Int:
         return self.data.get( key )
-
+    
     public function set( self, Int key, Int value ) -> Void:
         self.data.set( key, value )
-
+    
     public function remove( self, Int key ) -> Void:
         self.data.set( key, 0 )
-
+    
     public function contains( self, Int key ) -> Boolean:
         return key >= 0 and key < self.size
 
 public function main() -> I32:
-    putsln( "=== Indexable Tests ===" )
-
+    putsln( "Indexable Tests" )
     IntArray arr = new IntArray( 5 )
-
     arr.set( 0, 10 )
     arr.set( 1, 20 )
     arr.set( 2, 30 )
     arr.set( 3, 40 )
     arr.set( 4, 50 )
-
     assertEqualI64( 10, arr.get( 0 ), "arr[0]" )
     assertEqualI64( 20, arr.get( 1 ), "arr[1]" )
     assertEqualI64( 30, arr.get( 2 ), "arr[2]" )
     assertEqualI64( 40, arr.get( 3 ), "arr[3]" )
     assertEqualI64( 50, arr.get( 4 ), "arr[4]" )
     putsln( "get/set OK" )
-
     arr.set( 0, 999 )
     assertEqualI64( 999, arr.get( 0 ), "overwrite arr[0]" )
-
     arr.set( 1, -100 )
     assertEqualI64( -100, arr.get( 1 ), "negative arr[1]" )
     putsln( "overwrite OK" )
-
-    putsln( "=== All Indexable tests passed ===" )
+    putsln( "All Indexable tests passed" )
     return 0
