@@ -5,56 +5,50 @@ from uranite.operators.comparable import Comparable
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public class Score implements Comparable<Score>:
+    
     public Int value
-
+    
     public function Score( self, Int value ) -> Void:
         self.value = value
-
+    
     public function compareTo( self, Score other ) -> I32:
         if self.value < other.value:
             return -1
         if self.value > other.value:
             return 1
         return 0
-
+    
     public function lessThan( self, Score other ) -> Boolean:
         return self.value < other.value
-
+    
     public function greaterThan( self, Score other ) -> Boolean:
         return self.value > other.value
-
+    
     public function lessOrEqual( self, Score other ) -> Boolean:
         return self.value <= other.value
-
+    
     public function greaterOrEqual( self, Score other ) -> Boolean:
         return self.value >= other.value
 
 public function main() -> I32:
-    putsln( "=== Comparable Tests ===" )
-
+    putsln( "Comparable Tests" )
     Score a = new Score( 10 )
     Score b = new Score( 20 )
     Score c = new Score( 10 )
-
     assertEqualI64( -1, a.compareTo( b ), "compareTo less" )
     assertEqualI64( 1, b.compareTo( a ), "compareTo greater" )
     assertEqualI64( 0, a.compareTo( c ), "compareTo equal" )
     putsln( "compareTo OK" )
-
-    assertTrue( a.lessThan( b ), "lessThan(a,b)" )
-    assertFalse( b.lessThan( a ), "not lessThan(b,a)" )
-
-    assertTrue( b.greaterThan( a ), "greaterThan(b,a)" )
-    assertFalse( a.greaterThan( b ), "not greaterThan(a,b)" )
-
-    assertTrue( a.lessOrEqual( b ), "lessOrEqual(a,b)" )
-    assertTrue( a.lessOrEqual( c ), "lessOrEqual(a,c)" )
-    assertFalse( b.lessOrEqual( a ), "not lessOrEqual(b,a)" )
-
-    assertTrue( b.greaterOrEqual( a ), "greaterOrEqual(b,a)" )
-    assertTrue( a.greaterOrEqual( c ), "greaterOrEqual(a,c)" )
-    assertFalse( a.greaterOrEqual( b ), "not greaterOrEqual(a,b)" )
+    assertTrue( a < b, "lessThan(a,b)" )
+    assertFalse( b < a, "not lessThan(b,a)" )
+    assertTrue( b > a, "greaterThan(b,a)" )
+    assertFalse( a > b, "not greaterThan(a,b)" )
+    assertTrue( a <= b, "lessOrEqual(a,b)" )
+    assertTrue( a <= c, "lessOrEqual(a,c)" )
+    assertFalse( b <= a, "not lessOrEqual(b,a)" )
+    assertTrue( b >= a, "greaterOrEqual(b,a)" )
+    assertTrue( a >= c, "greaterOrEqual(a,c)" )
+    assertFalse( a >= b, "not greaterOrEqual(a,b)" )
     putsln( "comparison ops OK" )
-
-    putsln( "=== All Comparable tests passed ===" )
+    putsln( "All Comparable tests passed" )
     return 0
