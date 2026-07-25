@@ -22,8 +22,8 @@ async function runAll() -> Future<I64>:
     return ra + rb + rc
 
 public function main() -> I32:
-    putsln( "=== Async Concurrent Test ===" )
+    putsln( "Async Concurrent Test" )
     assertEqualI64( 1, 1, "async declarations compile" )
     putsln( "concurrent async declarations compile OK" )
-    putsln( "=== Async concurrent test passed ===" )
+    putsln( "Async concurrent test passed" )
     return 0
