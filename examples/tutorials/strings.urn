@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -22,7 +23,6 @@ package uranite.examples.testing.strings
 
 from uranite.io.console import puts
 
-# Count characters in a string via iteration
 public function strlen( String s ) -> I64:
     
     """
@@ -43,7 +43,6 @@ public function strlen( String s ) -> I64:
         count += 1
     return count
 
-# Print each character spaced out
 public function spell_out( String s ) -> Void:
     
     """
@@ -58,7 +57,7 @@ public function spell_out( String s ) -> Void:
     
     for Char c in s:
         puts( c, " " )
-    puts(  )
+    puts()
 
 public function main() -> I32:
     
@@ -71,23 +70,16 @@ public function main() -> I32:
     
     String greeting = "Hello, Uranite!"
     puts( greeting )
-
     puts( "length = ", strlen( greeting ) )
     puts( "length-equals = ", strlen( greeting ) == greeting.length() )
     puts( "length-equals = {}".format( strlen( greeting ) == greeting.length() ) )
-
     puts( "spell: " )
     spell_out( "Uranite" )
-
-    # String variable
     String a = "hello"
     String b = "world"
     puts( a, " ", b )
-
-    # Iterate string
     puts( "iterate: " )
     for Char c in greeting:
         puts( "[", c, "]" )
-    puts(  )
-
+    puts()
     return 0
