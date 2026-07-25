@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.0-2026.7 2026-07-19
+## v1.1.0-2026.7 2026-07-24
 
 **Added**
 - Shared descriptor system for MIR codegen — builtin OOP wrapper methods (Boolean, Char, String, Int, Float, UInt, Byte) routed through `descriptor::Builtin` registry with qualname validation via `semantic::qname::isOopWrapper`, eliminating duplicated inline implementations
@@ -124,8 +124,23 @@
 - Defer statements silently skipped in MIR path — `lowerDefer()` only emitted a no-op `DeferPush` instruction; replaced with actual deferred body accumulation and LIFO emission before returns
 - Interface dispatch always resolving to first concrete class — `concreteClassMap` tracking fails across function boundaries (e.g., `callGreet(Greeter g)` compiled once, can't know concrete type of parameter); replaced with embedded vtable/itable indirect dispatch
 
+**Fixed (AST codegen)**
+- `String.hashCode` returning pointer address instead of content hash — replaced raw `ptrtoint` with DJB2 hash loop over string bytes, producing stable content-based hash codes for HashMap key lookups
+- Generic type parameter equality comparing pointer addresses — `==`/`!=` on erased generic types (i64-encoded pointers) now uses threshold-based runtime type discrimination: values above 4096 dispatched to `strcmp`, values below compared as integers
+- `for k, v in map:` key-value iteration not decomposing Pair struct — iterator path now GEPs into Pair fields, resolves generic type parameters through `typeSubstitutions`, and applies `generateImplicitCast` for i64→ptr conversion on type-erased keys/values
+- Type-erased iterator values failing `isPointerTy()` check — when variadic `Args<T>` elements are i64 (type-erased pointers) but semantic type indicates Class/Struct, `IntToPtr` conversion applied instead of early return
+- Class variable allocas using struct type instead of pointer type — `toLLVMType` returns the LLVM struct type for user-defined classes, but heap-allocated class variables need pointer type; added `isStructTy()` check with `PointerType::getUnqual` conversion
+- Auto-free use-after-free for heap-allocated values stored in collections — variables passed as method call arguments through type erasure (ptr→i64 implicit cast) now have their alive flag cleared, preventing double-free when the caller's cleanup runs after ownership transfers to the collection
+
+**Fixed (MIR codegen)**
+- Kwargs iteration always returning empty — kwargs struct packed at call site as `{ ptr, ptr, i64, i64 }` (4 fields) but Kwargs class has vtable pointer prepended `{ ptr, ptr, ptr, i64, i64 }` (5 fields, implements `ImmutableMapping` interface); field accesses shifted by 8 bytes causing `has` to read position instead of count; fixed by looking up actual Kwargs struct type from `structTypeCache` and adjusting GEP indices for vtable offset
+- `test-cli-argv` segfault — argv initialization stored data pointer at ArrayList's vtable slot (field 0) and argc at data slot (field 1) because GEP indices were hardcoded to 0/1/2 without accounting for vtable prepended by `MutableSequence` interface implementation; `ArrayList.get` then loaded argc integer as a pointer, causing segfault on dereference
+
 **Issues**
 - Type names from `populateSemaTypes` builtin descriptors (e.g., `ArrayList`) resolve without explicit import — type registry lookup in `resolveType` bypasses the user import scope check; only identifier expression resolution is guarded
+
+**Notes**
+- The latest update in the future will deprecate the old codegen pipeline and will be more focused on the new codegen pipeline with HIR/MIR
 
 ## v1.0.0-2026.1 2026-07-13
 
