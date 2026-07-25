@@ -601,6 +601,24 @@ namespace uranite::semantic {
 		return name;
 	}
 	
+	bool ClassType::implementsInterface( const std::string& qualifiedName ) const {
+		for( const TypeSharedPointer& iface : this->interfaces ) {
+			if( iface->qualified == qualifiedName ||
+				qname::startsWith( iface->qualified, qualifiedName ) ) {
+				return true;
+			}
+			if( iface->kind == Type::Kind::Interface ) {
+				if( std::static_pointer_cast<InterfaceType>( iface )->extendsInterface( qualifiedName ) ) {
+					return true;
+				}
+			}
+		}
+		if( this->baseClass && this->baseClass->kind == Type::Kind::Class ) {
+			return std::static_pointer_cast<ClassType>( this->baseClass )->implementsInterface( qualifiedName );
+		}
+		return false;
+	}
+
 	std::vector<std::string> Registry::typeNames() const {
 		std::vector<std::string> names;
 		for( std::pair<std::string,TypeSharedPointer> primitiveEntry : this->primitivesTypes ) {

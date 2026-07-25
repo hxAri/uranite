@@ -10,22 +10,18 @@ from uranite.threading.thread import ThreadRuntime
 from uranite.threading.thread-pool import PoolTask, ThreadPool
 
 public function main() -> I32:
-    putsln( "=== Threading Pool Tests ===" )
-
+    putsln( "Threading Pool Tests" )
     Scheduler sched = new Scheduler()
     PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
     SystemClock clock = new SystemClock( 1000 )
     ThreadRuntime runtime = new ThreadRuntime( sched, pmm, clock, 256 )
-
     ThreadPool pool = new ThreadPool( 4, 64, runtime )
     assertEqualI64( 4, pool.getWorkerCount(), "worker count" )
     assertFalse( pool.isShutdown(), "not shutdown" )
     putsln( "pool OK" )
-
     pool.destroy()
     runtime.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All pool tests passed ===" )
+    putsln( "All pool tests passed" )
     exit( 0 )
     return 0

@@ -21,33 +21,27 @@
 
 package uranite.examples.benchmarks.fannkuch-redux
 
+from uranite.functions.externs import clock
 from uranite.io.console import puts
 from uranite.language.int import Int
 from uranite.memory.memory import Memory
-
-extern function clock() -> I64;
 
 function fannkuch( Int n ) -> Int:
     Memory<Int> perm = new Memory<Int>( n )
     Memory<Int> perm1 = new Memory<Int>( n )
     Memory<Int> count = new Memory<Int>( n )
-    
     for Int i = 0; i < n; i++:
         perm1.set( i, i )
-        
     Int r = n
     Int checkSum = 0
     Int maxFlipsCount = 0
     Int nperm = 0
-    
     while True:
         while r != 1:
             count.set( r - 1, r )
             r = r - 1
-            
         for Int i = 0; i < n; i++:
             perm.set( i, perm1.get( i ) )
-            
         Int flipsCount = 0
         Int k = perm.get( 0 )
         while k != 0:
@@ -58,17 +52,12 @@ function fannkuch( Int n ) -> Int:
                 perm.set( k - i, temp )
             flipsCount = flipsCount + 1
             k = perm.get( 0 )
-            
         if flipsCount > maxFlipsCount:
             maxFlipsCount = flipsCount
-            
         if ( nperm % 2 ) == 0:
             checkSum = checkSum + flipsCount
         else:
             checkSum = checkSum - flipsCount
-            
-        # Use a label-less break via loop condition or return if needed, 
-        # but here we use the permutation step logic.
         while True:
             if r == n:
                 delete perm
@@ -76,28 +65,22 @@ function fannkuch( Int n ) -> Int:
                 delete count
                 puts( checkSum )
                 return maxFlipsCount
-            
-            # Rotate perm1
             Int first = perm1.get( 0 )
             for Int i = 0; i < r; i++:
                 perm1.set( i, perm1.get( i + 1 ) )
             perm1.set( r, first )
-            
             count.set( r, count.get( r ) - 1 )
             if count.get( r ) > 0:
                 break
             r = r + 1
-        
         nperm = nperm + 1
 
 public function main() -> I32:
     Int n = 9
-    puts( "=== Uranite Extreme Fannkuch Redux Benchmark (n={}) ===".format( n ) )
-    
+    puts( "Uranite Extreme Fannkuch Redux Benchmark (n={})".format( n ) )
     I64 start = clock()
     Int result = fannkuch( n )
     I64 end = clock()
-    
     Double elapsed = ( end - start ) / 1000000.0
     puts( "Max flips: ", result )
     puts( "Elapsed time: ", elapsed, " seconds" )

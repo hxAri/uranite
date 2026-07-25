@@ -5,8 +5,7 @@ from uranite.os.io.request import IoRequestQueue, RequestStatus, RequestType
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS IO Request Tests ===" )
-
+    putsln( "OS IO Request Tests" )
     assertEqualI64( 1, RequestType.Read as I64, "Read" )
     assertEqualI64( 2, RequestType.Write as I64, "Write" )
     assertEqualI64( 3, RequestType.Flush as I64, "Flush" )
@@ -15,13 +14,11 @@ public function main() -> I32:
     assertEqualI64( 2, RequestStatus.Completed as I64, "Completed" )
     assertEqualI64( 3, RequestStatus.Failed as I64, "Failed" )
     putsln( "enums OK" )
-
     IoRequestQueue queue = new IoRequestQueue( 4 )
     assertEqualI64( 0, queue.getPending(), "pending 0" )
     assertEqualI64( 0, queue.getCompletedCount(), "completed 0" )
     assertTrue( queue.isEmpty(), "empty" )
     assertFalse( queue.isFull(), "not full" )
-
     I64 idx0 = queue.submit( 1, 10, 100, 4096, 512, 42 )
     assertTrue( idx0 >= 0, "submit idx0" )
     assertEqualI64( 1, queue.getPending(), "pending 1" )
@@ -29,29 +26,23 @@ public function main() -> I32:
     assertEqualI64( 42, queue.getTag( idx0 ), "tag 42" )
     assertEqualI64( 1, queue.getRequestType( idx0 ), "type read" )
     putsln( "submit OK" )
-
     I64 deqIdx = queue.dequeue()
     assertEqualI64( idx0, deqIdx, "dequeue idx" )
     assertEqualI64( 1, queue.getStatus( deqIdx ), "status active" )
-
     Boolean compOk = queue.complete( deqIdx )
     assertTrue( compOk, "complete" )
     assertEqualI64( 2, queue.getStatus( deqIdx ), "status completed" )
     assertEqualI64( 1, queue.getCompletedCount(), "completed 1" )
     putsln( "complete OK" )
-
     I64 drained = queue.drain()
     assertEqualI64( 1, drained, "drained 1" )
     assertEqualI64( 0, queue.getPending(), "pending after drain" )
-
     I64 idx1 = queue.submit( 2, 20, 200, 8192, 1024, 99 )
     queue.dequeue()
     Boolean failOk = queue.fail( idx1 )
     assertTrue( failOk, "fail" )
     assertEqualI64( 3, queue.getStatus( idx1 ), "status failed" )
     putsln( "fail OK" )
-
     queue.destroy()
-
-    putsln( "=== All IO request tests passed ===" )
+    putsln( "All IO request tests passed" )
     return 0

@@ -4,10 +4,8 @@ from uranite.io.console import putsln
 from uranite.io.fs.ext4 import Ext4FileSystem, Ext4Inode, Ext4Superblock
 
 public function main() -> I32:
-    putsln( "=== IO FS Ext4 Tests ===" )
-
+    putsln( "IO FS Ext4 Tests" )
     Ext4Superblock superblock = new Ext4Superblock()
     putsln( "Ext4Superblock constructed OK" )
-
-    putsln( "=== All IO FS Ext4 Tests Passed ===" )
+    putsln( "All IO FS Ext4 Tests Passed" )
     return 0

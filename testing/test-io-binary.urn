@@ -8,8 +8,7 @@ from uranite.sys.process import exit
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== IO Binary Tests ===" )
-
+    putsln( "IO Binary Tests" )
     File wf = createFile( "/tmp/uranite-test-binary.bin", 420 )
     BinaryWriter bw = new BinaryWriter( wf.getFd(), False )
     bw.writeU8( 42 )
@@ -18,7 +17,6 @@ public function main() -> I32:
     bw.writeI64( 9876543210 )
     bw.close()
     wf.close()
-
     File rf = openFile( "/tmp/uranite-test-binary.bin" )
     BinaryReader br = new BinaryReader( rf.getFd(), False )
     assertEqualI64( 42, br.readU8(), "readU8" )
@@ -28,7 +26,6 @@ public function main() -> I32:
     br.close()
     rf.close()
     putsln( "binary read/write OK" )
-
-    putsln( "=== All IO binary tests passed ===" )
+    putsln( "All IO binary tests passed" )
     exit( 0 )
     return 0

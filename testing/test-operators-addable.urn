@@ -5,35 +5,29 @@ from uranite.operators.addable import Addable
 from uranite.testing.assertions import assertEqualI64
 
 public class Number implements Addable<Number>:
+    
     public Int value
-
+    
     public function Number( self, Int value ) -> Void:
         self.value = value
-
+    
     public function add( self, Number other ) -> Number:
         return new Number( self.value + other.value )
 
 public function main() -> I32:
-    putsln( "=== Addable Tests ===" )
-
+    putsln( "Addable Tests" )
     Number a = new Number( 10 )
     Number b = new Number( 32 )
-
-    Number c = a.add( b )
+    Number c = a + b
     assertEqualI64( 42, c.value, "10+32=42" )
-
     Number zero = new Number( 0 )
-    Number d = a.add( zero )
+    Number d = a + zero
     assertEqualI64( 10, d.value, "add zero" )
-
     Number neg = new Number( -5 )
-    Number e = a.add( neg )
+    Number e = a + neg
     assertEqualI64( 5, e.value, "add negative" )
-
-    # chained method call
-    Number f = a.add( b ).add( neg )
+    Number f = a + b + neg
     assertEqualI64( 37, f.value, "chain add" )
     putsln( "add OK" )
-
-    putsln( "=== All Addable tests passed ===" )
+    putsln( "All Addable tests passed" )
     return 0

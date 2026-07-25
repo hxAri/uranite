@@ -1,7 +1,28 @@
+
+#
+# @author hxAri (hxari)
+# @create 2026-07-24 00:00
+# @update 2026-07-24 00:00
+# @github https://github.com/uranite-lang/uranite
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Lambdas: anonymous functions, higher-order function application,
+# callable type signatures, and inline lambda expressions.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
 package main
 
 from uranite.io.console import puts
-
 
 function apply( Callable<I64, <I64>> operation, I64 value ) -> I64:
     return operation( value )
@@ -10,21 +31,17 @@ function applyBinary( Callable<I64, <I64, I64>> operation, I64 a, I64 b ) -> I64
     return operation( a, b )
 
 public function main() -> I32:
-    puts( "=== Lambda basics ===" )
+    puts( "Lambda basics" )
     Callable<I64, <I64>> doubler = lambda I64 x: x * 2
     I64 result = doubler( 21 )
     puts( "doubler(21) = ", result )
-
-    puts( "\n=== Higher-order functions ===" )
+    puts( "\nHigher-order functions" )
     I64 squared = apply( lambda I64 x: x * x, 5 )
     puts( "apply(square, 5) = ", squared )
-
     I64 sum = applyBinary( lambda I64 a, I64 b: a + b, 10, 20 )
     puts( "applyBinary(add, 10, 20) = ", sum )
-
-    puts( "\n=== Closure capture ===" )
+    puts( "\nClosure capture" )
     I64 factor = 3
     Callable<I64, <I64>> multiplier = lambda I64 x: x * factor
     puts( "multiplier(7) = ", multiplier( 7 ) )
-
     return 0

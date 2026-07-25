@@ -13,58 +13,45 @@ from uranite.os.time.timer import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Time Timer Tests ===" )
-
+    putsln( "OS Time Timer Tests" )
     assertEqualI64( 1, TIMER_ONE_SHOT, "oneShot" )
     assertEqualI64( 2, TIMER_PERIODIC, "periodic" )
     assertEqualI64( 0, TIMER_INACTIVE, "inactive" )
     assertEqualI64( 1, TIMER_ACTIVE, "active" )
     assertEqualI64( 2, TIMER_EXPIRED, "expired" )
     putsln( "constants OK" )
-
     TimerEntry te = new TimerEntry()
     assertEqualI64( 0, te.id, "te id" )
     assertEqualI64( 0, te.deadline, "te deadline" )
     assertEqualI64( 0, te.mode, "te mode" )
     assertEqualI64( 0, te.state, "te state" )
     putsln( "TimerEntry OK" )
-
     TimerWheel tw = new TimerWheel( 8 )
     assertEqualI64( 0, tw.getCount(), "count 0" )
-
     I64 id1 = tw.scheduleOneShot( 100, 42 )
     assertTrue( id1 >= 0, "scheduleOneShot" )
     assertEqualI64( 1, tw.getCount(), "count 1" )
     assertEqualI64( 1, tw.getState( 0 ), "state active" )
     assertEqualI64( 42, tw.getCallbackId( 0 ), "callbackId" )
-
     I64 id2 = tw.schedulePeriodic( 50, 20, 99 )
     assertTrue( id2 >= 0, "schedulePeriodic" )
     assertEqualI64( 2, tw.getCount(), "count 2" )
     putsln( "schedule OK" )
-
     I64 fired0 = tw.fire( 30 )
     assertEqualI64( 0, fired0, "fire(30) none" )
-
     I64 fired1 = tw.fire( 50 )
     assertEqualI64( 1, fired1, "fire(50) periodic" )
-
     I64 fired2 = tw.fire( 100 )
     assertTrue( fired2 >= 1, "fire(100) oneshot" )
-
     assertEqualI64( 2, tw.getState( 0 ), "oneshot expired" )
     assertEqualI64( 1, tw.getState( 1 ), "periodic still active" )
     putsln( "fire OK" )
-
     I64 drained = tw.drain()
     assertEqualI64( 1, drained, "drained 1" )
-
     Boolean cancelOk = tw.cancel( 1 )
     assertTrue( cancelOk, "cancel periodic" )
     assertFalse( tw.cancel( 1 ), "cancel inactive" )
     putsln( "drain/cancel OK" )
-
     tw.destroy()
-
-    putsln( "=== All timer tests passed ===" )
+    putsln( "All timer tests passed" )
     return 0

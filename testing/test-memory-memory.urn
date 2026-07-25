@@ -5,27 +5,22 @@ from uranite.memory.memory import Memory
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== Memory Tests ===" )
-
+    putsln( "Memory Tests" )
     Memory<Int> mem = new Memory<Int>( 10 )
-
     mem.set( 0, 100 )
     mem.set( 1, 200 )
     mem.set( 2, 300 )
     mem.set( 3, 400 )
     mem.set( 4, 500 )
-
     assertEqualI64( 100, mem.get( 0 ), "get(0)" )
     assertEqualI64( 200, mem.get( 1 ), "get(1)" )
     assertEqualI64( 300, mem.get( 2 ), "get(2)" )
     assertEqualI64( 400, mem.get( 3 ), "get(3)" )
     assertEqualI64( 500, mem.get( 4 ), "get(4)" )
     putsln( "get/set OK" )
-
     mem.set( 0, 999 )
     assertEqualI64( 999, mem.get( 0 ), "overwrite get(0)" )
     putsln( "overwrite OK" )
-
     Memory<Int> dest = new Memory<Int>( 10 )
     mem.copyTo( dest, 5 )
     assertEqualI64( 999, dest.get( 0 ), "copy get(0)" )
@@ -34,10 +29,8 @@ public function main() -> I32:
     assertEqualI64( 400, dest.get( 3 ), "copy get(3)" )
     assertEqualI64( 500, dest.get( 4 ), "copy get(4)" )
     putsln( "copyTo OK" )
-
     mem.free()
     dest.free()
     putsln( "free OK" )
-
-    putsln( "=== All memory tests passed ===" )
+    putsln( "All memory tests passed" )
     return 0

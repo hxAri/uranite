@@ -7,7 +7,7 @@ from uranite.requests.session import Session
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Requests Tests ===" )
+    putsln( "Requests Tests" )
     
     Session session = new Session()
     Response response = session.get( "http://www.google.com" )
@@ -15,42 +15,29 @@ public function main() -> I32:
     putsln( "Status: {}".format( response.statusCode ) )
     putsln( "Headers: {}".format( response.headers ) )
     putsln( "Contents: {}".format( response.text ) )
-
-    # Response 200 — ok=true
     Response res200 = new Response( 200, "Hello World", "Content-Type: text/plain" )
     assertEqualI64( 200, res200.statusCode, "200 statusCode" )
     assertEqualStr( "Hello World", res200.text, "200 text" )
     assertEqualStr( "Content-Type: text/plain", res200.headers, "200 headers" )
     assertTrue( res200.ok, "200 ok true" )
     putsln( "Response 200 OK" )
-
-    # Response 404 — ok=false
     Response res404 = new Response( 404, "Not Found", "" )
     assertEqualI64( 404, res404.statusCode, "404 statusCode" )
     assertFalse( res404.ok, "404 ok false" )
     putsln( "Response 404 OK" )
-
-    # RequestError
     RequestError re = new RequestError( "request failed", 0, None )
     assertEqualStr( "request failed", re.getMessage(), "RequestError msg" )
     assertEqualI64( 0, re.getCode(), "RequestError code" )
     putsln( "RequestError OK" )
-
-    # RequestConnectionError
     RequestConnectionError ce = new RequestConnectionError( "connection refused", 0, None )
     assertEqualStr( "connection refused", ce.getMessage(), "ConnectionError msg" )
     putsln( "RequestConnectionError OK" )
-
-    # RequestTimeoutError
     RequestTimeoutError te = new RequestTimeoutError( "timed out", 0, None )
     assertEqualStr( "timed out", te.getMessage(), "TimeoutError msg" )
     putsln( "RequestTimeoutError OK" )
-
-    # HTTPError
     HTTPError he = new HTTPError( "not found", 404, None )
     assertEqualStr( "not found", he.getMessage(), "HTTPError msg" )
     assertEqualI64( 404, he.getCode(), "HTTPError code" )
     putsln( "HTTPError OK" )
-
-    putsln( "=== All requests tests passed ===" )
+    putsln( "All requests tests passed" )
     return 0

@@ -1,11 +1,41 @@
+#
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-07-25 03:19
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/stress-exceptions.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Advanced stress test for exception handling across deep call stacks.
+# Evaluates nested try-catch resolution, variable frame depth traversals,
+# and heavy object instantiations during unwinding operations.
+# Includes elapsed time tracking per individual phase.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
 package uranite.examples.benchmarks.stress-exceptions
 
 from uranite.convert.convert import intToString
 from uranite.errors.error import Error
+from uranite.functions.externs import clock
 from uranite.io.console import putsln
 
 public class TestError extends Error:
+    
     public function TestError( self, String message, I64 code, ?Error cause ) -> Void:
+        parent( message, code, cause )
+
+public class NestedError extends Error:
+    
+    public function NestedError( self, String message, I64 code, ?Error cause ) -> Void:
         parent( message, code, cause )
 
 function throwAtDepth( I64 depth ) -> I64:
@@ -13,27 +43,71 @@ function throwAtDepth( I64 depth ) -> I64:
         raise new TestError( "depth reached zero", 0, None )
     return throwAtDepth( depth - 1 )
 
-public function main() -> I32:
-    putsln( "=== Stress Exceptions Test ===" )
+function throwNestedAtDepth( I64 depth ) -> I64:
+    if depth <= 0:
+        raise new NestedError( "nested depth reached zero", 1, None )
+    return throwNestedAtDepth( depth - 1 )
+
+function runDeepCallStacks() -> I64:
     I64 caught = 0
     I64 i = 0
-    while i < 1000:
+    while i < 5000:
         try:
-            I64 result = throwAtDepth( 10 )
+            I64 result = throwAtDepth( 50 )
         except TestError as e:
             caught = caught + 1
         i = i + 1
-    
-    String caughtStr = intToString( caught )
-    putsln( "caught " + caughtStr + " exceptions across 10-deep frames" )
-    i = 1
-    while i <= 20:
+    return caught
+
+function runNestedExceptions() -> I64:
+    I64 caught = 0
+    I64 i = 0
+    while i < 2000:
         try:
-            I64 result = throwAtDepth( i )
+            try:
+                I64 result = throwNestedAtDepth( 25 )
+            except TestError as te:
+                caught = caught + 1
+        except NestedError as ne:
+            caught = caught + 1
+        i = i + 1
+    return caught
+
+function runVariableDepth() -> I64:
+    I64 caught = 0
+    I64 i = 1
+    while i <= 5000:
+        I64 currentDepth = ( i % 30 ) + 1
+        try:
+            I64 result = throwAtDepth( currentDepth )
         except TestError as e:
             caught = caught + 1
         i = i + 1
-    
-    putsln( "variable depth throw/catch OK" )
-    putsln( "=== Stress exceptions test PASSED ===" )
+    return caught
+
+public function main() -> I32:
+    putsln( "Starting Advanced Exceptions Stress Benchmark..." )
+    I64 startTotal = clock()
+    I64 startDeep = clock()
+    I64 caughtDeep = runDeepCallStacks()
+    I64 endDeep = clock()
+    Double elapsedDeep = ( endDeep - startDeep ) / 1000000.0
+    String caughtDeepStr = intToString( caughtDeep )
+    putsln( "- Deep Call Stacks caught: " + caughtDeepStr + " in ", elapsedDeep, " seconds" )
+    I64 startNested = clock()
+    I64 caughtNested = runNestedExceptions()
+    I64 endNested = clock()
+    Double elapsedNested = ( endNested - startNested ) / 1000000.0
+    String caughtNestedStr = intToString( caughtNested )
+    putsln( "- Nested Exceptions caught: " + caughtNestedStr + " in ", elapsedNested, " seconds" )
+    I64 startVar = clock()
+    I64 caughtVar = runVariableDepth()
+    I64 endVar = clock()
+    Double elapsedVar = ( endVar - startVar ) / 1000000.0
+    String caughtVarStr = intToString( caughtVar )
+    putsln( "- Variable Depth caught: " + caughtVarStr + " in ", elapsedVar, " seconds" )
+    I64 endTotal = clock()
+    Double elapsedTotal = ( endTotal - startTotal ) / 1000000.0
+    putsln( "Total Elapsed time: ", elapsedTotal, " seconds" )
+    putsln( "Advanced stress exceptions test PASSED" )
     return 0

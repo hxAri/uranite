@@ -51,8 +51,7 @@ public class Kwargs<T> implements ImmutableMapping<String,T>:
     protect Memory<String> keys
     protect Memory<T> values
     protect I64 count
-    protect I64 position
-    
+
     public function Kwargs( self, Memory<String> keys, Memory<T> values, I64 count ) -> Void:
         
         """
@@ -70,8 +69,7 @@ public class Kwargs<T> implements ImmutableMapping<String,T>:
         self.keys = keys
         self.values = values
         self.count = count
-        self.position = 0
-    
+
     # =======================================================================================
     # ImmutableMapping / Map methods
     # =======================================================================================
@@ -527,56 +525,21 @@ public class Kwargs<T> implements ImmutableMapping<String,T>:
     # Iterable method
     # =======================================================================================
     
-    public property iterator( self ) -> Iterator<T>:
-        
+    public property iterator( self ) -> Iterator<Pair<String, T>>:
+
         """
-        Return a fresh iterator over the values in the keyword arguments.
-        
+        Return a fresh iterator over the key-value pairs in the keyword arguments.
+
         Returns:
-            Iterator<T>:
-                A new KwargsIterator starting from the first value.
-        
+            Iterator<Pair<String, T>>:
+                A new KwargsIterator starting from the first entry.
+
         Complexity:
             Time: O(1)
             Space: O(1)
         """
-        
-        return new KwargsIterator<T>( self.values, self.count )
-    
-    # =======================================================================================
-    # Extra convenience methods (not from interface chain)
-    # =======================================================================================
-    
-    public property has( self ) -> Boolean:
-        
-        """
-        Check whether more key-value pairs remain in the built-in pair iterator.
-        
-        Returns:
-            Boolean:
-                True if the position has not reached the end.
-        """
-        
-        return self.position < self.count
-    
-    public property next( self ) -> Pair<String, T>:
-        
-        """
-        Return the current key-value pair and advance the built-in pair iterator.
-        
-        Returns:
-            Pair<String, T>:
-                The key-value pair at the current position before advancing.
-        
-        Complexity:
-            Time: O(1)
-            Space: O(1)
-        """
-        
-        String currentKey = self.keys.get( self.position )
-        T currentValue = self.values.get( self.position )
-        self.position = self.position + 1
-        return new Pair<String, T>( currentKey, currentValue )
+
+        return new KwargsIterator<T>( self.keys, self.values, self.count )
 
     public property size( self ) -> Int:
 
@@ -626,62 +589,63 @@ public class Kwargs<T> implements ImmutableMapping<String,T>:
         self.values.free()
 
 
-public class KwargsIterator<T> implements Iterator<T>:
-    
+public class KwargsIterator<T> implements Iterator<Pair<String, T>>:
+
     """
-    Iterator that traverses the value buffer of a Kwargs container,
-    yielding each value in insertion order.
+    Iterator that traverses a Kwargs container, yielding key-value
+    pairs as Pair<String, T> instances in insertion order.
     """
-    
-    protect Memory<T> data
+
+    protect Memory<String> keyData
+    protect Memory<T> valueData
     protect I64 count
     protect I64 position
-    
-    public function KwargsIterator( self, Memory<T> data, I64 count ) -> Void:
-        
+
+    public function KwargsIterator( self, Memory<String> keyData, Memory<T> valueData, I64 count ) -> Void:
+
         """
-        Create an iterator over the given value buffer.
-        
+        Create an iterator over the given key and value buffers.
+
         Parameters:
-            data (Memory<T>):
-                The value storage buffer to iterate over.
-            count (I64):
-                The number of values in the buffer.
+            keyData: The key storage buffer.
+            valueData: The value storage buffer.
+            count: The number of entries in the buffers.
         """
-        
-        self.data = data
+
+        self.keyData = keyData
+        self.valueData = valueData
         self.count = count
         self.position = 0
-    
+
     public property has( self ) -> Boolean:
-        
+
         """
-        Check whether more values remain to be iterated.
-        
+        Check whether more entries remain to be iterated.
+
         Returns:
             Boolean:
                 True if the iterator has not yet reached the end.
         """
-        
+
         return self.position < self.count
-    
-    public property next( self ) -> T:
-        
+
+    public property next( self ) -> Pair<String, T>:
+
         """
-        Return the current value and advance to the next position.
-        
+        Return the current key-value pair and advance to the next position.
+
         Returns:
-            T:
-                The value at the current position before advancing.
-        
+            Pair<String, T>:
+                The key-value pair at the current position before advancing.
+
         Complexity:
             Time: O(1)
             Space: O(1)
         """
-        
-        T element = self.data.get( self.position )
+
+        Pair<String, T> entry = new Pair<String, T>( self.keyData.get( self.position ), self.valueData.get( self.position ) )
         self.position = self.position + 1
-        return element
+        return entry
 
 
 export {

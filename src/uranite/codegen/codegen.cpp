@@ -739,20 +739,27 @@ namespace uranite::codegen {
 			return nullptr;
 		}
 		if( expression.operation == token::Type::KeywordIn ) {
-			std::string typeName = this->resolveStructTypeName( expression.right );
-			if( typeName.empty() == false ) {
-				std::string containsMethodName = fmt::format( "{}::contains", typeName );
-				std::unordered_map<std::string, llvm::Function*>::iterator functionIterator = this->functions.find( containsMethodName );
-				if( functionIterator != this->functions.end() && functionIterator->second != nullptr ) {
-					llvm::Value* selfPointer = this->resolveObjectPointer( expression.right );
-					if( selfPointer ) {
-						llvm::Value* keyValue = expressionLeftLLVMValue;
-						llvm::Function* containsFunction = functionIterator->second;
-						if( containsFunction->arg_size() >= 2 ) {
-							llvm::Type* expectedKeyType = ( containsFunction->arg_begin() + 1 )->getType();
-							keyValue = this->generateImplicitCast( keyValue, expectedKeyType );
+			if( expression.right->semanticType != nullptr &&
+				expression.right->semanticType->kind == semantic::Type::Kind::Class ) {
+				semantic::ClassTypeSharedPointer inClassType = std::static_pointer_cast<semantic::ClassType>( expression.right->semanticType );
+				if( inClassType->implementsInterface( semantic::qname::INDEXABLE ) ) {
+					std::string typeName = this->resolveStructTypeName( expression.right );
+					if( typeName.empty() == false ) {
+						std::string containsMethodName = fmt::format( "{}::contains", typeName );
+						std::unordered_map<std::string, llvm::Function*>::iterator functionIterator = this->functions.find( containsMethodName );
+						if( functionIterator != this->functions.end() && functionIterator->second != nullptr ) {
+							llvm::Value* selfPointer = this->resolveObjectPointer( expression.right );
+							if( selfPointer == nullptr ) {
+								selfPointer = expressionRightLLVMValue;
+							}
+							llvm::Value* keyValue = expressionLeftLLVMValue;
+							llvm::Function* containsFunction = functionIterator->second;
+							if( containsFunction->arg_size() >= 2 ) {
+								llvm::Type* expectedKeyType = ( containsFunction->arg_begin() + 1 )->getType();
+								keyValue = this->generateImplicitCast( keyValue, expectedKeyType );
+							}
+							return this->builder.CreateCall( containsFunction, { selfPointer, keyValue }, "in.contains" );
 						}
-						return this->builder.CreateCall( containsFunction, { selfPointer, keyValue }, "in.contains" );
 					}
 				}
 			}
@@ -781,46 +788,55 @@ namespace uranite::codegen {
 			}
 		}
 		
-		// Operator overloading: class/struct types dispatch to methods
-		// Checked before string operations because LLVM 19 opaque pointers
-		// make all pointer types indistinguishable at the LLVM level
-		if( expressionLeftLLVMValue->getType()->isPointerTy() ) {
-			std::string operatorTypeName( this->resolveStructTypeName( expression.left ) );
-			if( operatorTypeName.empty() == false ) {
+		if( expressionLeftLLVMValue->getType()->isPointerTy() &&
+			expression.left->semanticType != nullptr &&
+			expression.left->semanticType->kind == semantic::Type::Kind::Class ) {
+			semantic::ClassTypeSharedPointer operatorClassType = std::static_pointer_cast<semantic::ClassType>( expression.left->semanticType );
+			struct OperatorInterfaceMapping {
+				int tokenType;
+				const std::string& qualifiedName;
+				const char* methodName;
+			};
+			static const OperatorInterfaceMapping operatorInterfaceMappings[] = {
+				{ ( int ) token::Type::Plus,             semantic::qname::ADDABLE,      "add" },
+				{ ( int ) token::Type::Minus,            semantic::qname::SUBTRACTABLE,  "subtract" },
+				{ ( int ) token::Type::Star,             semantic::qname::MULTIPLIABLE,  "multiply" },
+				{ ( int ) token::Type::Slash,            semantic::qname::DIVIDABLE,     "divide" },
+				{ ( int ) token::Type::Percent,          semantic::qname::MODULABLE,     "modulo" },
+				{ ( int ) token::Type::Equal,            semantic::qname::EQUATABLE,     "equals" },
+				{ ( int ) token::Type::NotEqual,         semantic::qname::EQUATABLE,     "notEquals" },
+				{ ( int ) token::Type::LessThan,         semantic::qname::COMPARABLE,    "lessThan" },
+				{ ( int ) token::Type::GreaterThan,      semantic::qname::COMPARABLE,    "greaterThan" },
+				{ ( int ) token::Type::LessThanEqual,    semantic::qname::COMPARABLE,    "lessOrEqual" },
+				{ ( int ) token::Type::GreaterThanEqual, semantic::qname::COMPARABLE,    "greaterOrEqual" },
+			};
+			for( const OperatorInterfaceMapping& operatorMapping : operatorInterfaceMappings ) {
+				if( operatorMapping.tokenType != ( int ) expression.operation ) {
+					continue;
+				}
+				if( operatorClassType->implementsInterface( operatorMapping.qualifiedName ) == false ) {
+					break;
+				}
+				std::string operatorTypeName = operatorClassType->name;
 				size_t operatorGenericPos = operatorTypeName.find( '<' );
 				if( operatorGenericPos != std::string::npos ) {
 					operatorTypeName = operatorTypeName.substr( 0, operatorGenericPos );
 				}
-				std::unordered_map<std::string, llvm::StructType*>::iterator operatorStructIt = this->structTypes.find( operatorTypeName );
-				if( operatorStructIt != this->structTypes.end() ) {
-					static const std::unordered_map<int, std::string> operatorMethodMaps = {
-						{ ( int ) token::Type::Plus,             "add" },
-						{ ( int ) token::Type::Slash,            "divide" },
-						{ ( int ) token::Type::Equal,            "equals" },
-						{ ( int ) token::Type::GreaterThan,      "greaterThan" },
-						{ ( int ) token::Type::LessThan,         "lessThan" },
-						{ ( int ) token::Type::Percent,          "modulo" },
-						{ ( int ) token::Type::Star,             "multiply" },
-						{ ( int ) token::Type::NotEqual,         "notEquals" },
-						{ ( int ) token::Type::Minus,            "subtract" }
-					};
-					std::unordered_map<int, std::string>::const_iterator operatorMethodIterator = operatorMethodMaps.find( ( int ) expression.operation );
-					if( operatorMethodIterator != operatorMethodMaps.end() ) {
-						std::string methodName( fmt::format( "{}::{}", operatorTypeName, operatorMethodIterator->second ) );
-						std::unordered_map<std::string, llvm::Function*>::iterator functionIterator = this->functions.find( methodName );
-						if( functionIterator != this->functions.end() ) {
-							llvm::Value* selfPointer = this->resolveObjectPointer( expression.left );
-							if( selfPointer ) {
-								std::vector<llvm::Value*> args = { selfPointer, expressionRightLLVMValue };
-								if( functionIterator->second->getReturnType()->isVoidTy() ) {
-									this->builder.CreateCall( functionIterator->second, args );
-									return nullptr;
-								}
-								return this->builder.CreateCall( functionIterator->second, args, fmt::format( "op.{}", operatorMethodIterator->second ) );
-							}
-						}
+				std::string methodName = fmt::format( "{}::{}", operatorTypeName, operatorMapping.methodName );
+				std::unordered_map<std::string, llvm::Function*>::iterator functionIterator = this->functions.find( methodName );
+				if( functionIterator != this->functions.end() ) {
+					llvm::Value* selfPointer = this->resolveObjectPointer( expression.left );
+					if( selfPointer == nullptr ) {
+						selfPointer = expressionLeftLLVMValue;
 					}
+					std::vector<llvm::Value*> args = { selfPointer, expressionRightLLVMValue };
+					if( functionIterator->second->getReturnType()->isVoidTy() ) {
+						this->builder.CreateCall( functionIterator->second, args );
+						return nullptr;
+					}
+					return this->builder.CreateCall( functionIterator->second, args, fmt::format( "op.{}", operatorMapping.methodName ) );
 				}
+				break;
 			}
 		}
 		bool isString =
@@ -898,10 +914,10 @@ namespace uranite::codegen {
 		}
 		bool isFloat = expressionLeftLLVMValue->getType()->isFloatingPointTy() || expressionRightLLVMValue->getType()->isFloatingPointTy();
 		if( isFloat ) {
-			if( expressionLeftLLVMValue->getType()->isFloatingPointTy() == false ) {
+			if( expressionLeftLLVMValue->getType()->isFloatingPointTy() == false && expressionLeftLLVMValue->getType()->isIntegerTy() ) {
 				expressionLeftLLVMValue = this->builder.CreateSIToFP( expressionLeftLLVMValue, llvm::Type::getDoubleTy( this->context ), "tofp" );
 			}
-			if( expressionRightLLVMValue->getType()->isFloatingPointTy() == false ) {
+			if( expressionRightLLVMValue->getType()->isFloatingPointTy() == false && expressionRightLLVMValue->getType()->isIntegerTy() ) {
 				expressionRightLLVMValue = this->builder.CreateSIToFP( expressionRightLLVMValue, llvm::Type::getDoubleTy( this->context ), "tofp" );
 			}
 			if( expressionLeftLLVMValue->getType() != expressionRightLLVMValue->getType() ) {
@@ -944,13 +960,67 @@ namespace uranite::codegen {
 		if( expressionRightLLVMValue->getType()->isStructTy() ) {
 			expressionRightLLVMValue = this->builder.CreateExtractValue( expressionRightLLVMValue, 0, "right.scalar" );
 		}
+		bool mayBeGenericStringComparison = false;
+		if( isFloat == false && expressionLeftLLVMValue->getType()->isIntegerTy( 64 ) &&
+			expressionRightLLVMValue->getType()->isIntegerTy( 64 ) &&
+			( expression.operation == token::Type::Equal || expression.operation == token::Type::NotEqual ) ) {
+			if( expression.left && expression.left->semanticType ) {
+				semantic::Type::Kind leftKind = expression.left->semanticType->kind;
+				if( leftKind == semantic::Type::Kind::GenericParameter ||
+					leftKind == semantic::Type::Kind::String ||
+					( leftKind == semantic::Type::Kind::Class && expression.left->semanticType->name == "String" ) ) {
+					mayBeGenericStringComparison = true;
+				}
+			}
+			if( mayBeGenericStringComparison == false && expression.right && expression.right->semanticType ) {
+				semantic::Type::Kind rightKind = expression.right->semanticType->kind;
+				if( rightKind == semantic::Type::Kind::GenericParameter ||
+					rightKind == semantic::Type::Kind::String ||
+					( rightKind == semantic::Type::Kind::Class && expression.right->semanticType->name == "String" ) ) {
+					mayBeGenericStringComparison = true;
+				}
+			}
+		}
 		switch( expression.operation ) {
 			case token::Type::Ampersand:
 				return this->builder.CreateAnd( expressionLeftLLVMValue, expressionRightLLVMValue, "andtmp" );
 			case token::Type::Caret:
 				return this->builder.CreateXor( expressionLeftLLVMValue, expressionRightLLVMValue, "xortmp" );
 			case token::Type::Equal:
-				return isFloat ? this->builder.CreateFCmpOEQ( expressionLeftLLVMValue, expressionRightLLVMValue, "eqtmp" ) : this->builder.CreateICmpEQ( expressionLeftLLVMValue, expressionRightLLVMValue, "eqtmp" );
+				if( isFloat ) {
+					return this->builder.CreateFCmpOEQ( expressionLeftLLVMValue, expressionRightLLVMValue, "eqtmp" );
+				}
+				if( mayBeGenericStringComparison ) {
+					llvm::Type* i64Type = llvm::Type::getInt64Ty( this->context );
+					llvm::Value* pageThreshold = llvm::ConstantInt::get( i64Type, 4096 );
+					llvm::Value* leftAbove = this->builder.CreateICmpUGE( expressionLeftLLVMValue, pageThreshold, "eq.labove" );
+					llvm::Value* rightAbove = this->builder.CreateICmpUGE( expressionRightLLVMValue, pageThreshold, "eq.rabove" );
+					llvm::Value* bothAbove = this->builder.CreateAnd( leftAbove, rightAbove, "eq.bothptr" );
+					llvm::Function* currentFunction = this->builder.GetInsertBlock()->getParent();
+					llvm::BasicBlock* strcmpBlock = llvm::BasicBlock::Create( this->context, "eq.strcmp.call", currentFunction );
+					llvm::BasicBlock* fallbackBlock = llvm::BasicBlock::Create( this->context, "eq.int.cmp", currentFunction );
+					llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create( this->context, "eq.merge", currentFunction );
+					this->builder.CreateCondBr( bothAbove, strcmpBlock, fallbackBlock );
+					this->builder.SetInsertPoint( strcmpBlock );
+					llvm::Type* ptrType = llvm::PointerType::getUnqual( this->context );
+					llvm::Value* leftPtr = this->builder.CreateIntToPtr( expressionLeftLLVMValue, ptrType, "eq.lptr" );
+					llvm::Value* rightPtr = this->builder.CreateIntToPtr( expressionRightLLVMValue, ptrType, "eq.rptr" );
+					llvm::Function* strcmpFunction = this->getOrCreateStringCompare();
+					llvm::Value* strcmpResult = this->builder.CreateCall( strcmpFunction, { leftPtr, rightPtr }, "eq.strcmp" );
+					llvm::Value* strcmpEq = this->builder.CreateICmpEQ( strcmpResult, llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->context ), 0 ), "eq.streq" );
+					this->builder.CreateBr( mergeBlock );
+					llvm::BasicBlock* strcmpExitBlock = this->builder.GetInsertBlock();
+					this->builder.SetInsertPoint( fallbackBlock );
+					llvm::Value* intEq = this->builder.CreateICmpEQ( expressionLeftLLVMValue, expressionRightLLVMValue, "eq.inteq" );
+					this->builder.CreateBr( mergeBlock );
+					llvm::BasicBlock* fallbackExitBlock = this->builder.GetInsertBlock();
+					this->builder.SetInsertPoint( mergeBlock );
+					llvm::PHINode* phi = this->builder.CreatePHI( llvm::Type::getInt1Ty( this->context ), 2, "eq" );
+					phi->addIncoming( strcmpEq, strcmpExitBlock );
+					phi->addIncoming( intEq, fallbackExitBlock );
+					return phi;
+				}
+				return this->builder.CreateICmpEQ( expressionLeftLLVMValue, expressionRightLLVMValue, "eqtmp" );
 			case token::Type::GreaterThan:
 				return isFloat ? this->builder.CreateFCmpOGT( expressionLeftLLVMValue, expressionRightLLVMValue, "gttmp" ) : this->builder.CreateICmpSGT( expressionLeftLLVMValue, expressionRightLLVMValue, "gttmp" );
 			case token::Type::GreaterThanEqual:
@@ -998,7 +1068,40 @@ namespace uranite::codegen {
 			case token::Type::Minus:
 				return isFloat ? this->builder.CreateFSub( expressionLeftLLVMValue, expressionRightLLVMValue, "subtmp" ) : this->builder.CreateSub( expressionLeftLLVMValue, expressionRightLLVMValue, "subtmp" );
 			case token::Type::NotEqual:
-				return isFloat ? this->builder.CreateFCmpONE( expressionLeftLLVMValue, expressionRightLLVMValue, "neqtmp" ) : this->builder.CreateICmpNE( expressionLeftLLVMValue, expressionRightLLVMValue, "neqtmp" );
+				if( isFloat ) {
+					return this->builder.CreateFCmpONE( expressionLeftLLVMValue, expressionRightLLVMValue, "neqtmp" );
+				}
+				if( mayBeGenericStringComparison ) {
+					llvm::Type* i64Type = llvm::Type::getInt64Ty( this->context );
+					llvm::Value* pageThreshold = llvm::ConstantInt::get( i64Type, 4096 );
+					llvm::Value* leftAbove = this->builder.CreateICmpUGE( expressionLeftLLVMValue, pageThreshold, "ne.labove" );
+					llvm::Value* rightAbove = this->builder.CreateICmpUGE( expressionRightLLVMValue, pageThreshold, "ne.rabove" );
+					llvm::Value* bothAbove = this->builder.CreateAnd( leftAbove, rightAbove, "ne.bothptr" );
+					llvm::Function* currentFunction = this->builder.GetInsertBlock()->getParent();
+					llvm::BasicBlock* strcmpBlock = llvm::BasicBlock::Create( this->context, "ne.strcmp.call", currentFunction );
+					llvm::BasicBlock* fallbackBlock = llvm::BasicBlock::Create( this->context, "ne.int.cmp", currentFunction );
+					llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create( this->context, "ne.merge", currentFunction );
+					this->builder.CreateCondBr( bothAbove, strcmpBlock, fallbackBlock );
+					this->builder.SetInsertPoint( strcmpBlock );
+					llvm::Type* ptrType = llvm::PointerType::getUnqual( this->context );
+					llvm::Value* leftPtr = this->builder.CreateIntToPtr( expressionLeftLLVMValue, ptrType, "ne.lptr" );
+					llvm::Value* rightPtr = this->builder.CreateIntToPtr( expressionRightLLVMValue, ptrType, "ne.rptr" );
+					llvm::Function* strcmpFunction = this->getOrCreateStringCompare();
+					llvm::Value* strcmpResult = this->builder.CreateCall( strcmpFunction, { leftPtr, rightPtr }, "ne.strcmp" );
+					llvm::Value* strcmpNe = this->builder.CreateICmpNE( strcmpResult, llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->context ), 0 ), "ne.strne" );
+					this->builder.CreateBr( mergeBlock );
+					llvm::BasicBlock* strcmpExitBlock = this->builder.GetInsertBlock();
+					this->builder.SetInsertPoint( fallbackBlock );
+					llvm::Value* intNe = this->builder.CreateICmpNE( expressionLeftLLVMValue, expressionRightLLVMValue, "ne.intne" );
+					this->builder.CreateBr( mergeBlock );
+					llvm::BasicBlock* fallbackExitBlock = this->builder.GetInsertBlock();
+					this->builder.SetInsertPoint( mergeBlock );
+					llvm::PHINode* phi = this->builder.CreatePHI( llvm::Type::getInt1Ty( this->context ), 2, "ne" );
+					phi->addIncoming( strcmpNe, strcmpExitBlock );
+					phi->addIncoming( intNe, fallbackExitBlock );
+					return phi;
+				}
+				return this->builder.CreateICmpNE( expressionLeftLLVMValue, expressionRightLLVMValue, "neqtmp" );
 			case token::Type::Percent:
 				if( isFloat ) {
 					llvm::Value* fmodZeroCheck = this->builder.CreateFCmpOEQ( expressionRightLLVMValue, llvm::ConstantFP::get( expressionRightLLVMValue->getType(), 0.0 ), "fmodzero.chk" );
@@ -2039,7 +2142,7 @@ namespace uranite::codegen {
 				resolvedName = monomorphizedName;
 			}
 		}
-		if( structType == nullptr ) {
+		if( structType == nullptr && monomorphizedName.empty() ) {
 			std::unordered_map<std::string,llvm::StructType*>::iterator structTypeIterator = this->structTypes.find( typeName );
 			if( structTypeIterator != this->structTypes.end() ) {
 				structType = structTypeIterator->second;
@@ -3372,8 +3475,127 @@ namespace uranite::codegen {
 			this->builder.SetInsertPoint( forArrayEndBasicBlock );
 			return;
 		}
-		if( forStatement.iterable->semanticType && ( forStatement.iterable->semanticType->kind == semantic::Type::Kind::Class || forStatement.iterable->semanticType->kind == semantic::Type::Kind::Struct ) ) {
-			std::string forIteratorTypeName = forStatement.iterable->semanticType->name;
+		if( forStatement.iterable->semanticType && forStatement.iterable->semanticType->kind == semantic::Type::Kind::Class ) {
+			semantic::ClassTypeSharedPointer forIterableClassType = std::static_pointer_cast<semantic::ClassType>( forStatement.iterable->semanticType );
+			llvm::Value* forIteratorObjectPointer = nullptr;
+			std::string forIteratorTypeName;
+			semantic::TypeSharedPointer forIteratorSemaType = nullptr;
+			if( forIterableClassType->implementsInterface( semantic::qname::ITERATOR ) ) {
+				forIteratorObjectPointer = forBaseIteratorValue;
+				forIteratorTypeName = forIterableClassType->name;
+				forIteratorSemaType = forStatement.iterable->semanticType;
+			}
+			else if( forIterableClassType->implementsInterface( semantic::qname::ITERABLE ) ) {
+				semantic::MethodInfo* forIteratorMethodInfo = forIterableClassType->findMethod( "iterator" );
+				if( forIteratorMethodInfo == nullptr ) {
+					return;
+				}
+				if( forIteratorMethodInfo->type != nullptr && forIteratorMethodInfo->type->kind == semantic::Type::Kind::Function ) {
+					semantic::FunctionTypeSharedPointer forIteratorFuncType = std::static_pointer_cast<semantic::FunctionType>( forIteratorMethodInfo->type );
+					if( forIteratorFuncType->returnType != nullptr ) {
+						forIteratorTypeName = forIteratorFuncType->returnType->name;
+						forIteratorSemaType = forIteratorFuncType->returnType;
+					}
+				}
+				if( forIteratorTypeName.empty() ) {
+					return;
+				}
+				std::string forIteratorBaseClassName = forIteratorTypeName;
+				size_t forIteratorGenBracket = forIteratorBaseClassName.find( '<' );
+				if( forIteratorGenBracket != std::string::npos ) {
+					forIteratorBaseClassName = forIteratorBaseClassName.substr( 0, forIteratorGenBracket );
+				}
+				this->ensureClassMethodsRegistered( forIteratorBaseClassName );
+				if( forIteratorSemaType && forIteratorSemaType->kind == semantic::Type::Kind::Interface ) {
+					std::string forIterableBaseName = forIterableClassType->name;
+					size_t forIterableNameGenBracket = forIterableBaseName.find( '<' );
+					if( forIterableNameGenBracket != std::string::npos ) {
+						forIterableBaseName = forIterableBaseName.substr( 0, forIterableNameGenBracket );
+					}
+					std::string forConcreteIteratorName;
+					for( const std::string& forRegisteredClassName : this->preRegisteredClasses ) {
+						std::string forRegisteredBaseName = forRegisteredClassName;
+						size_t forRegisteredGenBracket = forRegisteredBaseName.find( '<' );
+						if( forRegisteredGenBracket != std::string::npos ) {
+							forRegisteredBaseName = forRegisteredBaseName.substr( 0, forRegisteredGenBracket );
+						}
+						if( forRegisteredBaseName.find( forIterableBaseName ) == std::string::npos ) {
+							continue;
+						}
+						std::string forHasKey = fmt::format( "{}::has", forRegisteredClassName );
+						std::string forNextKey = fmt::format( "{}::next", forRegisteredClassName );
+						bool forHasFound = this->functions.count( forHasKey ) > 0;
+						bool forNextFound = this->functions.count( forNextKey ) > 0;
+						if( forHasFound == false || forNextFound == false ) {
+							forHasKey = fmt::format( "{}::has", forRegisteredBaseName );
+							forNextKey = fmt::format( "{}::next", forRegisteredBaseName );
+							forHasFound = this->functions.count( forHasKey ) > 0;
+							forNextFound = this->functions.count( forNextKey ) > 0;
+						}
+						if( forHasFound && forNextFound ) {
+							forConcreteIteratorName = forRegisteredClassName;
+							break;
+						}
+					}
+					if( forConcreteIteratorName.empty() == false ) {
+						forIteratorTypeName = forConcreteIteratorName;
+					}
+				}
+				std::string forIterableTypeName = forIterableClassType->name;
+				std::string forIterableBaseTypeName = forIterableTypeName;
+				size_t forIterableGenBracket = forIterableBaseTypeName.find( '<' );
+				if( forIterableGenBracket != std::string::npos ) {
+					forIterableBaseTypeName = forIterableBaseTypeName.substr( 0, forIterableGenBracket );
+				}
+				llvm::Function* forIteratorPropertyFn = nullptr;
+				std::string forIteratorFnKey = fmt::format( "{}::iterator", forIterableTypeName );
+				if( this->functions.count( forIteratorFnKey ) ) {
+					forIteratorPropertyFn = this->functions[forIteratorFnKey];
+				}
+				if( forIteratorPropertyFn == nullptr && forIterableBaseTypeName != forIterableTypeName ) {
+					forIteratorFnKey = fmt::format( "{}::iterator", forIterableBaseTypeName );
+					if( this->functions.count( forIteratorFnKey ) ) {
+						forIteratorPropertyFn = this->functions[forIteratorFnKey];
+					}
+				}
+				if( forIteratorPropertyFn == nullptr ) {
+					return;
+				}
+				llvm::Value* forIterableSelfPointer = forBaseIteratorValue;
+				if( forIterableSelfPointer->getType()->isPointerTy() == false ) {
+					if( forIterableSelfPointer->getType()->isIntegerTy() ) {
+						forIterableSelfPointer = this->builder.CreateIntToPtr( forIterableSelfPointer, llvm::PointerType::getUnqual( this->context ), "iterable.ptr" );
+					}
+					else {
+						return;
+					}
+				}
+				llvm::Type* forIterableExpectedSelfType = forIteratorPropertyFn->getArg( 0 )->getType();
+				if( forIterableSelfPointer->getType() != forIterableExpectedSelfType ) {
+					forIterableSelfPointer = this->builder.CreateBitCast( forIterableSelfPointer, forIterableExpectedSelfType, "iterable.cast" );
+				}
+				llvm::Value* forIteratorCallResult = this->builder.CreateCall( forIteratorPropertyFn, { forIterableSelfPointer }, "iterator.obj" );
+					if( forIteratorCallResult->getType()->isStructTy() ) {
+						llvm::StructType* forIteratorResultStruct = llvm::cast<llvm::StructType>( forIteratorCallResult->getType() );
+						if( forIteratorResultStruct->getNumElements() == 2 &&
+							forIteratorResultStruct->getElementType( 0 )->isPointerTy() &&
+							forIteratorResultStruct->getElementType( 1 )->isPointerTy() ) {
+							forIteratorObjectPointer = this->builder.CreateExtractValue( forIteratorCallResult, 0, "iterator.ptr" );
+						}
+						else {
+							forIteratorObjectPointer = forIteratorCallResult;
+						}
+					}
+					else {
+						forIteratorObjectPointer = forIteratorCallResult;
+					}
+			}
+			else {
+				return;
+			}
+			if( forIteratorObjectPointer == nullptr ) {
+				return;
+			}
 			std::string forBaseTypeName = forIteratorTypeName;
 			size_t forGenericBracket = forBaseTypeName.find( '<' );
 			if( forGenericBracket != std::string::npos ) {
@@ -3401,9 +3623,14 @@ namespace uranite::codegen {
 				forNextFn = this->functions.count( forNextBaseKey ) ? this->functions[forNextBaseKey] : nullptr;
 			}
 			if( forHasNextFn && forNextFn ) {
-				llvm::Value* forObjPointer = forBaseIteratorValue;
+				llvm::Value* forObjPointer = forIteratorObjectPointer;
 				if( forObjPointer->getType()->isPointerTy() == false ) {
-					return;
+					if( forObjPointer->getType()->isIntegerTy() ) {
+						forObjPointer = this->builder.CreateIntToPtr( forObjPointer, llvm::PointerType::getUnqual( this->context ), "iter.erased.ptr" );
+					}
+					else {
+						return;
+					}
 				}
 				llvm::Type* forExpectedSelfType = forHasNextFn->getFunctionType()->getParamType( 0 );
 				if( forObjPointer->getType() != forExpectedSelfType ) {
@@ -3419,8 +3646,119 @@ namespace uranite::codegen {
 						forIsOptional = true;
 					}
 				}
-				llvm::Value* forIteratorVarAlloca = this->createEntryBlockAllocation( forFunction, forStatement.variable, forElemType );
+				bool forHasKeyValueDecomposition = false;
+				llvm::StructType* forPairStructType = nullptr;
+				llvm::Value* forIteratorVar2Alloca = nullptr;
+				llvm::Type* forResolvedKeyLLVMType = nullptr;
+				llvm::Type* forResolvedValueLLVMType = nullptr;
+				if( forStatement.variable2.empty() == false && forNextRetType->isPointerTy() ) {
+					std::string forPairStructName;
+					semantic::TypeSharedPointer forPairSemaType = nullptr;
+					std::unordered_map<std::string, semantic::TypeSharedPointer> forIterTypeSubstitutions;
+					if( forIteratorSemaType != nullptr && forIteratorSemaType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassTypeSharedPointer forIteratorClassTypeKV = std::static_pointer_cast<semantic::ClassType>( forIteratorSemaType );
+						forIterTypeSubstitutions = forIteratorClassTypeKV->typeSubstitutions;
+						semantic::MethodInfo* forNextMethod = forIteratorClassTypeKV->findMethod( "next" );
+						if( forNextMethod != nullptr && forNextMethod->type != nullptr && forNextMethod->type->kind == semantic::Type::Kind::Function ) {
+							semantic::TypeSharedPointer forNextRetSemaType = std::static_pointer_cast<semantic::FunctionType>( forNextMethod->type )->returnType;
+							if( forNextRetSemaType != nullptr && ( forNextRetSemaType->kind == semantic::Type::Kind::Struct || forNextRetSemaType->kind == semantic::Type::Kind::Class ) ) {
+								forPairSemaType = forNextRetSemaType;
+								forPairStructName = forNextRetSemaType->name;
+								size_t forGenBracketPos = forPairStructName.find( '<' );
+								if( forGenBracketPos != std::string::npos ) {
+									forPairStructName = forPairStructName.substr( 0, forGenBracketPos );
+								}
+							}
+						}
+					}
+					if( forPairStructName.empty() == false ) {
+						std::unordered_map<std::string, llvm::StructType*>::iterator forPairStructIt = this->structTypes.find( forPairStructName );
+						if( forPairStructIt != this->structTypes.end() ) {
+							forPairStructType = forPairStructIt->second;
+						}
+						if( forPairStructType == nullptr ) {
+							forPairStructType = llvm::StructType::getTypeByName( this->context, forPairStructName );
+						}
+					}
+					if( forPairStructType == nullptr ) {
+						forPairStructType = llvm::StructType::getTypeByName( this->context, "Pair" );
+					}
+					if( forPairStructType != nullptr && forPairStructType->getNumElements() >= 2 ) {
+						forHasKeyValueDecomposition = true;
+						if( forPairSemaType != nullptr && forPairSemaType->kind == semantic::Type::Kind::Struct ) {
+							semantic::StructTypeSharedPointer forPairStructSemaType = std::static_pointer_cast<semantic::StructType>( forPairSemaType );
+							if( forPairStructSemaType->fields.size() >= 2 ) {
+								semantic::TypeSharedPointer forKeyFieldSemaType = forPairStructSemaType->fields[0].type;
+								if( forKeyFieldSemaType != nullptr && forKeyFieldSemaType->kind == semantic::Type::Kind::GenericParameter ) {
+									std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator forKeySub = forIterTypeSubstitutions.find( forKeyFieldSemaType->name );
+									if( forKeySub != forIterTypeSubstitutions.end() ) {
+										forKeyFieldSemaType = forKeySub->second;
+									}
+								}
+								if( forKeyFieldSemaType != nullptr ) {
+									forResolvedKeyLLVMType = this->toLLVMType( forKeyFieldSemaType );
+								}
+								semantic::TypeSharedPointer forValueFieldSemaType = forPairStructSemaType->fields[1].type;
+								if( forValueFieldSemaType != nullptr && forValueFieldSemaType->kind == semantic::Type::Kind::GenericParameter ) {
+									std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator forValSub = forIterTypeSubstitutions.find( forValueFieldSemaType->name );
+									if( forValSub != forIterTypeSubstitutions.end() ) {
+										forValueFieldSemaType = forValSub->second;
+									}
+								}
+								if( forValueFieldSemaType != nullptr ) {
+									forResolvedValueLLVMType = this->toLLVMType( forValueFieldSemaType );
+								}
+							}
+						}
+						if( forResolvedKeyLLVMType == nullptr ) {
+							forResolvedKeyLLVMType = forPairStructType->getElementType( 0 );
+						}
+						if( forResolvedValueLLVMType == nullptr ) {
+							forResolvedValueLLVMType = forPairStructType->getElementType( 1 );
+						}
+						if( forResolvedKeyLLVMType->isStructTy() ) {
+							forResolvedKeyLLVMType = llvm::PointerType::getUnqual( this->context );
+						}
+						if( forResolvedValueLLVMType->isStructTy() ) {
+							forResolvedValueLLVMType = llvm::PointerType::getUnqual( this->context );
+						}
+					}
+				}
+				llvm::Value* forIteratorVarAlloca = this->createEntryBlockAllocation( forFunction, forStatement.variable, forHasKeyValueDecomposition ? forResolvedKeyLLVMType : forElemType );
 				this->namedValues[forStatement.variable] = forIteratorVarAlloca;
+				if( forHasKeyValueDecomposition == false && forElemType->isPointerTy() ) {
+					if( forStatement.variableType ) {
+						std::string forVarTypeName;
+						if( forStatement.variableType->kind == ast::Node::Kind::SimpleType ) {
+							forVarTypeName = static_cast<ast::nodes::SimpleTypeNode&>( *forStatement.variableType ).name;
+						}
+						else if( forStatement.variableType->kind == ast::Node::Kind::GenericType ) {
+							forVarTypeName = static_cast<ast::nodes::GenericTypeNode&>( *forStatement.variableType ).name;
+						}
+						if( forVarTypeName.empty() == false ) {
+							this->variableStructType[forStatement.variable] = forVarTypeName;
+						}
+					}
+					else if( forIteratorSemaType != nullptr && forIteratorSemaType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassTypeSharedPointer forIterClassType = std::static_pointer_cast<semantic::ClassType>( forIteratorSemaType );
+						semantic::MethodInfo* forNextMethodInfo = forIterClassType->findMethod( "next" );
+						if( forNextMethodInfo != nullptr && forNextMethodInfo->type != nullptr && forNextMethodInfo->type->kind == semantic::Type::Kind::Function ) {
+							semantic::TypeSharedPointer forNextRetSemaType = std::static_pointer_cast<semantic::FunctionType>( forNextMethodInfo->type )->returnType;
+							if( forNextRetSemaType != nullptr && ( forNextRetSemaType->kind == semantic::Type::Kind::Struct || forNextRetSemaType->kind == semantic::Type::Kind::Class ) ) {
+								std::string forElemStructName = forNextRetSemaType->name;
+								size_t forGenPos = forElemStructName.find( '<' );
+								if( forGenPos != std::string::npos ) {
+									forElemStructName = forElemStructName.substr( 0, forGenPos );
+								}
+								this->variableStructType[forStatement.variable] = forElemStructName;
+							}
+						}
+					}
+				}
+				if( forHasKeyValueDecomposition ) {
+					forIteratorVar2Alloca = this->createEntryBlockAllocation( forFunction, forStatement.variable2, forResolvedValueLLVMType );
+					this->namedValues[forStatement.variable2] = forIteratorVar2Alloca;
+				}
 				llvm::BasicBlock* forIteratorConditionBasicBlock = llvm::BasicBlock::Create( this->context, "iter.cond", forFunction );
 				llvm::BasicBlock* forIteratorBodyBasicBlock = llvm::BasicBlock::Create( this->context, "iter.body", forFunction );
 				llvm::BasicBlock* forIteratorIncBasicBlock = llvm::BasicBlock::Create( this->context, "iter.inc", forFunction );
@@ -3438,11 +3776,23 @@ namespace uranite::codegen {
 				this->builder.CreateCondBr( forIteratorConditionValue, forIteratorBodyBasicBlock, forIteratorEndBasicBlock );
 				this->builder.SetInsertPoint( forIteratorBodyBasicBlock );
 				llvm::Value* forNextRes = this->builder.CreateCall( forNextFn, {forObjPointer}, "next" );
-				llvm::Value* forElemValue = forNextRes;
-				if( forIsOptional ) {
-					forElemValue = this->builder.CreateExtractValue( forNextRes, 1, "unwrap" );
+				if( forHasKeyValueDecomposition ) {
+					llvm::Value* forKeyGep = this->builder.CreateStructGEP( forPairStructType, forNextRes, 0, "pair.key.ptr" );
+					llvm::Value* forKeyValue = this->builder.CreateLoad( forPairStructType->getElementType( 0 ), forKeyGep, "pair.key" );
+					forKeyValue = this->generateImplicitCast( forKeyValue, forResolvedKeyLLVMType );
+					this->builder.CreateStore( forKeyValue, forIteratorVarAlloca );
+					llvm::Value* forValueGep = this->builder.CreateStructGEP( forPairStructType, forNextRes, 1, "pair.val.ptr" );
+					llvm::Value* forValueValue = this->builder.CreateLoad( forPairStructType->getElementType( 1 ), forValueGep, "pair.val" );
+					forValueValue = this->generateImplicitCast( forValueValue, forResolvedValueLLVMType );
+					this->builder.CreateStore( forValueValue, forIteratorVar2Alloca );
 				}
-				this->builder.CreateStore( forElemValue, forIteratorVarAlloca );
+				else {
+					llvm::Value* forElemValue = forNextRes;
+					if( forIsOptional ) {
+						forElemValue = this->builder.CreateExtractValue( forNextRes, 1, "unwrap" );
+					}
+					this->builder.CreateStore( forElemValue, forIteratorVarAlloca );
+				}
 				this->breakTargets.push( forIteratorEndBasicBlock );
 				this->continueTargets.push( forIteratorIncBasicBlock );
 				this->pushDeferScope();
@@ -5445,6 +5795,25 @@ namespace uranite::codegen {
 						}
 					}
 				}
+				if( semanticType != nullptr && semanticType->kind == semantic::Type::Kind::Struct ) {
+					semantic::StructTypeSharedPointer structSemaType = std::static_pointer_cast<semantic::StructType>( semanticType );
+					semantic::MethodInfo* methodInformation = structSemaType->findMethod( memberAccessExpression.member );
+					if( methodInformation != nullptr && methodInformation->isProperty ) {
+						std::string functionLookUpKey = fmt::format( "{}::{}", structName, memberAccessExpression.member );
+						std::unordered_map<std::string, llvm::Function*>::iterator functionIterator = this->functions.find( functionLookUpKey );
+						if( functionIterator != this->functions.end() ) {
+							llvm::Function* targetPropertyFunction = functionIterator->second;
+							llvm::Type* expectedSelfType = targetPropertyFunction->getArg( 0 )->getType();
+							std::vector<llvm::Value*> propertyCallArguments = { this->generateImplicitCast( resolvedObjectPointer, expectedSelfType ) };
+							if( targetPropertyFunction->getReturnType()->isVoidTy() ) {
+								this->builder.CreateCall( targetPropertyFunction, propertyCallArguments );
+								return nullptr;
+							}
+							std::string propertyCallLabel = fmt::format( "prop.{}", memberAccessExpression.member );
+							return this->builder.CreateCall( targetPropertyFunction, propertyCallArguments, propertyCallLabel );
+						}
+					}
+				}
 				
 				// Interface/Trait property dispatch via itable
 				{
@@ -5962,6 +6331,14 @@ namespace uranite::codegen {
 							}
 						}
 					}
+					if( argumentValue->getType()->isPointerTy() && expectedArgType->isIntegerTy() &&
+						argumentNode->kind == ast::Node::Kind::IdentifierExpression ) {
+						ast::nodes::IdentifierExpression& argIdent = static_cast<ast::nodes::IdentifierExpression&>( *argumentNode );
+						std::unordered_map<std::string, llvm::Value*>::iterator aliveFlagIt = this->aliveFlags.find( argIdent.name );
+						if( aliveFlagIt != this->aliveFlags.end() ) {
+							this->builder.CreateStore( llvm::ConstantInt::getFalse( this->context ), aliveFlagIt->second );
+						}
+					}
 					argumentValue = this->generateImplicitCast( argumentValue, expectedArgType );
 				}
 				callArguments.push_back( argumentValue );
@@ -6197,7 +6574,20 @@ namespace uranite::codegen {
 				return this->generateImplicitCast( fallbackSelfValue, llvm::Type::getInt64Ty( this->context ) );
 			}
 			if( fallbackSelfValue->getType()->isPointerTy() ) {
-				return this->builder.CreatePtrToInt( fallbackSelfValue, llvm::Type::getInt64Ty( this->context ), "ptr.hash" );
+				bool isGenericOrErasedType = false;
+				if( methodCallExpression.object && methodCallExpression.object->semanticType ) {
+					semantic::Type::Kind objectKind = methodCallExpression.object->semanticType->kind;
+					isGenericOrErasedType = ( objectKind == semantic::Type::Kind::GenericParameter );
+				}
+				if( isGenericOrErasedType && llvm::isa<llvm::AllocaInst>( fallbackSelfValue ) ) {
+					llvm::Type* i64Type = llvm::Type::getInt64Ty( this->context );
+					llvm::Value* loadedValue = this->builder.CreateLoad( i64Type, fallbackSelfValue, "hash.load" );
+					llvm::Value* asPtr = this->builder.CreateIntToPtr( loadedValue, llvm::PointerType::getUnqual( this->context ), "hash.ptr" );
+					llvm::Function* hashFunction = this->getOrCreateStringHash();
+					return this->builder.CreateCall( hashFunction, { asPtr }, "str.hash" );
+				}
+				llvm::Function* hashFunction = this->getOrCreateStringHash();
+				return this->builder.CreateCall( hashFunction, { fallbackSelfValue }, "str.hash" );
 			}
 		}
 		return nullptr;
@@ -6792,23 +7182,25 @@ namespace uranite::codegen {
 		if( unaryOperand == nullptr ) {
 			return nullptr;
 		}
-		if( unaryOperand->getType()->isPointerTy() ) {
-			std::string unaryTypeName = resolveStructTypeName( expression.operand );
-			if( unaryTypeName.empty() == false ) {
-				std::string unaryMethodName;
-				if( expression.operation == token::Type::Minus ) {
-					unaryMethodName = "negate";
+		if( unaryOperand->getType()->isPointerTy() &&
+			expression.operand->semanticType != nullptr &&
+			expression.operand->semanticType->kind == semantic::Type::Kind::Class ) {
+			semantic::ClassTypeSharedPointer unaryClassType = std::static_pointer_cast<semantic::ClassType>( expression.operand->semanticType );
+			if( expression.operation == token::Type::Minus &&
+				unaryClassType->implementsInterface( semantic::qname::NEGATABLE ) ) {
+				std::string unaryTypeName = unaryClassType->name;
+				size_t unaryGenericPos = unaryTypeName.find( '<' );
+				if( unaryGenericPos != std::string::npos ) {
+					unaryTypeName = unaryTypeName.substr( 0, unaryGenericPos );
 				}
-				if( unaryMethodName.empty() == false ) {
-					std::string unaryFullMethodName = fmt::format( "{}::{}", unaryTypeName, unaryMethodName );
-					std::unordered_map<std::string,llvm::Function*>::iterator unaryFunctionIterator = this->functions.find( unaryFullMethodName );
-					if( unaryFunctionIterator != this->functions.end() ) {
-						llvm::Value* unarySelfPointer = this->resolveObjectPointer( expression.operand );
-						if( unarySelfPointer ) {
-							std::string unaryCallResultName = fmt::format( "op.{}", unaryMethodName );
-							return this->builder.CreateCall( unaryFunctionIterator->second, {unarySelfPointer}, unaryCallResultName );
-						}
+				std::string unaryFullMethodName = fmt::format( "{}::negate", unaryTypeName );
+				std::unordered_map<std::string,llvm::Function*>::iterator unaryFunctionIterator = this->functions.find( unaryFullMethodName );
+				if( unaryFunctionIterator != this->functions.end() ) {
+					llvm::Value* unarySelfPointer = this->resolveObjectPointer( expression.operand );
+					if( unarySelfPointer == nullptr ) {
+						unarySelfPointer = unaryOperand;
 					}
+					return this->builder.CreateCall( unaryFunctionIterator->second, {unarySelfPointer}, "op.negate" );
 				}
 			}
 		}
@@ -7663,6 +8055,58 @@ namespace uranite::codegen {
 		return function;
 	}
 	
+	llvm::Function* LLVMCodegen::getOrCreateStringHash() {
+		llvm::Function* function = this->module->getFunction( "__uranite_string_hash" );
+		if( function != nullptr ) {
+			return function;
+		}
+		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->context );
+		llvm::Type* i8Type = llvm::Type::getInt8Ty( this->context );
+		llvm::Type* ptrType = llvm::PointerType::getUnqual( this->context );
+		llvm::FunctionType* hashFuncType = llvm::FunctionType::get( i64Type, { ptrType }, false );
+		function = llvm::Function::Create(
+			hashFuncType, llvm::Function::InternalLinkage,
+			"__uranite_string_hash", this->getModule()
+		);
+		llvm::BasicBlock* entryBlock = llvm::BasicBlock::Create( this->context, "entry", function );
+		llvm::BasicBlock* loopHeader = llvm::BasicBlock::Create( this->context, "loop", function );
+		llvm::BasicBlock* loopBody = llvm::BasicBlock::Create( this->context, "body", function );
+		llvm::BasicBlock* exitBlock = llvm::BasicBlock::Create( this->context, "exit", function );
+		llvm::IRBuilder<> hashBuilder( this->context );
+		hashBuilder.SetInsertPoint( entryBlock );
+		llvm::Value* strArg = function->getArg( 0 );
+		llvm::Value* isNull = hashBuilder.CreateICmpEQ( strArg,
+			llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( ptrType ) ), "null.chk" );
+		llvm::BasicBlock* nonNullBlock = llvm::BasicBlock::Create( this->context, "nonnull", function, loopHeader );
+		hashBuilder.CreateCondBr( isNull, exitBlock, nonNullBlock );
+		hashBuilder.SetInsertPoint( nonNullBlock );
+		hashBuilder.CreateBr( loopHeader );
+		hashBuilder.SetInsertPoint( loopHeader );
+		llvm::PHINode* hashPhi = hashBuilder.CreatePHI( i64Type, 2, "hash" );
+		llvm::PHINode* idxPhi = hashBuilder.CreatePHI( i64Type, 2, "idx" );
+		hashPhi->addIncoming( llvm::ConstantInt::get( i64Type, 5381 ), nonNullBlock );
+		idxPhi->addIncoming( llvm::ConstantInt::get( i64Type, 0 ), nonNullBlock );
+		llvm::Value* charPtr = hashBuilder.CreateGEP( i8Type, strArg, idxPhi, "ch.ptr" );
+		llvm::Value* charVal = hashBuilder.CreateLoad( i8Type, charPtr, "ch" );
+		llvm::Value* isZero = hashBuilder.CreateICmpEQ( charVal, llvm::ConstantInt::get( i8Type, 0 ), "is.zero" );
+		hashBuilder.CreateCondBr( isZero, exitBlock, loopBody );
+		hashBuilder.SetInsertPoint( loopBody );
+		llvm::Value* charExt = hashBuilder.CreateZExt( charVal, i64Type, "ch.ext" );
+		llvm::Value* shifted = hashBuilder.CreateShl( hashPhi, llvm::ConstantInt::get( i64Type, 5 ), "shl" );
+		llvm::Value* combined = hashBuilder.CreateAdd( shifted, hashPhi, "combined" );
+		llvm::Value* newHash = hashBuilder.CreateAdd( combined, charExt, "new.hash" );
+		llvm::Value* newIdx = hashBuilder.CreateAdd( idxPhi, llvm::ConstantInt::get( i64Type, 1 ), "new.idx" );
+		hashPhi->addIncoming( newHash, loopBody );
+		idxPhi->addIncoming( newIdx, loopBody );
+		hashBuilder.CreateBr( loopHeader );
+		hashBuilder.SetInsertPoint( exitBlock );
+		llvm::PHINode* resultPhi = hashBuilder.CreatePHI( i64Type, 2, "result" );
+		resultPhi->addIncoming( llvm::ConstantInt::get( i64Type, 0 ), entryBlock );
+		resultPhi->addIncoming( hashPhi, loopHeader );
+		hashBuilder.CreateRet( resultPhi );
+		return function;
+	}
+	
 	llvm::StructType* LLVMCodegen::getOrCreateStructType( const std::string& name, const semantic::TypeSharedPointer& type ) {
 		std::unordered_map<std::string, llvm::StructType*>::iterator structTypeIterator = this->structTypes.find( name );
 		if( structTypeIterator != this->structTypes.end() ) {
@@ -7682,11 +8126,22 @@ namespace uranite::codegen {
 			}
 		}
 		if( baseName.empty() == false && baseName != name ) {
-			std::unordered_map<std::string, llvm::StructType*>::iterator baseIterator = this->structTypes.find( baseName );
-			if( baseIterator != this->structTypes.end() ) {
-				this->structTypes[name] = baseIterator->second;
-				this->structFieldIndices[name] = this->structFieldIndices[baseName];
-				return baseIterator->second;
+			bool hasTypeSubstitutions = false;
+			if( type->kind == semantic::Type::Kind::Struct ) {
+				semantic::StructTypeSharedPointer structCheckType = std::static_pointer_cast<semantic::StructType>( type );
+				hasTypeSubstitutions = structCheckType->typeSubstitutions.empty() == false;
+			}
+			else if( type->kind == semantic::Type::Kind::Class ) {
+				semantic::ClassTypeSharedPointer classCheckType = std::static_pointer_cast<semantic::ClassType>( type );
+				hasTypeSubstitutions = classCheckType->typeSubstitutions.empty() == false;
+			}
+			if( hasTypeSubstitutions == false ) {
+				std::unordered_map<std::string, llvm::StructType*>::iterator baseIterator = this->structTypes.find( baseName );
+				if( baseIterator != this->structTypes.end() ) {
+					this->structTypes[name] = baseIterator->second;
+					this->structFieldIndices[name] = this->structFieldIndices[baseName];
+					return baseIterator->second;
+				}
 			}
 		}
 		llvm::StructType* createdStructType = llvm::StructType::getTypeByName( this->context, name );
@@ -7731,8 +8186,15 @@ namespace uranite::codegen {
 					structMemberTypes.push_back( llvm::PointerType::getUnqual( createdStructType ) );
 				}
 				else {
-					llvm::Type* fieldLLVMType = toLLVMType( classField.type );
-					if( classField.type && ( classField.type->kind == semantic::Type::Kind::Class || classField.type->kind == semantic::Type::Kind::Struct ) &&
+					semantic::TypeSharedPointer resolvedFieldType = classField.type;
+					if( resolvedFieldType && resolvedFieldType->kind == semantic::Type::Kind::GenericParameter ) {
+						std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator substitution = classType->typeSubstitutions.find( resolvedFieldType->name );
+						if( substitution != classType->typeSubstitutions.end() ) {
+							resolvedFieldType = substitution->second;
+						}
+					}
+					llvm::Type* fieldLLVMType = toLLVMType( resolvedFieldType );
+					if( resolvedFieldType && ( resolvedFieldType->kind == semantic::Type::Kind::Class || resolvedFieldType->kind == semantic::Type::Kind::Struct ) &&
 						fieldLLVMType->isStructTy() && fieldLLVMType != this->getInterfaceFatPointerType() ) {
 						fieldLLVMType = llvm::PointerType::getUnqual( fieldLLVMType );
 					}
@@ -7759,8 +8221,15 @@ namespace uranite::codegen {
 					structMemberTypes.push_back( llvm::PointerType::getUnqual( createdStructType ) );
 				}
 				else {
-					llvm::Type* fieldLLVMType = toLLVMType( structField.type );
-					if( structField.type && ( structField.type->kind == semantic::Type::Kind::Class || structField.type->kind == semantic::Type::Kind::Struct ) &&
+					semantic::TypeSharedPointer resolvedFieldType = structField.type;
+					if( resolvedFieldType && resolvedFieldType->kind == semantic::Type::Kind::GenericParameter ) {
+						std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator substitution = semanticStructType->typeSubstitutions.find( resolvedFieldType->name );
+						if( substitution != semanticStructType->typeSubstitutions.end() ) {
+							resolvedFieldType = substitution->second;
+						}
+					}
+					llvm::Type* fieldLLVMType = toLLVMType( resolvedFieldType );
+					if( resolvedFieldType && ( resolvedFieldType->kind == semantic::Type::Kind::Class || resolvedFieldType->kind == semantic::Type::Kind::Struct ) &&
 						fieldLLVMType->isStructTy() && fieldLLVMType != this->getInterfaceFatPointerType() ) {
 						fieldLLVMType = llvm::PointerType::getUnqual( fieldLLVMType );
 					}
@@ -8392,7 +8861,7 @@ namespace uranite::codegen {
 					});
 					return llvm::PointerType::getUnqual( classArenaStaticStructType );
 				}
-				if( classType->astDeclaration && classType->astDeclaration->name != type->name ) {
+				if( classType->astDeclaration && classType->astDeclaration->name != type->name && classType->typeSubstitutions.empty() ) {
 					std::string classBaseName( classType->astDeclaration->name );
 					semantic::TypeSharedPointer classBaseType = this->analyzer.types().lookupType( classBaseName );
 					if( classBaseType ) {
@@ -8471,7 +8940,7 @@ namespace uranite::codegen {
 				return llvm::PointerType::getUnqual( this->context ); // char*
 			case semantic::Type::Kind::Struct: {
 				semantic::StructTypeSharedPointer structType = std::static_pointer_cast<semantic::StructType>( type );
-				if( structType->astDeclaration && structType->astDeclaration->name != type->name ) {
+				if( structType->astDeclaration && structType->astDeclaration->name != type->name && structType->typeSubstitutions.empty() ) {
 					std::string structBaseName( structType->astDeclaration->name );
 					semantic::TypeSharedPointer structBaseType = this->analyzer.types().lookupType( structBaseName );
 					if( structBaseType ) {

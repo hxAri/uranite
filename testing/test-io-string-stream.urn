@@ -7,8 +7,7 @@ from uranite.memory.memory import Memory
 from uranite.testing.assertions import assertEqualI64, assertEqualStr
 
 public function main() -> I32:
-    putsln( "=== IO String Stream Tests ===" )
-
+    putsln( "IO String Stream Tests" )
     StringWriter sw = new StringWriter()
     Memory<I64> data = new Memory<I64>( 3 )
     data.set( 0, 65 )
@@ -20,7 +19,6 @@ public function main() -> I32:
     assertEqualStr( "ABCDEF", output, "StringWriter output" )
     assertEqualI64( 6, sw.getLength(), "StringWriter length" )
     putsln( "StringWriter OK" )
-
     StringReader sr = new StringReader( "Hello World" )
     Memory<I64> readBuf = new Memory<I64>( 5 )
     I64 n = sr.read( readBuf, 0, 5 )
@@ -30,6 +28,5 @@ public function main() -> I32:
     readBuf.free()
     data.free()
     putsln( "StringReader OK" )
-
-    putsln( "=== All IO string stream tests passed ===" )
+    putsln( "All IO string stream tests passed" )
     return 0

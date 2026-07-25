@@ -6,30 +6,27 @@ from uranite.testing.assertions import assertEqualI64, assertFalse
 from uranite.threading.atomic import AtomicI64
 
 class SimpleOnce:
-
+    
     protect AtomicI64 state
     protect Spinlock guard
-
+    
     public function SimpleOnce( self ) -> Void:
         self.state = new AtomicI64( 0 )
         self.guard = new Spinlock()
-
+    
     public function isCompleted( self ) -> Boolean:
         return self.state.load() == 2
-
+    
     public function destroy( self ) -> Void:
         self.state.destroy()
 
 public function main() -> I32:
-    putsln( "=== Threading Once Literal Tests ===" )
-
+    putsln( "Threading Once Literal Tests" )
     SimpleOnce o = new SimpleOnce()
     assertFalse( o.isCompleted(), "initially not completed" )
     assertEqualI64( 0, o.state.load(), "state 0" )
     putsln( "SimpleOnce OK" )
-
     o.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All once literal tests passed ===" )
+    putsln( "All once literal tests passed" )
     return 0

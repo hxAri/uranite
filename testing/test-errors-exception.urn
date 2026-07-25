@@ -6,21 +6,16 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Exception Tests ===" )
-
+    putsln( "Exception Tests" )
     Exception ex = new Exception( "file not found", 404, None )
-
     assertEqualI64( 404, ex.getCode(), "getCode" )
     assertEqualStr( "", ex.getFile(), "getFile empty" )
     assertEqualI64( 0, ex.getLine(), "getLine zero" )
     assertEqualStr( "file not found", ex.getMessage(), "getMessage" )
     assertEqualStr( "file not found", ex.toString(), "toString" )
-
     ?Throwable prev = ex.getPrevious()
     assertTrue( prev == None, "getPrevious is None" )
     putsln( "basic Exception OK" )
-
-    # chained exception
     Exception inner = new Exception( "connection refused", 503, None )
     Exception outer = new Exception( "request failed", 500, inner )
     assertEqualStr( "request failed", outer.getMessage(), "outer getMessage" )
@@ -28,6 +23,5 @@ public function main() -> I32:
     ?Throwable outerPrev = outer.getPrevious()
     assertTrue( outerPrev != None, "outer getPrevious not None" )
     putsln( "chained Exception OK" )
-
-    putsln( "=== All exception tests passed ===" )
+    putsln( "All exception tests passed" )
     return 0

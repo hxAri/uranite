@@ -5,45 +5,36 @@ from uranite.logging.kernel-handler import KernelLogHandler
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Logging Kernel Handler Tests ===" )
-
+    putsln( "Logging Kernel Handler Tests" )
     KernelLogHandler handler = new KernelLogHandler( 64 )
     assertEqualI64( 0, handler.getCount(), "empty initially" )
     assertEqualI64( 0, handler.getMinLevel(), "min level trace" )
     putsln( "KernelLogHandler constructed OK" )
-
     Boolean logged = handler.logInfo( 1, 100 )
     assertTrue( logged, "log info OK" )
     assertEqualI64( 1, handler.getCount(), "1 entry" )
     putsln( "logInfo OK" )
-
     Boolean logged2 = handler.logError( 2, 200 )
     assertTrue( logged2, "log error OK" )
     assertEqualI64( 2, handler.getCount(), "2 entries" )
     putsln( "logError OK" )
-
     handler.setMinLevel( 4 )
     Boolean dropped = handler.logDebug( 3, 300 )
     assertFalse( dropped, "debug dropped when min=error" )
     assertEqualI64( 2, handler.getCount(), "still 2 entries" )
     putsln( "level filter OK" )
-
     assertEqualI64( 1, handler.getTimestamp( 0 ), "timestamp 0 = 1" )
     assertEqualI64( 2, handler.getLevel( 0 ), "level 0 = info(2)" )
     assertEqualI64( 1, handler.getSource( 0 ), "source 0 = 1" )
     assertEqualI64( 100, handler.getCode( 0 ), "code 0 = 100" )
     putsln( "entry access OK" )
-
     I64 errorCount = handler.countAtLevel( 4 )
     assertEqualI64( 1, errorCount, "1 error+ entry" )
     putsln( "countAtLevel OK" )
-
     handler.clear()
     assertEqualI64( 0, handler.getCount(), "0 after clear" )
     putsln( "clear OK" )
-
     handler.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All Logging Kernel Handler Tests Passed ===" )
+    putsln( "All Logging Kernel Handler Tests Passed" )
     return 0

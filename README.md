@@ -2,7 +2,7 @@
 <!--
 @author hxAri (hxari)
 @create 2025-02-24 15:15
-@update 2026-07-19 20:03
+@update 2026-07-24 21:00
 @github https://github.com/uranite-lang/uranite
 
 Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -17,11 +17,7 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 -->
 
-<div align="center">
-
 # Uranite
-
--
 
 **Accelerated Execution Through Quantum Precision**
 
@@ -29,27 +25,13 @@ A low-level, high-productivity system programming language built on top of a C++
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-</div>
-
----
-
 ## Table of Contents
 - [Uranite](#uranite)
   - [Table of Contents](#table-of-contents)
   - [Language Overview \& Philosophy](#language-overview--philosophy)
-  - [Concrete Language Features (Fully Implemented)](#concrete-language-features-fully-implemented)
-    - [Smart Memory Management](#smart-memory-management)
-    - [Object-Oriented Architecture](#object-oriented-architecture)
-    - [Ergonomic Standard Library](#ergonomic-standard-library)
-    - [Unified Error Hierarchy](#unified-error-hierarchy)
-    - [Additional Language Capabilities](#additional-language-capabilities)
-      - [Multi-Architecture Inline Assembly](#multi-architecture-inline-assembly)
   - [Compiler Architecture \& Pipeline State](#compiler-architecture--pipeline-state)
     - [Active Compilation Pipeline](#active-compilation-pipeline)
     - [HIR and MIR Pipeline](#hir-and-mir-pipeline)
-  - [Verification \& Testing Status](#verification--testing-status)
-    - [GoogleTest Suite](#googletest-suite)
-    - [Module Integration Tests](#module-integration-tests)
   - [Repository Development Infrastructure](#repository-development-infrastructure)
     - [Building from Source](#building-from-source)
     - [CLI Usage](#cli-usage)
@@ -80,129 +62,9 @@ public function main() -> I32:
 ```
 
 ```bash
-./build/uranite hello.urn -o hello && ./hello
+./build/uranite --run --use-mir --verbose hello.urn
 # Hello, Uranite!
 ```
-
----
-
-## Concrete Language Features (Fully Implemented)
-
-### Smart Memory Management
-
-Uranite tracks ownership and move semantics at compile time with zero garbage collection and no required lifetime annotations. The borrow checker detects use-after-move and double-free violations before code generation. Scope unwinding is deterministic: `defer` executes deferred actions in LIFO order before function return, and `finally` guarantees execution after `try`/`except` blocks regardless of the error path. Raw typed memory is accessible through the `Memory<T>` compiler intrinsic, which maps directly to heap allocation.
-
-```uranite
-function processData( I64 size ) -> Void:
-    Memory<I64> buffer = new Memory<I64>( size )
-    defer:
-        delete buffer
-    # buffer is guaranteed to be freed on any exit path
-```
-
-### Object-Oriented Architecture
-
-The type system supports single class inheritance, multiple interface implementation, traits, structs, enums with unit variants and backed values, and generics monomorphized at compile time. Classes support virtual dispatch, `Readonly` and `final` modifiers, abstract methods, constructor property promotion, and nested declarations. Type identity comparisons throughout the compiler use fully qualified names (`qualname`) to prevent namespace collisions and structural type confusion.
-
-```uranite
-public Readonly class Point:
-    public I64 coordX
-    public I64 coordY
-
-    public function Point( self, I64 coordX, I64 coordY ) -> Void:
-        self.coordX = coordX
-        self.coordY = coordY
-
-public interface Drawable:
-    public function draw( self ) -> Void;
-```
-
-### Ergonomic Standard Library
-
-The standard library is written entirely in Uranite. Core I/O, threading, networking, and filesystem operations run on raw Linux syscalls with zero C runtime dependency. Collections, string utilities, regex, HTTP, and cryptographic primitives deliver a Python-like developer experience built over raw-metal performance primitives.
-
-| Module | Contents |
-| --- | --- |
-| `async/` | Pure-Uranite async runtime: epoll, timerfd, context switching, task scheduler (no C runtime) |
-| `cli/` | Command-line argument parsing |
-| `collection/` | `ArrayList<E>`, `HashMap<K,V>`, `HashSet<E>`, `LinkedList<E>`, `Args<T>`, `Kwargs<K,V>` |
-| `convert/` | Type conversion: `intToString`, `floatToString`, `stringToInt` |
-| `coroutine/` | `Future<T>`, `Task<T>`, `Scheduler`, `AsyncChannel<T>` interfaces and implementations |
-| `crypto/` | AES cipher, keystore, CSPRNG |
-| `datetime/` | Date and time utilities |
-| `errors/` | `Throwable`, `Error`, `Exception`, `Warning`, `LookupError`, `IndexError`, `KeyError`, `TypeError`, `ValueError`, `StateError` (auto-imported) |
-| `ffi/` | Foreign function interface: dynamic library loading, symbol resolution |
-| `fiber/` | Cooperative lightweight threads via register save/restore |
-| `functions/` | String utilities: `equals`, `indexOf`, `substring`, `trim`, `toUpper`, `toLower`, `repeat`, `reverse` |
-| `io/` | Console I/O, file I/O, streams, buffered readers/writers, paths, directories |
-| `iterators/` | `Iterator`, `Iterable`, `Traversable` interfaces |
-| `language/` | OOP wrapper types: `I64`, `String`, `Float`, `Boolean`, `Char`, `U8`, `Double`, and others |
-| `logging/` | Structured logging with multiple handlers and formatters |
-| `math/` | `ArithmeticError`, `ZeroDivisionError`, `OverflowError`, `UnderflowError` (auto-imported) |
-| `memory/` | `Memory<T>` compiler intrinsic for raw typed memory |
-| `net/` | TCP socket wrappers, HTTP client/server, request/response parsing |
-| `operators/` | `Comparable`, `Equatable`, `Hashable` for operator overloading |
-| `os/` | Bare-metal OS primitives: arch (x86-64 + aarch64), bus, crypto, debug, drivers, filesystems, HAL, IPC, memory, networking, power, scheduler, security, sync, syscalls, tasks, timers, VFS |
-| `process/` | Multiprocessing with `ProcessPoolExecutor` and shared memory |
-| `regexp/` | Backtracking regex engine with character classes, anchors, alternation, quantifiers |
-| `string/` | `StringBuilder` for efficient mutable string construction |
-| `subprocess/` | Process management via fork/execve/wait with pipe I/O (zero C runtime) |
-| `testing/` | `assertTrue`, `assertFalse`, `assertEqualI64`, `assertEqualStr`, `TestCase`, `TestRunner` |
-| `threading/` | `ThreadPoolExecutor`, `Mutex`, `RwLock`, `Atomic`, `Channel`, `Barrier`, `CondVar`, `Once` |
-| `ipc/` | Inter-process communication via shared-memory message passing |
-| `kernel/` | High-level kernel facade re-exporting OS subsystem modules |
-| `security/` | Security primitives: capabilities, identity, handle management |
-| `sys/` | System-level interfaces: process management, syscall wrappers, error types |
-| `time/` | Timer utilities |
-| `web/` | HTTP server framework with router, route matching, session management |
-| `adelia/` | Color management library: RGB/HSL/HSV/CMYK, color distance, palette generation |
-
-### Unified Error Hierarchy
-
-The standard library provides a structured exception hierarchy rooted in a `Throwable` interface. `Error`, `Exception`, and `Warning` each implement `Throwable` directly. Domain-specific errors branch from `Error`: `LookupError` serves as the unifying base for `IndexError` and `KeyError`; `TypeError`, `ValueError`, `StateError`, `CapacityError`, and `NotImplementedError` each capture distinct failure modes. Arithmetic errors (`ZeroDivisionError`, `OverflowError`, `UnderflowError`) are auto-imported by the compiler and inserted as runtime safety checks before every division and modulo operation.
-
-Unhandled exceptions print a full diagnostic: shadow call stack with file:line:column per frame, the exception type name and message, and a 3-line source context window highlighting the throw site.
-
-```uranite
-from uranite.collection.array-list import ArrayList
-
-function getElement( ArrayList<I64> items, I64 index ) -> I64:
-    try:
-        return items.get( index )
-    except IndexError error:
-        return -1
-```
-
-### Additional Language Capabilities
-
-- **Nullable types** with `?Type` syntax and `None` literal; `is None` / `is not None` checks
-- **Pattern matching** via `match` expressions and statements with enum variant dispatch
-- **Inline assembly** with full LLVM constraint syntax and **multi-architecture arch blocks** for cross-platform code
-- **C FFI** through `extern function` declarations
-- **`addressof` operator** returning the raw `I64` address of any expression
-- **Comprehension expressions** for inline collection construction
-- **Range expressions** with `..` (exclusive) and `...` (inclusive)
-
-#### Multi-Architecture Inline Assembly
-
-Uranite supports architecture-specific inline assembly via arch blocks. The compiler selects the variant matching the compile target and emits only that one, producing a hard error if no variant matches. This enables a single source file to target multiple ISAs without preprocessor conditionals or separate modules.
-
-```uranite
-I64 flags = 0
-asm volatile:
-    x86-64 "pushfq; pop $0" : output( "=r" flags )
-    aarch64 "mrs $0, nzcv" : output( "=r" flags )
-```
-
-The universal form remains available for single-architecture or architecture-agnostic instructions:
-
-```uranite
-asm volatile "nop"
-```
-
-Currently supported targets: **x86-64** and **aarch64**. The standard library has been refactored to use arch blocks across 46 modules (sync, threading, crypto, I/O, OS primitives, coroutines, fibers, and networking), enabling seamless compilation on both architectures from a single codebase.
-
----
 
 ## Compiler Architecture & Pipeline State
 
@@ -229,7 +91,7 @@ Source (.urn)
   Optimizer  AST-level: constant folding, DCE, strength reduction, tail-call optimization
     |
     v
-  Codegen -- LLVM IR generation (~9440 lines)
+  Codegen -- LLVM IR generation
     |
     v
   Linker --- Links runtime libraries, produces native executable
@@ -258,48 +120,7 @@ AST → HIR Lowering → HIR Validation → MIR Lowering (CFG)
 - **HIR** (High-Level IR) preserves high-level semantics (loops, match, classes) with resolved types. Desugars elif chains to nested conditionals and unifies all loop forms. 60 node types. Accessible via `--dump-hir`.
 - **MIR** (Mid-Level IR) flattens the HIR tree into a control-flow graph of basic blocks with linear instruction sequences. Each block terminates with exactly one control flow instruction. Accessible via `--dump-mir`.
 - **MIR Analysis** provides backward dataflow liveness analysis (fixed-point iteration over def/use sets), forward dataflow ownership verification (use-after-move and double-free detection), and five optimization passes (dead store elimination, copy propagation, constant folding, block merging, unreachable block elimination).
-- **MIR Codegen** (experimental, `--use-mir`) generates LLVM IR from MIR. Passes 11/11 benchmarks and 164/203 module integration tests. Runtime-verified for functions, recursion, loops, conditionals, boolean logic, bitwise ops, float arithmetic, extern calls, division/modulo, class constructors, method calls, and field access. OOP wrapper classes not yet supported on this path.
-
----
-
-## Verification & Testing Status
-
-The repository maintains a rigorous two-tier testing strategy. Both tiers achieve a **100% pass rate** with zero known failures or regressions.
-
-### GoogleTest Suite
-
-152 unit tests across 12 test suites covering lexer, parser, semantic analysis, type system, borrow checker, optimizer, generics, integration, HIR lowering, MIR lowering, and MIR analysis. All 152 tests pass.
-
-```bash
-./build/uranite-tests
-# [==========] 152 tests from 12 test suites ran.
-# [  PASSED  ] 152 tests.
-
-# Run a single test
-./build/uranite-tests --gtest_filter="HIRLoweringTest.LowersSimpleFunction"
-```
-
-### Module Integration Tests
-
-212 `.urn` source files in `testing/` exercise every major language feature end-to-end: control flow, object dispatch, enums, generics, collections, borrow-checker validations, exception handling, inline assembly, async/await, module imports, CLI argument handling, HTTP networking, cryptography, threading, and subprocess management. All 212 compile and run successfully with zero runtime failures, completely clearing all legacy regressions.
-
-```bash
-# Compile all module tests
-for f in testing/test-*.urn; do
-    timeout 10 ./build/uranite "$f" 2>&1 | tail -1
-done
-
-# Runtime verification (compile + execute + check exit code)
-for f in testing/test-*.urn; do
-    name=$(basename "$f" .urn)
-    timeout 10 ./build/uranite "$f" -o /tmp/ae_test 2>/dev/null
-    if [ $? -ne 0 ]; then echo "COMPILE FAIL: $name"; continue; fi
-    timeout 10 /tmp/ae_test > /dev/null 2>&1
-    if [ $? -ne 0 ]; then echo "RUNTIME FAIL: $name"; fi
-done
-```
-
----
+- **MIR Codegen** (`--use-mir`) generates LLVM IR from MIR. Runtime-verified for functions, recursion, loops, conditionals, boolean logic, bitwise ops, float arithmetic, extern calls, division/modulo, class constructors, method calls, field access, OOP wrapper classes (via shared descriptor registry), virtual dispatch via interface tables, exception handling with shadow call stack, defer statements, keyword arguments, variadic parameters, generics, enums, async/await, and inline assembly.
 
 ## Repository Development Infrastructure
 
@@ -308,10 +129,14 @@ done
 **Prerequisites:** C++17 compiler (GCC 12+ or Clang 19+), LLVM 19 (via `llvm-config`), CMake 3.22+, fmt, spdlog, argparse, GoogleTest, pthread (thread runtime), rt (IPC runtime), dl (FFI runtime).
 
 ```bash
-# Debian/Ubuntu
-sudo apt-get install -y llvm-19-dev libfmt-dev libspdlog-dev libgtest-dev cmake g++
+sudo apt install -y \
+  g++ \
+  cmake \
+  llvm-19-dev \
+  libfmt-dev \
+  libspdlog-dev \
+  libgtest-dev
 
-# Build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 make -C build -j$(nproc)
 ```
@@ -340,8 +165,6 @@ Produces `./build/uranite`, `./build/uranite-tests`, `./build/uranite-fmt`, `./b
 ./build/uranite source.urn --verbose -o program
 ```
 
----
-
 ## Language Comparison Matrix
 
 To understand where Uranite stands in the modern engineering landscape, here is an objective, factual architectural comparison against existing ecosystems. Uranite uniquely bridges the gap by combining **bare-metal LLVM performance and compile-time ownership safety** with the **clean developer ergonomics of indentation-based languages**.
@@ -361,8 +184,6 @@ To understand where Uranite stands in the modern engineering landscape, here is 
 | **TypeScript**| Transpiled to JS | Garbage Collection (Runtime GC) | Curly Braces | Runtime Exceptions | Static (Structural Compile-Time) | High |
 | **Zig** | AOT Native | Manual (Explicit Allocator Passing) | Curly Braces | Error Return Statuses | Static | Medium |
 
----
-
 ## Key Architectural Distinctions
 
 * **Uranite vs. Python / Nim**: While sharing the clean, high-productivity aesthetic of indentation-based code blocks, Uranite executes directly on bare metal via LLVM with zero garbage collection overhead, unlike Python (VM-bound) or Nim (historically reliant on runtime memory management strategies).
@@ -370,13 +191,9 @@ To understand where Uranite stands in the modern engineering landscape, here is 
 * **Uranite vs. C++ / Zig**: Uranite guarantees out-of-the-box memory safety without forcing the engineer to manually manage pointers or explicitly pass allocators through every single call stack level, while enforcing rigid type validation via Fully Qualified Names (`qualname`) to avoid structural type confusion.
 * **Uranite vs. Managed Languages (Go, Java, C#)**: Uranite eliminates runtime jitter, garbage collection pauses, and fat execution binaries by shipping a zero-C-runtime native footprint suited for high-throughput, predictable production systems.
 
----
-
 ## Warning
 
 **Uranite is a research-oriented compiler in active development.** It has not been audited for security, memory safety, or performance stability. Do not use it for production systems. Syntax and APIs are subject to breaking changes without notice. Generated code may contain bugs or undefined behavior.
-
----
 
 ## Issues
 
@@ -385,14 +202,10 @@ If you encounter crashes, incorrect LLVM IR, or unexpected behavior:
 1. Search the [Issue Tracker](https://github.com/uranite-lang/uranite/issues).
 2. [Open a New Issue](https://github.com/uranite-lang/uranite/issues/new) with your environment (OS, LLVM version), a minimal `.urn` snippet, and expected vs actual output.
 
----
-
 ## Support
 
 Contributions of any size are appreciated.
 [paypal.me/hxAri](https://paypal.me/hxAri)
-
----
 
 ## Licence
 

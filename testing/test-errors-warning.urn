@@ -6,20 +6,16 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Warning Tests ===" )
-
+    putsln( "Warning Tests" )
     Warning w = new Warning( "deprecated API usage", 1, None )
     assertEqualI64( 1, w.getCode(), "getCode" )
     assertEqualStr( "", w.getFile(), "getFile empty" )
     assertEqualI64( 0, w.getLine(), "getLine zero" )
     assertEqualStr( "deprecated API usage", w.getMessage(), "getMessage" )
     assertEqualStr( "deprecated API usage", w.toString(), "toString" )
-
     ?Throwable prev = w.getPrevious()
     assertTrue( prev == None, "getPrevious is None" )
     putsln( "basic Warning OK" )
-
-    # chained warning
     Warning cause = new Warning( "suspicious input", 2, None )
     Warning chained = new Warning( "validation issue", 3, cause )
     assertEqualStr( "validation issue", chained.getMessage(), "chained getMessage" )
@@ -27,6 +23,5 @@ public function main() -> I32:
     ?Throwable chainedPrev = chained.getPrevious()
     assertTrue( chainedPrev != None, "chained getPrevious not None" )
     putsln( "chained Warning OK" )
-
-    putsln( "=== All warning tests passed ===" )
+    putsln( "All warning tests passed" )
     return 0

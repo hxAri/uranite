@@ -5,37 +5,24 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualStr, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Adelia CssFormatter Tests ===" )
-
-    # hex
+    putsln( "Adelia CssFormatter Tests" )
     String hexStr = CssFormatter.hex( 19273 )
     assertTrue( hexStr != "", "hex not empty" )
     putsln( "hex OK" )
-
-    # hex (red = 0xFF0000)
     String hexRed = CssFormatter.hex( 16711680 )
     assertTrue( hexRed != "", "hexRed not empty" )
     putsln( "hexRed OK" )
-
-    # hex (black = 0)
     String hexBlack = CssFormatter.hex( 0 )
     assertTrue( hexBlack != "", "hexBlack not empty" )
     putsln( "hexBlack OK" )
-
-    # rgb
     String rgbStr = CssFormatter.rgb( 0, 75, 73 )
     assertTrue( rgbStr != "", "rgb not empty" )
     putsln( "rgb OK" )
-
-    # hsl
     String hslStr = CssFormatter.hsl( 178.0, 1.0, 0.15 )
     assertTrue( hslStr != "", "hsl not empty" )
     putsln( "hsl OK" )
-
-    # hexFromRgb
     String hexFromRgb = CssFormatter.hexFromRgb( 255, 128, 0 )
     assertTrue( hexFromRgb != "", "hexFromRgb not empty" )
     putsln( "hexFromRgb OK" )
-
-    putsln( "=== All CssFormatter tests passed ===" )
+    putsln( "All CssFormatter tests passed" )
     return 0

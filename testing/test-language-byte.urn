@@ -5,37 +5,24 @@ from uranite.language.byte import Byte
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== Byte Tests ===" )
-
+    putsln( "Byte Tests" )
     Byte a = new Byte( 170 )
     Byte b = new Byte( 85 )
-
     assertEqualI64( 170, a.getValue() as I64, "getValue" )
     putsln( "getValue OK" )
-
-    # bitwiseAnd: 170 & 85 = 0 (10101010 & 01010101 = 00000000)
     Byte andResult = a.bitwiseAnd( b )
     assertEqualI64( 0, andResult.getValue() as I64, "bitwiseAnd" )
-
-    # bitwiseOr: 170 | 85 = 255
     Byte orResult = a.bitwiseOr( b )
     assertEqualI64( 255, orResult.getValue() as I64, "bitwiseOr" )
-
-    # bitwiseXor: 170 ^ 85 = 255
     Byte xorResult = a.bitwiseXor( b )
     assertEqualI64( 255, xorResult.getValue() as I64, "bitwiseXor" )
     putsln( "bitwise OK" )
-
-    # shiftLeft: 1 << 4 = 16
     Byte one = new Byte( 1 )
     Byte shifted = one.shiftLeft( 4 )
     assertEqualI64( 16, shifted.getValue() as I64, "shiftLeft(1,4)" )
-
-    # shiftRight: 16 >> 2 = 4
     Byte sixteen = new Byte( 16 )
     Byte rshifted = sixteen.shiftRight( 2 )
     assertEqualI64( 4, rshifted.getValue() as I64, "shiftRight(16,2)" )
     putsln( "shift OK" )
-
-    putsln( "=== All Byte tests passed ===" )
+    putsln( "All Byte tests passed" )
     return 0

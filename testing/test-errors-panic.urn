@@ -5,17 +5,14 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
-    putsln( "=== Errors Panic Tests ===" )
-
+    putsln( "Errors Panic Tests" )
     PanicHandler handler = new PanicHandler( 32 )
     assertFalse( handler.isPanicked(), "not panicked initially" )
     assertEqualI64( 0, handler.getReason(), "reason 0" )
     assertEqualI64( 0, handler.getFaultAddress(), "fault addr 0" )
     assertEqualI64( 0, handler.getFrameCount(), "0 frames" )
     putsln( "PanicHandler constructed OK" )
-
     handler.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All Errors Panic Tests Passed ===" )
+    putsln( "All Errors Panic Tests Passed" )
     return 0

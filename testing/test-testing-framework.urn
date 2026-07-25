@@ -18,9 +18,7 @@ from uranite.testing.runner import TestRunner
 from uranite.testing.test-case import TestCase
 
 public function main() -> I32:
-    putsln( "=== Testing Framework Tests ===" )
-
-    # Standalone assertions
+    putsln( "Testing Framework Tests" )
     assertTrue( True, "true should be true" )
     assertFalse( False, "false should be false" )
     assertEqualI64( 42, 42, "42 == 42" )
@@ -31,21 +29,15 @@ public function main() -> I32:
     assertLessThan( 3, 7, "3 < 7" )
     assertBetween( 5, 0, 10, "5 in [0,10]" )
     putsln( "standalone assertions OK" )
-
-    # TestCase
     TestCase tc = new TestCase( "basic" )
     tc.assertTrue( True, "assert in testcase" )
     tc.assertEqualI64( 10, 10, "equal ints" )
     tc.assertEqualStr( "abc", "abc", "equal strings" )
     tc.assertGreaterThan( 100, 50, "100 > 50" )
     putsln( "TestCase OK" )
-
-    # TestResult
     TestResult passResult = new TestResult( "test1", 0, "" )
     TestResult failResult = new TestResult( "test2", 1, "something failed" )
     putsln( "TestResult OK" )
-
-    # TestRunner
     TestRunner runner = new TestRunner()
     runner.recordPass( "add_test" )
     runner.recordPass( "sub_test" )
@@ -53,6 +45,5 @@ public function main() -> I32:
     runner.report()
     assertFalse( runner.allPassed(), "not all passed" )
     putsln( "TestRunner OK" )
-
-    putsln( "=== All testing framework tests passed ===" )
+    putsln( "All testing framework tests passed" )
     return 0

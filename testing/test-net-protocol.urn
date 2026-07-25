@@ -25,34 +25,29 @@ from uranite.net.protocol import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Net Protocol Tests ===" )
-
+    putsln( "Net Protocol Tests" )
     NetworkStack stack = new NetworkStack( 32, 16, 64, 32, 32 )
     assertEqualI64( 0, stack.arpTable.getCount(), "arp empty" )
     assertEqualI64( 0, stack.tcpConnections.getCount(), "tcp empty" )
     assertEqualI64( 0, stack.udpBindings.getCount(), "udp empty" )
     assertEqualI64( 0, stack.sockets.getCount(), "sockets empty" )
     putsln( "NetworkStack constructed OK" )
-
     I64 addr = ipAddr( 192, 168, 1, 1 )
     assertEqualI64( 192, ipOctet0( addr ), "octet 0" )
     assertEqualI64( 168, ipOctet1( addr ), "octet 1" )
     assertEqualI64( 1, ipOctet2( addr ), "octet 2" )
     assertEqualI64( 1, ipOctet3( addr ), "octet 3" )
     putsln( "ipAddr OK" )
-
     I64 addr2 = ipAddr( 192, 168, 1, 100 )
     I64 mask = ipAddr( 255, 255, 255, 0 )
     assertTrue( isSameSubnet( addr, addr2, mask ), "same subnet" )
     putsln( "isSameSubnet OK" )
-
     EthernetFrame frame = new EthernetFrame()
     frame.configure( 0, 0, ETHERTYPE_IPV4, 100 )
     assertTrue( frame.isIpv4(), "is ipv4" )
     assertFalse( frame.isArp(), "not arp" )
     assertEqualI64( 114, frame.getTotalSize(), "total size 14+100" )
     putsln( "EthernetFrame OK" )
-
     Ipv4Header ip = new Ipv4Header()
     assertEqualI64( 4, ip.version, "ipv4 version" )
     assertEqualI64( 64, ip.ttl, "default ttl" )
@@ -60,7 +55,6 @@ public function main() -> I32:
     assertTrue( ip.isTcp(), "is tcp" )
     assertEqualI64( 60, ip.totalLength, "total length 20+40" )
     putsln( "Ipv4Header OK" )
-
     TcpHeader tcp = new TcpHeader()
     tcp.setFlag( TCP_SYN )
     assertTrue( tcp.isSyn(), "syn set" )
@@ -68,15 +62,12 @@ public function main() -> I32:
     tcp.setFlag( TCP_ACK )
     assertTrue( tcp.isSynAck(), "syn+ack" )
     putsln( "TcpHeader OK" )
-
     UdpHeader udp = new UdpHeader()
     udp.configure( 5000, 8080, 128 )
     assertEqualI64( 136, udp.length, "udp length 8+128" )
     assertEqualI64( 128, udp.getPayloadLength(), "udp payload" )
     putsln( "UdpHeader OK" )
-
     stack.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All Net Protocol Tests Passed ===" )
+    putsln( "All Net Protocol Tests Passed" )
     return 0

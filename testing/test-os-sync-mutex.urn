@@ -5,35 +5,28 @@ from uranite.os.sync.mutex import KernelMutex
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Sync Mutex Tests ===" )
-
+    putsln( "OS Sync Mutex Tests" )
     KernelMutex mtx = new KernelMutex()
     assertFalse( mtx.isHeld(), "not held" )
     assertEqualI64( 0, mtx.getOwner(), "owner 0" )
     assertEqualI64( 0, mtx.getWaitCount(), "waitCount 0" )
-
     Boolean acq1 = mtx.acquire( 1 )
     assertTrue( acq1, "acquire(1)" )
     assertTrue( mtx.isHeld(), "held" )
     assertEqualI64( 1, mtx.getOwner(), "owner 1" )
     putsln( "acquire OK" )
-
     Boolean acq2 = mtx.acquire( 2 )
     assertFalse( acq2, "acquire(2) contended" )
     assertEqualI64( 1, mtx.getWaitCount(), "waitCount 1" )
-
     Boolean acq3 = mtx.acquire( 3 )
     assertFalse( acq3, "acquire(3) contended" )
     assertEqualI64( 2, mtx.getWaitCount(), "waitCount 2" )
     putsln( "contention OK" )
-
     Boolean relWrong = mtx.release( 99 )
     assertFalse( relWrong, "release wrong owner" )
-
     Boolean rel1 = mtx.release( 1 )
     assertTrue( rel1, "release(1)" )
     assertEqualI64( 1, mtx.getWaitCount(), "waitCount after release" )
     putsln( "release OK" )
-
-    putsln( "=== All mutex tests passed ===" )
+    putsln( "All mutex tests passed" )
     return 0

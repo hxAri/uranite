@@ -15,8 +15,7 @@ from uranite.os.net.tcp import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Net TCP Tests ===" )
-
+    putsln( "OS Net TCP Tests" )
     assertEqualI64( 1, TCP_FIN, "FIN" )
     assertEqualI64( 2, TCP_SYN, "SYN" )
     assertEqualI64( 4, TCP_RST, "RST" )
@@ -25,7 +24,6 @@ public function main() -> I32:
     assertEqualI64( 32, TCP_URG, "URG" )
     assertEqualI64( 20, TCP_HEADER_SIZE, "headerSize" )
     putsln( "constants OK" )
-
     TcpHeader hdr = new TcpHeader()
     assertEqualI64( 0, hdr.srcPort, "srcPort 0" )
     assertEqualI64( 0, hdr.flags, "flags 0" )
@@ -34,58 +32,45 @@ public function main() -> I32:
     assertFalse( hdr.isFin(), "not fin" )
     assertFalse( hdr.isRst(), "not rst" )
     assertFalse( hdr.isSynAck(), "not synack" )
-
     hdr.setFlag( TCP_SYN )
     assertTrue( hdr.isSyn(), "syn set" )
     assertFalse( hdr.isAck(), "still not ack" )
-
     hdr.setFlag( TCP_ACK )
     assertTrue( hdr.isSynAck(), "synack" )
-
     hdr.clearFlags()
     assertEqualI64( 0, hdr.flags, "cleared" )
     assertFalse( hdr.isSyn(), "syn cleared" )
-
     hdr.setFlag( TCP_FIN )
     hdr.setFlag( TCP_PSH )
     assertTrue( hdr.isFin(), "fin" )
     assertTrue( hdr.isPsh(), "psh" )
     assertFalse( hdr.isRst(), "not rst" )
     putsln( "TcpHeader OK" )
-
     TcpConnectionTable ct = new TcpConnectionTable( 8 )
     assertEqualI64( 0, ct.getCount(), "ct count 0" )
-
     I64 slot = ct.create( 3232235777, 12345, 167772161, 80, 2 )
     assertTrue( slot >= 0, "create" )
     assertEqualI64( 1, ct.getCount(), "ct count 1" )
     assertEqualI64( 2, ct.getState( slot ), "SynSent" )
-
     I64 found = ct.find( 3232235777, 12345, 167772161, 80 )
     assertEqualI64( slot, found, "find" )
     assertEqualI64( -1, ct.find( 0, 0, 0, 0 ), "find miss" )
-
     ct.setState( slot, 4 )
     assertEqualI64( 4, ct.getState( slot ), "Established" )
-
     ct.updateSeq( slot, 1000, 2000 )
     assertEqualI64( 1000, ct.getSeqNumber( slot ), "seq" )
     assertEqualI64( 2000, ct.getAckNumber( slot ), "ack" )
     putsln( "connection OK" )
-
     I64 lisSlot = ct.create( 0, 80, 0, 0, 1 )
     I64 lis = ct.findListener( 80 )
     assertEqualI64( lisSlot, lis, "findListener" )
     assertEqualI64( -1, ct.findListener( 9999 ), "listener miss" )
-
     Boolean closeOk = ct.close( slot )
     assertTrue( closeOk, "close" )
     assertFalse( ct.close( slot ), "close again" )
     assertEqualI64( -1, ct.getState( -1 ), "state oob" )
     putsln( "close OK" )
-
     ct.close( lisSlot )
     ct.destroy()
-
-    putsln( "=== All TCP tests passed ===" )
+    putsln( "All TCP tests passed" )
     return 0

@@ -21,6 +21,7 @@
 #include <functional>
 
 #include "uranite/ir/mir/lowering.hpp"
+#include "uranite/semantic/qualnames.hpp"
 
 namespace uranite::ir::mir {
 	
@@ -1274,48 +1275,89 @@ namespace uranite::ir::mir {
 			if( loopVariableType == nullptr && hirLoop.iterableExpression->resolvedType != nullptr ) {
 				loopVariableType = hirLoop.iterableExpression->resolvedType;
 			}
-			semantic::TypeSharedPointer nextReturnType = loopVariableType;
-			if( hasDualVariable ) {
-				nextReturnType = nullptr;
-				if( hirLoop.iterableExpression != nullptr && hirLoop.iterableExpression->resolvedType != nullptr ) {
-					semantic::TypeSharedPointer iterType = hirLoop.iterableExpression->resolvedType;
-					if( iterType->kind == semantic::Type::Kind::Class ) {
-						semantic::ClassTypeSharedPointer iterClassType = std::static_pointer_cast<semantic::ClassType>( iterType );
-						semantic::MethodInfo* nextMethod = iterClassType->findMethod( "next" );
-						if( nextMethod != nullptr && nextMethod->type != nullptr && nextMethod->type->kind == semantic::Type::Kind::Function ) {
-							nextReturnType = std::static_pointer_cast<semantic::FunctionType>( nextMethod->type )->returnType;
-						}
-					}
+			semantic::TypeSharedPointer iterableResolvedType = hirLoop.iterableExpression->resolvedType;
+			if( iterableResolvedType == nullptr || iterableResolvedType->kind != semantic::Type::Kind::Class ) {
+				return;
+			}
+			semantic::ClassTypeSharedPointer iterableClassType = std::static_pointer_cast<semantic::ClassType>( iterableResolvedType );
+			MIRVariableIdentifier iteratorVariable = iterableVariable;
+			std::string iteratorMethodClassName = iteratorClassName;
+			semantic::TypeSharedPointer iteratorSemaType = iterableResolvedType;
+			if( iterableClassType->implementsInterface( semantic::qname::ITERATOR ) ) {
+				iteratorVariable = iterableVariable;
+				iteratorMethodClassName = iteratorClassName;
+				iteratorSemaType = iterableResolvedType;
+			}
+			else if( iterableClassType->implementsInterface( semantic::qname::ITERABLE ) ) {
+				semantic::MethodInfo* iteratorMethodInfo = iterableClassType->findMethod( "iterator" );
+				if( iteratorMethodInfo == nullptr ) {
+					return;
 				}
-				if( nextReturnType != nullptr && nextReturnType->kind == semantic::Type::Kind::Struct ) {
-					semantic::StructTypeSharedPointer pairStructType = std::static_pointer_cast<semantic::StructType>( nextReturnType );
-					if( pairStructType->fields.size() >= 2 ) {
-						std::unordered_map<std::string, semantic::TypeSharedPointer> resolveMap;
-						if( hirLoop.iterableExpression->resolvedType != nullptr &&
-							hirLoop.iterableExpression->resolvedType->kind == semantic::Type::Kind::Class ) {
-							semantic::ClassTypeSharedPointer iterClassForSubs = std::static_pointer_cast<semantic::ClassType>( hirLoop.iterableExpression->resolvedType );
-							resolveMap = iterClassForSubs->typeSubstitutions;
-						}
-						std::string pairLayoutName = pairStructType->name;
-						TypeLayoutDescriptor pairLayout;
-						int pairFieldIndex = 0;
-						for( const semantic::FieldInfo& pairField : pairStructType->fields ) {
-							pairLayout.fieldByteOffsets.push_back( pairFieldIndex * 8 );
-							pairLayout.fieldNames.push_back( pairField.name );
-							semantic::TypeSharedPointer resolvedFieldType = pairField.type;
-							if( resolvedFieldType != nullptr && resolvedFieldType->kind == semantic::Type::Kind::GenericParameter ) {
-								std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator substitution = resolveMap.find( resolvedFieldType->name );
-								if( substitution != resolveMap.end() ) {
-									resolvedFieldType = substitution->second;
-								}
-							}
-							pairLayout.fieldTypes.push_back( resolvedFieldType );
-							pairFieldIndex++;
-						}
-						pairLayout.typeSizeInBytes = pairFieldIndex * 8;
-						pairLayout.typeAlignmentInBytes = 8;
-						this->currentModule->typeLayoutTable[pairLayoutName] = std::move( pairLayout );
+				semantic::TypeSharedPointer iteratorReturnType = nullptr;
+				if( iteratorMethodInfo->type != nullptr && iteratorMethodInfo->type->kind == semantic::Type::Kind::Function ) {
+					iteratorReturnType = std::static_pointer_cast<semantic::FunctionType>( iteratorMethodInfo->type )->returnType;
+				}
+				MIRInstruction iteratorCall( MIRInstructionKind::CallFunction );
+				iteratorCall.calledFunctionQualifiedName = iteratorClassName + ".iterator";
+				iteratorCall.sourceOperands.push_back( iterableVariable );
+				iteratorCall.operandType = iteratorReturnType;
+				MIRVariableIdentifier iteratorResult = this->currentFunction->allocateVariable( "_iterator_obj", iteratorReturnType, false );
+				iteratorCall.destinationVariable = iteratorResult;
+				this->emitInstruction( iteratorCall );
+				iteratorVariable = iteratorResult;
+				if( iteratorReturnType != nullptr ) {
+					iteratorSemaType = iteratorReturnType;
+					std::string iterRetName = iteratorReturnType->name;
+					size_t iterRetGenBracket = iterRetName.find( '<' );
+					if( iterRetGenBracket != std::string::npos ) {
+						iterRetName = iterRetName.substr( 0, iterRetGenBracket );
 					}
+					iteratorMethodClassName = iterRetName;
+				}
+			}
+			else {
+				return;
+			}
+			semantic::TypeSharedPointer nextReturnType = loopVariableType;
+			if( hasDualVariable || nextReturnType == nullptr ) {
+				semantic::MethodInfo* nextMethodInfo = nullptr;
+				if( iteratorSemaType->kind == semantic::Type::Kind::Class ) {
+					nextMethodInfo = std::static_pointer_cast<semantic::ClassType>( iteratorSemaType )->findMethod( "next" );
+				}
+				else if( iteratorSemaType->kind == semantic::Type::Kind::Interface ) {
+					nextMethodInfo = std::static_pointer_cast<semantic::InterfaceType>( iteratorSemaType )->findMethod( "next" );
+				}
+				if( nextMethodInfo != nullptr && nextMethodInfo->type != nullptr && nextMethodInfo->type->kind == semantic::Type::Kind::Function ) {
+					nextReturnType = std::static_pointer_cast<semantic::FunctionType>( nextMethodInfo->type )->returnType;
+				}
+			}
+			if( hasDualVariable && nextReturnType != nullptr && nextReturnType->kind == semantic::Type::Kind::Struct ) {
+				semantic::StructTypeSharedPointer pairStructType = std::static_pointer_cast<semantic::StructType>( nextReturnType );
+				if( pairStructType->fields.size() >= 2 ) {
+					std::unordered_map<std::string, semantic::TypeSharedPointer> resolveMap;
+					if( iteratorSemaType != nullptr && iteratorSemaType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassTypeSharedPointer iterClassForSubs = std::static_pointer_cast<semantic::ClassType>( iteratorSemaType );
+						resolveMap = iterClassForSubs->typeSubstitutions;
+					}
+					std::string pairLayoutName = pairStructType->name;
+					TypeLayoutDescriptor pairLayout;
+					int pairFieldIndex = 0;
+					for( const semantic::FieldInfo& pairField : pairStructType->fields ) {
+						pairLayout.fieldByteOffsets.push_back( pairFieldIndex * 8 );
+						pairLayout.fieldNames.push_back( pairField.name );
+						semantic::TypeSharedPointer resolvedFieldType = pairField.type;
+						if( resolvedFieldType != nullptr && resolvedFieldType->kind == semantic::Type::Kind::GenericParameter ) {
+							std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator substitution = resolveMap.find( resolvedFieldType->name );
+							if( substitution != resolveMap.end() ) {
+								resolvedFieldType = substitution->second;
+							}
+						}
+						pairLayout.fieldTypes.push_back( resolvedFieldType );
+						pairFieldIndex++;
+					}
+					pairLayout.typeSizeInBytes = pairFieldIndex * 8;
+					pairLayout.typeAlignmentInBytes = 8;
+					this->currentModule->typeLayoutTable[pairLayoutName] = std::move( pairLayout );
 				}
 			}
 			MIRVariableIdentifier loopVariable = this->currentFunction->allocateVariable( hirLoop.loopVariableName, loopVariableType, true );
@@ -1347,12 +1389,10 @@ namespace uranite::ir::mir {
 			MIRInstruction jumpToHeader( MIRInstructionKind::JumpUnconditional );
 			jumpToHeader.trueBranchTarget = headerBlock->blockIdentifier;
 			this->emitTerminator( jumpToHeader );
-			
-			// Header: call .has on iterator, branch on result
 			this->switchToBlock( headerBlock );
 			MIRInstruction hasCall( MIRInstructionKind::CallFunction );
-			hasCall.calledFunctionQualifiedName = iteratorClassName + ".has";
-			hasCall.sourceOperands.push_back( iterableVariable );
+			hasCall.calledFunctionQualifiedName = iteratorMethodClassName + ".has";
+			hasCall.sourceOperands.push_back( iteratorVariable );
 			MIRVariableIdentifier hasResult = this->currentFunction->allocateVariable( "_iter_has", nullptr, false );
 			hasCall.destinationVariable = hasResult;
 			this->emitInstruction( hasCall );
@@ -1366,19 +1406,15 @@ namespace uranite::ir::mir {
 			loopContext.exitBlockIdentifier = exitBlock->blockIdentifier;
 			loopContext.updateBlockIdentifier = INVALID_BLOCK_IDENTIFIER;
 			this->loopContextStack.push( loopContext );
-			
-			// Body: call .next on iterator, store to loop variable(s), execute body
 			this->switchToBlock( bodyBlock );
 			MIRInstruction nextCall( MIRInstructionKind::CallFunction );
-			nextCall.calledFunctionQualifiedName = iteratorClassName + ".next";
-			nextCall.sourceOperands.push_back( iterableVariable );
+			nextCall.calledFunctionQualifiedName = iteratorMethodClassName + ".next";
+			nextCall.sourceOperands.push_back( iteratorVariable );
 			nextCall.operandType = nextReturnType;
 			MIRVariableIdentifier nextResult = this->currentFunction->allocateVariable( "_iter_next", nextReturnType, false );
 			nextCall.destinationVariable = nextResult;
 			this->emitInstruction( nextCall );
 			if( hasDualVariable ) {
-				
-				// Destructure Pair: extract .key (field 0) and .value (field 1)
 				MIRInstruction keyGep( MIRInstructionKind::ComputeFieldAddress );
 				keyGep.sourceOperands.push_back( nextResult );
 				keyGep.fieldAccessName = "key";
@@ -2344,38 +2380,41 @@ namespace uranite::ir::mir {
 			}
 			return equalsResult;
 		}
-		auto isUserClassType = []( const semantic::TypeSharedPointer& type ) -> bool {
-			if( type == nullptr || type->kind != semantic::Type::Kind::Class ) {
-				return false;
-			}
-			static const std::unordered_set<std::string> primitiveWrappers = {
-				"Int", "I8", "I16", "I32", "I64",
-				"UInt", "Uint", "U8", "U16", "U32", "U64",
-				"Float", "F32", "F64", "Double",
-				"String", "Boolean", "Char", "Void", "Object"
-			};
-			return primitiveWrappers.count( type->name ) == 0;
-		};
 		semantic::TypeSharedPointer leftType = hirBinaryOp.leftOperand->resolvedType;
-		if( isUserClassType( leftType ) ) {
-			std::string methodName;
-			bool negateAfter = false;
-			switch( hirBinaryOp.operatorKind ) {
-				case token::Type::Plus:             methodName = "add"; break;
-				case token::Type::Minus:            methodName = "subtract"; break;
-				case token::Type::Star:             methodName = "multiply"; break;
-				case token::Type::Slash:            methodName = "divide"; break;
-				case token::Type::Percent:          methodName = "modulo"; break;
-				case token::Type::Equal:            methodName = "equals"; break;
-				case token::Type::NotEqual:         methodName = "equals"; negateAfter = true; break;
-				case token::Type::LessThan:         methodName = "lessThan"; break;
-				case token::Type::GreaterThan:      methodName = "greaterThan"; break;
-				case token::Type::LessThanEqual:    methodName = "lessOrEqual"; break;
-				case token::Type::GreaterThanEqual: methodName = "greaterOrEqual"; break;
-				default: break;
-			}
-			if( methodName.empty() == false ) {
-				std::string qualifiedMethodName = leftType->name + "." + methodName;
+		if( leftType != nullptr && leftType->kind == semantic::Type::Kind::Class ) {
+			semantic::ClassTypeSharedPointer leftClassType = std::static_pointer_cast<semantic::ClassType>( leftType );
+			struct OperatorInterfaceMapping {
+				int tokenType;
+				const std::string& qualifiedName;
+				const char* methodName;
+				bool negateAfter;
+			};
+			static const OperatorInterfaceMapping operatorInterfaceMappings[] = {
+				{ ( int ) token::Type::Plus,             semantic::qname::ADDABLE,      "add",            false },
+				{ ( int ) token::Type::Minus,            semantic::qname::SUBTRACTABLE,  "subtract",       false },
+				{ ( int ) token::Type::Star,             semantic::qname::MULTIPLIABLE,  "multiply",       false },
+				{ ( int ) token::Type::Slash,            semantic::qname::DIVIDABLE,     "divide",         false },
+				{ ( int ) token::Type::Percent,          semantic::qname::MODULABLE,     "modulo",         false },
+				{ ( int ) token::Type::Equal,            semantic::qname::EQUATABLE,     "equals",         false },
+				{ ( int ) token::Type::NotEqual,         semantic::qname::EQUATABLE,     "equals",         true },
+				{ ( int ) token::Type::LessThan,         semantic::qname::COMPARABLE,    "lessThan",       false },
+				{ ( int ) token::Type::GreaterThan,      semantic::qname::COMPARABLE,    "greaterThan",    false },
+				{ ( int ) token::Type::LessThanEqual,    semantic::qname::COMPARABLE,    "lessOrEqual",    false },
+				{ ( int ) token::Type::GreaterThanEqual, semantic::qname::COMPARABLE,    "greaterOrEqual", false },
+			};
+			for( const OperatorInterfaceMapping& mapping : operatorInterfaceMappings ) {
+				if( mapping.tokenType != ( int ) hirBinaryOp.operatorKind ) {
+					continue;
+				}
+				if( leftClassType->implementsInterface( mapping.qualifiedName ) == false ) {
+					break;
+				}
+				std::string operatorTypeName = leftType->name;
+				size_t operatorGenericPos = operatorTypeName.find( '<' );
+				if( operatorGenericPos != std::string::npos ) {
+					operatorTypeName = operatorTypeName.substr( 0, operatorGenericPos );
+				}
+				std::string qualifiedMethodName = operatorTypeName + "." + mapping.methodName;
 				MIRInstruction methodCall( MIRInstructionKind::CallFunction );
 				methodCall.calledFunctionQualifiedName = qualifiedMethodName;
 				methodCall.sourceOperands.push_back( leftVariable );
@@ -2387,7 +2426,7 @@ namespace uranite::ir::mir {
 				);
 				methodCall.destinationVariable = callResult;
 				this->emitInstruction( methodCall );
-				if( negateAfter ) {
+				if( mapping.negateAfter ) {
 					MIRInstruction negateInstruction( MIRInstructionKind::LogicalNot );
 					negateInstruction.sourceOperands.push_back( callResult );
 					negateInstruction.operandType = hirBinaryOp.resolvedType;
@@ -2454,14 +2493,14 @@ namespace uranite::ir::mir {
 		semantic::TypeSharedPointer operandType = hirUnaryOp.operandExpression->resolvedType;
 		if( operandType != nullptr && operandType->kind == semantic::Type::Kind::Class &&
 			hirUnaryOp.operatorKind == token::Type::Minus ) {
-			static const std::unordered_set<std::string> primitiveWrappers = {
-				"Int", "I8", "I16", "I32", "I64",
-				"UInt", "Uint", "U8", "U16", "U32", "U64",
-				"Float", "F32", "F64", "Double",
-				"String", "Boolean", "Char", "Void", "Object"
-			};
-			if( primitiveWrappers.count( operandType->name ) == 0 ) {
-				std::string qualifiedMethodName = operandType->name + ".negate";
+			semantic::ClassTypeSharedPointer operandClassType = std::static_pointer_cast<semantic::ClassType>( operandType );
+			if( operandClassType->implementsInterface( semantic::qname::NEGATABLE ) ) {
+				std::string operandTypeName = operandType->name;
+				size_t operandGenericPos = operandTypeName.find( '<' );
+				if( operandGenericPos != std::string::npos ) {
+					operandTypeName = operandTypeName.substr( 0, operandGenericPos );
+				}
+				std::string qualifiedMethodName = operandTypeName + ".negate";
 				MIRInstruction methodCall( MIRInstructionKind::CallFunction );
 				methodCall.calledFunctionQualifiedName = qualifiedMethodName;
 				methodCall.sourceOperands.push_back( operandVariable );

@@ -2,13 +2,15 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-21 01:44
+# @update 2026-07-25 03:25
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/spectral-norm.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
-# Extreme Spectral-norm benchmark using raw Memory access and mathematical optimizations.
+# Advanced Spectral-norm benchmark using raw Memory access and mathematical optimizations.
+# Features modularized execution phases for granular elapsed time tracking
+# across initialization, power iterations, and eigenvalue evaluation.
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,54 +23,45 @@
 
 package uranite.examples.benchmarks.spectral-norm
 
-from uranite.io.console import puts
+from uranite.functions.externs import clock, sqrt
+from uranite.io.console import puts, putsln
 from uranite.language.double import Double
 from uranite.language.int import Int
 from uranite.memory.memory import Memory
 
-extern function clock() -> I64;
-extern function sqrt( Double x ) -> Double;
-
-function A( Int i, Int j ) -> Double:
+function evaluateMatrixA( Int i, Int j ) -> Double:
     Int sum = i + j
     return 1.0 / ( sum * ( sum + 1 ) / 2 + i + 1 )
 
-function multiplyAv( Int n, Memory<Double> v, Memory<Double> Av ) -> Void:
+function multiplyAv( Int n, Memory<Double> v, Memory<Double> resultAv ) -> Void:
     for Int i = 0; i < n; i++:
         Double sum = 0.0
         for Int j = 0; j < n; j++:
-            sum = sum + A( i, j ) * v.get( j )
-        Av.set( i, sum )
+            sum = sum + evaluateMatrixA( i, j ) * v.get( j )
+        resultAv.set( i, sum )
 
-function multiplyAtv( Int n, Memory<Double> v, Memory<Double> Atv ) -> Void:
+function multiplyAtv( Int n, Memory<Double> v, Memory<Double> resultAtv ) -> Void:
     for Int i = 0; i < n; i++:
         Double sum = 0.0
         for Int j = 0; j < n; j++:
-            sum = sum + A( j, i ) * v.get( j )
-        Atv.set( i, sum )
+            sum = sum + evaluateMatrixA( j, i ) * v.get( j )
+        resultAtv.set( i, sum )
 
-function multiplyAtAv( Int n, Memory<Double> v, Memory<Double> AtAv, Memory<Double> tmp ) -> Void:
-    multiplyAv( n, v, tmp )
-    multiplyAtv( n, tmp, AtAv )
+function multiplyAtAv( Int n, Memory<Double> v, Memory<Double> resultAtAv, Memory<Double> tmpBuffer ) -> Void:
+    multiplyAv( n, v, tmpBuffer )
+    multiplyAtv( n, tmpBuffer, resultAtAv )
 
-public function main() -> I32:
-    Int n = 5500
-    puts( "=== Uranite Extreme Spectral Norm Benchmark (n={}) ===".format( n ) )
-    
-    Memory<Double> u = new Memory<Double>( n )
-    Memory<Double> v = new Memory<Double>( n )
-    Memory<Double> tmp = new Memory<Double>( n )
-    
+function initializeVectors( Int n, Memory<Double> u, Memory<Double> v ) -> Void:
     for Int i = 0; i < n; i++:
         u.set( i, 1.0 )
         v.set( i, 0.0 )
-        
-    I64 start = clock()
-    
+
+function runPowerIterations( Int n, Memory<Double> u, Memory<Double> v, Memory<Double> tmpBuffer ) -> Void:
     for Int iter = 0; iter < 10; iter++:
-        multiplyAtAv( n, u, v, tmp )
-        multiplyAtAv( n, v, u, tmp )
-        
+        multiplyAtAv( n, u, v, tmpBuffer )
+        multiplyAtAv( n, v, u, tmpBuffer )
+
+function calculateEigenvalue( Int n, Memory<Double> u, Memory<Double> v ) -> Double:
     Double vBv = 0.0
     Double vv = 0.0
     for Int i = 0; i < n; i++:
@@ -76,17 +69,36 @@ public function main() -> I32:
         Double vi = v.get( i )
         vBv = vBv + ui * vi
         vv = vv + vi * vi
-        
-    Double result = sqrt( vBv / vv )
-    
-    I64 end = clock()
-    Double elapsed = ( end - start ) / 1000000.0
-    
-    puts( "Result: ", result )
-    puts( "Elapsed time: ", elapsed, " seconds" )
-    
+    return sqrt( vBv / vv )
+
+public function main() -> I32:
+    Int n = 5500
+    putsln( "Starting Advanced Spectral Norm Benchmark (n=", n, ")" )
+    Memory<Double> u = new Memory<Double>( n )
+    Memory<Double> v = new Memory<Double>( n )
+    Memory<Double> tmpBuffer = new Memory<Double>( n )
+    I64 startTotal = clock()
+    I64 startInit = clock()
+    initializeVectors( n, u, v )
+    I64 endInit = clock()
+    Double elapsedInit = ( endInit - startInit ) / 1000000.0
+    putsln( "- Initialization elapsed: ", elapsedInit, " seconds" )
+    I64 startIters = clock()
+    runPowerIterations( n, u, v, tmpBuffer )
+    I64 endIters = clock()
+    Double elapsedIters = ( endIters - startIters ) / 1000000.0
+    putsln( "- Power Iterations elapsed: ", elapsedIters, " seconds" )
+    I64 startEval = clock()
+    Double result = calculateEigenvalue( n, u, v )
+    I64 endEval = clock()
+    Double elapsedEval = ( endEval - startEval ) / 1000000.0
+    putsln( "- Eigenvalue Evaluation elapsed: ", elapsedEval, " seconds" )
+    I64 endTotal = clock()
+    Double elapsedTotal = ( endTotal - startTotal ) / 1000000.0
+    putsln( "Final Result: ", result )
+    putsln( "Total Elapsed time: ", elapsedTotal, " seconds" )
     u.free()
     v.free()
-    tmp.free()
-    
+    tmpBuffer.free()
+    putsln( "Advanced spectral norm test PASSED" )
     return 0

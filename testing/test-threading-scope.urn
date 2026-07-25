@@ -10,19 +10,15 @@ from uranite.threading.scope import ScopedThread
 from uranite.threading.thread import ThreadRuntime
 
 public function main() -> I32:
-    putsln( "=== Threading Scope Tests ===" )
-
+    putsln( "Threading Scope Tests" )
     Scheduler sched = new Scheduler()
     PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
     SystemClock clock = new SystemClock( 1000 )
     ThreadRuntime runtime = new ThreadRuntime( sched, pmm, clock, 256 )
-
     ScopedThread scope = new ScopedThread( runtime )
     assertEqualI64( 0, scope.getThreadCount(), "initial thread count" )
     putsln( "ScopedThread OK" )
-
     runtime.destroy()
-
-    putsln( "=== All scope tests passed ===" )
+    putsln( "All scope tests passed" )
     exit( 0 )
     return 0

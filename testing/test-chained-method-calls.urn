@@ -4,42 +4,34 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64
 
 public class Builder:
+    
     public I64 value
-
+    
     public function Builder( self, I64 initial ) -> Void:
         self.value = initial
-
+    
     public function add( self, I64 n ) -> Builder:
         return new Builder( self.value + n )
-
+    
     public function multiply( self, I64 n ) -> Builder:
         return new Builder( self.value * n )
-
+    
     public function getValue( self ) -> I64:
         return self.value
 
 public function main() -> I32:
     Builder b = new Builder( 5 )
-
-    # Single method call — baseline
     Builder b2 = b.add( 3 )
     assertEqualI64( 8, b2.value, "b.add(3) = 8" )
     putsln( "single call OK" )
-
-    # Two-level chain: b.add(3).multiply(2) should give (5+3)*2 = 16
     Builder b3 = b.add( 3 ).multiply( 2 )
     assertEqualI64( 16, b3.value, "b.add(3).multiply(2) = 16" )
     putsln( "two-level chain OK" )
-
-    # Three-level chain: b.add(10).multiply(3).add(1) should give ((5+10)*3)+1 = 46
     Builder b4 = b.add( 10 ).multiply( 3 ).add( 1 )
     assertEqualI64( 46, b4.value, "b.add(10).multiply(3).add(1) = 46" )
     putsln( "three-level chain OK" )
-
-    # Chain ending with non-Builder return
     I64 result = b.add( 7 ).multiply( 4 ).getValue()
     assertEqualI64( 48, result, "b.add(7).multiply(4).getValue() = 48" )
     putsln( "chain getValue OK" )
-
-    putsln( "=== All chained method call tests passed ===" )
+    putsln( "All chained method call tests passed" )
     return 0

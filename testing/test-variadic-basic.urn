@@ -5,18 +5,14 @@ from uranite.testing.assertions import assertEqualI64
 
 function sum( I64 numbers[] ) -> I64:
     I64 total = 0
-    I64 i = 0
-    while i < numbers.length():
-        total = total + numbers.get( i )
-        i = i + 1
+    for I64 number in numbers:
+        total = total + number
     return total
 
 public function main() -> I32:
-    putsln( "=== Variadic Basic Tests ===" )
-
+    putsln( "Variadic Basic Tests" )
     I64 result = sum( 1, 2, 3, 4, 5 )
     assertEqualI64( 15, result, "sum(1..5) = 15" )
     putsln( "variadic sum OK" )
-
-    putsln( "=== All variadic tests passed ===" )
+    putsln( "All variadic tests passed" )
     return 0

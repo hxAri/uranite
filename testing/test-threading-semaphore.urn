@@ -11,27 +11,20 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
-    putsln( "=== Threading Semaphore Tests ===" )
-
+    putsln( "Threading Semaphore Tests" )
     I64 sem = uraniteSemaphoreCreate( 2 )
     assertGreaterThan( sem, 0, "semaphore handle" )
     putsln( "create OK" )
-
     uraniteSemaphoreAcquire( sem )
     putsln( "acquire 1 OK" )
-
     I32 tryResult = uraniteSemaphoreTryAcquire( sem )
     assertEqualI64( 1, tryResult as I64, "tryAcquire 1 success" )
     putsln( "tryAcquire OK" )
-
     uraniteSemaphoreRelease( sem )
     putsln( "release 1 OK" )
-
     uraniteSemaphoreRelease( sem )
     putsln( "release 2 OK" )
-
     uraniteSemaphoreDestroy( sem )
     putsln( "destroy OK" )
-
-    putsln( "=== All semaphore tests passed ===" )
+    putsln( "All semaphore tests passed" )
     return 0

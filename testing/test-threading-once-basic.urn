@@ -5,14 +5,11 @@ from uranite.testing.assertions import assertFalse
 from uranite.threading.once import Once
 
 public function main() -> I32:
-    putsln( "=== Threading Once Basic Tests ===" )
-
+    putsln( "Threading Once Basic Tests" )
     Once o = new Once()
     assertFalse( o.isCompleted(), "initially not completed" )
     putsln( "isCompleted OK" )
-
     o.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All once basic tests passed ===" )
+    putsln( "All once basic tests passed" )
     return 0

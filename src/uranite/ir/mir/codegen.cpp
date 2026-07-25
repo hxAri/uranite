@@ -267,6 +267,10 @@ namespace uranite::ir::mir {
 					paramIdx == static_cast<unsigned>( functionDefinition->variadicParameterIndex ) ) {
 					parameterType = llvm::PointerType::getUnqual( this->llvmContext );
 				}
+				else if( functionDefinition->keywordParameterIndex >= 0 &&
+					paramIdx == static_cast<unsigned>( functionDefinition->keywordParameterIndex ) ) {
+					parameterType = llvm::PointerType::getUnqual( this->llvmContext );
+				}
 				else if( functionDefinition->variableDescriptorTable.count( parameterVariable ) > 0 ) {
 					MIRVariableDescriptor& descriptor =
 						functionDefinition->variableDescriptorTable[parameterVariable];
@@ -666,6 +670,10 @@ namespace uranite::ir::mir {
 					paramIdx == static_cast<unsigned>( functionDefinition.variadicParameterIndex ) ) {
 					parameterType = llvm::PointerType::getUnqual( this->llvmContext );
 				}
+				else if( functionDefinition.keywordParameterIndex >= 0 &&
+					paramIdx == static_cast<unsigned>( functionDefinition.keywordParameterIndex ) ) {
+					parameterType = llvm::PointerType::getUnqual( this->llvmContext );
+				}
 				else if( functionDefinition.variableDescriptorTable.count( parameterVariable ) > 0 ) {
 					MIRVariableDescriptor& descriptor =
 						functionDefinition.variableDescriptorTable[parameterVariable];
@@ -773,10 +781,22 @@ namespace uranite::ir::mir {
 					llvm::Value* rawBuf = this->irBuilder.CreateCall( this->getOrCreateMalloc(), { totalBytes }, "argv.buf" );
 					this->irBuilder.CreateCall( this->getOrCreateMemcpy(),
 						{ rawBuf, argvRaw, totalBytes, this->irBuilder.getInt1( false ) } );
-					llvm::Value* dataGep = this->irBuilder.CreateStructGEP( listStructType, listPtr, 0, "argv.data.ptr" );
-					llvm::Value* countGep = this->irBuilder.CreateStructGEP( listStructType, listPtr, 1, "argv.count.ptr" );
-					llvm::Value* capGep = this->irBuilder.CreateStructGEP( listStructType, listPtr, 2, "argv.cap.ptr" );
-					llvm::Type* dataFieldType = listStructType->getElementType( 0 );
+					unsigned argvFieldOff = 0;
+					if( this->classesWithVtable.count( "ArrayList" ) ||
+						this->classesWithVtable.count( "uranite.collection.arraylist.ArrayList" ) ) {
+						if( listStructType->getNumElements() >= 4 ) {
+							argvFieldOff = 1;
+						}
+					}
+					if( argvFieldOff > 0 ) {
+						llvm::Value* vtableGep = this->irBuilder.CreateStructGEP( listStructType, listPtr, 0, "argv.vtable" );
+						this->irBuilder.CreateStore( llvm::ConstantPointerNull::get(
+							llvm::PointerType::getUnqual( this->llvmContext ) ), vtableGep );
+					}
+					llvm::Value* dataGep = this->irBuilder.CreateStructGEP( listStructType, listPtr, argvFieldOff + 0, "argv.data.ptr" );
+					llvm::Value* countGep = this->irBuilder.CreateStructGEP( listStructType, listPtr, argvFieldOff + 1, "argv.count.ptr" );
+					llvm::Value* capGep = this->irBuilder.CreateStructGEP( listStructType, listPtr, argvFieldOff + 2, "argv.cap.ptr" );
+					llvm::Type* dataFieldType = listStructType->getElementType( argvFieldOff + 0 );
 					llvm::Value* dataCast = rawBuf;
 					if( rawBuf->getType() != dataFieldType ) {
 						if( dataFieldType->isIntegerTy() ) {
@@ -4551,13 +4571,35 @@ namespace uranite::ir::mir {
 				size_t kwargCount = instruction.keywordArgumentKeys.size();
 				llvm::Type* i64TypeKw = llvm::Type::getInt64Ty( this->llvmContext );
 				llvm::Type* ptrTypeKw = llvm::PointerType::getUnqual( this->llvmContext );
-				llvm::StructType* kwargsStructTypeKw = llvm::StructType::get( this->llvmContext, {
-					ptrTypeKw, ptrTypeKw, i64TypeKw, i64TypeKw
-				});
+				llvm::StructType* kwargsStructTypeKw = nullptr;
+				unsigned kwFieldOffset = 0;
+				std::unordered_map<std::string, llvm::StructType*>::iterator kwCacheIt = this->structTypeCache.find( "Kwargs" );
+				if( kwCacheIt == this->structTypeCache.end() ) {
+					kwCacheIt = this->structTypeCache.find( "uranite.collection.kwargs.Kwargs" );
+				}
+				if( kwCacheIt != this->structTypeCache.end() && kwCacheIt->second->getNumElements() >= 3 ) {
+					kwargsStructTypeKw = kwCacheIt->second;
+					unsigned kwargsNumElements = kwargsStructTypeKw->getNumElements();
+					if( kwargsNumElements > 3 ) {
+						kwFieldOffset = kwargsNumElements - 3;
+					}
+				}
+				if( kwargsStructTypeKw == nullptr ) {
+					kwargsStructTypeKw = llvm::StructType::get( this->llvmContext, {
+						ptrTypeKw, ptrTypeKw, i64TypeKw, i64TypeKw
+					});
+				}
 				llvm::Function* currentFuncKw = this->irBuilder.GetInsertBlock()->getParent();
 				llvm::AllocaInst* kwargsAllocaKw = this->createEntryBlockAllocation(
 					currentFuncKw, "pack.kwargs", kwargsStructTypeKw
 				);
+				if( kwFieldOffset > 0 ) {
+					llvm::Value* vtableFieldPtr = this->irBuilder.CreateStructGEP(
+						kwargsStructTypeKw, kwargsAllocaKw, 0, "pack.kwargs.vtable"
+					);
+					this->irBuilder.CreateStore( llvm::ConstantPointerNull::get(
+						llvm::cast<llvm::PointerType>( ptrTypeKw ) ), vtableFieldPtr );
+				}
 				if( kwargCount > 0 ) {
 					llvm::ArrayType* keysArrayTypeKw = llvm::ArrayType::get( ptrTypeKw, kwargCount );
 					llvm::ArrayType* valsArrayTypeKw = llvm::ArrayType::get( ptrTypeKw, kwargCount );
@@ -4587,34 +4629,36 @@ namespace uranite::ir::mir {
 						}
 					}
 					llvm::Value* keysFieldPtrKw = this->irBuilder.CreateStructGEP(
-						kwargsStructTypeKw, kwargsAllocaKw, 0, "pack.kwargs.keys.field"
+						kwargsStructTypeKw, kwargsAllocaKw, kwFieldOffset + 0, "pack.kwargs.keys.field"
 					);
 					this->irBuilder.CreateStore( keysAllocaKw, keysFieldPtrKw );
 					llvm::Value* valsFieldPtrKw = this->irBuilder.CreateStructGEP(
-						kwargsStructTypeKw, kwargsAllocaKw, 1, "pack.kwargs.vals.field"
+						kwargsStructTypeKw, kwargsAllocaKw, kwFieldOffset + 1, "pack.kwargs.vals.field"
 					);
 					this->irBuilder.CreateStore( valsAllocaKw, valsFieldPtrKw );
 				}
 				else {
 					llvm::Value* keysFieldPtrKw = this->irBuilder.CreateStructGEP(
-						kwargsStructTypeKw, kwargsAllocaKw, 0, "pack.kwargs.keys.field"
+						kwargsStructTypeKw, kwargsAllocaKw, kwFieldOffset + 0, "pack.kwargs.keys.field"
 					);
 					this->irBuilder.CreateStore( llvm::ConstantPointerNull::get(
 						llvm::cast<llvm::PointerType>( ptrTypeKw ) ), keysFieldPtrKw );
 					llvm::Value* valsFieldPtrKw = this->irBuilder.CreateStructGEP(
-						kwargsStructTypeKw, kwargsAllocaKw, 1, "pack.kwargs.vals.field"
+						kwargsStructTypeKw, kwargsAllocaKw, kwFieldOffset + 1, "pack.kwargs.vals.field"
 					);
 					this->irBuilder.CreateStore( llvm::ConstantPointerNull::get(
 						llvm::cast<llvm::PointerType>( ptrTypeKw ) ), valsFieldPtrKw );
 				}
 				llvm::Value* countFieldPtrKw = this->irBuilder.CreateStructGEP(
-					kwargsStructTypeKw, kwargsAllocaKw, 2, "pack.kwargs.count.field"
+					kwargsStructTypeKw, kwargsAllocaKw, kwFieldOffset + 2, "pack.kwargs.count.field"
 				);
 				this->irBuilder.CreateStore( llvm::ConstantInt::get( i64TypeKw, kwargCount ), countFieldPtrKw );
-				llvm::Value* posFieldPtrKw = this->irBuilder.CreateStructGEP(
-					kwargsStructTypeKw, kwargsAllocaKw, 3, "pack.kwargs.pos.field"
-				);
-				this->irBuilder.CreateStore( llvm::ConstantInt::get( i64TypeKw, 0 ), posFieldPtrKw );
+				if( kwFieldOffset + 3 < kwargsStructTypeKw->getNumElements() ) {
+					llvm::Value* posFieldPtrKw = this->irBuilder.CreateStructGEP(
+						kwargsStructTypeKw, kwargsAllocaKw, kwFieldOffset + 3, "pack.kwargs.pos.field"
+					);
+					this->irBuilder.CreateStore( llvm::ConstantInt::get( i64TypeKw, 0 ), posFieldPtrKw );
+				}
 				arguments.push_back( kwargsAllocaKw );
 			}
 			while( arguments.size() < expectedParamCount ) {
@@ -4716,13 +4760,35 @@ namespace uranite::ir::mir {
 			if( expectedKwargsType->isPointerTy() ) {
 				valType = ptrType;
 			}
-			llvm::StructType* kwargsStructType = llvm::StructType::get( this->llvmContext, {
-				ptrType, ptrType, i64Type, i64Type
-			});
+			llvm::StructType* kwargsStructType = nullptr;
+			unsigned kwFieldOff = 0;
+			std::unordered_map<std::string, llvm::StructType*>::iterator kwCacheIt2 = this->structTypeCache.find( "Kwargs" );
+			if( kwCacheIt2 == this->structTypeCache.end() ) {
+				kwCacheIt2 = this->structTypeCache.find( "uranite.collection.kwargs.Kwargs" );
+			}
+			if( kwCacheIt2 != this->structTypeCache.end() && kwCacheIt2->second->getNumElements() >= 3 ) {
+				kwargsStructType = kwCacheIt2->second;
+				unsigned kwargsNumElements2 = kwargsStructType->getNumElements();
+				if( kwargsNumElements2 > 3 ) {
+					kwFieldOff = kwargsNumElements2 - 3;
+				}
+			}
+			if( kwargsStructType == nullptr ) {
+				kwargsStructType = llvm::StructType::get( this->llvmContext, {
+					ptrType, ptrType, i64Type, i64Type
+				});
+			}
 			llvm::Function* currentFunc = this->irBuilder.GetInsertBlock()->getParent();
 			llvm::AllocaInst* kwargsAlloca = this->createEntryBlockAllocation(
 				currentFunc, "pack.kwargs", kwargsStructType
 			);
+			if( kwFieldOff > 0 ) {
+				llvm::Value* vtableFieldPtr = this->irBuilder.CreateStructGEP(
+					kwargsStructType, kwargsAlloca, 0, "pack.kwargs.vtable"
+				);
+				this->irBuilder.CreateStore( llvm::ConstantPointerNull::get(
+					llvm::cast<llvm::PointerType>( ptrType ) ), vtableFieldPtr );
+			}
 			if( kwargCount > 0 ) {
 				llvm::ArrayType* keysArrayType = llvm::ArrayType::get( ptrType, kwargCount );
 				llvm::ArrayType* valsArrayType = llvm::ArrayType::get( valType, kwargCount );
@@ -4760,34 +4826,36 @@ namespace uranite::ir::mir {
 					}
 				}
 				llvm::Value* keysFieldPtr = this->irBuilder.CreateStructGEP(
-					kwargsStructType, kwargsAlloca, 0, "pack.kwargs.keys.field"
+					kwargsStructType, kwargsAlloca, kwFieldOff + 0, "pack.kwargs.keys.field"
 				);
 				this->irBuilder.CreateStore( keysAlloca, keysFieldPtr );
 				llvm::Value* valsFieldPtr = this->irBuilder.CreateStructGEP(
-					kwargsStructType, kwargsAlloca, 1, "pack.kwargs.vals.field"
+					kwargsStructType, kwargsAlloca, kwFieldOff + 1, "pack.kwargs.vals.field"
 				);
 				this->irBuilder.CreateStore( valsAlloca, valsFieldPtr );
 			}
 			else {
 				llvm::Value* keysFieldPtr = this->irBuilder.CreateStructGEP(
-					kwargsStructType, kwargsAlloca, 0, "pack.kwargs.keys.field"
+					kwargsStructType, kwargsAlloca, kwFieldOff + 0, "pack.kwargs.keys.field"
 				);
 				this->irBuilder.CreateStore( llvm::ConstantPointerNull::get(
 					llvm::cast<llvm::PointerType>( ptrType ) ), keysFieldPtr );
 				llvm::Value* valsFieldPtr = this->irBuilder.CreateStructGEP(
-					kwargsStructType, kwargsAlloca, 1, "pack.kwargs.vals.field"
+					kwargsStructType, kwargsAlloca, kwFieldOff + 1, "pack.kwargs.vals.field"
 				);
 				this->irBuilder.CreateStore( llvm::ConstantPointerNull::get(
 					llvm::cast<llvm::PointerType>( ptrType ) ), valsFieldPtr );
 			}
 			llvm::Value* countFieldPtr = this->irBuilder.CreateStructGEP(
-				kwargsStructType, kwargsAlloca, 2, "pack.kwargs.count.field"
+				kwargsStructType, kwargsAlloca, kwFieldOff + 2, "pack.kwargs.count.field"
 			);
 			this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, kwargCount ), countFieldPtr );
-			llvm::Value* posFieldPtr = this->irBuilder.CreateStructGEP(
-				kwargsStructType, kwargsAlloca, 3, "pack.kwargs.pos.field"
-			);
-			this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, 0 ), posFieldPtr );
+			if( kwFieldOff + 3 < kwargsStructType->getNumElements() ) {
+				llvm::Value* posFieldPtr = this->irBuilder.CreateStructGEP(
+					kwargsStructType, kwargsAlloca, kwFieldOff + 3, "pack.kwargs.pos.field"
+				);
+				this->irBuilder.CreateStore( llvm::ConstantInt::get( i64Type, 0 ), posFieldPtr );
+			}
 			arguments.push_back( kwargsAlloca );
 		}
 		while( arguments.size() < expectedParamCount ) {
@@ -6081,12 +6149,24 @@ namespace uranite::ir::mir {
 			return llvm::Type::getInt64Ty( this->llvmContext );
 		}
 		if( resolved->isPointerTy() && elementSemaType->kind == semantic::Type::Kind::Class ) {
-			if( this->structTypeCache.count( elementClassName ) > 0 ) {
-				return this->structTypeCache[elementClassName];
+			static const std::unordered_set<std::string> oopWrapperElementNames = {
+				"Int", "I64", "I32", "I16", "I8", "UInt", "U64", "U32", "U16", "U8",
+				"Float", "Double", "F32", "F64", "Long", "Integer", "Boolean", "Byte", "Char",
+				"String", "Void", "Object"
+			};
+			std::string shortElementName = elementClassName;
+			size_t lastDotPos = shortElementName.rfind( '.' );
+			if( lastDotPos != std::string::npos ) {
+				shortElementName = shortElementName.substr( lastDotPos + 1 );
 			}
-			llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, elementClassName );
-			if( structType != nullptr ) {
-				return structType;
+			if( oopWrapperElementNames.count( shortElementName ) == 0 ) {
+				if( this->structTypeCache.count( elementClassName ) > 0 ) {
+					return this->structTypeCache[elementClassName];
+				}
+				llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, elementClassName );
+				if( structType != nullptr ) {
+					return structType;
+				}
 			}
 		}
 		return resolved;

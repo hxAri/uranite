@@ -5,14 +5,9 @@ from uranite.os.sync.spinlock import Spinlock
 from uranite.testing.assertions import assertFalse
 
 public function main() -> I32:
-    putsln( "=== OS Sync Spinlock Tests ===" )
-
+    putsln( "OS Sync Spinlock Tests" )
     Spinlock lock = new Spinlock()
     assertFalse( lock.isLocked(), "not locked" )
     putsln( "Spinlock OK" )
-
-    # lock/unlock/tryLock use asm volatile xchg + cli/sti
-    # which may not work in userspace
-
-    putsln( "=== All spinlock tests passed ===" )
+    putsln( "All spinlock tests passed" )
     return 0

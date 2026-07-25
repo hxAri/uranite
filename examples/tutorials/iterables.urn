@@ -1,3 +1,4 @@
+
 #
 # @author hxAri (hxari)
 # @create 2026-05-01 15:00
@@ -25,7 +26,6 @@ from uranite.io.console import puts
 from uranite.iterators.iterator import Iterator
 from uranite.memory.memory import Memory
 
-
 public class RangeIterator implements Iterator<I64>:
     
     """
@@ -49,7 +49,6 @@ public class RangeIterator implements Iterator<I64>:
         I64 value = self.current
         self.current = self.current + self.stepSize
         return value
-
 
 public class IntRange implements Iterator<I64>:
     
@@ -85,7 +84,6 @@ public class IntRange implements Iterator<I64>:
     
     public function reset( self ) -> Void:
         self.position = self.rangeStart
-
 
 public class FixedStack implements Iterator<I64>:
     
@@ -128,7 +126,6 @@ public class FixedStack implements Iterator<I64>:
     public function resetIterator( self ) -> Void:
         self.iterPosition = 0
 
-
 public function sumRange( I64 start, I64 end ) -> I64:
     
     """
@@ -147,7 +144,6 @@ public function sumRange( I64 start, I64 end ) -> I64:
     while range.has:
         total = total + range.next
     return total
-
 
 public function countElements( I64 start, I64 end, I64 step ) -> I64:
     
@@ -169,7 +165,6 @@ public function countElements( I64 start, I64 end, I64 step ) -> I64:
         range.next
         count = count + 1
     return count
-
 
 public function main() -> I32:
     

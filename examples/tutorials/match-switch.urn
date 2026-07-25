@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -22,7 +23,6 @@ package main
 
 from uranite.io.console import puts
 
-# Match expression — inline value selection
 function grade( I64 score ) -> String:
     
     """
@@ -59,7 +59,6 @@ function fizzbuzz( I64 n ) -> String:
         return "Buzz"
     return "number"
 
-# Switch statement — multi-branch control flow
 function dayName( I64 day ) -> String:
     
     """
@@ -114,7 +113,6 @@ function classify( I64 n ) -> String:
             return "negative"
     return "?"
 
-# Switch with break (fallthrough prevention)
 function season( I64 month ) -> Void:
     
     """
@@ -150,32 +148,23 @@ public function main() -> I32:
         I32 exit code.
     """
     
-    # Match expression tests
     puts( "grade(100) = ", grade( 100 ) )
     puts( "grade(90) = ", grade( 90 ) )
     puts( "grade(80) = ", grade( 80 ) )
     puts( "grade(50) = ", grade( 50 ) )
-
-    # Match in variable assignment
     I64 x = 42
     String label = match x in 0 => "zero", 42 => "answer", * => "other"
     puts( "match 42 = ", label )
-
-    # Switch tests
     puts( "day(0) = ", dayName( 0 ) )
     puts( "day(3) = ", dayName( 3 ) )
     puts( "day(6) = ", dayName( 6 ) )
     puts( "day(9) = ", dayName( 9 ) )
-
     puts( "classify(0) = ", classify( 0 ) )
     puts( "classify(1) = ", classify( 1 ) )
     puts( "classify(5) = ", classify( 5 ) )
-
-    # Switch with break
     season( 3 )
     season( 6 )
     season( 12 )
     season( 7 )
-
     puts( "all match/switch tests passed" )
     return 0
