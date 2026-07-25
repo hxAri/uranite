@@ -23,8 +23,6 @@ package uranite.examples.testing.arithmetic
 
 from uranite.io.console import puts
 
-
-# Basic arithmetic
 public function add( I64 a, I64 b ) -> I64:
     return a + b
 
@@ -40,7 +38,6 @@ public function divide( I64 a, I64 b ) -> I64:
 public function modulo( I64 a, I64 b ) -> I64:
     return a - ( a / b ) * b
 
-# Compound assignment operators
 public function compound_ops( I64 x ) -> I64:
     I64 result = x
     result += 10
@@ -48,16 +45,13 @@ public function compound_ops( I64 x ) -> I64:
     result *= 2
     return result
 
-# Unary negation
 public function negate( I64 x ) -> I64:
     return 0 - x
 
-# Floating-point arithmetic
 public function circle_area( F64 radius ) -> F64:
     F64 pi = 3.14159265
     return pi * radius * radius
 
-# Power (iterative)
 public function power( I64 base, I64 exp ) -> I64:
     I64 result = 1
     I64 i = 0
@@ -66,11 +60,9 @@ public function power( I64 base, I64 exp ) -> I64:
         i = i + 1
     return result
 
-# Bitwise shift (strength reduction: x * 2 -> x << 1)
 public function double_val( I64 x ) -> I64:
     return x * 2
 
-# GCD (Euclidean algorithm)
 public function gcd( I64 a, I64 b ) -> I64:
     if b == 0:
         return a
