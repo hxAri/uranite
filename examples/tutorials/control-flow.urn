@@ -23,13 +23,11 @@ package uranite.examples.testing.control-flow
 
 from uranite.io.console import puts
 
-# Simple if/else
 public function abs_value( I64 x ) -> I64:
     if x < 0:
         return 0 - x
     return x
 
-# If/elif/else chain
 public function sign( I64 x ) -> I64:
     if x > 0:
         return 1
@@ -38,7 +36,6 @@ public function sign( I64 x ) -> I64:
     else:
         return 0 - 1
 
-# Nested conditionals
 public function classify( I64 x ) -> I64:
     if x > 100:
         if x > 1000:
@@ -52,7 +49,6 @@ public function classify( I64 x ) -> I64:
     else:
         return 0 - 1
 
-# Clamping with elif
 public function clamp( I64 val, I64 lo, I64 hi ) -> I64:
     if val < lo:
         return lo
@@ -61,7 +57,6 @@ public function clamp( I64 val, I64 lo, I64 hi ) -> I64:
     else:
         return val
 
-# Boolean operators: and, or
 public function is_in_range( I64 x, I64 lo, I64 hi ) -> Boolean:
     if x >= lo and x <= hi:
         return True
@@ -72,7 +67,6 @@ public function is_extreme( I64 x ) -> Boolean:
         return True
     return False
 
-# Match on enum
 enum Season:
     unit Spring
     unit Summer
@@ -96,11 +90,8 @@ public function main() -> I32:
     puts( "classify(50) = ", classify( 50 ) )
     puts( "classify(0) = ", classify( 0 ) )
     puts( "clamp(150, 0, 100) = ", clamp( 150, 0, 100 ) )
-
     Season summer = Season.Summer
     puts( "season_temp(Summer) = ", season_temp( summer ) )
-
     Season winter = Season.Winter
     puts( "season_temp(Winter) = ", season_temp( winter ) )
-
     return 0
