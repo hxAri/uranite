@@ -1,26 +1,50 @@
+
+#
+# @author hxAri (hxari)
+# @create 2026-07-24 00:00
+# @update 2026-07-24 00:00
+# @github https://github.com/uranite-lang/uranite
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Interface dispatch: polymorphic method calls through interface-typed
+# variables, concrete class resolution, and multi-implementation patterns.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
 package testing
 
 from uranite.io.console import puts
 
-
 public interface Greeter:
+    
     public function greet( self ) -> Void;
 
 public class EnglishGreeter implements Greeter:
+    
     public Int id
-
+    
     public function EnglishGreeter( self, Int id ) -> Void:
         self.id = id
-
+    
     public function greet( self ) -> Void:
         puts( "Hello, World!" )
 
 public class SpanishGreeter implements Greeter:
+    
     public Int id
-
+    
     public function SpanishGreeter( self, Int id ) -> Void:
         self.id = id
-
+    
     public function greet( self ) -> Void:
         puts( "Hola, Mundo!" )
 
