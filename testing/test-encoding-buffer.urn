@@ -5,55 +5,41 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Encoding BinaryBuffer Tests ===" )
-
+    putsln( "Encoding BinaryBuffer Tests" )
     BinaryBuffer buffer = new BinaryBuffer( 256 )
-
     assertEqualI64( 0, buffer.position(), "initial position 0" )
     assertEqualI64( 256, buffer.capacity(), "capacity 256" )
     assertEqualI64( 256, buffer.remaining(), "initial remaining 256" )
     putsln( "initial state OK" )
-
     buffer.putI8( 0x42 )
     assertEqualI64( 1, buffer.position(), "after putI8 position 1" )
     assertEqualI64( 256, buffer.remaining(), "after putI8 remaining (read-side, readPos=0)" )
     putsln( "putI8 OK" )
-
     buffer.putI16( 0x1234 )
     assertEqualI64( 3, buffer.position(), "after putI16 position 3" )
     putsln( "putI16 OK" )
-
     buffer.putI32( 0x0EADBEEF )
     assertEqualI64( 7, buffer.position(), "after putI32 position 7" )
     putsln( "putI32 OK" )
-
     buffer.putI64( 0x0102030405060708 )
     assertEqualI64( 15, buffer.position(), "after putI64 position 15" )
     putsln( "putI64 OK" )
-
     buffer.flip()
     assertEqualI64( 0, buffer.readPos(), "after flip readPos 0" )
     putsln( "flip OK" )
-
     I64 readByte = buffer.getI8()
     assertEqualI64( 0x42, readByte, "getI8 0x42" )
     assertEqualI64( 1, buffer.readPos(), "after getI8 readPos 1" )
-
     I64 readShort = buffer.getI16()
     assertEqualI64( 0x1234, readShort, "getI16 0x1234" )
-
     I64 readInt = buffer.getI32()
     assertEqualI64( 0x0EADBEEF, readInt, "getI32 0x0EADBEEF" )
-
     I64 readLong = buffer.getI64()
     assertEqualI64( 0x0102030405060708, readLong, "getI64" )
     putsln( "read back OK" )
-
     buffer.reset()
     assertEqualI64( 0, buffer.position(), "after reset position 0" )
     putsln( "reset OK" )
-
     buffer.destroy()
-
-    putsln( "=== All Encoding BinaryBuffer Tests Passed ===" )
+    putsln( "All Encoding BinaryBuffer Tests Passed" )
     return 0
