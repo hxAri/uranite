@@ -173,20 +173,6 @@ function main() {
 	rm "$temporary"
 	puts "=========================================="
 	puts "$compiled: successfully compiled of $totals .urn codes"
-	if [[ ${#faileds[@]} -ge 1 ]]; then
-		puts "=========================================="
-		puts "${#faileds[@]}: files has been error occurred of $totals totals"
-		puts "=========================================="
-		for i in "${!faileds[@]}"; do
-			puts "${faileds[$i]/${basepath}\//}"
-			if [[ -z "${foutputs[$i]}" ]]; then
-				puts "(No output generated)"
-			else
-				puts "${foutputs[$i]/${basepath}\//}"
-			fi
-			puts "=========================================="
-		done
-	fi
 	if [[ ${#warnings[@]} -ge 1 ]]; then
 		if [[ ${#faileds[@]} -le 0 ]]; then
 			puts "=========================================="
@@ -203,6 +189,22 @@ function main() {
 			puts "=========================================="
 		done
 	fi
+	if [[ ${#faileds[@]} -ge 1 ]]; then
+		puts "=========================================="
+		puts "${#faileds[@]}: files has been error occurred of $totals totals"
+		puts "=========================================="
+		for i in "${!faileds[@]}"; do
+			puts "${faileds[$i]/${basepath}\//}"
+			if [[ -z "${foutputs[$i]}" ]]; then
+				puts "(No output generated)"
+			else
+				puts "${foutputs[$i]/${basepath}\//}"
+			fi
+			puts "=========================================="
+		done
+		return 1
+	fi
+	return 0
 }
 
 main "$@"
