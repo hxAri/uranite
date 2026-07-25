@@ -19,52 +19,37 @@ from uranite.process.process-future import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Multiprocessing Future Tests ===" )
-
+    putsln( "Multiprocessing Future Tests" )
     Scheduler sched = new Scheduler()
     PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
     ProcessRuntime runtime = new ProcessRuntime( sched, pmm, new SystemClock( 1000 ), 256 )
     SharedRegion region = runtime.createSharedRegion( 0, 1 )
     I64 slotAddr = region.getPhysicalBase()
-
-    # Initial state
     ProcessFutureBase fb = new ProcessFutureBase( sched, region, slotAddr )
     assertFalse( fb.isDone(), "initially not done" )
     putsln( "initial state OK" )
-
-    # setRunning
     fb.setRunning()
     putsln( "setRunning OK" )
-
-    # completeRaw
     fb.completeRaw( 42 )
     assertTrue( fb.isDone(), "done after complete" )
     assertEqualI64( 42, fb.getRawResult(), "raw result 42" )
     putsln( "completeRaw OK" )
-
-    # ProcessFuture wrapper
     ProcessFuture<I64> future = new ProcessFuture<I64>( fb )
     assertTrue( future.isDone(), "wrapped future done" )
     putsln( "ProcessFuture OK" )
-
-    # failRaw
     I64 slotAddr2 = slotAddr + 16
     ProcessFutureBase fb2 = new ProcessFutureBase( sched, region, slotAddr2 )
     fb2.failRaw( 99 )
     assertEqualI64( 99, fb2.getRawException(), "raw exception 99" )
     putsln( "failRaw OK" )
-
-    # cancel
     I64 slotAddr3 = slotAddr + 32
     ProcessFutureBase fb3 = new ProcessFutureBase( sched, region, slotAddr3 )
     Boolean cancelled = fb3.cancel()
     assertTrue( cancelled, "cancel success" )
     putsln( "cancel OK" )
-
     fb.destroy()
     fb2.destroy()
     fb3.destroy()
     runtime.destroy()
-
-    putsln( "=== All future tests passed ===" )
+    putsln( "All future tests passed" )
     return 0
