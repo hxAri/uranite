@@ -11,21 +11,17 @@ from uranite.os.arch.idt import {
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== OS Arch IDT Tests ===" )
-
+    putsln( "OS Arch IDT Tests" )
     IdtEntry entry = new IdtEntry()
     assertEqualI64( 0, entry.getHandler(), "entry handler 0" )
     putsln( "IdtEntry OK" )
-
     assertEqualI64( 0, InterruptVector.DivideError as I64, "DivideError = 0" )
     assertEqualI64( 14, InterruptVector.PageFault as I64, "PageFault = 14" )
     assertEqualI64( 32, IRQ_BASE, "IRQ_BASE = 32" )
     assertEqualI64( 142, GateType.InterruptGateKernel as I64, "InterruptGateKernel = 142" )
     putsln( "constants OK" )
-
     Idt idt = new Idt()
     putsln( "Idt created" )
     idt.destroy()
-
-    putsln( "=== All IDT tests passed ===" )
+    putsln( "All IDT tests passed" )
     return 0
