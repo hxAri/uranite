@@ -5,22 +5,17 @@ from uranite.kernel.io import BlockIoSubsystem
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== Kernel IO Tests ===" )
-
+    putsln( "Kernel IO Tests" )
     BlockIoSubsystem bio = new BlockIoSubsystem( 64, 32 )
     putsln( "BlockIoSubsystem constructed OK" )
-
     I64 dirtyCount = bio.getDirtyCount()
     assertEqualI64( 0, dirtyCount, "no dirty entries in fresh cache" )
     putsln( "getDirtyCount OK" )
-
     I64 hits = bio.getCacheHits()
     assertEqualI64( 0, hits, "no hits in fresh cache" )
     putsln( "getCacheHits OK" )
-
     I64 pending = bio.getPendingRequests()
     assertEqualI64( 0, pending, "no pending requests" )
     putsln( "getPendingRequests OK" )
-
-    putsln( "=== All Kernel IO Tests Passed ===" )
+    putsln( "All Kernel IO Tests Passed" )
     return 0
