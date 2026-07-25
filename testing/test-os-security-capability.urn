@@ -5,8 +5,7 @@ from uranite.os.security.capability import Capability
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Security Capability Tests ===" )
-
+    putsln( "OS Security Capability Tests" )
     Capability cap = new Capability( 7 )
     assertEqualI64( 7, cap.getMask(), "mask 7" )
     assertTrue( cap.has( 1 ), "has 1" )
@@ -14,29 +13,22 @@ public function main() -> I32:
     assertTrue( cap.has( 4 ), "has 4" )
     assertFalse( cap.has( 8 ), "not has 8" )
     putsln( "Capability OK" )
-
     Capability added = cap.add( 8 )
     assertEqualI64( 15, added.getMask(), "add(8) = 15" )
-
     Capability removed = cap.remove( 2 )
     assertEqualI64( 5, removed.getMask(), "remove(2) = 5" )
     putsln( "add/remove OK" )
-
     Capability other = new Capability( 3 )
     assertTrue( cap.contains( other ), "7 contains 3" )
-
     Capability merged = cap.merge( other )
     assertEqualI64( 7, merged.getMask(), "merge 7|3 = 7" )
-
     Capability intersected = cap.intersect( other )
     assertEqualI64( 3, intersected.getMask(), "intersect 7&3 = 3" )
     putsln( "merge/intersect OK" )
-
     Capability disjoint = new Capability( 8 )
     assertFalse( cap.contains( disjoint ), "7 not contains 8" )
     assertEqualI64( 15, cap.merge( disjoint ).getMask(), "merge 7|8 = 15" )
     assertEqualI64( 0, cap.intersect( disjoint ).getMask(), "intersect 7&8 = 0" )
     putsln( "disjoint OK" )
-
-    putsln( "=== All capability tests passed ===" )
+    putsln( "All capability tests passed" )
     return 0

@@ -53,7 +53,7 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
     private Memory<Int> status
     private Int count
     private Int capacity
-    
+
     public function HashMap( self ) -> Void:
         
         """
@@ -69,7 +69,7 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.valueData = new Memory<V>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
-    
+
     public function HashMap( self, Int initialCapacity ) -> Void:
         
         """
@@ -89,7 +89,7 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.valueData = new Memory<V>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
-    
+
     private function computeIndex( self, K key ) -> Int:
         
         """
@@ -837,18 +837,18 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
                 return True
         return False
     
-    public property iterator( self ) -> Iterator<V>:
-        
+    public property iterator( self ) -> Iterator<Pair<K, V>>:
+
         """
-        Return an iterator over the values in the map.
-        
+        Return an iterator over the key-value pairs in the map.
+
         Complexity:
             Time: O(1)
             Space: O(1)
         """
-        
-        return new HashMapIterator<V>( self.valueData, self.status, self.capacity )
-    
+
+        return new HashMapIterator<K, V>( self.keyData, self.valueData, self.status, self.capacity )
+
     public function toString( self ) -> String:
         
         """
@@ -1042,77 +1042,75 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.status.free()
 
 
-public class HashMapIterator<V> implements Iterator<V>:
-    
+public class HashMapIterator<K, V> implements Iterator<Pair<K, V>>:
+
     """
-    Iterator that traverses occupied slots in a HashMap's value array.
-    
-    Skips over empty and tombstone slots, yielding only values from
-    active entries.
+    Iterator that traverses occupied slots in a HashMap, yielding
+    key-value pairs as Pair<K, V> instances.
     """
-    
+
+    private Memory<K> keyData
     private Memory<V> valueData
     private Memory<Int> status
     private Int capacity
     private Int position
-    
-    public function HashMapIterator( self, Memory<V> valueData, Memory<Int> status, Int capacity ) -> Void:
-        
+
+    public function HashMapIterator( self, Memory<K> keyData, Memory<V> valueData, Memory<Int> status, Int capacity ) -> Void:
+
         """
-        Create an iterator over the given value array, starting at the first
-        occupied slot.
-        
+        Create an iterator over the given key and value arrays, starting at
+        the first occupied slot.
+
         Parameters:
-            valueData (Memory<V>):
-                The value storage buffer to iterate over.
-            status (Memory<Int>):
-                The slot status array (0=empty, 1=occupied, 2=deleted).
-            capacity (Int):
-                The total number of slots in the table.
-        
+            keyData: The key storage buffer.
+            valueData: The value storage buffer.
+            status: The slot status array (0=empty, 1=occupied, 2=deleted).
+            capacity: The total number of slots in the table.
+
         Complexity:
             Time: O(n)
             Space: O(1)
         """
-        
+
+        self.keyData = keyData
         self.valueData = valueData
         self.status = status
         self.capacity = capacity
         self.position = 0
         while self.position < self.capacity and self.status.get( self.position ) != 1:
             self.position = self.position + 1
-    
+
     public property has( self ) -> Boolean:
-        
+
         """
-        Check whether more values remain to be iterated.
-        
+        Check whether more entries remain to be iterated.
+
         Returns:
             Boolean:
                 True if the iterator has not yet reached the end of the table.
         """
-        
+
         return self.position < self.capacity
-    
-    public property next( self ) -> V:
-        
+
+    public property next( self ) -> Pair<K, V>:
+
         """
-        Return the current value and advance to the next occupied slot.
-        
+        Return the current key-value pair and advance to the next occupied slot.
+
         Returns:
-            V:
-                The value at the current position before advancing.
-        
+            Pair<K, V>:
+                The key-value pair at the current position before advancing.
+
         Complexity:
             Time: O(n)
             Space: O(1)
         """
-        
-        V element = self.valueData.get( self.position )
+
+        Pair<K, V> entry = new Pair<K, V>( self.keyData.get( self.position ), self.valueData.get( self.position ) )
         self.position = self.position + 1
         while self.position < self.capacity and self.status.get( self.position ) != 1:
             self.position = self.position + 1
-        return element
+        return entry
 
 
 export {

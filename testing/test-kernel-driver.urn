@@ -5,11 +5,9 @@ from uranite.kernel.driver import DeviceDriverManager
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== Kernel Driver Tests ===" )
-
+    putsln( "Kernel Driver Tests" )
     DeviceDriverManager manager = new DeviceDriverManager( 16 )
     assertEqualI64( 0, manager.registry.count, "no drivers initially" )
     putsln( "DeviceDriverManager constructed OK" )
-
-    putsln( "=== All Kernel Driver Tests Passed ===" )
+    putsln( "All Kernel Driver Tests Passed" )
     return 0

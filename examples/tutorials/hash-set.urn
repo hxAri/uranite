@@ -23,23 +23,18 @@ package main
 from uranite.collection.hash-set import HashSet
 from uranite.io.console import puts
 
-
 public function main() -> I32:
-    puts( "=== HashSet Test ===" )
-
+    puts( "HashSet Test" )
     HashSet<Int> set = new HashSet<Int>()
     set.add( 10 )
     set.add( 20 )
     set.add( 30 )
     set.add( 10 )
-
     puts( "Size after adding 10,20,30,10: ", set.length )
     puts( "Exists 20: ", set.exists( 20 ) )
     puts( "Exists 99: ", set.exists( 99 ) )
-
     set.remove( 20 )
     puts( "Size after remove 20: ", set.length )
     puts( "Exists 20 after remove: ", set.exists( 20 ) )
-
     puts( "Done." )
     return 0

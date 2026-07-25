@@ -20,43 +20,31 @@ function computeConstant() -> I64:
     return 42
 
 public function main() -> I32:
-    putsln( "=== Threading Executor Tests ===" )
-
+    putsln( "Threading Executor Tests" )
     Scheduler sched = new Scheduler()
     PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
     SystemClock clock = new SystemClock( 1000 )
     ThreadRuntime runtime = new ThreadRuntime( sched, pmm, clock, 256 )
-
     ThreadPoolExecutor executor = new ThreadPoolExecutor( 4 )
     assertEqualI64( 4, executor.getWorkerCount(), "worker count" )
     assertFalse( executor.isShutdown(), "not shutdown" )
     putsln( "executor OK" )
-
-    # Direct computation
     I64 directResult = computeSquare( 7 )
     assertEqualI64( 49, directResult, "computeSquare(7)" )
     putsln( "direct compute OK" )
-
-    # FutureBase
     FutureBase fb = new FutureBase( sched )
     assertFalse( fb.isDone(), "initially not done" )
-
     fb.completeRaw( directResult )
     assertTrue( fb.isDone(), "done after complete" )
     assertEqualI64( 49, fb.getRawResult(), "raw result" )
     putsln( "future OK" )
-
-    # Future wrapper
     Future<I64> future = new Future<I64>( fb )
     assertTrue( future.isDone(), "wrapped done" )
     putsln( "Future wrapper OK" )
-
-    # Submitters
     I64 constAddr = addressof computeConstant
     assertGreaterThan( constAddr, 0, "function addr" )
     TaskSubmitter1<I64, I64> submitter1 = new TaskSubmitter1<I64, I64>( executor )
     TaskSubmitter0<I64> submitter0 = new TaskSubmitter0<I64>( executor )
     putsln( "submitters OK" )
-
-    putsln( "=== All executor tests passed ===" )
+    putsln( "All executor tests passed" )
     return 0

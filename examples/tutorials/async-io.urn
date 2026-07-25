@@ -1,39 +1,59 @@
-# 
+
+#
 # @author hxAri (hxari)
 # @create 2026-05-01 15:00
-# @update 2026-06-21 01:44
+# @update 2026-07-23 21:00
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/
-# 
+#
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
-# 
-# Example demonstrating extern function uraniteAwaitFD( I32 fd, U32 events ) -> Void;.
-# 
+#
+# Example demonstrating async I/O with file descriptor waiting
+# and timer-based sleeping via the C async runtime.
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # any later version.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-# 
-package fuck.you
+#
 
-from uranite.functions.runtime import uraniteAwaitFD, uraniteSleep
+package uranite.examples.tutorials.async-io
+
+from uranite.errors.exception import Exception
+from uranite.functions.runtime import uraniteSleep
 from uranite.io.console import puts
 
-public function main( self ) -> Void:
-    
-    """
-    Description of main.
-    
-    Parameters:
-        self (Any): The self
-    Returns:
-        Void: Description of return value.
-    Complexity:
-        Time: O(1)
-    """
-    
-	uraniteSleep( 1000 )
-	puts( "Fuck You!" )
+async function slowCompute( I64 value, U64 delayMs ) -> Future<I64>:
+    uraniteSleep( delayMs )
+    return value * value
+
+async function computeSum( I64 a, I64 b, U64 delayMs ) -> Future<I64>:
+    uraniteSleep( delayMs )
+    return a + b
+
+async function pipeline( I64 input ) -> Future<I64>:
+    I64 squared = await slowCompute( input, 50 )
+    I64 result = await computeSum( squared, 10, 50 )
+    return result
+
+async function delayedFailure( U64 delayMs ) -> Future<I64>:
+    uraniteSleep( delayMs )
+    raise new Exception( "timed out after delay", 0, None )
+
+public async function main() -> Future<I32>:
+    I64 result = await slowCompute( 7, 100 )
+    puts( "slowCompute(7) = ", result )
+    I64 pipeResult = await pipeline( 5 )
+    puts( "pipeline(5) = ", pipeResult )
+    I64 first = await computeSum( 10, 20, 50 )
+    I64 second = await computeSum( first, 5, 50 )
+    puts( "chained sum = ", second )
+    try:
+        I64 value = await delayedFailure( 50 )
+    except as catchedException:
+        puts( "caught delayed error" )
+    puts( "async-io complete" )
+    return 0

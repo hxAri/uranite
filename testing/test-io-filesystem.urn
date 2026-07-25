@@ -14,32 +14,26 @@ from uranite.io.path import exists
 from uranite.testing.assertions import assertEqualStr, assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
-    putsln( "=== IO Filesystem Tests ===" )
-
+    putsln( "IO Filesystem Tests" )
     writeFileString( "/tmp/uranite-test-fs-src.txt", "filesystem test" )
     copy( "/tmp/uranite-test-fs-src.txt", "/tmp/uranite-test-fs-dst.txt" )
     String copied = readFileString( "/tmp/uranite-test-fs-dst.txt" )
     assertEqualStr( "filesystem test", copied, "copy content" )
     putsln( "copy OK" )
-
     rename( "/tmp/uranite-test-fs-dst.txt", "/tmp/uranite-test-fs-ren.txt" )
     assertTrue( exists( "/tmp/uranite-test-fs-ren.txt" ), "renamed exists" )
     assertFalse( exists( "/tmp/uranite-test-fs-dst.txt" ), "old name gone" )
     putsln( "rename OK" )
-
     remove( "/tmp/uranite-test-fs-ren.txt" )
     remove( "/tmp/uranite-test-fs-src.txt" )
     assertFalse( exists( "/tmp/uranite-test-fs-ren.txt" ), "removed" )
     putsln( "remove OK" )
-
     String cwd = getcwd()
     assertGreaterThan( cwd.length(), 0, "cwd not empty" )
     putsln( "getcwd OK" )
-
     FilesystemInfo info = statfs( "/" )
     assertGreaterThan( info.getBlockSize(), 0, "block size > 0" )
     assertGreaterThan( info.getTotalBlocks(), 0, "total blocks > 0" )
     putsln( "statfs OK" )
-
-    putsln( "=== All IO filesystem tests passed ===" )
+    putsln( "All IO filesystem tests passed" )
     return 0

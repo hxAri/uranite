@@ -1,4 +1,5 @@
 
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -23,68 +24,67 @@ package uranite.examples.testing.interfaces
 
 from uranite.io.console import puts
 
-# Interface declaration
 interface Describable:
+    
     public function describe( self ) -> Void
 
 interface Measurable:
+    
     public function measure( self ) -> I64
 
-# Class implementing single interface
 class Circle implements Describable:
+    
     public F64 radius
-
+    
     public function Circle( self, F64 radius ) -> Void:
         self.radius = radius
-
+    
     public function describe( self ) -> Void:
         puts( "Circle with radius ", self.radius )
 
-# Class implementing multiple interfaces
 class Square implements Describable, Measurable:
+    
     public I64 side
-
+    
     public function Square( self, I64 side ) -> Void:
         self.side = side
-
+    
     public function describe( self ) -> Void:
         puts( "Square with side ", self.side )
-
+    
     public function measure( self ) -> I64:
         return self.side * self.side
 
-# Class extending base + implementing interface
 class Shape:
+    
     public String kind
-
+    
     public function Shape( self, String kind ) -> Void:
         self.kind = kind
 
 class Rectangle extends Shape implements Describable:
+    
     public F64 width
     public F64 height
-
+    
     public function Rectangle( self, F64 w, F64 h ) -> Void:
         self.kind = "Rectangle"
         self.width = w
         self.height = h
-
+    
     public function describe( self ) -> Void:
         puts( "Rectangle ", self.width, " x ", self.height )
-
+    
     public function area( self ) -> F64:
         return self.width * self.height
 
 public function main() -> I32:
     Circle c = new Circle( 5.0 )
     c.describe()
-
     Square sq = new Square( 4 )
     sq.describe()
     puts( "Square area = ", sq.measure() )
-
     Rectangle r = new Rectangle( 3.0, 7.0 )
     r.describe()
     puts( "Rectangle area = ", r.area() )
-
     return 0

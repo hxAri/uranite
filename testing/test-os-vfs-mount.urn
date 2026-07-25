@@ -11,51 +11,40 @@ from uranite.os.vfs.mount import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS VFS Mount Tests ===" )
-
+    putsln( "OS VFS Mount Tests" )
     assertEqualI64( 1, MOUNT_READ_ONLY, "mountReadOnly" )
     assertEqualI64( 2, MOUNT_NO_EXEC, "mountNoExec" )
     assertEqualI64( 4, MOUNT_NO_SUID, "mountNoSuid" )
     putsln( "flags OK" )
-
     MountEntry me = new MountEntry( 1, 10, 20, 0, 1, 0 )
     assertEqualI64( 1, me.getMountId(), "mountId" )
     assertEqualI64( 20, me.getFilesystemId(), "fsId" )
     assertEqualI64( 0, me.getRootInode(), "rootInode" )
     assertFalse( me.isReadOnly(), "not readonly" )
-
     MountEntry meRo = new MountEntry( 2, 20, 30, 0, 2, 1 )
     assertTrue( meRo.isReadOnly(), "readonly" )
     putsln( "MountEntry OK" )
-
     MountTable mt = new MountTable( 4 )
     assertEqualI64( 0, mt.getCount(), "count 0" )
-
     I64 mid1 = mt.mount( 100, 1, 0, 1, 0 )
     assertTrue( mid1 >= 0, "mount 1" )
     assertEqualI64( 1, mt.getCount(), "count 1" )
-
     I64 mid2 = mt.mount( 200, 2, 0, 2, 1 )
     assertTrue( mid2 >= 0, "mount 2" )
     assertEqualI64( 2, mt.getCount(), "count 2" )
-
     I64 foundFs = mt.findByMountPoint( 100 )
     assertTrue( foundFs >= 0, "findByMountPoint" )
     assertEqualI64( -1, mt.findByMountPoint( 999 ), "find miss" )
-
     assertTrue( mt.isMountPoint( 100 ), "isMountPoint" )
     assertFalse( mt.isMountPoint( 999 ), "not mountpoint" )
     putsln( "MountTable OK" )
-
     Boolean umOk = mt.unmount( mid1 )
     assertTrue( umOk, "unmount" )
     assertEqualI64( 1, mt.getCount(), "count after unmount" )
     assertFalse( mt.isMountPoint( 100 ), "unmounted" )
     assertFalse( mt.unmount( 999 ), "unmount miss" )
     putsln( "unmount OK" )
-
     mt.unmount( mid2 )
     mt.destroy()
-
-    putsln( "=== All mount tests passed ===" )
+    putsln( "All mount tests passed" )
     return 0

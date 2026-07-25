@@ -6,16 +6,13 @@ from uranite.testing.assertions import assertEqualI64
 from uranite.threading.atomic import AtomicI64
 
 public function main() -> I32:
-    putsln( "=== Threading Atomic Basic Tests ===" )
-
+    putsln( "Threading Atomic Basic Tests" )
     AtomicI64 counter = new AtomicI64( 42 )
     I64 val = counter.load()
     assertEqualI64( 42, val, "initial load" )
     putsln( "load OK" )
-
     counter.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All atomic basic tests passed ===" )
+    putsln( "All atomic basic tests passed" )
     exit( 0 )
     return 0

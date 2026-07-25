@@ -20,6 +20,8 @@
 
 package uranite.language.string
 
+from uranite.memory.allocator import alloc
+from uranite.io.syscall import ptrToString, readByteAt, stringLen, stringToPtr, writeByteAt
 
 
 class String:
@@ -157,8 +159,59 @@ class String:
 
         return self.value as I64
 
-    public function format( self, I64 args[], I64 kwargs{} ) -> String:
+    public function format( self, I64 args[] ) -> String:
 
-        """ Format this string, replacing {} placeholders with positional arguments and {name} placeholders with keyword arguments. """
+        """
+        Format this string, replacing {} placeholders with positional arguments.
 
-        return self.value
+        Each {} in the template is replaced with the next positional argument,
+        interpreted as a string pointer. Arguments beyond the placeholder count
+        are ignored; excess placeholders are left as literal {}.
+
+        Parameters:
+            args (I64[]):
+                Positional arguments. Each value is treated as a raw string pointer.
+
+        Returns:
+            String:
+                The formatted string with placeholders substituted.
+        """
+
+        I64 templatePointer = stringToPtr( self.value )
+        I64 templateLength = stringLen( self.value )
+        I64 argCount = args.length()
+        I64 estimatedSize = templateLength
+        I64 estimateIndex = 0
+        while estimateIndex < argCount:
+            String argumentString = ptrToString( args.get( estimateIndex ) )
+            estimatedSize = estimatedSize + stringLen( argumentString )
+            estimateIndex = estimateIndex + 1
+        I64 resultPointer = alloc( estimatedSize + 1 )
+        I64 readPosition = 0
+        I64 writePosition = 0
+        I64 argumentIndex = 0
+        while readPosition < templateLength:
+            I64 currentByte = readByteAt( templatePointer, readPosition )
+            if currentByte == 123 and readPosition + 1 < templateLength:
+                I64 nextByte = readByteAt( templatePointer, readPosition + 1 )
+                if nextByte == 125 and argumentIndex < argCount:
+                    String argumentString = ptrToString( args.get( argumentIndex ) )
+                    I64 argumentPointer = stringToPtr( argumentString )
+                    I64 argumentLength = stringLen( argumentString )
+                    I64 copyOffset = 0
+                    while copyOffset < argumentLength:
+                        writeByteAt( resultPointer, writePosition, readByteAt( argumentPointer, copyOffset ) )
+                        copyOffset = copyOffset + 1
+                        writePosition = writePosition + 1
+                    readPosition = readPosition + 2
+                    argumentIndex = argumentIndex + 1
+                else:
+                    writeByteAt( resultPointer, writePosition, currentByte )
+                    writePosition = writePosition + 1
+                    readPosition = readPosition + 1
+            else:
+                writeByteAt( resultPointer, writePosition, currentByte )
+                writePosition = writePosition + 1
+                readPosition = readPosition + 1
+        writeByteAt( resultPointer, writePosition, 0 )
+        return ptrToString( resultPointer )

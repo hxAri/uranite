@@ -6,56 +6,50 @@ from uranite.iterators.iterator import Iterator
 from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public class CounterIterator implements Iterator<Int>:
+    
     private Int current
     private Int max
-
+    
     public function CounterIterator( self, Int max ) -> Void:
         self.current = 0
         self.max = max
-
+    
     public property has( self ) -> Boolean:
         return self.current < self.max
-
+    
     public property next( self ) -> Int:
         Int val = self.current
         self.current = self.current + 1
         return val
 
 public class Counter implements Iterable<Int>:
+    
     private Int max
-
+    
     public function Counter( self, Int max ) -> Void:
         self.max = max
-
+    
     public property iterator( self ) -> Iterator<Int>:
         return new CounterIterator( self.max )
 
 public function main() -> I32:
-    putsln( "=== Iterable Tests ===" )
-
+    putsln( "Iterable Tests" )
     Counter counter = new Counter( 4 )
-
-    # first traversal
     Iterator<Int> it1 = counter.iterator
     I64 sum1 = 0
     while it1.has:
         sum1 = sum1 + it1.next
     assertEqualI64( 6, sum1, "first traversal sum 0+1+2+3" )
     putsln( "first traversal OK" )
-
-    # second traversal (fresh iterator)
     Iterator<Int> it2 = counter.iterator
     I64 sum2 = 0
     while it2.has:
         sum2 = sum2 + it2.next
     assertEqualI64( 6, sum2, "second traversal sum" )
     putsln( "second traversal OK" )
-
-    # empty iterable
     Counter empty = new Counter( 0 )
     Iterator<Int> it3 = empty.iterator
     assertFalse( it3.has, "empty has" )
     putsln( "empty iterable OK" )
-
-    putsln( "=== All Iterable tests passed ===" )
+    putsln( "All Iterable tests passed" )
     return 0

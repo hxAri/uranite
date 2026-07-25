@@ -65,10 +65,22 @@ namespace uranite::semantic::qname {
 	
 	// Interfaces
 	inline const std::string DROPER = "uranite.memory.droper.Droper";
-	inline const std::string INDEXABLE = "uranite.operators.Indexable";
 	inline const std::string ITERABLE = "uranite.iterators.iterable.Iterable";
 	inline const std::string ITERATOR = "uranite.iterators.iterator.Iterator";
 	inline const std::string THROWABLE = "uranite.errors.throwable.Throwable";
+
+	// Operator interfaces
+	inline const std::string ADDABLE = "uranite.operators.addable.Addable";
+	inline const std::string COMPARABLE = "uranite.operators.comparable.Comparable";
+	inline const std::string DIVIDABLE = "uranite.operators.dividable.Dividable";
+	inline const std::string EQUATABLE = "uranite.operators.equatable.Equatable";
+	inline const std::string HASHABLE = "uranite.operators.hashable.Hashable";
+	inline const std::string INDEXABLE = "uranite.operators.indexable.Indexable";
+	inline const std::string MODULABLE = "uranite.operators.modulable.Modulable";
+	inline const std::string MULTIPLIABLE = "uranite.operators.multipliable.Multipliable";
+	inline const std::string NEGATABLE = "uranite.operators.negatable.Negatable";
+	inline const std::string STRINGABLE = "uranite.operators.stringable.Stringable";
+	inline const std::string SUBTRACTABLE = "uranite.operators.subtractable.Subtractable";
 	
 	// Collections
 	inline const std::string ARGS = "uranite.collection.args.Args";

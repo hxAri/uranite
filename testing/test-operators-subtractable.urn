@@ -5,34 +5,28 @@ from uranite.operators.subtractable import Subtractable
 from uranite.testing.assertions import assertEqualI64
 
 public class Val implements Subtractable<Val>:
+    
     public Int value
-
+    
     public function Val( self, Int value ) -> Void:
         self.value = value
-
+    
     public function subtract( self, Val other ) -> Val:
         return new Val( self.value - other.value )
 
 public function main() -> I32:
-    putsln( "=== Subtractable Tests ===" )
-
+    putsln( "Subtractable Tests" )
     Val a = new Val( 100 )
     Val b = new Val( 30 )
-
-    Val c = a.subtract( b )
+    Val c = a - b
     assertEqualI64( 70, c.value, "100-30=70" )
-
-    Val d = b.subtract( a )
+    Val d = b - a
     assertEqualI64( -70, d.value, "subtract to negative" )
-
     Val zero = new Val( 0 )
-    Val e = a.subtract( zero )
+    Val e = a - zero
     assertEqualI64( 100, e.value, "subtract zero" )
-
-    # chained method call
-    Val f = a.subtract( b ).subtract( b )
+    Val f = ( a - b ) - b
     assertEqualI64( 40, f.value, "chain subtract" )
     putsln( "subtract OK" )
-
-    putsln( "=== All Subtractable tests passed ===" )
+    putsln( "All Subtractable tests passed" )
     return 0

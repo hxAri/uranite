@@ -8,9 +8,7 @@ from uranite.logging.logger import Logger, getDebugLogger, getLogger
 from uranite.testing.assertions import assertEqualStr, assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Logging Tests ===" )
-
-    # LogLevel enum .name
+    putsln( "Logging Tests" )
     assertEqualStr( "Trace", LogLevel.Trace.name, "Trace name" )
     assertEqualStr( "Debug", LogLevel.Debug.name, "Debug name" )
     assertEqualStr( "Info", LogLevel.Info.name, "Info name" )
@@ -18,39 +16,27 @@ public function main() -> I32:
     assertEqualStr( "Error", LogLevel.Error.name, "Error name" )
     assertEqualStr( "Fatal", LogLevel.Fatal.name, "Fatal name" )
     putsln( "LogLevel.name OK" )
-
-    # Logger construction
     Logger log = getLogger( "test" )
     Logger dlog = getDebugLogger( "debug-test" )
     putsln( "getLogger/getDebugLogger OK" )
-
-    # isEnabled
     assertTrue( log.isEnabled( LogLevel.Info ), "Info enabled" )
     log.setLevel( LogLevel.Debug )
     assertTrue( log.isEnabled( LogLevel.Debug ), "Debug enabled after setLevel" )
     putsln( "isEnabled/setLevel OK" )
-
-    # Log output
     log.info( "test info message" )
     log.warn( "test warn message" )
     log.debug( "test debug message" )
     putsln( "log output OK" )
-
-    # LogFormatter
     LogFormatter fmt = defaultFormatter()
     String fmtResult = fmt.format( LogLevel.Info, "test", "hello" )
     assertTrue( fmtResult != "", "formatted not empty" )
     putsln( "LogFormatter OK" )
-
-    # ConsoleHandler
     ConsoleHandler ch = consoleHandler()
     ch.handle( LogLevel.Info, "handler-test", "handler output" )
     putsln( "ConsoleHandler OK" )
-
     ConsoleHandler ch2 = consoleHandlerWithLevel( LogLevel.Warn )
     ch2.handle( LogLevel.Debug, "filtered", "should not appear" )
     ch2.handle( LogLevel.Warn, "filtered", "should appear" )
     putsln( "ConsoleHandler level filter OK" )
-
-    putsln( "=== All logging tests passed ===" )
+    putsln( "All logging tests passed" )
     return 0

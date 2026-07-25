@@ -12,30 +12,21 @@ from uranite.threading.future import {
 }
 
 public function main() -> I32:
-    putsln( "=== Threading Future Tests ===" )
-
+    putsln( "Threading Future Tests" )
     Scheduler sched = new Scheduler()
-
-    # FutureBase initial state
     FutureBase base = new FutureBase( sched )
     assertFalse( base.isDone(), "initially not done" )
     putsln( "initial state OK" )
-
-    # completeRaw
     base.completeRaw( 42 )
     assertTrue( base.isDone(), "done after complete" )
     assertEqualI64( 42, base.getRawResult(), "result 42" )
     putsln( "completeRaw OK" )
-
     base.destroy()
     putsln( "destroy OK" )
-
-    # Future wrapper
     FutureBase base2 = new FutureBase( sched )
     Future<I64> future = new Future<I64>( base2 )
     assertFalse( future.isDone(), "future not done" )
     future.destroy()
     putsln( "Future wrapper OK" )
-
-    putsln( "=== All future tests passed ===" )
+    putsln( "All future tests passed" )
     return 0

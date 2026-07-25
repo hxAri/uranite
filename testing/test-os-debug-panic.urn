@@ -5,8 +5,7 @@ from uranite.os.debug.panic import PanicContext, PanicReason
 from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
-    putsln( "=== OS Debug Panic Tests ===" )
-
+    putsln( "OS Debug Panic Tests" )
     assertEqualI64( 1, PanicReason.General as I64, "General" )
     assertEqualI64( 2, PanicReason.DoubleFault as I64, "DoubleFault" )
     assertEqualI64( 3, PanicReason.OutOfMemory as I64, "OutOfMemory" )
@@ -14,15 +13,12 @@ public function main() -> I32:
     assertEqualI64( 5, PanicReason.NullDeref as I64, "NullDeref" )
     assertEqualI64( 6, PanicReason.AssertFailed as I64, "AssertFailed" )
     putsln( "enum OK" )
-
     PanicContext ctx = new PanicContext( 16 )
     assertEqualI64( 0, ctx.reason, "reason 0" )
     assertEqualI64( 16, ctx.maxFrames, "maxFrames" )
     assertFalse( ctx.isPanicked(), "not panicked" )
     assertEqualI64( 0, ctx.getFrameCount(), "frames 0" )
     putsln( "PanicContext OK" )
-
     ctx.destroy()
-
-    putsln( "=== All panic tests passed ===" )
+    putsln( "All panic tests passed" )
     return 0

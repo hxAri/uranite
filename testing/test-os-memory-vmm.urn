@@ -5,23 +5,17 @@ from uranite.os.memory.address-space import protReadOnly, protReadWrite, protUse
 from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Memory VMM Tests ===" )
-
+    putsln( "OS Memory VMM Tests" )
     I64 ro = protReadOnly()
     assertEqualI64( 1, ro, "protReadOnly = PRESENT" )
-
     I64 rw = protReadWrite()
     assertEqualI64( 3, rw, "protReadWrite = PRESENT|WRITABLE" )
-
     I64 user = protUser()
     assertEqualI64( 7, user, "protUser = PRESENT|WRITABLE|USER" )
-
     I64 userRo = protUserReadOnly()
     assertEqualI64( 5, userRo, "protUserReadOnly = PRESENT|USER" )
-
     assertTrue( rw > ro, "rw > ro" )
     assertTrue( user > rw, "user > rw" )
     putsln( "protection flags OK" )
-
-    putsln( "=== All VMM tests passed ===" )
+    putsln( "All VMM tests passed" )
     return 0

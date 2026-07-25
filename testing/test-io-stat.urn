@@ -5,13 +5,11 @@ from uranite.io.stat import FileStat, FileType, statPath
 from uranite.testing.assertions import assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
-    putsln( "=== IO Stat Tests ===" )
-
+    putsln( "IO Stat Tests" )
     FileStat st = statPath( "/tmp" )
     assertTrue( st.isDirectory(), "isDirectory /tmp" )
     assertFalse( st.isFile(), "not isFile /tmp" )
     assertGreaterThan( st.getSize(), -1, "size >= 0" )
     putsln( "stat OK" )
-
-    putsln( "=== All IO stat tests passed ===" )
+    putsln( "All IO stat tests passed" )
     return 0

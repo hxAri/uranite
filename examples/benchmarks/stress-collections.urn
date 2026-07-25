@@ -1,45 +1,105 @@
-package testing
+
+# 
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-07-25 03:21
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/stress-collections.urn
+# 
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+# 
+# Advanced stress test for collection types (ArrayList, HashMap, HashSet).
+# Performs extensive insertions, lookups, and aggregations across massive datasets
+# to benchmark collection resizing, memory throughput, and hashing performance.
+# Includes elapsed time tracking per individual phase.
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
+
+package uranite.examples.benchmarks.stress-collections
 
 from uranite.collection.array-list import ArrayList
 from uranite.collection.hash-map import HashMap
+from uranite.collection.hash-set import HashSet
 from uranite.convert.convert import intToString
+from uranite.functions.externs import clock
 from uranite.io.console import putsln
 
-public function main() -> I32:
-    putsln( "=== Stress Collections Test ===" )
-    
-    # ArrayList: insert 10K elements
+function runArrayListStress() -> I64:
     ArrayList<I64> list = new ArrayList<I64>()
     I64 i = 0
-    while i < 10000:
+    while i < 500000:
         list.add( i )
         i = i + 1
-    putsln( "ArrayList 10K inserts OK" )
-    
-    I64 sum = 0
+    I64 accumulator = 0
     i = 0
-    while i < 10000:
-        sum = sum + list.get( i )
+    while i < 500000:
+        I64 value = list.get( i )
+        accumulator = accumulator + ( value % 10 )
         i = i + 1
-    putsln( "ArrayList 10K reads OK" )
-    
-    # HashMap: insert 10K entries
+    return accumulator
+
+function runHashMapStress() -> I64:
     HashMap<String, I64> map = new HashMap<String, I64>()
-    i = 0
-    while i < 10000:
+    I64 i = 0
+    while i < 100000:
         String key = intToString( i )
         map.put( key, i )
         i = i + 1
-    putsln( "HashMap 10K inserts OK" )
-    
-    I64 found = 0
+    I64 matchCount = 0
     i = 0
-    while i < 10000:
-        String key = intToString( i )
-        if map.containsKey( key ):
-            found = found + 1
+    while i < 150000:
+        String lookupKey = intToString( i )
+        if map.containsKey( lookupKey ):
+            matchCount = matchCount + 1
         i = i + 1
-    putsln( "HashMap 10K lookups OK" )
-    
-    putsln( "=== Stress collections test PASSED ===" )
+    return matchCount
+
+function runHashSetStress() -> I64:
+    HashSet<String> set = new HashSet<String>()
+    I64 i = 0
+    while i < 100000:
+        String key = intToString( i )
+        set.add( key )
+        i = i + 2
+    I64 foundCount = 0
+    i = 0
+    while i < 100000:
+        String lookupKey = intToString( i )
+        if set.exists( lookupKey ):
+            foundCount = foundCount + 1
+        i = i + 1
+    return foundCount
+
+public function main() -> I32:
+    putsln( "Starting Advanced Collections Stress Benchmark..." )
+    I64 startTotal = clock()
+    I64 startArray = clock()
+    I64 arraySum = runArrayListStress()
+    I64 endArray = clock()
+    Double elapsedArray = ( endArray - startArray ) / 1000000.0
+    String arraySumStr = intToString( arraySum )
+    putsln( "- ArrayList completed with checksum: " + arraySumStr + " in ", elapsedArray, " seconds" )
+    I64 startMap = clock()
+    I64 mapHits = runHashMapStress()
+    I64 endMap = clock()
+    Double elapsedMap = ( endMap - startMap ) / 1000000.0
+    String mapHitsStr = intToString( mapHits )
+    putsln( "- HashMap completed with hits: " + mapHitsStr + " in ", elapsedMap, " seconds" )
+    I64 startSet = clock()
+    I64 setHits = runHashSetStress()
+    I64 endSet = clock()
+    Double elapsedSet = ( endSet - startSet ) / 1000000.0
+    String setHitsStr = intToString( setHits )
+    putsln( "- HashSet completed with hits: " + setHitsStr + " in ", elapsedSet, " seconds" )
+    I64 endTotal = clock()
+    Double elapsedTotal = ( endTotal - startTotal ) / 1000000.0
+    putsln( "Total Elapsed time: ", elapsedTotal, " seconds" )
+    putsln( "Advanced stress collections test PASSED" )
     return 0

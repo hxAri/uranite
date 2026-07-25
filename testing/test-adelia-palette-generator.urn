@@ -6,52 +6,36 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertGreaterThan
 
 public function main() -> I32:
-    putsln( "=== Adelia PaletteGenerator Tests ===" )
-
+    putsln( "Adelia PaletteGenerator Tests" )
     I32 teal = 32896
-
-    # complementary
     ColorPalette comp = PaletteGenerator.complementary( teal )
     assertEqualStr( "Complementary", comp.name, "comp name" )
     assertEqualI64( 2, comp.length, "comp length" )
     assertEqualI64( 32896, comp.get( 0 ) as I64, "comp base" )
     putsln( "complementary OK" )
-
-    # triadic
     ColorPalette tri = PaletteGenerator.triadic( teal )
     assertEqualStr( "Triadic", tri.name, "tri name" )
     assertEqualI64( 3, tri.length, "tri length" )
     putsln( "triadic OK" )
-
-    # analogous
     ColorPalette ana = PaletteGenerator.analogous( teal )
     assertEqualStr( "Analogous", ana.name, "ana name" )
     assertEqualI64( 3, ana.length, "ana length" )
     putsln( "analogous OK" )
-
-    # splitComplementary
     ColorPalette split = PaletteGenerator.splitComplementary( teal )
     assertEqualStr( "Split Complementary", split.name, "split name" )
     assertEqualI64( 3, split.length, "split length" )
     putsln( "splitComplementary OK" )
-
-    # tints
     ColorPalette tintPal = PaletteGenerator.tints( teal, 3 )
     assertEqualStr( "Tints", tintPal.name, "tints name" )
     assertEqualI64( 4, tintPal.length, "tints length" )
     putsln( "tints OK" )
-
-    # shades
     ColorPalette shadePal = PaletteGenerator.shades( teal, 3 )
     assertEqualStr( "Shades", shadePal.name, "shades name" )
     assertEqualI64( 4, shadePal.length, "shades length" )
     putsln( "shades OK" )
-
-    # monochromatic
     ColorPalette mono = PaletteGenerator.monochromatic( teal, 2 )
     assertEqualStr( "Monochromatic", mono.name, "mono name" )
     assertEqualI64( 5, mono.length, "mono length" )
     putsln( "monochromatic OK" )
-
-    putsln( "=== All PaletteGenerator tests passed ===" )
+    putsln( "All PaletteGenerator tests passed" )
     return 0

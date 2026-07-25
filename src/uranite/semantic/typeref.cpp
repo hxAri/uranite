@@ -112,7 +112,7 @@ namespace uranite::semantic {
 			return false;
 		}
 		if( target->isError() || source->isError() ) {
-			return true; // error recovery
+			return true;
 		}
 		if( target->equals( source ) ) {
 			return true;
@@ -120,8 +120,6 @@ namespace uranite::semantic {
 		if( target->isVoid() && source->isVoid() ) {
 			return true;
 		}
-		
-		// Object is universal base — any type assignable to/from Object
 		if( target->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer classTargetType = std::static_pointer_cast<ClassType>( target );
 			if( classTargetType->qualified == qname::OBJECT || classTargetType->name == "Object" ) {
@@ -134,7 +132,6 @@ namespace uranite::semantic {
 				return true;
 			}
 		}
-		// Monomorphized and base class of same type are assignable
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer targetClassType = std::static_pointer_cast<ClassType>( target );
 			ClassTypeSharedPointer sourceClassType = std::static_pointer_cast<ClassType>( source );
@@ -154,13 +151,10 @@ namespace uranite::semantic {
 				return true;
 			}
 		}
-		// Class assignable to interface it implements (including transitive)
 		if( target->kind == Type::Kind::Interface && source->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer sourceClassType = std::static_pointer_cast<ClassType>( source);
 			InterfaceTypeSharedPointer targetInterfaceType = std::static_pointer_cast<InterfaceType>( target);
 			std::vector<TypeSharedPointer> typesToCheck = sourceClassType->interfaces;
-			
-			// Also check base class's interfaces
 			if( sourceClassType->astDeclaration ) {
 				TypeSharedPointer baseTemplateType = this->lookupType( sourceClassType->astDeclaration->name );
 				if( baseTemplateType && baseTemplateType->kind == Type::Kind::Class ) {
@@ -178,25 +172,17 @@ namespace uranite::semantic {
 					continue;
 				}
 				checkedTypes.push_back( currentType );
-				
-				// 1. Identity Match: qualified name takes precedence, short name fallback
 				if( typeIdentityMatch( currentType, target ) ) {
 					return true;
 				}
-				
-				// 2. Structural/Declaration Match: Both are specializations of the same interface
 				if( currentType->kind == Type::Kind::Interface ) {
 					InterfaceTypeSharedPointer currentInterfaceType = std::static_pointer_cast<InterfaceType>( currentType );
 					if( currentInterfaceType->astDeclaration && targetInterfaceType->astDeclaration && currentInterfaceType->astDeclaration == targetInterfaceType->astDeclaration ) {
 						return true;
 					}
-					
-					// Transitive: walk super interfaces
 					for( TypeSharedPointer& parentInterfaceType : currentInterfaceType->superInterfaces ) {
 						typesToCheck.push_back( parentInterfaceType );
 					}
-					
-					// Also check AST super interfaces if runtime ones are empty
 					if( currentInterfaceType->superInterfaces.empty() && currentInterfaceType->astDeclaration ) {
 						for( ast::nodes::TypeNodeSharedPointer& superNode : currentInterfaceType->astDeclaration->superInterfaces ) {
 							if( superNode->kind == ast::Node::Kind::SimpleType ) {
@@ -217,8 +203,6 @@ namespace uranite::semantic {
 					}
 				}
 			}
-			
-			// Check parent classes implementation
 			TypeSharedPointer baseType = sourceClassType->baseClass;
 			while( baseType && baseType->kind == Type::Kind::Class ) {
 				ClassTypeSharedPointer baseClassType = std::static_pointer_cast<ClassType>( baseType );
@@ -236,8 +220,6 @@ namespace uranite::semantic {
 				baseType = baseClassType->baseClass;
 			}
 		}
-		
-		// Interface assignable to class that implements it (downcast)
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Interface ) {
 			ClassTypeSharedPointer targetClassType = std::static_pointer_cast<ClassType>( target );
 			InterfaceTypeSharedPointer sourceInterfaceType = std::static_pointer_cast<InterfaceType>( source );
@@ -273,15 +255,11 @@ namespace uranite::semantic {
 				}
 			}
 		}
-		
-		// Class assignable to its base class
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer sourceClassType = std::static_pointer_cast<ClassType>( source );
 			if( sourceClassType->baseClass && typeIdentityMatch( sourceClassType->baseClass, target ) ) {
 				return true;
 			}
-			
-			// Fallback for mono copies
 			if( sourceClassType->astDeclaration ) {
 				TypeSharedPointer baseTemplateType = this->lookupType( sourceClassType->astDeclaration->name );
 				if( baseTemplateType && baseTemplateType->kind == Type::Kind::Class ) {
@@ -292,13 +270,9 @@ namespace uranite::semantic {
 				}
 			}
 		}
-		
-		// Integer conversions (widening and narrowing)
 		if( target->kind == Type::Kind::Integer && source->kind == Type::Kind::Integer ) {
 			return true;
 		}
-		
-		// OOP numeric class interconversion
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
 			bool targetIsIntOop = qname::isIntegerOop( target->qualified );
 			bool sourceIsIntOop = qname::isIntegerOop( source->qualified );
@@ -310,8 +284,6 @@ namespace uranite::semantic {
 				return true;
 			}
 		}
-		
-		// Cross-layer numeric conversion (OOP class ↔ primitive)
 		if( target->isIntegral() && source->isIntegral() ) {
 			return true;
 		}
@@ -321,13 +293,9 @@ namespace uranite::semantic {
 		if( target->isFloatingPoint() && source->isFloatingPoint() ) {
 			return true;
 		}
-		
-		// Float to int (narrowing truncation)
 		if( target->isIntegral() && source->isFloatingPoint() ) {
 			return true;
 		}
-		
-		// OOP float-to-int interconversion
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
 			bool targetIsIntOop = qname::isIntegerOop( target->qualified );
 			bool sourceIsFloatOop = qname::isFloatOop( source->qualified );
@@ -335,8 +303,6 @@ namespace uranite::semantic {
 				return true;
 			}
 		}
-		
-		// Float widening
 		if( target->kind == Type::Kind::Float && source->kind == Type::Kind::Float ) {
 			FloatTypeSharedPointer targetFloatType = std::static_pointer_cast<FloatType>( target );
 			FloatTypeSharedPointer sourceFloatType = std::static_pointer_cast<FloatType>( source );
@@ -344,18 +310,12 @@ namespace uranite::semantic {
 				return true;
 			}
 		}
-		
-		// Int to float
 		if( target->kind == Type::Kind::Float && source->kind == Type::Kind::Integer ) {
 			return true;
 		}
-		
-		// Generic type parameters are compatible with any type
 		if( target->kind == Type::Kind::GenericParameter || source->kind == Type::Kind::GenericParameter ) {
 			return true;
 		}
-		
-		// Optional type: None (void) is assignable to any optional type, and inner type T is assignable to ?T
 		if( target->kind == Type::Kind::Optional ) {
 			if( source->isVoid() ) {
 				return true;
@@ -367,20 +327,14 @@ namespace uranite::semantic {
 			}
 			return this->isAssignable( targetOptionalType->inner,source );
 		}
-		
-		// ?T is assignable to T (implicit unwrap)
 		if( source->kind == Type::Kind::Optional ) {
 			OptionalTypeSharedPointer sourceOptionalType = std::static_pointer_cast<OptionalType>( source );
 			return this->isAssignable( target,sourceOptionalType->inner );
 		}
-		
-		// Reference stripping
 		if( target->kind == Type::Kind::Reference ) {
 			ReferenceTypeSharedPointer referenceTargetType = std::static_pointer_cast<ReferenceType>( target );
 			return this->isAssignable( referenceTargetType->inner,source );
 		}
-		
-		// Class-to-class assignability: check inheritance chain
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer sourceClassType = std::static_pointer_cast<ClassType>( source );
 			TypeSharedPointer baseType = sourceClassType->baseClass;
@@ -395,16 +349,12 @@ namespace uranite::semantic {
 					break;
 				}
 			}
-			
-			// Check interface compatibility
 			for( TypeSharedPointer& interfaceType : sourceClassType->interfaces ) {
 				if( interfaceType && typeIdentityMatch( interfaceType, target ) ) {
 					return true;
 				}
 			}
 		}
-		
-		// OOP type to primitive compatibility
 		if( target->isPrimitive() && source->kind == Type::Kind::Class ) {
 			static const std::unordered_map<std::string,std::string> oopToPrimitiveMap = {
 				{"Boolean","bool"},{"String","str"},{"Char","char"},
@@ -449,22 +399,16 @@ namespace uranite::semantic {
 				return true;
 			}
 		}
-		
-		// Meta<T> assignability
 		if( target->kind == Type::Kind::Meta && source->kind == Type::Kind::Meta ) {
 			MetaTypeSharedPointer targetMetaType = std::static_pointer_cast<MetaType>( target );
 			MetaTypeSharedPointer sourceMetaType = std::static_pointer_cast<MetaType>( source );
 			return this->isAssignable( targetMetaType->innerType,sourceMetaType->innerType );
 		}
-		
-		// Future<T> assignability
 		if( target->kind == Type::Kind::Future && source->kind == Type::Kind::Future ) {
 			FutureTypeSharedPointer targetFutureType = std::static_pointer_cast<FutureType>( target );
 			FutureTypeSharedPointer sourceFutureType = std::static_pointer_cast<FutureType>( source );
 			return this->isAssignable( targetFutureType->innerType,sourceFutureType->innerType );
 		}
-		
-		// Union type: source assignable to union if it matches any member
 		if( target->kind == Type::Kind::Union ) {
 			UnionTypeSharedPointer unionTargetType = std::static_pointer_cast<UnionType>( target );
 			for( TypeSharedPointer& memberType : unionTargetType->types ) {
@@ -473,8 +417,6 @@ namespace uranite::semantic {
 				}
 			}
 		}
-		
-		// Union source: assignable if all members assignable to target
 		if( source->kind == Type::Kind::Union ) {
 			UnionTypeSharedPointer unionSourceType = std::static_pointer_cast<UnionType>( source );
 			bool isAllMemberAssignable = true;
@@ -488,8 +430,6 @@ namespace uranite::semantic {
 				return true;
 			}
 		}
-		
-		// Callable <-> Function compatibility with signature validation
 		if( target->kind == Type::Kind::Callable && source->kind == Type::Kind::Function ) {
 			CallableTypeSharedPointer targetCallableType = std::static_pointer_cast<CallableType>( target );
 			FunctionTypeSharedPointer sourceFunctionType = std::static_pointer_cast<FunctionType>( source );
@@ -503,7 +443,6 @@ namespace uranite::semantic {
 			}
 			return this->isAssignable( targetCallableType->returnType,sourceFunctionType->returnType );
 		}
-		
 		if( target->kind == Type::Kind::Function && source->kind == Type::Kind::Callable ) {
 			FunctionTypeSharedPointer targetFunctionType = std::static_pointer_cast<FunctionType>( target );
 			CallableTypeSharedPointer sourceCallableType = std::static_pointer_cast<CallableType>( source );
@@ -517,7 +456,6 @@ namespace uranite::semantic {
 			}
 			return this->isAssignable( targetFunctionType->returnType,sourceCallableType->returnType );
 		}
-		
 		if( target->kind == Type::Kind::Callable && source->kind == Type::Kind::Callable ) {
 			CallableTypeSharedPointer targetCallableType = std::static_pointer_cast<CallableType>( target );
 			CallableTypeSharedPointer sourceCallableType = std::static_pointer_cast<CallableType>( source );
@@ -553,16 +491,12 @@ namespace uranite::semantic {
 		if( x->equals( y ) ) {
 			return true;
 		}
-		
-		// Optional types can be compared with None (void)
 		if( x->kind == Type::Kind::Optional && y->isVoid() ) {
 			return true;
 		}
 		if( y->kind == Type::Kind::Optional && x->isVoid() ) {
 			return true;
 		}
-		
-		// Optional<T> can be compared with T
 		if( x->kind == Type::Kind::Optional ) {
 			OptionalTypeSharedPointer optionalType = std::static_pointer_cast<OptionalType>( x );
 			return this->isComparable( optionalType->inner, y );
@@ -571,8 +505,6 @@ namespace uranite::semantic {
 			OptionalTypeSharedPointer optionalType = std::static_pointer_cast<OptionalType>( y );
 			return this->isComparable( x, optionalType->inner );
 		}
-		
-		// Meta<T> types are comparable with each other
 		if( x->kind == Type::Kind::Meta && y->kind == Type::Kind::Meta ) {
 			return true;
 		}
@@ -669,6 +601,24 @@ namespace uranite::semantic {
 		return name;
 	}
 	
+	bool ClassType::implementsInterface( const std::string& qualifiedName ) const {
+		for( const TypeSharedPointer& iface : this->interfaces ) {
+			if( iface->qualified == qualifiedName ||
+				qname::startsWith( iface->qualified, qualifiedName ) ) {
+				return true;
+			}
+			if( iface->kind == Type::Kind::Interface ) {
+				if( std::static_pointer_cast<InterfaceType>( iface )->extendsInterface( qualifiedName ) ) {
+					return true;
+				}
+			}
+		}
+		if( this->baseClass && this->baseClass->kind == Type::Kind::Class ) {
+			return std::static_pointer_cast<ClassType>( this->baseClass )->implementsInterface( qualifiedName );
+		}
+		return false;
+	}
+
 	std::vector<std::string> Registry::typeNames() const {
 		std::vector<std::string> names;
 		for( std::pair<std::string,TypeSharedPointer> primitiveEntry : this->primitivesTypes ) {

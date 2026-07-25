@@ -9,13 +9,11 @@ from uranite.sys.process import exit
 from uranite.testing.assertions import assertGreaterOrEqual, assertTrue
 
 public function main() -> I32:
-    putsln( "=== IO Directory Tests ===" )
-
+    putsln( "IO Directory Tests" )
     String testDir = "/tmp/uranite-test-dir-io"
     makedirs( testDir, 493 )
     writeFileString( "/tmp/uranite-test-dir-io/a.txt", "aaa" )
     writeFileString( "/tmp/uranite-test-dir-io/b.txt", "bbb" )
-
     DirectoryIterator iter = new DirectoryIterator( testDir )
     I64 count = 0
     while iter.has:
@@ -24,8 +22,6 @@ public function main() -> I32:
     iter.close()
     assertGreaterOrEqual( count, 2, "dir entry count >= 2" )
     putsln( "directory iteration OK" )
-
-    # cleanup
     I64 p1 = stringToPtr( "/tmp/uranite-test-dir-io/a.txt" )
     sysUnlink( p1 )
     I64 p2 = stringToPtr( "/tmp/uranite-test-dir-io/b.txt" )
@@ -33,7 +29,6 @@ public function main() -> I32:
     I64 p3 = stringToPtr( "/tmp/uranite-test-dir-io" )
     sysRmdir( p3 )
     putsln( "cleanup OK" )
-
-    putsln( "=== All IO directory tests passed ===" )
+    putsln( "All IO directory tests passed" )
     exit( 0 )
     return 0

@@ -5,35 +5,30 @@ from uranite.operators.multipliable import Multipliable
 from uranite.testing.assertions import assertEqualI64
 
 public class Val implements Multipliable<Val>:
+    
     public Int value
-
+    
     public function Val( self, Int value ) -> Void:
         self.value = value
-
+    
     public function multiply( self, Val other ) -> Val:
         return new Val( self.value * other.value )
 
 public function main() -> I32:
-    putsln( "=== Multipliable Tests ===" )
-
+    putsln( "Multipliable Tests" )
     Val a = new Val( 7 )
     Val b = new Val( 6 )
-
-    Val c = a.multiply( b )
+    Val c = a * b
     assertEqualI64( 42, c.value, "7*6=42" )
-
     Val zero = new Val( 0 )
-    Val d = a.multiply( zero )
+    Val d = a * zero
     assertEqualI64( 0, d.value, "multiply by zero" )
-
     Val one = new Val( 1 )
-    Val e = a.multiply( one )
+    Val e = a * one
     assertEqualI64( 7, e.value, "multiply by one" )
-
     Val neg = new Val( -3 )
-    Val f = a.multiply( neg )
+    Val f = a * neg
     assertEqualI64( -21, f.value, "multiply negative" )
     putsln( "multiply OK" )
-
-    putsln( "=== All Multipliable tests passed ===" )
+    putsln( "All Multipliable tests passed" )
     return 0

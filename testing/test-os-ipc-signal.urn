@@ -5,57 +5,44 @@ from uranite.os.ipc.signal import Event
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS IPC Signal Tests ===" )
-
+    putsln( "OS IPC Signal Tests" )
     Event ev = new Event()
     assertEqualI64( 0, ev.getSignaled(), "init signaled 0" )
     assertEqualI64( 0, ev.getWaitingTaskId(), "init no waiter" )
-
     Boolean waker1 = ev.signal( 1 )
     assertFalse( waker1, "signal(1) no waiter" )
     assertEqualI64( 1, ev.getSignaled(), "signaled 1" )
-
     ev.signal( 4 )
     assertEqualI64( 5, ev.getSignaled(), "signaled 1|4=5" )
     putsln( "signal OK" )
-
     assertEqualI64( 1, ev.poll( 1 ), "poll(1)" )
     assertEqualI64( 0, ev.poll( 2 ), "poll(2) miss" )
     assertEqualI64( 5, ev.poll( 5 ), "poll(5)" )
     putsln( "poll OK" )
-
     I64 acked = ev.acknowledge( 1 )
     assertEqualI64( 1, acked, "ack(1)" )
     assertEqualI64( 4, ev.getSignaled(), "signaled after ack" )
-
     I64 acked2 = ev.acknowledge( 1 )
     assertEqualI64( 0, acked2, "ack(1) already cleared" )
     putsln( "acknowledge OK" )
-
     Boolean waitReg1 = ev.registerWait( 10, 4 )
     assertTrue( waitReg1, "wait already signaled" )
-
     Boolean waitReg2 = ev.registerWait( 10, 2 )
     assertFalse( waitReg2, "wait pending" )
     assertEqualI64( 10, ev.getWaitingTaskId(), "waiter 10" )
-
     Boolean waker2 = ev.signal( 2 )
     assertTrue( waker2, "signal satisfies waiter" )
     putsln( "registerWait OK" )
-
     ev.clearWait()
     assertEqualI64( 0, ev.getWaitingTaskId(), "cleared waiter" )
-
     ev.reset()
     assertEqualI64( 0, ev.getSignaled(), "reset signaled" )
     putsln( "reset OK" )
-
     Boolean waitReg3 = ev.registerWait( 20, 8 )
     assertFalse( waitReg3, "wait reg 20" )
     Boolean waitReg4 = ev.registerWait( 30, 16 )
     assertFalse( waitReg4, "wait already has waiter" )
     ev.clearWait()
     putsln( "double wait OK" )
-
-    putsln( "=== All IPC signal tests passed ===" )
+    putsln( "All IPC signal tests passed" )
     return 0

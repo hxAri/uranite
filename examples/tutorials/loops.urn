@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -22,8 +23,6 @@ package uranite.examples.testing.loops
 
 from uranite.io.console import puts
 
-
-# While loop
 public function sum_to( I64 n ) -> I64:
     
     """
@@ -46,7 +45,6 @@ public function sum_to( I64 n ) -> I64:
         i = i + 1
     return result
 
-# Infinite while with break
 public function count_to( I64 limit ) -> I64:
     
     """
@@ -66,7 +64,6 @@ public function count_to( I64 limit ) -> I64:
             break
     return count
 
-# While with continue (sum odd numbers)
 public function sum_odd( I64 n ) -> I64:
     
     """
@@ -89,7 +86,6 @@ public function sum_odd( I64 n ) -> I64:
         result += i
     return result
 
-# C-style for loop
 public function c_style_sum() -> I64:
     
     """
@@ -104,7 +100,6 @@ public function c_style_sum() -> I64:
         total += i
     return total
 
-# Range for (exclusive)
 public function range_sum() -> I64:
     
     """
@@ -119,7 +114,6 @@ public function range_sum() -> I64:
         total += i
     return total
 
-# Range for (inclusive)
 public function inclusive_sum() -> I64:
     
     """
@@ -134,7 +128,6 @@ public function inclusive_sum() -> I64:
         total += i
     return total
 
-# String iteration
 public function count_chars( String s ) -> I64:
     
     """
@@ -152,7 +145,6 @@ public function count_chars( String s ) -> I64:
         count += 1
     return count
 
-# Nested loops with break
 public function find_first_over( I64 threshold ) -> I64:
     
     """
@@ -172,7 +164,6 @@ public function find_first_over( I64 threshold ) -> I64:
             break
     return i
 
-# C-style for with decrement
 public function countdown() -> Void:
     
     """ Prints a countdown from 5 to 1 """
@@ -198,18 +189,14 @@ public function main() -> I32:
     puts( "inclusive_sum(1...10) = ", inclusive_sum() )
     puts( "count_chars(\\\"Uranite\\\") = ", count_chars( "Uranite" ) )
     puts( "find_first_over(10) = ", find_first_over( 10 ) )
-
     puts( "countdown: " )
     countdown()
-
     puts( "string iter: " )
     for Char c in "Hello":
         puts( c, " " )
-    puts(  )
-
+    puts()
     puts( "range iter: " )
     for I64 i in 0..5:
         puts( i, " " )
-    puts(  )
-
+    puts()
     return 0

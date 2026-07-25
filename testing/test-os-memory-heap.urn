@@ -6,43 +6,34 @@ from uranite.sys.process import exit
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Memory Heap Tests ===" )
-
+    putsln( "OS Memory Heap Tests" )
     SlabCache sc = new SlabCache( 64, 1 )
     assertEqualI64( 64, sc.getObjectSize(), "objectSize" )
     assertEqualI64( 64, sc.getCapacity(), "capacity" )
     assertEqualI64( 0, sc.getUsed(), "used 0" )
     assertFalse( sc.isFull(), "not full" )
-
     I64 slot0 = sc.allocate()
     assertEqualI64( 0, slot0, "slot0" )
     assertEqualI64( 1, sc.getUsed(), "used 1" )
-
     I64 slot1 = sc.allocate()
     assertEqualI64( 1, slot1, "slot1" )
     assertEqualI64( 2, sc.getUsed(), "used 2" )
     putsln( "allocate OK" )
-
     sc.deallocate( slot0 )
     assertEqualI64( 1, sc.getUsed(), "used after dealloc" )
-
     I64 slot2 = sc.allocate()
     assertEqualI64( 0, slot2, "re-allocate reuses slot0" )
     assertEqualI64( 2, sc.getUsed(), "used 2 again" )
     putsln( "deallocate OK" )
-
     I64 i = 2
     while i < 64:
         sc.allocate()
         i = i + 1
     assertTrue( sc.isFull(), "full after exhaust" )
-
     I64 failSlot = sc.allocate()
     assertEqualI64( -1, failSlot, "alloc when full" )
     putsln( "full OK" )
-
     sc.destroy()
-
-    putsln( "=== All heap tests passed ===" )
+    putsln( "All heap tests passed" )
     exit( 0 )
     return 0

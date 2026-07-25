@@ -13,10 +13,10 @@
 
 #include "uranite/diagnostic/diagnostic.hpp"
 #include "uranite/ir/hir.hpp"
-#include "uranite/ir/hir-lowering.hpp"
+#include "uranite/ir/hir/lowering.hpp"
 #include "uranite/ir/mir.hpp"
-#include "uranite/ir/mir-lowering.hpp"
-#include "uranite/ir/mir-printer.hpp"
+#include "uranite/ir/mir/lowering.hpp"
+#include "uranite/ir/mir/printer.hpp"
 #include "uranite/lexer/lexer.hpp"
 #include "uranite/parser/parser.hpp"
 #include "uranite/semantic/analyzer.hpp"

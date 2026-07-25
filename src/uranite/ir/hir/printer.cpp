@@ -17,65 +17,56 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/hir-printer.hpp"
+#include "uranite/ir/hir/printer.hpp"
 
 namespace uranite::ir::hir {
 	
 	std::string HIRPrinter::print( const HIRModule& hirModule ) {
 		this->outputStream.str( "" );
 		this->outputStream << "HIRModule \"" << hirModule.moduleName << "\"" << std::endl;
-		
 		for( const std::shared_ptr<HIRExternFunctionDeclaration>& externDeclaration : hirModule.externFunctionDeclarations ) {
 			if( externDeclaration != nullptr ) {
 				this->indent( 1 );
 				this->outputStream << "ExternFunction \"" << externDeclaration->functionName << "\" link=\"" << externDeclaration->linkageName << "\"" << std::endl;
 			}
 		}
-		
 		for( const std::shared_ptr<HIRConstantDefinition>& constantDefinition : hirModule.constantDefinitions ) {
 			if( constantDefinition != nullptr ) {
 				this->indent( 1 );
 				this->outputStream << "Constant \"" << constantDefinition->constantName << "\"" << std::endl;
 			}
 		}
-		
 		for( const std::shared_ptr<HIRGlobalVariableDefinition>& globalVariable : hirModule.globalVariableDefinitions ) {
 			if( globalVariable != nullptr ) {
 				this->indent( 1 );
 				this->outputStream << "GlobalVariable \"" << globalVariable->variableName << "\"" << std::endl;
 			}
 		}
-		
 		for( const std::shared_ptr<HIREnumDefinition>& enumDefinition : hirModule.enumDefinitions ) {
 			if( enumDefinition != nullptr ) {
 				this->printEnumDefinition( *enumDefinition, 1 );
 			}
 		}
-		
 		for( const std::shared_ptr<HIRInterfaceDefinition>& interfaceDefinition : hirModule.interfaceDefinitions ) {
 			if( interfaceDefinition != nullptr ) {
 				this->printInterfaceDefinition( *interfaceDefinition, 1 );
 			}
 		}
-		
 		for( const std::shared_ptr<HIRStructDefinition>& structDefinition : hirModule.structDefinitions ) {
 			if( structDefinition != nullptr ) {
 				this->printStructDefinition( *structDefinition, 1 );
 			}
 		}
-		
 		for( const std::shared_ptr<HIRClassDefinition>& classDefinition : hirModule.classDefinitions ) {
 			if( classDefinition != nullptr ) {
 				this->printClassDefinition( *classDefinition, 1 );
 			}
 		}
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& functionDefinition : hirModule.functionDefinitions ) {
 			if( functionDefinition != nullptr ) {
 				this->printFunctionDefinition( *functionDefinition, 1 );
 			}
 		}
-		
 		return this->outputStream.str();
 	}
 	
@@ -95,7 +86,6 @@ namespace uranite::ir::hir {
 			this->outputStream << " virtual";
 		}
 		this->outputStream << std::endl;
-		
 		for( const HIRParameterDescriptor& parameter : function.parameterDescriptors ) {
 			this->indent( indentLevel + 1 );
 			this->outputStream << "Parameter \"" << parameter.parameterName << "\"";
@@ -107,7 +97,6 @@ namespace uranite::ir::hir {
 			}
 			this->outputStream << std::endl;
 		}
-		
 		if( function.functionBody != nullptr ) {
 			this->printBlock( *function.functionBody, indentLevel + 1 );
 		}
@@ -123,12 +112,10 @@ namespace uranite::ir::hir {
 			this->outputStream << " final";
 		}
 		this->outputStream << std::endl;
-		
 		for( const HIRFieldDescriptor& field : classDefinition.fieldDescriptors ) {
 			this->indent( indentLevel + 1 );
 			this->outputStream << "Field \"" << field.fieldName << "\" index=" << field.fieldIndex << std::endl;
 		}
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : classDefinition.methodDefinitions ) {
 			if( method != nullptr ) {
 				this->printFunctionDefinition( *method, indentLevel + 1 );
@@ -139,12 +126,10 @@ namespace uranite::ir::hir {
 	void HIRPrinter::printStructDefinition( const HIRStructDefinition& structDefinition, int indentLevel ) {
 		this->indent( indentLevel );
 		this->outputStream << "HIRStructDefinition \"" << structDefinition.structName << "\"" << std::endl;
-		
 		for( const HIRFieldDescriptor& field : structDefinition.fieldDescriptors ) {
 			this->indent( indentLevel + 1 );
 			this->outputStream << "Field \"" << field.fieldName << "\" index=" << field.fieldIndex << std::endl;
 		}
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : structDefinition.methodDefinitions ) {
 			if( method != nullptr ) {
 				this->printFunctionDefinition( *method, indentLevel + 1 );
@@ -155,7 +140,6 @@ namespace uranite::ir::hir {
 	void HIRPrinter::printEnumDefinition( const HIREnumDefinition& enumDefinition, int indentLevel ) {
 		this->indent( indentLevel );
 		this->outputStream << "HIREnumDefinition \"" << enumDefinition.enumName << "\"" << std::endl;
-		
 		for( const HIREnumVariantDescriptor& variant : enumDefinition.variantDescriptors ) {
 			this->indent( indentLevel + 1 );
 			this->outputStream << "Variant \"" << variant.variantName << "\"" << std::endl;
@@ -165,7 +149,6 @@ namespace uranite::ir::hir {
 	void HIRPrinter::printInterfaceDefinition( const HIRInterfaceDefinition& interfaceDefinition, int indentLevel ) {
 		this->indent( indentLevel );
 		this->outputStream << "HIRInterfaceDefinition \"" << interfaceDefinition.interfaceName << "\"" << std::endl;
-		
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : interfaceDefinition.methodDefinitions ) {
 			if( method != nullptr ) {
 				this->printFunctionDefinition( *method, indentLevel + 1 );
@@ -185,10 +168,8 @@ namespace uranite::ir::hir {
 		if( node == nullptr ) {
 			return;
 		}
-		
 		this->indent( indentLevel );
 		this->outputStream << this->nodeKindToString( node->nodeKind );
-		
 		switch( node->nodeKind ) {
 			case HIRNodeKind::VariableBinding: {
 				HIRVariableBinding& variable = static_cast<HIRVariableBinding&>( *node );
@@ -401,5 +382,5 @@ namespace uranite::ir::hir {
 		}
 		return "Unknown";
 	}
-
+	
 } // namespace uranite::ir::hir

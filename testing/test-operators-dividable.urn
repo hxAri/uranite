@@ -5,35 +5,30 @@ from uranite.operators.dividable import Dividable
 from uranite.testing.assertions import assertEqualI64
 
 public class Val implements Dividable<Val>:
+    
     public Int value
-
+    
     public function Val( self, Int value ) -> Void:
         self.value = value
-
+    
     public function divide( self, Val other ) -> Val:
         return new Val( self.value / other.value )
 
 public function main() -> I32:
-    putsln( "=== Dividable Tests ===" )
-
+    putsln( "Dividable Tests" )
     Val a = new Val( 42 )
     Val b = new Val( 6 )
-
-    Val c = a.divide( b )
+    Val c = a / b
     assertEqualI64( 7, c.value, "42/6=7" )
-
     Val one = new Val( 1 )
-    Val d = a.divide( one )
+    Val d = a / one
     assertEqualI64( 42, d.value, "divide by one" )
-
     Val e = new Val( 7 )
     Val f = new Val( 2 )
-    Val g = e.divide( f )
+    Val g = e / f
     assertEqualI64( 3, g.value, "7/2=3 truncate" )
-
-    Val h = a.divide( a )
+    Val h = a / a
     assertEqualI64( 1, h.value, "divide self" )
     putsln( "divide OK" )
-
-    putsln( "=== All Dividable tests passed ===" )
+    putsln( "All Dividable tests passed" )
     return 0

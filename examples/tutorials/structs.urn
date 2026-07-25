@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -22,7 +23,6 @@ package uranite.examples.testing.structs
 
 from uranite.io.console import puts
 
-
 struct Vec3:
     
     """ A 3D vector struct with basic mathematical operations """
@@ -30,7 +30,7 @@ struct Vec3:
     public F64 x
     public F64 y
     public F64 z
-
+    
     public function Vec3( self, F64 x, F64 y, F64 z ) -> Void:
         
         """
@@ -45,7 +45,7 @@ struct Vec3:
         self.x = x
         self.y = y
         self.z = z
-
+    
     public function magnitude_squared( self ) -> F64:
         
         """
@@ -56,7 +56,7 @@ struct Vec3:
         """
         
         return self.x * self.x + self.y * self.y + self.z * self.z
-
+    
     public function sum( self ) -> F64:
         
         """
@@ -75,7 +75,7 @@ struct Color:
     public I64 r
     public I64 g
     public I64 b
-
+    
     public function Color( self, I64 r, I64 g, I64 b ) -> Void:
         
         """
@@ -97,7 +97,7 @@ struct Rect:
     
     public I64 width
     public I64 height
-
+    
     public function Rect( self, I64 w, I64 h ) -> Void:
         
         """
@@ -110,7 +110,7 @@ struct Rect:
         
         self.width = w
         self.height = h
-
+    
     public function area( self ) -> I64:
         
         """
@@ -121,7 +121,7 @@ struct Rect:
         """
         
         return self.width * self.height
-
+    
     public function perimeter( self ) -> I64:
         
         """
@@ -145,12 +145,9 @@ public function main() -> I32:
     Vec3 v = new Vec3( 3.0, 4.0, 0.0 )
     puts( "Vec3(3, 4, 0) sum = ", v.sum() )
     puts( "Vec3(3, 4, 0) mag^2 = ", v.magnitude_squared() )
-
     Color c = new Color( 255, 128, 0 )
     puts( "Color(", c.r, ", ", c.g, ", ", c.b, ")" )
-
     Rect r = new Rect( 10, 5 )
     puts( "Rect ", r.width, "x", r.height, " area = ", r.area() )
     puts( "Rect ", r.width, "x", r.height, " perimeter = ", r.perimeter() )
-
     return 0

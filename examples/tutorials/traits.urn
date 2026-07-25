@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -22,53 +23,60 @@ package main
 
 from uranite.io.console import puts
 
-
 trait Printable:
-    """
-    A trait for objects that can be displayed.
-    """
+    
+    """ A trait for objects that can be displayed. """
+    
     public function display( self ) -> Void:
+        
         """
         Displays the object.
         """
+        
         puts( "[Printable]" )
 
 trait Serializable:
-    """
-    A trait for objects that can be serialized.
-    """
+    
+    """ A trait for objects that can be serialized. """
+    
     public function serialize( self ) -> String:
+        
         """
         Serializes the object to a String.
         
         Returns:
             A string representation of the serialized object.
         """
+        
         return "serialized"
 
 trait HasName:
-    """
-    A trait for objects that have a display name.
-    """
+    
+    """ A trait for objects that have a display name. """
+    
     public String displayName
-
+    
     public function getName( self ) -> String:
+        
         """
         Gets the display name.
         
         Returns:
             The display name.
         """
+        
         return self.displayName
 
 class User:
-    """
-    A class representing a user, utilizing multiple traits.
-    """
+    
+    """ A class representing a user, utilizing multiple traits. """
+    
     use Printable, Serializable, HasName
+    
     public I64 id
-
+    
     public function User( self, I64 id, String displayName ):
+        
         """
         Initializes a new User instance.
         
@@ -76,24 +84,26 @@ class User:
             id: The user's ID.
             displayName: The user's display name.
         """
+        
         self.id = id
         self.displayName = displayName
-
-    # Override trait default
+    
     public function display( self ) -> Void:
-        """
-        Overrides the Printable.display method to provide user-specific output.
-        """
+        
+        """ Overrides the Printable.display method to provide user-specific output. """
+        
         puts( "User #", self.id, ": ", self.displayName )
 
 class Admin:
-    """
-    A class representing an administrator.
-    """
+    
+    """ A class representing an administrator. """
+    
     use Printable, HasName
+    
     public I64 level
-
+    
     public function Admin( self, String displayName, I64 level ):
+        
         """
         Initializes a new Admin instance.
         
@@ -101,25 +111,26 @@ class Admin:
             displayName: The admin's display name.
             level: The admin's access level.
         """
+        
         self.displayName = displayName
         self.level = level
 
 public function main() -> I32:
+    
     """
     The main entry point for the trait demonstration.
     
     Returns:
         I32 exit code.
     """
-    puts( "=== Trait basics ===" )
+    
+    puts( "Trait basics" )
     User u = new User( 1, "Alice" )
     u.display()
     puts( "Name: ", u.getName() )
     puts( "Serialized: ", u.serialize() )
-
-    puts( "\n=== Trait default ===" )
+    puts( "\nTrait default" )
     Admin a = new Admin( "Bob", 5 )
     a.display()
     puts( "Admin name: ", a.getName() )
-
     return 0

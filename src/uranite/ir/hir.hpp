@@ -34,6 +34,7 @@ namespace uranite::ir::hir {
 
 	/** @brief Categorizes every HIR node into exactly one structural role. */
 	enum class HIRNodeKind {
+		
 		// Module-level declarations
 		Module,
 		FunctionDefinition,
@@ -98,7 +99,8 @@ namespace uranite::ir::hir {
 		InstanceOf,
 		SubclassOf,
 		RangeExpression,
-		Comprehension,
+		Comprehension
+		
 	};
 
 	// Forward declarations
@@ -112,11 +114,7 @@ namespace uranite::ir::hir {
 	struct HIRExternFunctionDeclaration;
 
 	using HIRNodeSharedPointer = std::shared_ptr<HIRNode>;
-
-	// ===================================================================
-	// Base Node
-	// ===================================================================
-
+	
 	/** @brief Root of the HIR node hierarchy; carries resolved type and source location. */
 	struct HIRNode {
 
@@ -137,10 +135,6 @@ namespace uranite::ir::hir {
 		virtual ~HIRNode() = default;
 
 	};
-
-	// ===================================================================
-	// Parameter & Field Descriptors
-	// ===================================================================
 
 	/** @brief Describes a single function/method parameter in HIR. */
 	struct HIRParameterDescriptor {
@@ -175,10 +169,6 @@ namespace uranite::ir::hir {
 		std::vector<semantic::TypeSharedPointer> constraintTypes;
 		semantic::TypeSharedPointer defaultType;
 	};
-
-	// ===================================================================
-	// Statements
-	// ===================================================================
 
 	/** @brief Ordered sequence of statements with optional deferred cleanup actions. */
 	struct HIRBlock : HIRNode {
@@ -497,10 +487,6 @@ namespace uranite::ir::hir {
 		}
 
 	};
-
-	// ===================================================================
-	// Expressions
-	// ===================================================================
 
 	/** @brief Integer literal expression. */
 	struct HIRIntegerLiteral : HIRNode {
@@ -1028,10 +1014,6 @@ namespace uranite::ir::hir {
 
 	};
 
-	// ===================================================================
-	// Declarations
-	// ===================================================================
-
 	/** @brief Function or method definition. */
 	struct HIRFunctionDefinition : HIRNode {
 
@@ -1230,10 +1212,6 @@ namespace uranite::ir::hir {
 		}
 
 	};
-
-	// ===================================================================
-	// Module (top-level container)
-	// ===================================================================
 
 	/** @brief Root HIR node representing a compiled module. */
 	struct HIRModule : HIRNode {

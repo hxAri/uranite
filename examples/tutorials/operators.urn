@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -21,15 +22,19 @@
 package main
 
 from uranite.io.console import puts
+from uranite.operators.addable import Addable
+from uranite.operators.subtractable import Subtractable
+from uranite.operators.multipliable import Multipliable
+from uranite.operators.equatable import Equatable
+from uranite.operators.negatable import Negatable
 
-
-class Vector2:
+class Vector2 implements Addable<Vector2>, Subtractable<Vector2>, Multipliable<Vector2>, Equatable<Vector2>, Negatable<Vector2>:
     
     """ A 2D vector class with operator overloading """
     
     public F64 x
     public F64 y
-
+    
     public function Vector2( self, F64 x, F64 y ):
         
         """
@@ -42,7 +47,7 @@ class Vector2:
         
         self.x = x
         self.y = y
-
+    
     public function add( self, Vector2 other ) -> Vector2:
         
         """
@@ -56,7 +61,7 @@ class Vector2:
         """
         
         return new Vector2( self.x + other.x, self.y + other.y )
-
+    
     public function subtract( self, Vector2 other ) -> Vector2:
         
         """
@@ -70,7 +75,7 @@ class Vector2:
         """
         
         return new Vector2( self.x - other.x, self.y - other.y )
-
+    
     public function multiply( self, Vector2 other ) -> Vector2:
         
         """
@@ -84,7 +89,7 @@ class Vector2:
         """
         
         return new Vector2( self.x * other.x, self.y * other.y )
-
+    
     public function equals( self, Vector2 other ) -> Boolean:
         
         """
@@ -98,6 +103,9 @@ class Vector2:
         """
         
         return self.x == other.x and self.y == other.y
+
+    public function notEquals( self, Vector2 other ) -> Boolean:
+        return not( self.x == other.x and self.y == other.y )
 
     public function negate( self ) -> Vector2:
         
@@ -121,31 +129,23 @@ public function main() -> I32:
     
     Vector2 a = new Vector2( 1.0, 2.0 )
     Vector2 b = new Vector2( 3.0, 4.0 )
-
-    puts( "=== Operator overloading ===" )
-
+    puts( "Operator overloading" )
     Vector2 sum = a + b
     puts( "(1,2) + (3,4) = (", sum.x, ", ", sum.y, ")" )
-
     Vector2 diff = a - b
     puts( "(1,2) - (3,4) = (", diff.x, ", ", diff.y, ")" )
-
     Vector2 prod = a * b
     puts( "(1,2) * (3,4) = (", prod.x, ", ", prod.y, ")" )
-
     Vector2 neg = -a
     puts( "-(1,2) = (", neg.x, ", ", neg.y, ")" )
-
     Boolean eq = a == b
     if eq:
         puts( "a == b: True" )
     else:
         puts( "a == b: False" )
-
     Boolean eq2 = a == a
     if eq2:
         puts( "a == a: True" )
     else:
         puts( "a == a: False" )
-
     return 0

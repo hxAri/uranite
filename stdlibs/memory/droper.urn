@@ -1,7 +1,5 @@
 package uranite.memory.droper
 
-
-
 public interface Droper:
 
     """
@@ -13,4 +11,5 @@ public interface Droper:
     """
 
     public function drop( self ) -> Void:
-    """Release all resources owned by this object."""
+		
+	    """Release all resources owned by this object."""

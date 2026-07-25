@@ -21,14 +21,13 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package main
+package uranite.examples.benchmarks.binary-trees
 
+from uranite.functions.externs import clock
 from uranite.io.console import puts
 from uranite.language.int import Int
 from uranite.language.void import Void
 from uranite.memory.arena import Arena
-
-extern function clock() -> I64;
 
 class Node:
     
@@ -61,12 +60,9 @@ function treeSize( Int depth ) -> Int:
 public function main() -> I32:
     Int maxDepth = 21
     Int minDepth = 4
-    
-    puts( "=== Uranite Binary Trees Benchmark (max depth ", maxDepth, ") ===" )
+    puts( "Uranite Binary Trees Benchmark (max depth ", maxDepth, ")" )
     puts( "Initializing stretch tree..." )
-    
     I64 start = clock()
-    
     Int stretchDepth = maxDepth + 1
     Int stretchNodes = treeSize( stretchDepth )
     Arena<Node> stretchPool = new Arena<Node>( stretchNodes )
@@ -74,12 +70,10 @@ public function main() -> I32:
     puts( "stretch tree of depth ", stretchDepth, "\t check: ", stretchTree.check() )
     stretchPool.freeAll()
     stretchPool.destroy()
-    
     puts( "Initializing long lived tree..." )
     Int longNodes = treeSize( maxDepth )
     Arena<Node> longPool = new Arena<Node>( longNodes )
     Node longLivedTree = bottomUpTree( maxDepth, longPool )
-    
     for Int depth = minDepth; depth <= maxDepth; depth += 2:
         Int iterations = 1 << ( maxDepth - depth + minDepth )
         Int totalCheck = 0
@@ -91,11 +85,9 @@ public function main() -> I32:
             pool.freeAll()
             pool.destroy()
         puts( iterations, "\t trees of depth ", depth, "\t check: ", totalCheck )
-    
     puts( "long lived tree of depth ", maxDepth, "\t check: ", longLivedTree.check() )
     longPool.freeAll()
     longPool.destroy()
-    
     I64 end = clock()
     Double elapsed = ( end - start ) / 1000000.0
     puts( "Total execution finalized." )

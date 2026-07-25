@@ -25,87 +25,60 @@ from uranite.math.math import {
 from uranite.testing.assertions import assertEqualF64, assertEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Pure Uranite Math Tests ===" )
-
-    # abs
+    putsln( "Pure Uranite Math Tests" )
     assertEqualF64( 5.0, abs( -5.0 ), 0.001, "abs(-5.0)" )
     assertEqualF64( 3.0, abs( 3.0 ), 0.001, "abs(3.0)" )
     assertEqualF64( 0.0, abs( 0.0 ), 0.001, "abs(0.0)" )
     putsln( "abs OK" )
-
-    # absI64
     assertEqualI64( 42, absI64( -42 ), "absI64(-42)" )
     assertEqualI64( 99, absI64( 99 ), "absI64(99)" )
     putsln( "absI64 OK" )
-
-    # sqrt
     assertEqualF64( 2.0, sqrt( 4.0 ), 0.001, "sqrt(4.0)" )
     assertEqualF64( 3.0, sqrt( 9.0 ), 0.001, "sqrt(9.0)" )
     assertEqualF64( 0.0, sqrt( 0.0 ), 0.001, "sqrt(0.0)" )
     assertEqualF64( 10.0, sqrt( 100.0 ), 0.001, "sqrt(100.0)" )
     putsln( "sqrt OK" )
-
-    # floor
     assertEqualF64( 3.0, floor( 3.7 ), 0.001, "floor(3.7)" )
     assertEqualF64( -3.0, floor( -2.3 ), 0.001, "floor(-2.3)" )
     assertEqualF64( 5.0, floor( 5.0 ), 0.001, "floor(5.0)" )
     putsln( "floor OK" )
-
-    # ceil
     assertEqualF64( 4.0, ceil( 3.2 ), 0.001, "ceil(3.2)" )
     assertEqualF64( -2.0, ceil( -2.8 ), 0.001, "ceil(-2.8)" )
     assertEqualF64( 5.0, ceil( 5.0 ), 0.001, "ceil(5.0)" )
     putsln( "ceil OK" )
-
-    # round
     assertEqualF64( 4.0, round( 3.5 ), 0.001, "round(3.5)" )
     assertEqualF64( 3.0, round( 3.4 ), 0.001, "round(3.4)" )
     putsln( "round OK" )
-
-    # fmod
     assertEqualF64( 1.0, fmod( 10.0, 3.0 ), 0.001, "fmod(10.0,3.0)" )
     assertEqualF64( 0.0, fmod( 7.5, 2.5 ), 0.001, "fmod(7.5,2.5)" )
     putsln( "fmod OK" )
-
-    # pow
     assertEqualF64( 1024.0, pow( 2.0, 10 ), 0.001, "pow(2.0,10)" )
     assertEqualF64( 27.0, pow( 3.0, 3 ), 0.001, "pow(3.0,3)" )
     assertEqualF64( 1.0, pow( 5.0, 0 ), 0.001, "pow(5.0,0)" )
     assertEqualF64( 0.5, pow( 2.0, -1 ), 0.001, "pow(2.0,-1)" )
     putsln( "pow OK" )
-
-    # min/max
     assertEqualI64( 3, min( 5, 3 ), "min(5,3)" )
     assertEqualI64( 5, max( 5, 3 ), "max(5,3)" )
     assertEqualF64( 1.5, minF64( 1.5, 2.5 ), 0.001, "minF64(1.5,2.5)" )
     assertEqualF64( 2.5, maxF64( 1.5, 2.5 ), 0.001, "maxF64(1.5,2.5)" )
     putsln( "min/max OK" )
-
-    # clamp
     assertEqualI64( 10, clamp( 15, 0, 10 ), "clamp(15,0,10)" )
     assertEqualI64( 0, clamp( -5, 0, 10 ), "clamp(-5,0,10)" )
     assertEqualI64( 5, clamp( 5, 0, 10 ), "clamp(5,0,10)" )
     putsln( "clamp OK" )
-
-    # sign
     assertEqualI64( 1, sign( 42 ), "sign(42)" )
     assertEqualI64( -1, sign( -7 ), "sign(-7)" )
     assertEqualI64( 0, sign( 0 ), "sign(0)" )
     putsln( "sign OK" )
-
-    # gcd/lcm
     assertEqualI64( 4, gcd( 12, 8 ), "gcd(12,8)" )
     assertEqualI64( 1, gcd( 17, 5 ), "gcd(17,5)" )
     assertEqualI64( 12, lcm( 4, 6 ), "lcm(4,6)" )
     assertEqualI64( 21, lcm( 7, 3 ), "lcm(7,3)" )
     putsln( "gcd/lcm OK" )
-
-    # ln/log10/log2
     assertEqualF64( 0.0, ln( 1.0 ), 0.01, "ln(1.0)" )
     assertEqualF64( 1.0, ln( 2.718281828 ), 0.01, "ln(e)" )
     assertEqualF64( 2.0, log10( 100.0 ), 0.01, "log10(100.0)" )
     assertEqualF64( 3.0, log2( 8.0 ), 0.01, "log2(8.0)" )
     putsln( "ln/log OK" )
-
-    putsln( "=== All math tests passed ===" )
+    putsln( "All math tests passed" )
     return 0

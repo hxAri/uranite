@@ -23,6 +23,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "uranite/ast/node.hpp"
 #include "uranite/diagnostic/diagnostic.hpp"
@@ -116,6 +117,7 @@ namespace uranite::semantic {
 			
 			void importModuleTypes( const std::unordered_map<std::string, TypeSharedPointer>& types );
 			void importModuleSymbols( const std::unordered_map<std::string, std::vector<SymbolSharedPointer>>& symbols );
+			void setUserImportScope( const std::string& sourceFile, const std::unordered_set<std::string>& importedIdentifiers );
 			std::unordered_map<std::string, TypeSharedPointer> getRegisteredTypes() const;
 			std::unordered_map<std::string, std::vector<SymbolSharedPointer>> getRegisteredSymbols() const;
 			bool analyzeModuleRegistration( ast::nodes::Program& program );
@@ -445,7 +447,11 @@ namespace uranite::semantic {
 			
 			/** @brief The registry containing all known primitive and user-defined types. */
 			Registry typeRegistry;
-		
+
+			std::string userSourceFile_;
+			std::unordered_set<std::string> userImportedIdentifiers_;
+			bool isInUserCode_ = false;
+
 	};
 	
 } // namespace uranite::semantic

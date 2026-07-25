@@ -5,32 +5,25 @@ from uranite.os.sync.read-write-lock import ReadWriteLock
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Sync RWLock Tests ===" )
-
+    putsln( "OS Sync RWLock Tests" )
     ReadWriteLock rwl = new ReadWriteLock()
     assertEqualI64( 0, rwl.getReaderCount(), "readers 0" )
     assertFalse( rwl.isWriterActive(), "no writer" )
-
     Boolean rl1 = rwl.readLock()
     assertTrue( rl1, "readLock 1" )
     assertEqualI64( 1, rwl.getReaderCount(), "readers 1" )
-
     Boolean rl2 = rwl.readLock()
     assertTrue( rl2, "readLock 2" )
     assertEqualI64( 2, rwl.getReaderCount(), "readers 2" )
-
     Boolean wl1 = rwl.writeLock()
     assertFalse( wl1, "writeLock while reading" )
     putsln( "read/write exclusion OK" )
-
     Boolean ru1 = rwl.readUnlock()
     assertTrue( ru1, "readUnlock 1" )
     assertEqualI64( 1, rwl.getReaderCount(), "readers 1 after unlock" )
-
     Boolean ru2 = rwl.readUnlock()
     assertTrue( ru2, "readUnlock 2" )
     assertEqualI64( 0, rwl.getReaderCount(), "readers 0 after unlock" )
     putsln( "readUnlock OK" )
-
-    putsln( "=== All rwlock tests passed ===" )
+    putsln( "All rwlock tests passed" )
     return 0

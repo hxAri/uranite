@@ -6,37 +6,26 @@ from uranite.subprocess.subprocess import Subprocess, SubprocessError, Subproces
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Subprocess Tests ===" )
-
-    # SubprocessError construction
+    putsln( "Subprocess Tests" )
     SubprocessError err = new SubprocessError( "test error", 1, None )
     assertEqualStr( "test error", err.getMessage(), "error message" )
     assertEqualI64( 1, err.getCode(), "error code" )
     putsln( "SubprocessError OK" )
-
-    # SubprocessResult construction
     SubprocessResult res = new SubprocessResult( 0, "output", "errors" )
     assertEqualI64( 0, res.exitCode, "exitCode 0" )
     assertEqualStr( "output", res.stdout, "stdout" )
     assertEqualStr( "errors", res.stderr, "stderr" )
     assertTrue( res.isSuccess(), "isSuccess true" )
     putsln( "SubprocessResult OK" )
-
-    # SubprocessResult with non-zero exit
     SubprocessResult failRes = new SubprocessResult( 1, "", "fail" )
     assertEqualI64( 1, failRes.exitCode, "fail exitCode" )
     assertFalse( failRes.isSuccess(), "isSuccess false" )
     putsln( "SubprocessResult fail OK" )
-
-    # Pipe construction
     Pipe p = new Pipe()
     putsln( "Pipe OK" )
-
-    # PipeError
     PipeError pe = new PipeError( "pipe error", 0, None )
     assertEqualStr( "pipe error", pe.getMessage(), "pipe error msg" )
     assertEqualI64( 0, pe.getCode(), "pipe error code" )
     putsln( "PipeError OK" )
-
-    putsln( "=== All subprocess tests passed ===" )
+    putsln( "All subprocess tests passed" )
     return 0

@@ -7,18 +7,15 @@ from uranite.os.vfs.vnode import PERM_OWNER_READ, PERM_OWNER_WRITE, VNode
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS VFS Combined Tests ===" )
-
+    putsln( "OS VFS Combined Tests" )
     VNode vn = new VNode( 1, 1, 10, 100 )
     assertTrue( vn.isFile(), "isFile" )
     assertEqualI64( 1, vn.getVnodeId(), "vnodeId" )
-
     I64 perms = PERM_OWNER_READ | PERM_OWNER_WRITE
     vn.setPermissions( perms )
     assertTrue( vn.canOwnerRead(), "canRead" )
     assertTrue( vn.canOwnerWrite(), "canWrite" )
     putsln( "VNode OK" )
-
     I64 fdFlags = FLAG_READ | FLAG_WRITE
     FileDescriptor fd = new FileDescriptor( 0, 1, fdFlags )
     assertTrue( fd.canRead(), "fd canRead" )
@@ -27,11 +24,9 @@ public function main() -> I32:
     fd.advanceOffset( 100 )
     assertEqualI64( 100, fd.getOffset(), "offset 100" )
     putsln( "FileDescriptor OK" )
-
     MountEntry me = new MountEntry( 1, 10, 20, 0, 1, 0 )
     assertEqualI64( 1, me.getMountId(), "mountId" )
     assertFalse( me.isReadOnly(), "not readonly" )
     putsln( "MountEntry OK" )
-
-    putsln( "=== All VFS combined tests passed ===" )
+    putsln( "All VFS combined tests passed" )
     return 0

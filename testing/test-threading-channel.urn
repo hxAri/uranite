@@ -6,28 +6,22 @@ from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 from uranite.threading.channel import ChannelInner, Receiver, Sender
 
 public function main() -> I32:
-    putsln( "=== Threading Channel Tests ===" )
-
+    putsln( "Threading Channel Tests" )
     Scheduler sched = new Scheduler()
     ChannelInner<I64> inner = new ChannelInner<I64>( 16, sched )
     putsln( "create OK" )
-
     Sender<I64> tx = new Sender<I64>( inner )
     Receiver<I64> rx = new Receiver<I64>( inner )
     putsln( "sender/receiver OK" )
-
     assertTrue( inner.isEmpty(), "initially empty" )
     assertEqualI64( 0, inner.getCount(), "count 0" )
     putsln( "empty OK" )
-
     Boolean sent = inner.trySend( 42 )
     assertTrue( sent, "trySend success" )
     assertFalse( inner.isEmpty(), "not empty after send" )
     assertEqualI64( 1, inner.getCount(), "count 1" )
     putsln( "send OK" )
-
     inner.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All channel tests passed ===" )
+    putsln( "All channel tests passed" )
     return 0

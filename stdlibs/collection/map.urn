@@ -25,12 +25,13 @@ from uranite.collection.collection import Collection
 from uranite.collection.pair import Pair
 from uranite.collection.sequence import Sequence
 from uranite.collection.set import Set
+from uranite.iterators.iterable import Iterable
 from uranite.language.boolean import Boolean
 from uranite.language.callable import Callable
 from uranite.language.void import Void
 from uranite.operators.indexable import Indexable
 
-public interface Map<K, V> extends Collection<V>, Indexable<K, V>:
+public interface Map<K, V> extends Collection<V>, Indexable<K, V>, Iterable<Pair<K, V>>:
     
     """
     Key-value associative container mapping keys of type K to values of type V.

@@ -6,15 +6,11 @@ from uranite.language.float import Float
 from uranite.testing.assertions import assertEqualF64, assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== F64 Tests ===" )
-
+    putsln( "F64 Tests" )
     F64 a = new F64( 1.23456789012345 )
     F64 b = new F64( 9.87654321098765 )
-
     assertEqualF64( 1.23456789012345, a.getValue(), 0.0001, "getValue" )
     putsln( "getValue OK" )
-
-    # arithmetic
     Float sum = a.add( b )
     assertEqualF64( 11.1111111011111, sum.getValue(), 0.001, "add" )
     Float diff = a.subtract( b )
@@ -22,27 +18,19 @@ public function main() -> I32:
     Float quot = a.divide( b )
     assertEqualF64( 0.124999998, quot.getValue(), 0.001, "divide" )
     putsln( "arithmetic OK" )
-
-    # abs / negate
     F64 neg = new F64( -7.77 )
     Float absVal = neg.abs()
     assertEqualF64( 7.77, absVal.getValue(), 0.001, "abs" )
     Float negated = a.negate()
     assertEqualF64( -1.23456789, negated.getValue(), 0.001, "negate" )
     putsln( "abs/negate OK" )
-
-    # equals / compareTo
     F64 c = new F64( 1.23456789012345 )
     assertTrue( a.equals( c ), "equals" )
     assertEqualI64( -1, a.compareTo( b ), "compareTo" )
-
-    # isNaN / isInfinite
     Boolean nanCheck = a.isNaN()
     assertFalse( nanCheck, "isNaN" )
     Boolean infCheck = a.isInfinite()
     assertFalse( infCheck, "isInfinite" )
-
-    # floor / ceil / round / toInt
     Float fl = a.floor()
     assertEqualF64( 1.0, fl.getValue(), 0.001, "floor" )
     Float ce = a.ceil()
@@ -51,6 +39,5 @@ public function main() -> I32:
     assertEqualF64( 1.0, rnd.getValue(), 0.001, "round" )
     assertEqualI64( 1, a.toInt(), "toInt" )
     putsln( "floor/ceil/round/toInt OK" )
-
-    putsln( "=== All F64 tests passed ===" )
+    putsln( "All F64 tests passed" )
     return 0

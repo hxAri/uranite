@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -32,23 +33,16 @@ public function main() -> I32:
         I32 exit code.
     """
     
-    # Nullable string initialized to None
     ?String empty = None
     if empty == None:
         puts( "empty is None" )
-
-    # Nullable string with value
     ?String greeting = "Hello"
     if greeting != None:
         puts( "greeting has a value" )
-
-    # Reassign nullable
     ?String name = None
     if name == None:
         puts( "name starts as None" )
-
     name = "Alice"
     if name != None:
         puts( "name is now set" )
-
     return 0

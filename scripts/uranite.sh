@@ -137,9 +137,9 @@ function main() {
 	function listing() {
 		puts ""
 		puts "  <<- i > listing libraries:"
-		if [[ -d ${basepath}/modules ]] && [[ $(ls -A ${basepath}/modules) ]]; then
-			for filename in $(find ${basepath}/modules); do
-				if [[ -f "$filename" ]] && [[ "${filename##*.}" == "ae" ]]; then
+		if [[ -d ${basepath}/stdlibs ]] && [[ $(ls -A ${basepath}/stdlibs) ]]; then
+			for filename in $(find ${basepath}/stdlibs); do
+				if [[ -f "$filename" ]] && [[ "${filename##*.}" == "urn" ]]; then
 					puts "  <<- m > ${filename/$basepath\//}"
 				fi
 			done
@@ -150,10 +150,14 @@ function main() {
 	function execute() {
 		compile
 		local builded=$?
+		local command="$basepath/build/uranite $@"
 		if [[ $builded -eq 0 ]]; then
-			listing
-			subshell "$basepath/build/uranite $@"
-			return $SUBSHELLSTATUS
+			#listing
+			#subshell "$command"
+			#return $SUBSHELLSTATUS
+			echo -e ""
+			$basepath/build/uranite $@
+			return $?
 		fi
 		return $builded
 	}
@@ -247,9 +251,8 @@ function main() {
 		esac
 	else
 		execute "${arguments[@]}"
-		return $?
 	fi
-	
+	return $?
 }
 
 # Handle subshell execution.
@@ -270,6 +273,7 @@ function subshell() {
         fi
         eval $stdout
     done < <($command; echo -e "SUBSHELLSTATUS=${PIPESTATUS[0]}")
+	return $?
 }
 
 main "$@"

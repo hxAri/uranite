@@ -19,42 +19,30 @@ function computeConstant() -> I64:
     return 42
 
 public function main() -> I32:
-    putsln( "=== Multiprocessing Executor Tests ===" )
-
+    putsln( "Multiprocessing Executor Tests" )
     Scheduler sched = new Scheduler()
     PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
     SystemClock clock = new SystemClock( 1000 )
     ProcessRuntime runtime = new ProcessRuntime( sched, pmm, clock, 256 )
-
     ProcessPoolExecutor executor = new ProcessPoolExecutor( 4, runtime )
     assertEqualI64( 4, executor.getWorkerCount(), "worker count" )
     assertFalse( executor.isShutdown(), "not shutdown" )
     putsln( "executor OK" )
-
-    # Direct computation test
     I64 directResult = computeSquare( 7 )
     assertEqualI64( 49, directResult, "computeSquare(7)" )
     putsln( "direct compute OK" )
-
-    # FutureBase complete test
     SharedRegion testRegion = runtime.createSharedRegion( 0, 1 )
     I64 slotAddr = testRegion.getPhysicalBase()
     ProcessFutureBase fb = new ProcessFutureBase( sched, testRegion, slotAddr )
-
     fb.completeRaw( directResult )
     assertTrue( fb.isDone(), "future done" )
     assertEqualI64( directResult, fb.getRawResult(), "future result" )
     putsln( "future complete OK" )
-
-    # Submitters creation
     I64 constAddr = addressof computeConstant
     assertGreaterThan( constAddr, 0, "function addr" )
-
     ProcessSubmitter1<I64, I64> submitter1 = new ProcessSubmitter1<I64, I64>( executor )
     ProcessSubmitter0<I64> submitter0 = new ProcessSubmitter0<I64>( executor )
     putsln( "submitters OK" )
-
     testRegion.release()
-
-    putsln( "=== All executor tests passed ===" )
+    putsln( "All executor tests passed" )
     return 0

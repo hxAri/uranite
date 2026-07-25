@@ -5,37 +5,26 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualF64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Adelia HSV Tests ===" )
-
-    # constructor + fields
+    putsln( "Adelia HSV Tests" )
     HSV color = new HSV( 120.0, 1.0, 0.8 )
     assertEqualF64( 120.0, color.hue, 0.0001, "hue" )
     assertEqualF64( 1.0, color.saturation, 0.0001, "saturation" )
     assertEqualF64( 0.8, color.value, 0.0001, "value" )
     putsln( "constructor OK" )
-
-    # equals
     HSV same = new HSV( 120.0, 1.0, 0.8 )
     assertTrue( color.equals( same ), "equals same" )
     HSV diff = new HSV( 240.0, 0.5, 0.5 )
     assertFalse( color.equals( diff ), "equals diff" )
     putsln( "equals OK" )
-
-    # toString
     String str = color.toString()
     assertTrue( str != "", "toString not empty" )
     putsln( "toString OK" )
-
-    # gray (zero saturation)
     HSV gray = new HSV( 0.0, 0.0, 0.5 )
     assertEqualF64( 0.0, gray.saturation, 0.0001, "gray saturation" )
     putsln( "gray OK" )
-
-    # full red
     HSV red = new HSV( 0.0, 1.0, 1.0 )
     assertEqualF64( 0.0, red.hue, 0.0001, "red hue" )
     assertEqualF64( 1.0, red.value, 0.0001, "red value" )
     putsln( "red OK" )
-
-    putsln( "=== All HSV tests passed ===" )
+    putsln( "All HSV tests passed" )
     return 0

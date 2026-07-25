@@ -6,15 +6,12 @@ from uranite.memory.memory import Memory
 from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
-    putsln( "=== IO Pipe Tests ===" )
-
+    putsln( "IO Pipe Tests" )
     Pipe p = new Pipe()
     assertGreaterThan( p.getReadFd(), -1, "readFd valid" )
     assertGreaterThan( p.getWriteFd(), -1, "writeFd valid" )
-
     I64 written = p.writeString( "pipe data" )
     assertEqualI64( 9, written, "written 9 bytes" )
-
     Memory<I64> readBuf = new Memory<I64>( 16 )
     I64 n = p.readBytes( readBuf, 9 )
     assertEqualI64( 9, n, "read 9 bytes" )
@@ -22,6 +19,5 @@ public function main() -> I32:
     readBuf.free()
     p.close()
     putsln( "pipe OK" )
-
-    putsln( "=== All IO pipe tests passed ===" )
+    putsln( "All IO pipe tests passed" )
     return 0

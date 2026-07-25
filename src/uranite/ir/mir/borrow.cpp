@@ -17,9 +17,9 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/mir-borrow-checker.hpp"
-
 #include <fmt/format.h>
+
+#include "uranite/ir/mir/borrow.hpp"
 
 namespace uranite::ir::mir {
 	
@@ -37,31 +37,22 @@ namespace uranite::ir::mir {
 	}
 	
 	void MIRBorrowChecker::propagateOwnershipStates( MIRFunctionDefinition& functionDefinition ) {
-		// Per-block entry ownership states
 		std::unordered_map<MIRBlockIdentifier, OwnershipStateMap> blockEntryStates;
-		
-		// Initialize entry block: parameters are Owned, all others Uninitialized
 		OwnershipStateMap entryState;
 		for( MIRVariableIdentifier parameterVariable : functionDefinition.parameterVariableIdentifiers ) {
 			entryState[parameterVariable] = BorrowOwnershipState::Owned;
 		}
 		blockEntryStates[functionDefinition.entryBlockIdentifier] = entryState;
-		
-		// Fixed-point iteration
 		bool changed = true;
 		int iterationCount = 0;
 		int maxIterations = static_cast<int>( functionDefinition.controlFlowBlocks.size() ) * 4 + 10;
-		
 		while( changed && iterationCount < maxIterations ) {
 			changed = false;
 			iterationCount++;
-			
 			for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 				if( basicBlock == nullptr ) {
 					continue;
 				}
-				
-				// Merge predecessor states
 				OwnershipStateMap mergedEntryState;
 				if( basicBlock->blockIdentifier == functionDefinition.entryBlockIdentifier ) {
 					mergedEntryState = blockEntryStates[basicBlock->blockIdentifier];
@@ -70,7 +61,6 @@ namespace uranite::ir::mir {
 					std::vector<OwnershipStateMap> predecessorMaps;
 					for( MIRBlockIdentifier predecessorIdentifier : basicBlock->predecessorBlocks ) {
 						if( blockEntryStates.count( predecessorIdentifier ) > 0 ) {
-							// Compute exit state by replaying instructions on entry state
 							OwnershipStateMap predecessorExitState = blockEntryStates[predecessorIdentifier];
 							std::shared_ptr<MIRBasicBlock>& predecessorBlock =
 								functionDefinition.controlFlowBlocks[predecessorIdentifier];
@@ -86,8 +76,6 @@ namespace uranite::ir::mir {
 						mergedEntryState = this->mergeOwnershipMaps( predecessorMaps );
 					}
 				}
-				
-				// Check for change
 				if( blockEntryStates.count( basicBlock->blockIdentifier ) == 0 ||
 					blockEntryStates[basicBlock->blockIdentifier] != mergedEntryState ) {
 					blockEntryStates[basicBlock->blockIdentifier] = mergedEntryState;
@@ -95,38 +83,27 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-		
-		// Final pass: check all instructions with converged states
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock == nullptr ) {
 				continue;
 			}
-			
 			OwnershipStateMap currentState;
 			if( blockEntryStates.count( basicBlock->blockIdentifier ) > 0 ) {
 				currentState = blockEntryStates[basicBlock->blockIdentifier];
 			}
-			
 			for( const MIRInstruction& instruction : basicBlock->blockInstructions ) {
 				this->checkInstruction( instruction, currentState, functionDefinition );
 			}
 		}
 	}
 	
-	void MIRBorrowChecker::checkInstruction(
-		const MIRInstruction& instruction,
-		OwnershipStateMap& currentStates,
-		const MIRFunctionDefinition& functionDefinition
-	) {
-		// Check source operands for use-after-move
+	void MIRBorrowChecker::checkInstruction( const MIRInstruction& instruction, OwnershipStateMap& currentStates, const MIRFunctionDefinition& functionDefinition ) {
 		for( MIRVariableIdentifier sourceOperand : instruction.sourceOperands ) {
 			if( sourceOperand == INVALID_VARIABLE_IDENTIFIER ) {
 				continue;
 			}
-			
 			if( currentStates.count( sourceOperand ) > 0 ) {
 				BorrowOwnershipState operandState = currentStates[sourceOperand];
-				
 				if( operandState == BorrowOwnershipState::Moved ) {
 					std::string variableName = "v" + std::to_string( sourceOperand );
 					if( functionDefinition.variableDescriptorTable.count( sourceOperand ) > 0 ) {
@@ -139,24 +116,19 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-		
-		// Update state based on instruction kind
 		switch( instruction.instructionKind ) {
 			case MIRInstructionKind::MoveValue: {
-				// Source is moved
 				if( instruction.sourceOperands.empty() == false ) {
 					MIRVariableIdentifier sourceVariable = instruction.sourceOperands[0];
 					if( sourceVariable != INVALID_VARIABLE_IDENTIFIER ) {
 						currentStates[sourceVariable] = BorrowOwnershipState::Moved;
 					}
 				}
-				// Destination is now owned
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					currentStates[instruction.destinationVariable] = BorrowOwnershipState::Owned;
 				}
 				break;
 			}
-			
 			case MIRInstructionKind::CopyValue:
 			case MIRInstructionKind::AllocateLocal:
 			case MIRInstructionKind::ConstantInteger:
@@ -178,7 +150,6 @@ namespace uranite::ir::mir {
 				}
 				break;
 			}
-			
 			case MIRInstructionKind::TakeReference: {
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					currentStates[instruction.destinationVariable] = BorrowOwnershipState::Borrowed;
@@ -191,7 +162,6 @@ namespace uranite::ir::mir {
 				}
 				break;
 			}
-			
 			case MIRInstructionKind::DropValue:
 			case MIRInstructionKind::HeapFree: {
 				if( instruction.sourceOperands.empty() == false ) {
@@ -213,16 +183,13 @@ namespace uranite::ir::mir {
 				}
 				break;
 			}
-			
 			case MIRInstructionKind::StoreVariable: {
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					currentStates[instruction.destinationVariable] = BorrowOwnershipState::Owned;
 				}
 				break;
 			}
-			
 			default: {
-				// Arithmetic, comparison, logical, branch, etc. — destination is Owned if produced
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					currentStates[instruction.destinationVariable] = BorrowOwnershipState::Owned;
 				}
@@ -231,31 +198,23 @@ namespace uranite::ir::mir {
 		}
 	}
 	
-	OwnershipStateMap MIRBorrowChecker::mergeOwnershipMaps(
-		const std::vector<OwnershipStateMap>& predecessorStates
-	) {
+	OwnershipStateMap MIRBorrowChecker::mergeOwnershipMaps( const std::vector<OwnershipStateMap>& predecessorStates ) {
 		if( predecessorStates.empty() ) {
 			return {};
 		}
 		if( predecessorStates.size() == 1 ) {
 			return predecessorStates[0];
 		}
-		
 		OwnershipStateMap merged = predecessorStates[0];
-		
 		for( size_t mapIndex = 1; mapIndex < predecessorStates.size(); mapIndex++ ) {
 			const OwnershipStateMap& otherMap = predecessorStates[mapIndex];
-			
-			// Add variables only in other map
 			for( const std::pair<const MIRVariableIdentifier, BorrowOwnershipState>& entry : otherMap ) {
 				if( merged.count( entry.first ) == 0 ) {
 					merged[entry.first] = entry.second;
 				}
 				else {
-					// Conservative merge: Moved wins over Owned
 					BorrowOwnershipState existingState = merged[entry.first];
 					BorrowOwnershipState incomingState = entry.second;
-					
 					if( existingState == BorrowOwnershipState::Moved ||
 						incomingState == BorrowOwnershipState::Moved ) {
 						merged[entry.first] = BorrowOwnershipState::Moved;
@@ -275,14 +234,10 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-		
 		return merged;
 	}
 	
-	void MIRBorrowChecker::reportViolation(
-		const std::string& message,
-		const lookup::SourceSharedPointer& sourceLocation
-	) {
+	void MIRBorrowChecker::reportViolation( const std::string& message, const lookup::SourceSharedPointer& sourceLocation ) {
 		this->detectedViolations++;
 		if( sourceLocation != nullptr && sourceLocation->location != nullptr ) {
 			this->diagnosticEngine.error(
@@ -291,5 +246,5 @@ namespace uranite::ir::mir {
 			);
 		}
 	}
-
+	
 } // namespace uranite::ir::mir

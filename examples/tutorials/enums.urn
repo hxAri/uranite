@@ -23,15 +23,14 @@ package uranite.examples.testing.enums
 
 from uranite.io.console import puts
 
-# Simple enum
 enum Direction:
     unit North
     unit South
     unit East
     unit West
 
-# Another enum with Backed
 enum Color backed Integer:
+    
     unit Blue   1
     unit Green  2
     unit Red    3:
@@ -71,19 +70,15 @@ public function main() -> I32:
     Direction south = Direction.South
     Direction east = Direction.East
     Direction west = Direction.West
-
     puts( "Directions:" )
     direction_name( north )
     direction_name( south )
     direction_name( east )
     direction_name( west )
-
     puts( "north value = ", direction_value( north ) )
     puts( "west value = ", direction_value( west ) )
-
     Color red = Color.Red
     Color blue = Color.Blue
     puts( "red hex = ", color_hex( red ) )
     puts( "blue hex = ", color_hex( blue ) )
-
     return 0

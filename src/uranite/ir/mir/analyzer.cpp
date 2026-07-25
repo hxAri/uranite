@@ -17,33 +17,28 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/mir-analysis.hpp"
-
 #include <algorithm>
+
+#include "uranite/ir/mir/analyzer.hpp"
 
 namespace uranite::ir::mir {
 	
-	void MIRLivenessAnalysis::analyze( MIRFunctionDefinition& functionDefinition ) {
+	void MIRLivenessAnalyzer::analyze( MIRFunctionDefinition& functionDefinition ) {
 		this->buildPredecessorSuccessorEdges( functionDefinition );
-		
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock != nullptr ) {
 				this->computeLocalSets( *basicBlock );
 			}
 		}
-		
-		// Fixed-point iteration: propagate until no changes
 		bool changed = true;
 		while( changed ) {
 			changed = this->propagateBackward( functionDefinition );
 		}
 	}
 	
-	void MIRLivenessAnalysis::computeLocalSets( MIRBasicBlock& basicBlock ) {
+	void MIRLivenessAnalyzer::computeLocalSets( MIRBasicBlock& basicBlock ) {
 		basicBlock.definedVariables.clear();
 		basicBlock.usedVariables.clear();
-		
-		// Walk instructions forward: a variable is "used" if read before being defined in this block
 		for( const MIRInstruction& instruction : basicBlock.blockInstructions ) {
 			for( MIRVariableIdentifier sourceOperand : instruction.sourceOperands ) {
 				if( sourceOperand != INVALID_VARIABLE_IDENTIFIER &&
@@ -51,38 +46,30 @@ namespace uranite::ir::mir {
 					basicBlock.usedVariables.insert( sourceOperand );
 				}
 			}
-			
-			// Phi node incoming values count as uses from predecessor blocks
 			for( const std::pair<MIRBlockIdentifier, MIRVariableIdentifier>& phiEntry : instruction.phiIncomingValues ) {
 				if( phiEntry.second != INVALID_VARIABLE_IDENTIFIER &&
 					basicBlock.definedVariables.count( phiEntry.second ) == 0 ) {
 					basicBlock.usedVariables.insert( phiEntry.second );
 				}
 			}
-			
 			if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 				basicBlock.definedVariables.insert( instruction.destinationVariable );
 			}
 		}
 	}
 	
-	void MIRLivenessAnalysis::buildPredecessorSuccessorEdges( MIRFunctionDefinition& functionDefinition ) {
-		// Clear existing edges
+	void MIRLivenessAnalyzer::buildPredecessorSuccessorEdges( MIRFunctionDefinition& functionDefinition ) {
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock != nullptr ) {
 				basicBlock->predecessorBlocks.clear();
 				basicBlock->successorBlocks.clear();
 			}
 		}
-		
-		// Rebuild from terminators
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock == nullptr || basicBlock->blockInstructions.empty() ) {
 				continue;
 			}
-			
 			const MIRInstruction& lastInstruction = basicBlock->blockInstructions.back();
-			
 			auto addEdge = [&]( MIRBlockIdentifier targetIdentifier ) {
 				if( targetIdentifier == INVALID_BLOCK_IDENTIFIER ||
 					targetIdentifier >= functionDefinition.controlFlowBlocks.size() ||
@@ -94,53 +81,44 @@ namespace uranite::ir::mir {
 					basicBlock->blockIdentifier
 				);
 			};
-			
 			switch( lastInstruction.instructionKind ) {
 				case MIRInstructionKind::BranchConditional:
 					addEdge( lastInstruction.trueBranchTarget );
 					addEdge( lastInstruction.falseBranchTarget );
 					break;
-				
 				case MIRInstructionKind::JumpUnconditional:
 					addEdge( lastInstruction.trueBranchTarget );
 					break;
-				
 				case MIRInstructionKind::SwitchBranch:
 					for( const std::pair<int64_t, MIRBlockIdentifier>& switchTarget : lastInstruction.switchBranchTargets ) {
 						addEdge( switchTarget.second );
 					}
 					addEdge( lastInstruction.defaultSwitchTarget );
 					break;
-				
 				case MIRInstructionKind::InvokeFunction:
 					addEdge( lastInstruction.trueBranchTarget );
 					addEdge( lastInstruction.landingPadTarget );
 					break;
-				
-				case MIRInstructionKind::ReturnValue:
 				case MIRInstructionKind::ThrowException:
+					addEdge( lastInstruction.landingPadTarget );
+					break;
+				case MIRInstructionKind::ReturnValue:
 				case MIRInstructionKind::Unreachable:
 					break;
-				
 				default:
 					break;
 			}
 		}
 	}
 	
-	bool MIRLivenessAnalysis::propagateBackward( MIRFunctionDefinition& functionDefinition ) {
+	bool MIRLivenessAnalyzer::propagateBackward( MIRFunctionDefinition& functionDefinition ) {
 		bool changed = false;
-		
-		// Iterate blocks in reverse order for faster convergence
 		for( int blockIndex = static_cast<int>( functionDefinition.controlFlowBlocks.size() ) - 1;
 			 blockIndex >= 0; blockIndex-- ) {
-			
 			std::shared_ptr<MIRBasicBlock>& basicBlock = functionDefinition.controlFlowBlocks[blockIndex];
 			if( basicBlock == nullptr ) {
 				continue;
 			}
-			
-			// liveOut = union of liveIn of all successors
 			std::unordered_set<MIRVariableIdentifier> newLiveOut;
 			for( MIRBlockIdentifier successorIdentifier : basicBlock->successorBlocks ) {
 				if( successorIdentifier < functionDefinition.controlFlowBlocks.size() ) {
@@ -154,15 +132,12 @@ namespace uranite::ir::mir {
 					}
 				}
 			}
-			
-			// liveIn = used union (liveOut - defined)
 			std::unordered_set<MIRVariableIdentifier> newLiveIn = basicBlock->usedVariables;
 			for( MIRVariableIdentifier liveOutVariable : newLiveOut ) {
 				if( basicBlock->definedVariables.count( liveOutVariable ) == 0 ) {
 					newLiveIn.insert( liveOutVariable );
 				}
 			}
-			
 			if( newLiveIn != basicBlock->liveVariablesAtEntry ||
 				newLiveOut != basicBlock->liveVariablesAtExit ) {
 				changed = true;
@@ -170,8 +145,7 @@ namespace uranite::ir::mir {
 				basicBlock->liveVariablesAtExit = std::move( newLiveOut );
 			}
 		}
-		
 		return changed;
 	}
-
+	
 } // namespace uranite::ir::mir

@@ -17,41 +17,31 @@ from uranite.os.arch.paging import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Arch Paging Tests ===" )
-
-    # PageTableEntry
+    putsln( "OS Arch Paging Tests" )
     PageTableEntry pte = new PageTableEntry( 0 )
     assertFalse( pte.isPresent(), "PTE not present" )
-
     pte.set( 4096, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER )
     assertTrue( pte.isPresent(), "PTE present" )
     assertTrue( pte.isWritable(), "PTE writable" )
     assertEqualI64( 4096, pte.address(), "PTE address" )
     putsln( "PageTableEntry OK" )
-
-    # Constants
     assertEqualI64( 1, PAGE_PRESENT, "PAGE_PRESENT" )
     assertEqualI64( 2, PAGE_WRITABLE, "PAGE_WRITABLE" )
     assertEqualI64( 4, PAGE_USER, "PAGE_USER" )
     assertEqualI64( 4096, PAGE_SIZE, "PAGE_SIZE" )
     assertEqualI64( 2097152, HUGE_PAGE_2MB, "HUGE_PAGE_2MB" )
     putsln( "constants OK" )
-
-    # Index extraction (vaddr = 4194304 = 2^22)
     I64 vaddr = 4194304
     assertEqualI64( 0, pml4Index( vaddr ), "pml4Index" )
     assertEqualI64( 0, pdptIndex( vaddr ), "pdptIndex" )
     assertEqualI64( 2, pdIndex( vaddr ), "pdIndex" )
     assertEqualI64( 0, ptIndex( vaddr ), "ptIndex" )
     putsln( "index extraction OK" )
-
-    # PageTable
     PageTable pt = new PageTable()
     pt.setEntry( 0, 4096 | 3 )
     PageTableEntry e = pt.getEntry( 0 )
     assertTrue( e.isPresent(), "PT[0] present" )
     pt.destroy()
     putsln( "PageTable OK" )
-
-    putsln( "=== All paging tests passed ===" )
+    putsln( "All paging tests passed" )
     return 0

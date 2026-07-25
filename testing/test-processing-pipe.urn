@@ -14,31 +14,24 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 
 public function main() -> I32:
-    putsln( "=== Processing Pipe Tests ===" )
-
+    putsln( "Processing Pipe Tests" )
     I64 pipe = uranitePipeCreate()
     assertGreaterThan( pipe, 0, "pipe handle" )
     putsln( "pipe created OK" )
-
     I32 rfd = uranitePipeReadFd( pipe )
     I32 wfd = uranitePipeWriteFd( pipe )
     assertGreaterThan( rfd as I64, -1, "read fd valid" )
     assertGreaterThan( wfd as I64, -1, "write fd valid" )
     putsln( "fds OK" )
-
     String msg = "hello pipe"
     I64 written = uranitePipeWrite( pipe, msg, 10 )
     assertEqualI64( 10, written, "wrote 10 bytes" )
     putsln( "write OK" )
-
     uranitePipeCloseWrite( pipe )
     putsln( "close write OK" )
-
     uranitePipeCloseRead( pipe )
     putsln( "close read OK" )
-
     uranitePipeDestroy( pipe )
     putsln( "destroy OK" )
-
-    putsln( "=== All pipe tests passed ===" )
+    putsln( "All pipe tests passed" )
     return 0

@@ -17,8 +17,7 @@ from uranite.os.net.socket import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Net Socket Tests ===" )
-
+    putsln( "OS Net Socket Tests" )
     assertEqualI64( 1, SOCKET_STREAM, "SOCKET_STREAM" )
     assertEqualI64( 2, SOCKET_DATAGRAM, "SOCKET_DATAGRAM" )
     assertEqualI64( 3, SOCKET_RAW, "SOCKET_RAW" )
@@ -30,49 +29,39 @@ public function main() -> I32:
     assertEqualI64( 2, AF_INET, "AF_INET" )
     assertEqualI64( 10, AF_INET6, "AF_INET6" )
     putsln( "constants OK" )
-
     SocketTable st = new SocketTable( 8 )
     assertEqualI64( 0, st.getCount(), "count 0" )
-
     I64 sid = st.create( 1, 6 )
     assertTrue( sid >= 0, "create stream" )
     assertEqualI64( 1, st.getCount(), "count 1" )
     assertEqualI64( 1, st.getType( sid ), "type stream" )
     assertEqualI64( 0, st.getState( sid ), "state unbound" )
-
     Boolean bindOk = st.bind( sid, 3232235777, 8080 )
     assertTrue( bindOk, "bind" )
     assertEqualI64( 1, st.getState( sid ), "state bound" )
     assertEqualI64( 8080, st.getLocalPort( sid ), "port 8080" )
-
     Boolean bindFail = st.bind( sid, 0, 9090 )
     assertFalse( bindFail, "bind already bound" )
-
     Boolean listenOk = st.listen( sid )
     assertTrue( listenOk, "listen" )
     assertEqualI64( 2, st.getState( sid ), "state listening" )
     putsln( "stream lifecycle OK" )
-
     I64 sid2 = st.create( 2, 17 )
     assertEqualI64( 2, st.getType( sid2 ), "type datagram" )
     st.bind( sid2, 0, 5353 )
     Boolean listenDg = st.listen( sid2 )
     assertFalse( listenDg, "listen datagram fails" )
-
     Boolean connOk = st.connect( sid2, 167772161, 53 )
     assertTrue( connOk, "connect" )
     assertEqualI64( 3, st.getState( sid2 ), "state connected" )
     assertEqualI64( 167772161, st.getRemoteAddr( sid2 ), "remoteAddr" )
     putsln( "datagram OK" )
-
     Boolean closeOk = st.close( sid )
     assertTrue( closeOk, "close" )
     assertEqualI64( 4, st.getState( sid ), "state closed" )
     assertEqualI64( -1, st.getType( 999 ), "type nonexistent" )
     putsln( "close OK" )
-
     st.close( sid2 )
     st.destroy()
-
-    putsln( "=== All socket tests passed ===" )
+    putsln( "All socket tests passed" )
     return 0

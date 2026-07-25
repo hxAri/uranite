@@ -5,18 +5,13 @@ from uranite.os.hal.mmio import loadFence, memoryFence, storeFence
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== OS HAL MMIO Tests ===" )
-
+    putsln( "OS HAL MMIO Tests" )
     memoryFence()
     putsln( "memoryFence OK" )
-
     storeFence()
     putsln( "storeFence OK" )
-
     loadFence()
     putsln( "loadFence OK" )
-
     assertEqualI64( 1, 1, "compile verification" )
-
-    putsln( "=== All MMIO tests passed ===" )
+    putsln( "All MMIO tests passed" )
     return 0

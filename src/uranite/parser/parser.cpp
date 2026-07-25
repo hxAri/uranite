@@ -211,7 +211,7 @@ namespace uranite::parser {
 			this->check( token::Type::KeywordTry ) ||
 			this->check( token::Type::KeywordUnsafe ) ||
 			this->check( token::Type::KeywordWhile ) ||
-			this->check( token::Type::Question ) ||  // nullable type variable declaration
+			this->check( token::Type::Question ) ||
            	this->isExpressionStart()
 		);
 	}
@@ -240,21 +240,15 @@ namespace uranite::parser {
 			std::make_shared<ast::nodes::Program>( this->current().source )
 		);
 		this->skipNewline();
-		
-		// Optional package declaration
 		if( this->check( token::Type::KeywordPackage ) ) {
 			program->module = this->parseModuleDeclaration();
 			this->skipNewline();
 		}
-		
-		// Import declarations (before any other declarations)
 		while( this->check( token::Type::KeywordImport ) || this->check( token::Type::KeywordFrom ) ) {
 			ast::nodes::ImportDeclarationSharedPointer importDeclaration = this->parseImportDeclaration();
 			program->imports.push_back( importDeclaration );
 			this->skipNewline();
 		}
-		
-		// Top-level declarations, exports, and imports (interleaved)
 		while( this->isAtEnd( false ) ) {
 			this->skipNewline();
 			if( this->isAtEnd() ) {
@@ -305,14 +299,10 @@ namespace uranite::parser {
 			return std::make_shared<ast::nodes::ArrayExpression>( std::vector<ast::nodes::ExpressionSharedPointer>{}, source );
 		}
 		ast::nodes::ExpressionSharedPointer firstExpression = parseExpression();
-		
-		// Comprehension: [expression for Type variable in iterable] or [expression for Type variable in iterable if condition]
 		if( this->check( token::Type::KeywordFor ) ) {
-			this->advance(); // consume 'for'
+			this->advance();
 			ast::nodes::TypeNodeSharedPointer variableType;
 			std::string variableName;
-			
-			// Parse optional type and variable name
 			if( this->check( token::Type::Identifier ) && this->peek( 1 ).type == token::Type::Identifier ) {
 				variableType = this->parseTypeNode();
 				variableName = this->expect( token::Type::Identifier, "expected variable name" ).value;
@@ -340,8 +330,6 @@ namespace uranite::parser {
 				variableType
 			);
 		}
-		
-		// Regular array literal
 		std::vector<ast::nodes::ExpressionSharedPointer> elements;
 		elements.push_back( firstExpression );
 		while( this->match(token::Type::Comma ) ) {
@@ -353,24 +341,18 @@ namespace uranite::parser {
 	
 	ast::nodes::TypeNodeSharedPointer Parser::parseBaseTypeNode() {
 		lookup::SourceSharedPointer source = this->current().source;
-		
-		// Reference types: &Type, &mut Type
 		if( this->check( token::Type::Ampersand ) ) {
 			this->advance();
 			bool isMutable = this->match( token::Type::KeywordMutable );
 			ast::nodes::TypeNodeSharedPointer inner = this->parseTypeNode();
 			return std::make_shared<ast::nodes::ReferenceTypeNode>( inner, isMutable, source );
 		}
-		
-		// Pointer types: *Type, *mut Type
 		if( this->check( token::Type::Star ) ) {
 			this->advance();
 			bool isMutable = this->match( token::Type::KeywordMutable );
 			ast::nodes::TypeNodeSharedPointer inner = this->parseTypeNode();
 			return std::make_shared<ast::nodes::PointerTypeNode>( inner, isMutable, source );
 		}
-		
-		// Array types: [Type], [Type; N]
 		if( this->check( token::Type::LeftBracket ) ) {
 			this->advance();
 			ast::nodes::TypeNodeSharedPointer elementType = this->parseTypeNode();
@@ -381,8 +363,6 @@ namespace uranite::parser {
 			this->expect( token::Type::RightBracket, "expected ']' in array type" );
 			return std::make_shared<ast::nodes::ArrayTypeNode>( elementType, size, source );
 		}
-		
-		// Tuple types: (Type1, Type2)
 		if( this->check( token::Type::LeftParenthesis ) ) {
 			this->advance();
 			std::vector<ast::nodes::TypeNodeSharedPointer> elements;
@@ -394,12 +374,10 @@ namespace uranite::parser {
 			}
 			this->expect( token::Type::RightParenthesis, "expected ')'" );
 			if( elements.size() == 1 ) {
-				return elements[0]; // Just grouping
+				return elements[0];
 			}
 			return std::make_shared<ast::nodes::TupleTypeNode>( std::move( elements ), source );
 		}
-		
-		// Function types: fn(Type, ...) -> ReturnType
 		if( this->check( token::Type::KeywordFunction ) ) {
 			this->advance();
 			this->expect( token::Type::LeftParenthesis, "expected '('" );
@@ -420,8 +398,6 @@ namespace uranite::parser {
 			}
 			return std::make_shared<ast::nodes::FunctionTypeNode>( std::move( parameterTypes ), returnType, source );
 		}
-		
-		// Named types (including primitives and user-defined)
 		std::string name;
 		if( this->check( token::Type::Identifier ) ) {
 			name = this->current().value;
@@ -435,18 +411,14 @@ namespace uranite::parser {
 			this->diagnostic.error( this->current().source, fmt::format( "expected type name but found \"{}\"", this->current().value ) );
 			return std::make_shared<ast::nodes::SimpleTypeNode>( "error", source );
 		}
-		
-		// Meta<T> — type-as-value wrapper
 		if( name == "Meta" && this->check( token::Type::LessThan ) ) {
-			this->advance(); // consume <
+			this->advance();
 			ast::nodes::TypeNodeSharedPointer inner = this->parseTypeNode();
 			this->expect( token::Type::GreaterThan, "expected '>' after Meta type parameter" );
 			return std::make_shared<ast::nodes::MetaTypeNode>( inner, source );
 		}
-		
-		// Callable<Return, <Parameter1, Parameter2, ...>>
 		if( name == "Callable" && this->check( token::Type::LessThan ) ) {
-			this->advance(); // consume <
+			this->advance();
 			ast::nodes::TypeNodeSharedPointer returnType = this->parseTypeNode();
 			this->expect( token::Type::Comma, "expected ',' after Callable return type" );
 			this->expect( token::Type::LessThan, "expected '<' before Callable parameter types" );
@@ -461,8 +433,6 @@ namespace uranite::parser {
 			this->expect( token::Type::GreaterThan, "expected '>' to close Callable type" );
 			return std::make_shared<ast::nodes::CallableTypeNode>( returnType, std::move( parameterTypes ), source );
 		}
-		
-		// Check for generic arguments: Name<T1, T2>
 		ast::nodes::TypeNodeSharedPointer result;
 		if( this->check( token::Type::LessThan ) ) {
 			std::vector<ast::nodes::TypeNodeSharedPointer> typeArguments = this->parseGenericArguments();
@@ -487,39 +457,27 @@ namespace uranite::parser {
 		token::Token nameToken = this->expect( token::Type::Identifier, "expected class name" );
 		ast::nodes::ClassDeclarationSharedPointer declaration = std::make_shared<ast::nodes::ClassDeclaration>( nameToken.value, nameToken.source );
 		declaration->access = access;
-		
-		// Generic parameters
 		declaration->genericParameters = this->parseGenericParameters();
-		
-		// Inheritance: class Name extends Base implements Interface1, Interface2:
 		if( this->check( token::Type::KeywordExtends ) ) {
-			this->advance(); // consume 'extends'
+			this->advance();
 			declaration->baseClassType = this->parseTypeNode();
-			
-			// Additional base classes via comma (multiple inheritance not supported, but parse gracefully)
 			while( this->match( token::Type::Comma ) ) {
 				declaration->interfaces.push_back( this->parseTypeNode() );
 			}
 		}
-		
-		// Interface implementation: class Name implements Interface1, Interface2:
 		if( this->check( token::Type::KeywordImplements ) ) {
-			this->advance(); // consume 'implements'
+			this->advance();
 			declaration->interfaces.push_back( this->parseTypeNode() );
 			while( this->match( token::Type::Comma ) ) {
 				declaration->interfaces.push_back( this->parseTypeNode() );
 			}
 		}
-		
-		// Forward declaration: class X;
 		if( this->match( token::Type::Semicolon ) ) {
 			this->expectNewline( "class forward declaration" );
 			return declaration;
 		}
 		this->expect( token::Type::Colon, "expected ':' or ';' after class declaration" );
 		this->expectNewline( "class declaration" );
-		
-		// Class body
 		if( this->match( token::Type::Indent ) ) {
 			while( this->check( { token::Type::Dedent, token::Type::Eof }, false ) ) {
 				this->skipNewline();
@@ -614,8 +572,6 @@ namespace uranite::parser {
 					this->expectNewline( "use statement" );
 				}
 				else if( this->check( token::Type::Identifier ) || this->check( token::Type::Question ) ) {
-					
-					// Field: Type name [= value]  or ?Type name [= value]
 					ast::nodes::FieldDeclarationSharedPointer field = this->parseFieldDeclaration( memberAccess );
 					if( memberFinal ) {
 						field->isFinal = true;
@@ -641,8 +597,6 @@ namespace uranite::parser {
 	
 	ast::nodes::DeclarationSharedPointer Parser::parseDeclaration() {
 		ast::AccessModifier access = this->parseAccessModifier();
-		
-		// Check for modifiers before function
 		bool isAbstract = false;
 		bool isAsync = false;
 		bool isFinal = false;
@@ -785,7 +739,6 @@ namespace uranite::parser {
 			isVolatile = true;
 			this->advance();
 		}
-
 		std::function<std::vector<ast::nodes::InlineAssemblyOperand>()> parseOperandList = [&]() -> std::vector<ast::nodes::InlineAssemblyOperand> {
 			std::vector<ast::nodes::InlineAssemblyOperand> operands;
 			this->expect( token::Type::LeftParenthesis, "expected '(' after output/input" );
@@ -802,7 +755,6 @@ namespace uranite::parser {
 			this->expect( token::Type::RightParenthesis, "expected ')'" );
 			return operands;
 		};
-
 		std::function<void( std::vector<ast::nodes::InlineAssemblyOperand>&, std::vector<ast::nodes::InlineAssemblyOperand>&, std::vector<std::string>& )> parseAsmOperands =
 			[&]( std::vector<ast::nodes::InlineAssemblyOperand>& outputs, std::vector<ast::nodes::InlineAssemblyOperand>& inputs, std::vector<std::string>& clobbers ) {
 			if( this->check( token::Type::Colon ) ) {
@@ -835,7 +787,7 @@ namespace uranite::parser {
 				}
 			}
 		};
-
+		
 		// Arch block form: asm [volatile]:
 		//     <arch> "<template>" [: operands...]
 		//     <arch> "<template>" [: operands...]
@@ -843,17 +795,13 @@ namespace uranite::parser {
 			this->advance();
 			this->expectNewline( "asm arch block" );
 			this->match( token::Type::Indent );
-
 			std::vector<ast::nodes::InlineAssemblyArchVariant> archVariants;
-
 			while( this->check( { token::Type::Dedent, token::Type::Eof }, false ) ) {
 				this->skipNewline();
 				if( this->check( token::Type::Dedent ) ) {
 					break;
 				}
-
 				ast::nodes::InlineAssemblyArchVariant variant;
-
 				std::string archName = this->current().value;
 				this->expect( token::Type::Identifier, "expected architecture name (x86-64, aarch64, ...)" );
 				if( archName == "x86" && this->check( token::Type::Minus ) ) {
@@ -862,26 +810,19 @@ namespace uranite::parser {
 					this->expect( token::Type::LiteralInteger, "expected architecture suffix after 'x86-'" );
 				}
 				variant.targetArch = archName;
-
 				variant.asmTemplate = this->current().value;
 				this->expect( token::Type::LiteralString, "expected assembly template string" );
-
 				parseAsmOperands( variant.outputs, variant.inputs, variant.clobbers );
-
 				archVariants.push_back( std::move( variant ) );
 				this->skipNewline();
 			}
-
 			this->match( token::Type::Dedent );
-
 			return std::make_shared<ast::nodes::InlineAssemblyStatement>(
 				isVolatile,
 				std::move( archVariants ),
 				source
 			);
 		}
-
-		// Universal form: asm [volatile] "<template>" [: operands...]
 		std::string asmTemplate = this->current().value;
 		this->expect( token::Type::LiteralString, "expected assembly template string" );
 		std::vector<ast::nodes::InlineAssemblyOperand> outputs;
@@ -922,31 +863,22 @@ namespace uranite::parser {
 		ast::nodes::EnumDeclarationSharedPointer declaration = std::make_shared<ast::nodes::EnumDeclaration>( nameToken.value, nameToken.source );
 		declaration->access = access;
 		declaration->genericParameters = this->parseGenericParameters();
-		
-		// backed type: enum Color backed Integer:
 		if( this->match( token::Type::KeywordBacked ) ) {
 			declaration->backedType = this->parseTypeNode();
 		}
-		
-		// extends: enum Color backed Integer extends String:
 		if( this->match( token::Type::KeywordExtends ) ) {
 			declaration->baseClassType = this->parseTypeNode();
 		}
-		
-		// implements: enum Color backed Integer extends String implements Stringable:
 		if( this->match( token::Type::KeywordImplements ) ) {
 			do {
 				declaration->interfaces.push_back( this->parseTypeNode() );
 			}
 			while( this->match( token::Type::Comma ) );
 		}
-		
-		// Forward declaration: enum X;
 		if( this->match( token::Type::Semicolon ) ) {
 			this->expectNewline( "enum forward declaration" );
 			return declaration;
 		}
-		
 		this->expect( token::Type::Colon, "expected ':' or ';' after enum declaration" );
 		this->expectNewline( "enum declaration" );
 		std::function<ast::AccessModifier()> parseAccessModifier = [this]() -> ast::AccessModifier {
@@ -968,8 +900,6 @@ namespace uranite::parser {
 					break;
 				}
 				ast::AccessModifier memberAccess = parseAccessModifier();
-				
-				// Parse method modifiers (virtual, override, static, final, abstract)
 				bool memberAbstract = false;
 				bool memberFinal = false;
 				bool memberOverride = false;
@@ -998,12 +928,9 @@ namespace uranite::parser {
 					}
 					break;
 				}
-				
 				if( memberAbstract ) {
 					this->diagnostic.error( this->current().source, "enum methods cannot be abstract", "remove 'abstract' modifier" );
 				}
-				
-				// Enum-level methods: public function/property ...
 				if( this->check( token::Type::KeywordFunction ) || 
 					this->check( token::Type::KeywordProperty ) ) {
 					bool isProperty = this->check( token::Type::KeywordProperty );
@@ -1022,19 +949,13 @@ namespace uranite::parser {
 					}
 					declaration->methods.push_back( method );
 				}
-				
-				// Variant: unit NAME [value] [:block]
 				else if( this->match( token::Type::KeywordUnit ) ) {
 					lookup::SourceSharedPointer variableSource = this->current().source;
 					std::string variableName = this->expect( token::Type::Identifier, "expected variant name" ).value;
 					ast::nodes::EnumVariantSharedPointer variant = std::make_shared<ast::nodes::EnumVariantNode>( variableName, variableSource );
-					
-					// Backed value: unit OKE "oke"
 					if( this->check({ token::Type::KeywordFalse, token::Type::LiteralFloat, token::Type::LiteralInteger, token::Type::LiteralString, token::Type::KeywordTrue }) ) {
 						variant->backedValue = parseExpression();
 					}
-					
-					// Tuple-style variant: unit Variant(Type1, Type2)
 					if( this->match( token::Type::LeftParenthesis ) ) {
 						while( this->check( { token::Type::Eof, token::Type::RightParenthesis }, false ) ) {
 							variant->associatedTypes.push_back( this->parseTypeNode() );
@@ -1044,8 +965,6 @@ namespace uranite::parser {
 						}
 						this->expect( token::Type::RightParenthesis, "expected ')'" );
 					}
-					
-					// Per-variant methods block
 					if( this->match( token::Type::Colon ) ) {
 						this->expectNewline( "variant body" );
 						if( this->match( token::Type::Indent ) ) {
@@ -1111,7 +1030,6 @@ namespace uranite::parser {
 					}
 					declaration->variants.push_back( variant );
 				}
-				
 				else if( this->check( token::Type::Identifier ) ) {
 					std::string hintMessage( fmt::format( "use 'unit {}' to declare an enum variant", this->current().value ) );
 					this->diagnostic.error( this->current().source, "enum variants must be declared with 'unit' keyword", hintMessage );
@@ -1128,8 +1046,6 @@ namespace uranite::parser {
 		lookup::SourceSharedPointer source = this->current().source;
 		this->expect( token::Type::KeywordExport, "" );
 		ast::nodes::ExportDeclarationSharedPointer declaration = std::make_shared<ast::nodes::ExportDeclaration>( source );
-		
-		// export { Foo, Bar as Baz }
 		if( this->match( token::Type::LeftBrace ) ) {
 			std::function<void()> skipWhitespace = [this]() {
 				while( this->check({ token::Type::Dedent, token::Type::Indent, token::Type::Newline }) ) {
@@ -1151,8 +1067,6 @@ namespace uranite::parser {
 			this->skipNewline();
 			return declaration;
 		}
-		
-		// export declaration (function, class, etc.)
 		ast::nodes::DeclarationSharedPointer innerDeclaration = this->parseDeclaration();
 		if( innerDeclaration ) {
 			innerDeclaration->access = ast::AccessModifier::Public;
@@ -1185,21 +1099,15 @@ namespace uranite::parser {
 	
 	ast::nodes::ExternDeclarationSharedPointer Parser::parseExternDeclaration() {
 		this->expect( token::Type::KeywordExtern, "" );
-		
-		// extern function name(Type parameter, Type parameter, ...) -> ReturnType
 		this->expect( token::Type::KeywordFunction, "expected 'function' after 'extern'" );
 		token::Token nameToken = this->expect( token::Type::Identifier, "expected function name" );
 		ast::nodes::ExternDeclarationSharedPointer declaration = std::make_shared<ast::nodes::ExternDeclaration>( nameToken.value, nameToken.source );
-		
-		// Optional link name: extern function name as "c_name"
 		if( this->match( token::Type::KeywordAs ) ) {
 			declaration->linkName = this->expect( token::Type::LiteralString, "expected link name string" ).value;
 		}
 		this->expect( token::Type::LeftParenthesis, "expected '(' after extern function name" );
 		if( this->check( token::Type::RightParenthesis, false ) ) {
 			do {
-				
-				// Check for variableiadic ...
 				if( this->match( token::Type::Ellipsis ) ) {
 					declaration->isVariadic = true;
 					break;
@@ -1217,10 +1125,7 @@ namespace uranite::parser {
 		if( this->match( token::Type::Arrow ) ) {
 			declaration->returnType = this->parseTypeNode();
 		}
-		
-		// Extern declarations end with semicolon
 		if( this->match( token::Type::Semicolon, false ) ) {
-			// Allow newline for backward compatibility but prefer semicolon
 		}
 		this->expectNewline( "extern declaration" );
 		return declaration;
@@ -1228,8 +1133,6 @@ namespace uranite::parser {
 	
 	ast::nodes::FieldDeclarationSharedPointer Parser::parseFieldDeclaration( ast::AccessModifier access ) {
 		lookup::SourceSharedPointer source = this->current().source;
-		
-		// Java-style field: Type name [= value]
 		ast::nodes::TypeNodeSharedPointer type = this->parseTypeNode();
 		std::string name = this->expect( token::Type::Identifier, "expected field name" ).value;
 		ast::nodes::FieldDeclarationSharedPointer field = std::make_shared<ast::nodes::FieldDeclarationNode>( name, type, source );
@@ -1252,7 +1155,6 @@ namespace uranite::parser {
 		
 		ast::nodes::TypeNodeSharedPointer variableType = nullptr;
 		std::string variable;
-		
 		if( this->check( token::Type::Identifier ) && 
 			this->peek().type == token::Type::Identifier ) {
 			variableType = this->parseTypeNode();
@@ -1270,16 +1172,12 @@ namespace uranite::parser {
 		else {
 			variable = this->expect( token::Type::Identifier, "expected loop variable" ).value;
 		}
-		
-		// C-style for: for [Type] variable = init; condition; update:
 		if( this->check( token::Type::Assignment ) ) {
-			this->advance(); // consume =
+			this->advance();
 			ast::nodes::ExpressionSharedPointer init = this->parseExpression();
 			this->expect( token::Type::Semicolon, "expected ';' after for initializer" );
 			ast::nodes::ExpressionSharedPointer condition = this->parseExpression();
 			this->expect( token::Type::Semicolon, "expected ';' after for condition" );
-			
-			// Parse update as an assignment: variable op= expression, or variable++/variable--
 			ast::nodes::ExpressionSharedPointer updateTarget = this->parseExpression();
 			ast::nodes::StatementSharedPointer update;
 			if( this->check({ token::Type::Decrement, token::Type::Increment }) ) {
@@ -1313,8 +1211,6 @@ namespace uranite::parser {
 			forStatement->update = update;
 			return forStatement;
 		}
-		
-		// Multi-variable for-in: for Type1 k, Type2 v in expression:
 		ast::nodes::TypeNodeSharedPointer variableType2 = nullptr;
 		std::string variable2;
 		if( this->match( token::Type::Comma ) ) {
@@ -1327,8 +1223,6 @@ namespace uranite::parser {
 				variable2 = this->expect( token::Type::Identifier, "expected second loop variable" ).value;
 			}
 		}
-		
-		// Range-based for: for [Type] variable in expression:
 		this->expect( token::Type::KeywordIn, "expected 'in' after loop variable" );
 		ast::nodes::ExpressionSharedPointer iterable = this->parseExpression();
 		this->expect( token::Type::Colon, "expected ':' after for loop header" );
@@ -1352,37 +1246,25 @@ namespace uranite::parser {
 		declaration->isOverride = isOverrideFunction;
 		declaration->isAbstract = isAbstractFunction;
 		declaration->isStatic = isStaticFunction;
-		
-		// Generic parameters
 		declaration->genericParameters = this->parseGenericParameters();
-		
-		// Parameters
 		this->expect( token::Type::LeftParenthesis, "expected '(' after function name" );
 		declaration->parameters = this->parseFunctionParameters();
 		this->expect( token::Type::RightParenthesis, "expected ')' after parameters" );
-		
-		// Return type
 		if( this->match( token::Type::Arrow ) ) {
 			declaration->returnType = this->parseTypeNode();
 		}
-		
-		// Raises clause: raises ExceptionType|AnotherException
 		if( this->check( token::Type::KeywordRaises ) ) {
-			this->advance(); // consume 'raises'
+			this->advance();
 			declaration->raisesTypes.push_back( this->parseTypeNode() );
 			while( this->match( token::Type::Pipe ) ) {
 				declaration->raisesTypes.push_back( this->parseTypeNode() );
 			}
 		}
-		
-		// Abstract declaration ending with semicolon (interface methods)
 		if( this->match( token::Type::Semicolon ) ) {
 			this->expectNewline( "abstract method declaration" );
 			declaration->isAbstract = true;
 			return declaration;
 		}
-		
-		// Colon before body block (Python-style)
 		if( this->match( token::Type::Colon ) ) {
 			this->expectNewline( "function signature" );
 			if( isAbstractFunction == false && this->match( token::Type::Indent ) ) {
@@ -1404,7 +1286,6 @@ namespace uranite::parser {
 			}
 		}
 		else if( isAbstractFunction || this->check({ token::Type::Eof, token::Type::Newline }) ) {
-			// Abstract or forward declaration (no body, no colon required)
 			this->expectNewline( "function signature" );
 		}
 		return declaration;
@@ -1412,28 +1293,21 @@ namespace uranite::parser {
 	
 	ast::nodes::FunctionParameterSharedPointer Parser::parseFunctionParameter() {
 		lookup::SourceSharedPointer source = this->current().source;
-		
-		// self parameter
 		if( this->check( token::Type::KeywordSelf ) ) {
 			this->advance();
 			ast::nodes::FunctionParameterSharedPointer parameter = std::make_shared<ast::nodes::FunctionParameterNode>( "self", nullptr, source );
 			parameter->isSelf = true;
 			return parameter;
 		}
-		
-		// &self parameter
 		if( this->check( token::Type::Ampersand ) && 
 			this->peek().type == token::Type::KeywordSelf ) {
-			this->advance(); // &
-			this->advance(); // self
+			this->advance();
+			this->advance();
 			ast::nodes::FunctionParameterSharedPointer parameter = std::make_shared<ast::nodes::FunctionParameterNode>( "self", nullptr, source );
 			parameter->isSelf = true;
 			parameter->isReference = true;
 			return parameter;
 		}
-		
-		// Check for property declaration in constructor: private/public/protect Type name
-		// Also supports Readonly: public Readonly Type name
 		ast::AccessModifier propertyAccess = ast::AccessModifier::Default;
 		bool isProperty = false;
 		bool propertyReadonly = false;
@@ -1450,16 +1324,12 @@ namespace uranite::parser {
 				propertyAccess = ast::AccessModifier::Protect;
 			}
 			this->advance();
-			
-			// Check for Readonly after access modifier
 			if( this->match( token::Type::KeywordReadonly ) ) {
 				propertyReadonly = true;
 			}
 			isProperty = true;
 		}
 		bool isMutable = this->match( token::Type::KeywordMutable );
-		
-		// Java-style: Type name  or  Type name[]
 		ast::nodes::TypeNodeSharedPointer type = this->parseTypeNode();
 		std::string name = this->expect( token::Type::Identifier, "expected parameter name" ).value;
 		bool paramIsVariadic = false;
@@ -1484,8 +1354,6 @@ namespace uranite::parser {
 		parameter->isProperty = isProperty;
 		parameter->propertyAccess = propertyAccess;
 		parameter->isReadonly = propertyReadonly;
-		
-		// Default value
 		if( this->match( token::Type::Assignment ) ) {
 			parameter->defaultValue = this->parseExpression();
 		}
@@ -1501,7 +1369,6 @@ namespace uranite::parser {
 			parameters.push_back( this->parseFunctionParameter() );
 		}
 		while( this->match( token::Type::Comma ) );
-		
 		bool hasVariadic = false;
 		bool hasKeyword = false;
 		for( size_t i = 0; i < parameters.size(); i++ ) {
@@ -1551,16 +1418,12 @@ namespace uranite::parser {
 			lookup::SourceSharedPointer source = this->current().source;
 			std::string name = this->expect( token::Type::Identifier, "expected generic parameter name" ).value;
 			ast::nodes::GenericParameterSharedPointer parameter = std::make_shared<ast::nodes::GenericParameterNode>( name, source );
-			
-			// Constraints: T: Interface1 + Interface2
 			if( this->match( token::Type::Colon ) ) {
 				parameter->constraints.push_back( this->parseTypeNode() );
 				while( this->match( token::Type::Plus ) ) {
 					parameter->constraints.push_back( this->parseTypeNode() );
 				}
 			}
-			
-			// Default type: T = DefaultType
 			if( this->match( token::Type::Assignment ) ) {
 				parameter->defaultType = this->parseTypeNode();
 			}
@@ -1581,8 +1444,6 @@ namespace uranite::parser {
 		this->expectNewline( "if condition" );
 		std::vector<ast::nodes::StatementSharedPointer> body = this->parseStatementBlock();
 		ast::nodes::IfStatementSharedPointer statement = std::make_shared<ast::nodes::IfStatement>( condition, std::move( body ), source );
-		
-		// Elif branches
 		while( this->check( token::Type::KeywordElif ) ) {
 			this->advance();
 			ast::nodes::ExpressionSharedPointer elifCondition = this->parseExpression();
@@ -1591,8 +1452,6 @@ namespace uranite::parser {
 			std::vector<ast::nodes::StatementSharedPointer> elifBody = this->parseStatementBlock();
 			statement->elifBranches.emplace_back( elifCondition, std::move( elifBody ) );
 		}
-		
-		// Else branch
 		if( this->match( token::Type::KeywordElse ) ) {
 			this->expect( token::Type::Colon, "expected ':' after else" );
 			this->expectNewline( "else" );
@@ -1607,8 +1466,6 @@ namespace uranite::parser {
 		ast::nodes::ImplementDeclarationSharedPointer declaration = std::make_shared<ast::nodes::ImplementDeclaration>( source );
 		declaration->genericParameters = this->parseGenericParameters();
 		ast::nodes::TypeNodeSharedPointer type = this->parseTypeNode();
-		
-		// implement Interface for Type:
 		if( this->match( token::Type::KeywordFor ) ) {
 			declaration->interfaceType = type;
 			declaration->targetType = this->parseTypeNode();
@@ -1616,8 +1473,6 @@ namespace uranite::parser {
 		else {
 			declaration->targetType = type;
 		}
-		
-		// Colon before block
 		this->expect( token::Type::Colon, "expected ':' after impl declaration" );
 		this->expectNewline( "impl declaration" );
 		if( this->match( token::Type::Indent ) ) {
@@ -1637,9 +1492,6 @@ namespace uranite::parser {
 	
 	ast::nodes::ImportDeclarationSharedPointer Parser::parseImportDeclaration() {
 		lookup::SourceSharedPointer source = this->current().source;
-		
-		// Helper: consume a token as a path segment (identifiers and keywords are both valid)
-		// Also consumes hyphenated continuations: control-flow → "control-flow"
 		std::function<std::string( const std::string& )> expectPathSegment = [this]( const std::string& hint ) -> std::string {
 			const token::Token& token = this->current();
 			std::string value;
@@ -1667,8 +1519,6 @@ namespace uranite::parser {
 			}
 			return value;
 		};
-		
-		// from module.submodule import ...
 		if( this->match( token::Type::KeywordFrom ) ) {
 			std::vector<std::string> pathname;
 			pathname.push_back( expectPathSegment( "expected module path" ) );
@@ -1678,15 +1528,11 @@ namespace uranite::parser {
 			this->expect( token::Type::KeywordImport, "expected 'import' after module path" );
 			ast::nodes::ImportDeclarationSharedPointer declaration = std::make_shared<ast::nodes::ImportDeclaration>( std::move( pathname ), source );
 			declaration->isFromImport = true;
-			
-			// from x.y import *
 			if( this->match( token::Type::Star ) ) {
 				this->expectNewline( "import declaration" );
 				declaration->importAll = true;
 				return declaration;
 			}
-			
-			// from x.y import { Module, Module2 as m, ... }
 			if( this->match( token::Type::LeftBrace ) ) {
 				this->skipNewline();
 				this->match( token::Type::Indent );
@@ -1711,8 +1557,6 @@ namespace uranite::parser {
 				this->expectNewline( "import declaration" );
 				return declaration;
 			}
-			
-			// from x.y import Module, Module2, Module3 as m
 			do {
 				ast::nodes::ImportItem item;
 				item.name = this->expect( token::Type::Identifier, "expected import name" ).value;
@@ -1725,11 +1569,7 @@ namespace uranite::parser {
 			this->expectNewline( "import declaration" );
 			return declaration;
 		}
-		
-		// import module.submodule
-		// import module.submodule as sm
 		this->expect( token::Type::KeywordImport, "" );
-		
 		std::vector<std::string> pathname;
 		pathname.push_back( expectPathSegment( "expected import path" ) );
 		while( this->match( token::Type::Dot ) ) {
@@ -1749,14 +1589,10 @@ namespace uranite::parser {
 		ast::nodes::InterfaceDeclarationSharedPointer declaration = std::make_shared<ast::nodes::InterfaceDeclaration>( nameToken.value, nameToken.source );
 		declaration->access = access;
 		declaration->genericParameters = this->parseGenericParameters();
-		
-		// Forward declaration: interface X;
 		if( this->match( token::Type::Semicolon ) ) {
 			this->expectNewline( "interface forward declaration" );
 			return declaration;
 		}
-		
-		// Super interfaces via extends/implements keywords
 		if( this->check( token::Type::KeywordExtends ) || 
 			this->check( token::Type::KeywordImplements ) ) {
 			this->advance();
@@ -1765,18 +1601,12 @@ namespace uranite::parser {
 				declaration->superInterfaces.push_back( this->parseTypeNode() );
 			}
 		}
-		
-		// Colon: either for super interfaces list or block start
 		if( this->match( token::Type::Colon ) ) {
-			
-			// Check if followed by a type (super interfaces) or newline (block start)
 			if( this->check( { token::Type::Newline, token::Type::Eof }, false ) ) {
 				declaration->superInterfaces.push_back( this->parseTypeNode() );
 				while( this->match( token::Type::Comma ) ) {
 					declaration->superInterfaces.push_back( this->parseTypeNode() );
 				}
-				
-				// Expect another colon for block start
 				this->expect( token::Type::Colon, "expected ':' after interface declaration" );
 			}
 		}
@@ -1825,8 +1655,6 @@ namespace uranite::parser {
 	
 	ast::nodes::ExpressionSharedPointer Parser::parseLambdaExpression() {
 		lookup::SourceSharedPointer source = this->current().source;
-		
-		// lambda syntax: lambda [final] Type name[, Type name ...]: expression
 		if( this->match( token::Type::KeywordLambda ) ) {
 			std::vector<ast::nodes::FunctionParameterSharedPointer> parameters;
 			do {
@@ -1844,8 +1672,6 @@ namespace uranite::parser {
 			std::vector<ast::nodes::StatementSharedPointer> body({ returnStatement });
 			return std::make_shared<ast::nodes::LambdaExpression>( std::move( parameters ), nullptr, std::move( body ), source );
 		}
-		
-		// function-style lambda: function( parameters ) -> Type: body
 		this->expect( token::Type::KeywordFunction, "" );
 		this->expect( token::Type::LeftParenthesis, "expected '(' in lambda" );
 		std::vector<ast::nodes::FunctionParameterSharedPointer> parameters = this->parseFunctionParameters();
@@ -1854,8 +1680,6 @@ namespace uranite::parser {
 		if( this->match( token::Type::Arrow ) ) {
 			returnType = this->parseTypeNode();
 		}
-		
-		// Single-expression body with colon
 		if( this->match( token::Type::Colon ) ) {
 			if( this->check( { token::Type::Indent, token::Type::Newline }, false ) ) {
 				ast::nodes::ExpressionSharedPointer expression = this->parseExpression();
@@ -1905,12 +1729,6 @@ namespace uranite::parser {
 		);
 	}
 	
-	// ast::nodes::StatementSharedPointer Parser::parseMatchStatement() {
-	// }
-	
-	// ast::nodes::DeclarationSharedPointer Parser::parseMethodDeclaration( ast::AccessModifier access ) {
-	// }
-	
 	ast::nodes::ModuleDeclarationSharedPointer Parser::parseModuleDeclaration() {
 		lookup::SourceSharedPointer source = this->current().source;
 		this->expect( token::Type::KeywordPackage, "" );
@@ -1925,8 +1743,6 @@ namespace uranite::parser {
 				name = this->expect( token::Type::Identifier, "expected package name" ).value;
 			}
 		}
-		
-		// Allow hyphenated segments: control-flow → "control-flow", x86-64 → "x86-64", test-case → "test-case"
 		while( this->check( token::Type::Minus ) && ( this->peek().type == token::Type::Identifier || this->peek().type == token::Type::LiteralInteger || ( this->peek().type >= token::Type::KeywordIf && this->peek().type <= token::Type::KeywordExport ) ) ) {
 			this->advance();
 			const token::Token& segToken = this->current();
@@ -1942,8 +1758,6 @@ namespace uranite::parser {
 				name+= "-" + this->expect( token::Type::Identifier, "expected package name segment" ).value;
 			}
 		}
-		
-		// Allow dotted package names
 		while( this->match( token::Type::Dot ) ) {
 			std::string segment;
 			{
@@ -2018,12 +1832,10 @@ namespace uranite::parser {
 			else if( this->check( token::Type::Dot ) ) {
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
-				
 				std::string member;
 				if( this->check( token::Type::Identifier ) ) {
 					member = this->advance().value;
 				}
-				
 				if( this->check( token::Type::LeftParenthesis ) ) {
 					this->advance();
 					std::vector<ast::nodes::ExpressionSharedPointer> arguments;
@@ -2066,16 +1878,12 @@ namespace uranite::parser {
 				expression = std::make_shared<ast::nodes::IndexExpression>( expression, index, source );
 			}
 			else if( this->check( token::Type::DoubleColon ) ) {
-				
-				// Static method access: Type::method
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
-				
 				std::string member;
 				if( this->check( token::Type::Identifier ) ) {
 					member = this->advance().value;
 				}
-				
 				if( this->check( token::Type::LeftParenthesis ) ) {
 					this->advance();
 					std::vector<ast::nodes::ExpressionSharedPointer> arguments;
@@ -2093,8 +1901,6 @@ namespace uranite::parser {
 				}
 			}
 			else if( this->check( token::Type::Question ) ) {
-				
-				// Error propertyagation: expression?
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
 				expression = std::make_shared<ast::nodes::UnaryExpression>( token::Type::Question, expression, false, source );
@@ -2117,8 +1923,6 @@ namespace uranite::parser {
 			if( precedence < minimumPrecedence ) {
 				break;
 			}
-			
-			// Handle 'as' cast specially
 			if( kind == token::Type::KeywordAs ) {
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
@@ -2126,8 +1930,6 @@ namespace uranite::parser {
 				left = std::make_shared<ast::nodes::CastExpression>( left, type, source );
 				continue;
 			}
-			
-			// Handle 'instanceof': expression instanceof Type
 			if( kind == token::Type::KeywordInstanceOf ) {
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
@@ -2135,8 +1937,6 @@ namespace uranite::parser {
 				left = std::make_shared<ast::nodes::InstanceofExpression>( left, type, source );
 				continue;
 			}
-			
-			// Handle 'subclassof': TypeExpression subclassof Type
 			if( kind == token::Type::KeywordSubclassOf ) {
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
@@ -2151,18 +1951,13 @@ namespace uranite::parser {
 				);
 				continue;
 			}
-			
 			lookup::SourceSharedPointer source = this->current().source;
 			this->advance();
-			
-			// Handle 'is not' compound operator: x is not Y → not (x is Y)
 			bool isNegated = false;
 			if( kind == token::Type::KeywordIs && this->current().type == token::Type::KeywordNot ) {
 				isNegated = true;
 				this->advance();
 			}
-			
-			// Right-associative for POWER
 			int nextMinPrecedence = ( kind == token::Type::Power ) ? precedence : precedence + 1;
 			ast::nodes::ExpressionSharedPointer right = this->parsePrecedenceExpression( nextMinPrecedence );
 			left = std::make_shared<ast::nodes::BinaryExpression>( kind, left, right, source );
@@ -2170,8 +1965,6 @@ namespace uranite::parser {
 				left = std::make_shared<ast::nodes::UnaryExpression>( token::Type::KeywordNot, left, true, source );
 			}
 		}
-		
-		// Range expressions
 		if( this->check( token::Type::DoubleDot ) || 
 			this->check( token::Type::Ellipsis ) ) {
 			bool inclusive = this->check( token::Type::Ellipsis );
@@ -2301,8 +2094,6 @@ namespace uranite::parser {
 					value = std::stoll( raw.substr( 2 ), nullptr, 8 );
 				}
 				else {
-					
-					// Remove type suffix if present
 					std::string numericString;
 					for( char character : raw ) {
 						if( std::isdigit( character ) || character == '-' ) {
@@ -2339,7 +2130,7 @@ namespace uranite::parser {
 	
 	ast::nodes::StatementSharedPointer Parser::parseReturnStatement() {
 		lookup::SourceSharedPointer returnSource = this->current().source;
-		this->advance(); // consume the 'return' keyword to begin parsing the optional return value expression
+		this->advance();
 		ast::nodes::ExpressionSharedPointer returnValue;
 		if( this->check( { token::Type::Dedent, token::Type::Eof, token::Type::Newline }, false ) ) {
 			returnValue = this->parseExpression();
@@ -2357,8 +2148,6 @@ namespace uranite::parser {
 				return this->parseReturnStatement();
 			case token::Type::KeywordIf:
 				return this->parseIfStatement();
-			// case token::Type::KeywordMatch (Removed because we've switch right now. Match statements have been fully deprecedenceated in favor of standard switch cases which offer better control flow and code readability.):
-			// 	return this->parseMatchStatement();
 			case token::Type::KeywordSwitch:
 				return this->parseSwitchStatement();
 			case token::Type::KeywordFor:
@@ -2383,7 +2172,7 @@ namespace uranite::parser {
 				return this->parseDeferStatement();
 			case token::Type::KeywordDelete: {
 				lookup::SourceSharedPointer deleteSource = this->current().source;
-				this->advance(); // consume 'delete' token and proceed to evaluate the target expression memory cleanup
+				this->advance();
 				ast::nodes::ExpressionSharedPointer parsedExpression = this->parseExpression();
 				this->expectNewline( "delete statement" );
 				return std::make_shared<ast::nodes::DeleteStatement>( parsedExpression, deleteSource );
@@ -2404,7 +2193,7 @@ namespace uranite::parser {
 			}
 			case token::Type::KeywordRaise: {
 				lookup::SourceSharedPointer raiseSource = this->current().source;
-				this->advance(); // consume 'raise' keyword and begin extracting the thrown exception expression
+				this->advance();
 				ast::nodes::ExpressionSharedPointer thrownExpression = this->parseExpression();
 				this->expectNewline( "raise statement" );
 				return std::make_shared<ast::nodes::ThrowStatement>( thrownExpression, raiseSource );
@@ -2435,15 +2224,10 @@ namespace uranite::parser {
 					
 					( void ) accessModifier; // access modifiers on local variables are parsed but not used in the final AST emission phase at this scope
 					
-					// Check for const keyword to determine mutability
 					if( this->check( token::Type::KeywordConstant ) ) {
 						isConstVariable = true;
 						this->advance();
 					}
-					
-					// Try to parse as "Type name" pattern
-					// Type can be: identifier, primitive type, identifier<...> (generic),
-					// ?Type (nullable), Callable<R, <P...>>, Meta<T>
 					bool isNullablePrefix = this->check( token::Type::Question );
 					if( isNullablePrefix || this->check( token::Type::Identifier ) ) {
 						size_t typeStartPosition = this->position;
@@ -2453,14 +2237,9 @@ namespace uranite::parser {
 						if( this->check( token::Type::Identifier ) ) {
 							this->advance();
 						}
-						
-						// Skip generic arguments if present: <...>
-						// Handle >> as two closing > (for nested generics like Callable<I64, <I64, I64>>)
 						if( this->check( token::Type::LessThan ) ) {
 							int genericDepth = 1;
 							this->advance();
-							
-							// Condition sorted alphabetically: genericDepth < this->isAtEnd
 							while( ( genericDepth > 0 ) && ( this->isAtEnd( false ) ) ) {
 								if( this->check( token::Type::LessThan ) ) {
 									genericDepth++;
@@ -2474,13 +2253,10 @@ namespace uranite::parser {
 								this->advance();
 							}
 						}
-						
-						// Condition sorted alphabetically: this->check < this->peek
 						if( this->check( token::Type::LeftBracket ) && ( this->peek( 1 ).type == token::Type::RightBracket ) ) {
 							this->advance();
 							this->advance();
 						}
-						
 						if( this->check( token::Type::Identifier ) ) {
 							this->position = typeStartPosition;
 							ast::nodes::TypeNodeSharedPointer parsedTypeNode = this->parseTypeNode();
@@ -2489,8 +2265,6 @@ namespace uranite::parser {
 							if( this->match( token::Type::Assignment ) ) {
 								initializationExpression = this->parseExpression();
 							}
-							
-							// Block-producing expressions (lambda with body) already consumed DEDENT
 							if( ( initializationExpression == nullptr ) || ( initializationExpression->kind != ast::Node::Kind::LambdaExpression ) ) {
 								this->expectNewline( "variable declaration" );
 							}
@@ -2505,21 +2279,14 @@ namespace uranite::parser {
 							return variableStatement;
 						}
 					}
-					
-					// Not a valid variable declaration pattern detected, backtrack
-					// the parser position to safely attempt other statement types
 					this->position = savedPosition;
 				}
-				
-				// Fallback to parsing an expression statement or a potential assignment operation
 				ast::nodes::ExpressionSharedPointer fallbackExpression = this->parseExpression();
 				if( fallbackExpression == nullptr ) {
 					this->diagnostic.error( this->current().source, "expected statement" );
 					this->advance();
 					return nullptr;
 				}
-				
-				// Check if the current token is a valid assignment operator
 				if( this->current().isAssignment() ) {
 					lookup::SourceSharedPointer assignmentSource = this->current().source;
 					token::Type assignmentOperator = this->current().type;
@@ -2528,9 +2295,6 @@ namespace uranite::parser {
 					this->expectNewline( "assignment" );
 					return std::make_shared<ast::nodes::AssignStatement>( fallbackExpression, assignmentOperator, rightHandSideValue, assignmentSource );
 				}
-				
-				// Desugar postfix increment (i++) to addition assignment (i+= 1) and decrement (i--) to subtraction assignment (i -= 1) for simplified AST evaluation
-				// Condition sorted alphabetically: Decrement < Increment
 				if( this->check( token::Type::Decrement ) || this->check( token::Type::Increment ) ) {
 					lookup::SourceSharedPointer mutationSource = this->current().source;
 					token::Type mutationOperator;
@@ -2801,17 +2565,10 @@ namespace uranite::parser {
 		while( this->check( token::Type::KeywordExcept ) ) {
 			ast::nodes::ExceptionClause exceptionClause;
 			exceptionClause.source = this->current().source;
-			this->advance(); // consume 'except'
-			
-			// Exception Type Resolution: If an identifier follows 'except', it represents 
-			// a specific error type or a union of multiple types separated by the pipe operator.
+			this->advance();
 			if( this->check( token::Type::Identifier ) ) {
-				
-				// First exception type
 				exceptionClause.exceptionTypes.push_back( std::make_shared<ast::nodes::SimpleTypeNode>( this->current().value, this->current().source ) );
 				this->advance();
-				
-				// Additional exception types: except ExA|ExB
 				while( this->match( token::Type::Pipe ) ) {
 					if( this->check( token::Type::Identifier, false ) ) {
 						this->diagnostic.error( this->current().source, "expected exception type after '|'" );
@@ -2821,25 +2578,16 @@ namespace uranite::parser {
 					this->advance();
 				}
 			}
-			
-			// Variable Binding: The 'as' keyword allows the caught exception instance 
-			// to be bound to a specific local variable name for use within the catch block.
 			if( this->match( token::Type::KeywordAs ) ) {
 				exceptionClause.variableName = this->expect( token::Type::Identifier, "expected variable name after 'as'" ).value;
 			}
-			
-			// Clause Completion: Each except header must terminate with a colon and newline
-			// before the indented statement block containing the recovery logic begins.
 			this->expect( token::Type::Colon, "expected ':' after except clause" );
 			this->expectNewline( "except block" );
 			exceptionClause.body = this->parseStatementBlock();
 			tryStatement->exceptionClauses.push_back( std::move( exceptionClause ) );
 		}
-		
-		// Parse optional finally block: This block is guaranteed to execute regardless 
-		// of whether an exception was raised or caught, typically used for resource cleanup.
 		if( this->check( token::Type::KeywordFinally ) ) {
-			this->advance(); // consume 'finally'
+			this->advance();
 			this->expect( token::Type::Colon, "expected ':' after 'finally'" );
 			this->expectNewline( "finally block" );
 			tryStatement->finallyBody = this->parseStatementBlock();
@@ -2862,18 +2610,12 @@ namespace uranite::parser {
 	}
 	
 	ast::nodes::TypeNodeSharedPointer Parser::parseTypeNode() {
-		
-		// Optional type prefix: ?Type (nullable): This branch handles the prefix notation 
-		// for optional types, allowing types to be declared as nullable using a leading question mark.
 		if( this->check( token::Type::Question ) ) {
 			lookup::SourceSharedPointer prefixSource = this->current().source;
 			this->advance();
 			ast::nodes::TypeNodeSharedPointer innerType = this->parseBaseTypeNode();
 			return std::make_shared<ast::nodes::OptionalTypeNode>( innerType, prefixSource );
 		}
-		
-		// Union type: Type1 | Type2 | Type3: This logic processes the bitwise-pipe symbol 
-		// to construct a union type node, representing a value that could be any of the specified types.
 		ast::nodes::TypeNodeSharedPointer baseType = this->parseBaseTypeNode();
 		if( this->check( token::Type::Pipe ) ) {
 			lookup::SourceSharedPointer unionSource = baseType->source;
@@ -2884,9 +2626,6 @@ namespace uranite::parser {
 			}
 			baseType = std::make_shared<ast::nodes::UnionTypeNode>( std::move( memberTypes ), unionSource );
 		}
-		
-		// Optional type suffix: Type? (also supported): Provides compatibility for 
-		// trailing question mark notation to indicate a nullable type, wrapping the existing type node.
 		if( this->check( token::Type::Question ) ) {
 			lookup::SourceSharedPointer suffixSource = this->current().source;
 			this->advance();
@@ -2901,7 +2640,7 @@ namespace uranite::parser {
 			case token::Type::Ampersand: {
 				this->advance();
 				bool isMutable = this->match( token::Type::KeywordMutable );
-				( void ) isMutable; // Note: stored in type info later
+				( void ) isMutable;
 				return std::make_shared<ast::nodes::UnaryExpression>( token::Type::Ampersand, this->parseUnaryExpression(), true, unarySource );
 			}
 			case token::Type::Bang:

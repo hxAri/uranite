@@ -17,57 +17,37 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertGreaterThan, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Functions Externs Tests ===" )
-
-    # printf
+    putsln( "Functions Externs Tests" )
     printf( "printf: %d %s %f\n", 42, "hello", 3.14 )
     putsln( "printf OK" )
-
-    # puts
     puts( "puts: ok" )
     putsln( "puts OK" )
-
-    # strlen
     I64 len = strlen( "Hello, World!" )
     assertEqualI64( 13, len, "strlen Hello World" )
     putsln( "strlen OK" )
-
-    # strcmp (equal)
     I32 cmpEq = strcmp( "abc", "abc" )
     assertEqualI64( 0, cmpEq as I64, "strcmp equal" )
     putsln( "strcmp equal OK" )
-
-    # strcmp (less)
     I32 cmpLt = strcmp( "abc", "def" )
     assertTrue( cmpLt < 0, "strcmp less" )
     putsln( "strcmp less OK" )
-
-    # strcmp (greater)
     I32 cmpGt = strcmp( "def", "abc" )
     assertTrue( cmpGt > 0, "strcmp greater" )
     putsln( "strcmp greater OK" )
-
-    # malloc + memset + free
     I64 ptr = malloc( 64 ) as I64
     assertGreaterThan( ptr, 0, "malloc not null" )
     memset( ptr as *Void, 0, 64 )
     free( ptr as *Void )
     putsln( "malloc+memset+free OK" )
-
-    # calloc
     I64 cptr = calloc( 10, 8 ) as I64
     assertGreaterThan( cptr, 0, "calloc not null" )
     free( cptr as *Void )
     putsln( "calloc OK" )
-
-    # realloc
     I64 rptr = malloc( 32 ) as I64
     rptr = realloc( rptr as *Void, 128 ) as I64
     assertGreaterThan( rptr, 0, "realloc not null" )
     free( rptr as *Void )
     putsln( "realloc OK" )
-
-    # memcpy
     I64 src = malloc( 16 ) as I64
     I64 dst = malloc( 16 ) as I64
     memset( src as *Void, 65, 16 )
@@ -75,10 +55,7 @@ public function main() -> I32:
     free( src as *Void )
     free( dst as *Void )
     putsln( "memcpy OK" )
-
-    # clock
     I64 t = clock()
     putsln( "clock OK" )
-
-    putsln( "=== All extern function tests passed ===" )
+    putsln( "All extern function tests passed" )
     return 0

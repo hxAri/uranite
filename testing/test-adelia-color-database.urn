@@ -6,48 +6,30 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertGreaterThan, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Adelia ColorDatabase Tests ===" )
-
+    putsln( "Adelia ColorDatabase Tests" )
     ColorDatabase db = new ColorDatabase()
-
-    # count
     assertGreaterThan( db.count, 0, "count > 0" )
     putsln( "count OK" )
-
-    # nameForHex (Red = 0xFF0000 = 16711680)
     String redName = db.nameForHex( 16711680 )
     assertEqualStr( "Red", redName, "nameForHex red" )
     putsln( "nameForHex red OK" )
-
-    # nameForHex (Black = 0)
     String blackName = db.nameForHex( 0 )
     assertEqualStr( "Black", blackName, "nameForHex black" )
     putsln( "nameForHex black OK" )
-
-    # nameForHex no match
     String noMatch = db.nameForHex( 123456 )
     assertTrue( noMatch != "Red", "no match not Red" )
     putsln( "nameForHex noMatch OK" )
-
-    # hexForName
     I32 redHex = db.hexForName( "Red" )
     assertEqualI64( 16711680, redHex as I64, "hexForName Red" )
     putsln( "hexForName OK" )
-
-    # closestName
     String closest = db.closestName( 16720000 )
     assertTrue( closest != "", "closestName not empty" )
     putsln( "closestName OK" )
-
-    # closestEntry
     ColorNameEntry entry = db.closestEntry( 19273 )
     assertTrue( entry.name != "", "closestEntry name" )
     putsln( "closestEntry OK" )
-
-    # closestName white
     String whiteClosest = db.closestName( 16777215 )
     assertEqualStr( "White", whiteClosest, "closestName white" )
     putsln( "closestName white OK" )
-
-    putsln( "=== All ColorDatabase tests passed ===" )
+    putsln( "All ColorDatabase tests passed" )
     return 0

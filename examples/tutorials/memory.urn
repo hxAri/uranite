@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -28,7 +29,7 @@ class Resource:
     
     public I64 id
     public String name
-
+    
     public function Resource( self, I64 id, String name ) -> Void:
         
         """
@@ -41,7 +42,7 @@ class Resource:
         
         self.id = id
         self.name = name
-
+    
     public function describe( self ) -> Void:
         
         """ Prints a description of the resource to the console """
@@ -53,7 +54,7 @@ class Counter:
     """ A simple counter class stored on the heap """
     
     public I64 value
-
+    
     public function Counter( self, I64 initial ) -> Void:
         
         """
@@ -64,13 +65,13 @@ class Counter:
         """
         
         self.value = initial
-
+    
     public function increment( self ) -> Void:
         
         """ Increments the counter value by one """
         
         self.value = self.value + 1
-
+    
     public function get( self ) -> I64:
         
         """
@@ -91,14 +92,10 @@ public function main() -> I32:
         I32 exit code.
     """
     
-    # Heap allocation with new
     Resource r1 = new Resource( 1, "database" )
     Resource r2 = new Resource( 2, "cache" )
-
     r1.describe()
     r2.describe()
-
-    # Use then delete
     Counter c = new Counter( 0 )
     c.increment()
     c.increment()
@@ -106,10 +103,7 @@ public function main() -> I32:
     puts( "counter = ", c.get() )
     delete c
     puts( "counter deleted" )
-
-    # Delete resources
     delete r1
     delete r2
     puts( "resources freed" )
-
     return 0

@@ -36,17 +36,11 @@ namespace uranite::semantic {
 			return;
 		}
 		BorrowOwnershipInfo& ownershipInformation = ownershipIterator->second;
-		
-		// Check use-after-move
 		if( ownershipInformation.state == BorrowOwnershipState::Moved ) {
 			std::string moveErrorMessage = fmt::format( "cannot borrow moved value \"{}\"", ownerName );
 			this->diagnostic.error( source, moveErrorMessage );
 			return;
 		}
-		
-		// Borrow rules:
-		// 1. Many immutable borrows OR one mutable borrow, not both
-		// 2. No mutable borrow while immutable borrows exist
 		if( isMutable ) {
 			if( ownershipInformation.hasMutableBorrow ) {
 				std::string multipleMutableErrorMessage = fmt::format( "cannot borrow \"{}\" as mutable more than once", ownerName );
@@ -157,13 +151,10 @@ namespace uranite::semantic {
 				this->checkExpression( callExpression.callee );
 				for( ast::nodes::ExpressionSharedPointer& argument : callExpression.arguments ) {
 					this->checkExpression( argument );
-					
-					// Auto-move: passing owned non-primitive to function transfers ownership
 					if( argument->kind == ast::Node::Kind::IdentifierExpression ) {
 						ast::nodes::IdentifierExpression& identifierExpression = static_cast<ast::nodes::IdentifierExpression&>( *argument );
 						std::unordered_map<std::string,BorrowOwnershipInfo>::iterator ownershipIterator = this->ownershipTracking.find( identifierExpression.name );
 						if( ownershipIterator != this->ownershipTracking.end() && ownershipIterator->second.state == BorrowOwnershipState::Owned ) {
-							
 							if( argument->semanticType && argument->semanticType->isPrimitive() == false &&
 								argument->semanticType->kind != Type::Kind::Enum &&
 								argument->semanticType->kind != Type::Kind::Class &&
@@ -172,7 +163,6 @@ namespace uranite::semantic {
 							}
 						}
 					}
-					// Explicit borrow: &arg does not move
 					if( argument->kind == ast::Node::Kind::UnaryExpression ) {
 						ast::nodes::UnaryExpression& unaryExpression = static_cast<ast::nodes::UnaryExpression&>( *argument );
 						if( unaryExpression.operation == token::Type::Ampersand && unaryExpression.operand && unaryExpression.operand->kind == ast::Node::Kind::IdentifierExpression ) {
@@ -228,8 +218,6 @@ namespace uranite::semantic {
 			case ast::Node::Kind::UnaryExpression: {
 				ast::nodes::UnaryExpression& unaryExpression = static_cast<ast::nodes::UnaryExpression&>( *expression );
 				if( unaryExpression.operation == token::Type::Ampersand ) {
-					
-					// Borrow
 					if( unaryExpression.operand && unaryExpression.operand->kind == ast::Node::Kind::IdentifierExpression ) {
 						ast::nodes::IdentifierExpression& identifierExpression = static_cast<ast::nodes::IdentifierExpression&>( *unaryExpression.operand );
 						this->borrowValue( identifierExpression.name, "<temp>", false, unaryExpression.source );
@@ -242,9 +230,7 @@ namespace uranite::semantic {
 					}
 				}
 				else if( unaryExpression.operation == token::Type::Star ) {
-					// Dereference
 					if( unaryExpression.operand && this->isInsideUnsafeBlock == false ) {
-						// Raw pointer dereference checked in sema
 					}
 					this->checkExpression( unaryExpression.operand );
 				}
@@ -342,8 +328,6 @@ namespace uranite::semantic {
 	void BorrowChecker::checkReturnStatement( ast::nodes::ReturnStatement& statement ) {
 		if( statement.value ) {
 			this->checkExpression( statement.value );
-			
-			// Check for returning references to local variables (dangling references)
 			if( statement.value->kind == ast::Node::Kind::UnaryExpression ) {
 				ast::nodes::UnaryExpression& unaryExpression = static_cast<ast::nodes::UnaryExpression&>( *statement.value );
 				if( unaryExpression.operation == token::Type::Ampersand && unaryExpression.operand &&
@@ -425,8 +409,6 @@ namespace uranite::semantic {
 				for( const ast::nodes::StatementSharedPointer& tryBodyStatement : tryCatchStatement.tryBody ) {
 					this->checkStatement( tryBodyStatement );
 				}
-				
-				// Warn about heap allocations in try body that are not freed
 				if( this->variableScope.empty() == false ) {
 					for( const std::string& tryScopeVariable : this->variableScope.back() ) {
 						std::unordered_map<std::string, BorrowOwnershipInfo>::iterator heapCheckIterator = this->ownershipTracking.find( tryScopeVariable );
@@ -446,9 +428,6 @@ namespace uranite::semantic {
 				this->popScope();
 				std::unordered_map<std::string, BorrowOwnershipState> postTrySnapshot = this->snapshotOwnershipStates();
 				tryCatchBranchSnapshots.push_back( postTrySnapshot );
-				
-				// Except clauses see pessimistic state: merge of pre-try and post-try
-				// because an exception could occur at any point during the try body
 				std::vector<std::unordered_map<std::string, BorrowOwnershipState>> pessimisticBasis;
 				pessimisticBasis.push_back( preTrySnapshot );
 				pessimisticBasis.push_back( postTrySnapshot );
@@ -510,8 +489,6 @@ namespace uranite::semantic {
 	void BorrowChecker::checkVarStatement( ast::nodes::VariableStatement& statement ) {
 		if( statement.initializer ) {
 			this->checkExpression( statement.initializer );
-			
-			// Auto-move: assigning non-primitive owned value transfers ownership
 			if( statement.initializer->kind == ast::Node::Kind::IdentifierExpression ) {
 				ast::nodes::IdentifierExpression& identifierExpression = static_cast<ast::nodes::IdentifierExpression&>( *statement.initializer );
 				std::unordered_map<std::string,BorrowOwnershipInfo>::iterator ownershipIterator = this->ownershipTracking.find( identifierExpression.name );
@@ -539,8 +516,6 @@ namespace uranite::semantic {
 			}
 		}
 		this->declareOwnership( statement.name, statement.isMutable, statement.source );
-		
-		// Mark heap allocations (from `new` expressions)
 		std::string constructorName;
 		if( statement.initializer ) {
 			std::unordered_map<std::string,BorrowOwnershipInfo>::iterator variableIterator = this->ownershipTracking.find( statement.name );
@@ -555,14 +530,11 @@ namespace uranite::semantic {
 						constructorName = static_cast<ast::nodes::SimpleTypeNode&>( *constructorExpression.type ).name;
 					}
 					if( constructorName == "Arena" ) {
-						// Arena lifecycle managed by destroy(), not delete
 					}
 					else {
 						variableIterator->second.isHeapAllocated = true;
 					}
 				}
-				
-				// Detect arena-managed values: result of arena.alloc()
 				if( statement.initializer->kind == ast::Node::Kind::MethodCallExpression ) {
 					ast::nodes::MethodCallExpression& methodCallExpression = static_cast<ast::nodes::MethodCallExpression&>( *statement.initializer );
 					if( methodCallExpression.method == "alloc" && methodCallExpression.object &&
@@ -672,8 +644,6 @@ namespace uranite::semantic {
 			return;
 		}
 		BorrowOwnershipInfo& variableInformation = ownershipIterator->second;
-		
-		// Release any borrows this value holds on other values
 		for( std::pair<const std::string,BorrowOwnershipInfo>& ownershipEntry : this->ownershipTracking ) {
 			BorrowOwnershipInfo& ownerInformation = ownershipEntry.second;
 			std::vector<BorrowInfo>& activeBorrows = ownerInformation.activeBorrows;
@@ -687,8 +657,6 @@ namespace uranite::semantic {
 				),
 				activeBorrows.end()
 			);
-			
-			// Recalculate borrow counts
 			ownerInformation.immutableBorrowCount = 0;
 			ownerInformation.hasMutableBorrow = false;
 			for( const BorrowInfo& borrowRecord : activeBorrows ) {
@@ -742,11 +710,7 @@ namespace uranite::semantic {
 		if( this->variableScope.empty() ) {
 			return;
 		}
-		
-		// Drop all values declared in this scope (RAII)
 		std::vector<std::string>& scopeVariables = this->variableScope.back();
-		
-		// Drop in reverse order (LIFO)
 		for( std::vector<std::string>::reverse_iterator variableIterator = scopeVariables.rbegin(); variableIterator != scopeVariables.rend(); ++variableIterator ) {
 			this->dropValue( *variableIterator );
 		}

@@ -5,30 +5,23 @@ from uranite.memory.arena import Arena
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== Arena Tests ===" )
-
+    putsln( "Arena Tests" )
     Arena<Int> arena = new Arena<Int>( 100 )
-
     assertEqualI64( 100, arena.capacity(), "capacity" )
     assertEqualI64( 0, arena.count(), "initial count" )
-
     Int slot1 = arena.alloc()
     Int slot2 = arena.alloc()
     Int slot3 = arena.alloc()
     assertEqualI64( 3, arena.count(), "count after 3 allocs" )
     putsln( "alloc OK" )
-
     arena.freeAll()
     assertEqualI64( 0, arena.count(), "count after freeAll" )
     putsln( "freeAll OK" )
-
     Int slot4 = arena.alloc()
     assertEqualI64( 1, arena.count(), "count after re-alloc" )
     putsln( "re-alloc OK" )
-
     arena.destroy()
     putsln( "destroy OK" )
-
     Arena<F64> farena = new Arena<F64>( 50 )
     assertEqualI64( 50, farena.capacity(), "F64 capacity" )
     I64 fslot = farena.alloc() as I64
@@ -36,6 +29,5 @@ public function main() -> I32:
     farena.freeAll()
     farena.destroy()
     putsln( "F64 arena OK" )
-
-    putsln( "=== All arena tests passed ===" )
+    putsln( "All arena tests passed" )
     return 0

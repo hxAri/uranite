@@ -5,8 +5,7 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== HashSet Tests ===" )
-
+    putsln( "HashSet Tests" )
     HashSet<Int> set = new HashSet<Int>()
     Boolean added1 = set.add( 10 )
     Boolean added2 = set.add( 20 )
@@ -18,25 +17,17 @@ public function main() -> I32:
     assertFalse( addDup, "add dup(10)" )
     assertEqualI64( 3, set.length, "length after adds" )
     putsln( "add OK" )
-
     assertTrue( set.exists( 20 ), "exists(20)" )
     assertFalse( set.exists( 99 ), "not exists(99)" )
-
-    # discard
     set.discard( 10 )
     assertEqualI64( 2, set.length, "length after discard" )
     assertFalse( set.exists( 10 ), "not exists(10) after discard" )
     putsln( "discard OK" )
-
-    # remove
     set.add( 10 )
     Boolean didRemove = set.remove( 10 )
     assertTrue( didRemove, "remove(10)" )
     putsln( "remove OK" )
-
     assertFalse( set.empty, "not empty" )
-
-    # clear
     HashSet<Int> clearSet = new HashSet<Int>()
     clearSet.add( 1 )
     clearSet.add( 2 )
@@ -44,8 +35,6 @@ public function main() -> I32:
     assertEqualI64( 0, clearSet.length, "clear length" )
     assertTrue( clearSet.empty, "clear empty" )
     putsln( "clear OK" )
-
-    # set operations
     HashSet<Int> a = new HashSet<Int>()
     a.add( 1 )
     a.add( 2 )
@@ -54,48 +43,34 @@ public function main() -> I32:
     b.add( 2 )
     b.add( 3 )
     b.add( 4 )
-
     HashSet<Int> u = a.union( b ) as HashSet<Int>
     assertEqualI64( 4, u.length, "union length" )
-
     HashSet<Int> inter = a.intersect( b ) as HashSet<Int>
     assertEqualI64( 2, inter.length, "intersect length" )
-
     HashSet<Int> diff = a.difference( b ) as HashSet<Int>
     assertEqualI64( 1, diff.length, "difference length" )
-
     HashSet<Int> symDiff = a.symmetricDifference( b ) as HashSet<Int>
     assertEqualI64( 2, symDiff.length, "symmetricDifference length" )
     putsln( "set ops OK" )
-
-    # isSubsetOf / isSupersetOf
     HashSet<Int> sub = new HashSet<Int>()
     sub.add( 1 )
     sub.add( 2 )
     assertTrue( sub.isSubsetOf( a ), "isSubsetOf" )
     assertTrue( a.isSupersetOf( sub ), "isSupersetOf" )
-
-    # isDisjoint
     HashSet<Int> disj = new HashSet<Int>()
     disj.add( 100 )
     assertTrue( a.isDisjoint( disj ), "isDisjoint" )
     putsln( "subset/superset/disjoint OK" )
-
-    # addUnion
     HashSet<Int> au = new HashSet<Int>()
     au.add( 1 )
     au.addUnion( b )
     assertEqualI64( 4, au.length, "addUnion length" )
-
-    # retainIntersect
     HashSet<Int> ri = new HashSet<Int>()
     ri.add( 1 )
     ri.add( 2 )
     ri.add( 3 )
     ri.retainIntersect( b )
     assertEqualI64( 2, ri.length, "retainIntersect length" )
-
-    # removeDifference
     HashSet<Int> rd = new HashSet<Int>()
     rd.add( 1 )
     rd.add( 2 )
@@ -104,8 +79,6 @@ public function main() -> I32:
     rd.removeDifference( b )
     assertEqualI64( 1, rd.length, "removeDifference length" )
     putsln( "mutable set ops OK" )
-
-    # iterator
     HashSet<Int> itSet = new HashSet<Int>()
     itSet.add( 10 )
     itSet.add( 20 )
@@ -117,6 +90,5 @@ public function main() -> I32:
         iterCount = iterCount + 1
     assertEqualI64( 3, iterCount, "iterator count" )
     putsln( "iterator OK" )
-
-    putsln( "=== All HashSet tests passed ===" )
+    putsln( "All HashSet tests passed" )
     return 0

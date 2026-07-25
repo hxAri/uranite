@@ -647,11 +647,13 @@ namespace uranite::semantic {
 			}
 			return nullptr;
 		}
-	
+
+		bool implementsInterface( const std::string& qualifiedName ) const;
+
 	};
-	
+
 	using ClassTypeSharedPointer = std::shared_ptr<ClassType>;
-	
+
 	/**
 	 * @brief Represents a structd data type within the compiler's type system.
 	 * 
@@ -867,9 +869,24 @@ namespace uranite::semantic {
 			}
 			return nullptr;
 		}
-	
+
+		bool extendsInterface( const std::string& qualifiedName ) const {
+			for( const TypeSharedPointer& superIface : this->superInterfaces ) {
+				if( superIface->qualified == qualifiedName ||
+					qname::startsWith( superIface->qualified, qualifiedName ) ) {
+					return true;
+				}
+				if( superIface->kind == Type::Kind::Interface ) {
+					if( std::static_pointer_cast<InterfaceType>( superIface )->extendsInterface( qualifiedName ) ) {
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
 	};
-	
+
 	using InterfaceTypeSharedPointer = std::shared_ptr<InterfaceType>;
 	
 	/**

@@ -63,7 +63,7 @@ public class HashSet<E> implements MutableSet<E>:
         self.data = new Memory<E>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
-    
+
     public function HashSet( self, Int initialCapacity ) -> Void:
         
         """
@@ -82,7 +82,7 @@ public class HashSet<E> implements MutableSet<E>:
         self.data = new Memory<E>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
-    
+
     private function computeIndex( self, E element ) -> Int:
         
         """
@@ -754,7 +754,7 @@ public class HashSet<E> implements MutableSet<E>:
         """
         
         return new HashSetIterator<E>( self.data, self.status, self.capacity )
-    
+
     public function toString( self ) -> String:
         
         """

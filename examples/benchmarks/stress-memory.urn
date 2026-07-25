@@ -1,55 +1,110 @@
-package testing
+
+#
+# @author hxAri (hxari)
+# @create 2025-02-24 15:15
+# @update 2026-07-25 03:16
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/stress-memory.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Advanced stress test for raw memory allocation primitives.
+# Performs complex fragmentation patterns, deeply nested scoped allocations,
+# and extensive rapid alloc/dealloc cycles to benchmark memory throughput.
+# Includes elapsed time tracking per individual phase.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.examples.benchmarks.stress-memory
 
 from uranite.convert.convert import intToString
+from uranite.functions.externs import clock
 from uranite.io.console import putsln
-from uranite.io.syscall import readByteAt
-from uranite.io.syscall import readByteAt
-from uranite.memory.allocator import dealloc
-from uranite.memory.allocator import dealloc
+from uranite.memory.allocator import alloc, dealloc
+from uranite.os.arch.native.memory import readByteAt, writeByteAt
 
-public function main() -> I32:
-    putsln( "=== Stress Memory Test: 100K allocations ===" )
-    
-    I64 iterations = 100000
+function runRapidCycles() -> I32:
     I64 i = 0
-    while i < iterations:
-        I64 size = ( i % 256 ) + 8
+    while i < 250000:
+        I64 size = ( i % 1024 ) + 16
         I64 ptr = alloc( size )
-        writeByteAt( ptr, 0, 42 )
-        writeByteAt( ptr, size - 1, 99 )
-        I64 v1 = readByteAt( ptr, 0 )
-        I64 v2 = readByteAt( ptr, size - 1 )
+        writeByteAt( ptr, 0, 170 )
+        writeByteAt( ptr, size / 2, 85 )
+        writeByteAt( ptr, size - 1, 255 )
+        I64 v1 = readByteAt( ptr, size / 2 )
         dealloc( ptr )
         i = i + 1
-    
-    putsln( "100K alloc/dealloc cycles complete" )
-    
-    # Nested scope allocations
+    return 0
+
+function runFragmentationPattern() -> I32:
+    I64 i = 0
+    while i < 5000:
+        I64 chunkA = alloc( 128 )
+        I64 chunkB = alloc( 256 )
+        I64 chunkC = alloc( 512 )
+        writeByteAt( chunkA, 127, 1 )
+        writeByteAt( chunkB, 255, 2 )
+        writeByteAt( chunkC, 511, 3 )
+        dealloc( chunkB )
+        I64 chunkD = alloc( 1024 )
+        I64 chunkE = alloc( 64 )
+        writeByteAt( chunkD, 0, 4 )
+        writeByteAt( chunkE, 0, 5 )
+        dealloc( chunkA )
+        dealloc( chunkD )
+        dealloc( chunkC )
+        dealloc( chunkE )
+        i = i + 1
+    return 0
+
+function runDeepNesting() -> I32:
     I64 outer = 0
     while outer < 1000:
-        I64 p1 = alloc( 64 )
-        I64 inner = 0
-        while inner < 10:
-            I64 p2 = alloc( 32 )
-            writeByteAt( p2, 0, inner )
+        I64 p1 = alloc( 2048 )
+        writeByteAt( p1, 0, 10 )
+        I64 mid = 0
+        while mid < 25:
+            I64 p2 = alloc( 128 )
+            writeByteAt( p2, 0, 20 )
+            I64 inner = 0
+            while inner < 15:
+                I64 p3 = alloc( 32 )
+                writeByteAt( p3, 31, 30 )
+                dealloc( p3 )
+                inner = inner + 1
             dealloc( p2 )
-            inner = inner + 1
+            mid = mid + 1
         dealloc( p1 )
         outer = outer + 1
-    
-    putsln( "nested scope allocations complete" )
-    
-    # Large + small interleaved
-    i = 0
-    while i < 500:
-        I64 big = alloc( 4096 )
-        I64 small = alloc( 16 )
-        writeByteAt( big, 0, 1 )
-        writeByteAt( small, 0, 2 )
-        dealloc( small )
-        dealloc( big )
-        i = i + 1
-    
-    putsln( "interleaved large/small complete" )
-    putsln( "=== Stress memory test PASSED ===" )
+    return 0
+
+public function main() -> I32:
+    putsln( "Starting Advanced Memory Stress Benchmark..." )
+    I64 startTotal = clock()
+    I64 startRapid = clock()
+    runRapidCycles()
+    I64 endRapid = clock()
+    Double elapsedRapid = ( endRapid - startRapid ) / 1000000.0
+    putsln( "- Rapid Cycles elapsed: ", elapsedRapid, " seconds" )
+    I64 startFrag = clock()
+    runFragmentationPattern()
+    I64 endFrag = clock()
+    Double elapsedFrag = ( endFrag - startFrag ) / 1000000.0
+    putsln( "- Fragmentation elapsed: ", elapsedFrag, " seconds" )
+    I64 startNest = clock()
+    runDeepNesting()
+    I64 endNest = clock()
+    Double elapsedNest = ( endNest - startNest ) / 1000000.0
+    putsln( "- Deep Nesting elapsed: ", elapsedNest, " seconds" )
+    I64 endTotal = clock()
+    Double elapsedTotal = ( endTotal - startTotal ) / 1000000.0
+    putsln( "Total Elapsed time: ", elapsedTotal, " seconds" )
+    putsln( "Advanced stress memory test PASSED" )
     return 0

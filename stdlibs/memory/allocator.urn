@@ -31,18 +31,25 @@ from uranite.os.syscall.result import SyscallResult
 
 const I64 PROT_READ = 1
 """ Memory protection flag: page can be read. """
+
 const I64 PROT_WRITE = 2
 """ Memory protection flag: page can be written. """
+
 const I64 PROT_RW = 3
 """ Memory protection flags: page can be read and written. """
+
 const I64 MAP_PRIVATE = 2
 """ Mapping flag: changes are private (copy-on-write). """
+
 const I64 MAP_ANONYMOUS = 32
 """ Mapping flag: not backed by any file. """
+
 const I64 MAP_PRIVATE_ANON = 34
 """ Combined MAP_PRIVATE and MAP_ANONYMOUS flags. """
+
 const I64 HEADER_SIZE = 8
 """ Size in bytes of the allocation header that stores the total mapped region size. """
+
 const I64 PAGE_SIZE = 4096
 """ System page size in bytes used for aligning mmap allocations. """
 

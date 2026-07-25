@@ -17,10 +17,10 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#include "uranite/ir/mir-optimizer.hpp"
-
 #include <algorithm>
 #include <unordered_set>
+
+#include "uranite/ir/mir/optimizer.hpp"
 
 namespace uranite::ir::mir {
 	
@@ -36,11 +36,9 @@ namespace uranite::ir::mir {
 		bool changed = true;
 		int iterationLimit = 20;
 		int iterationCount = 0;
-		
 		while( changed && iterationCount < iterationLimit ) {
 			changed = false;
 			iterationCount++;
-			
 			changed |= this->eliminateUnreachableBlocks( functionDefinition );
 			changed |= this->foldConstants( functionDefinition );
 			changed |= this->propagateCopies( functionDefinition );
@@ -58,46 +56,46 @@ namespace uranite::ir::mir {
 	}
 	
 	bool MIROptimizer::eliminateDeadStores( MIRFunctionDefinition& functionDefinition ) {
-		MIRLivenessAnalysis livenessAnalysis;
+		MIRLivenessAnalyzer livenessAnalysis;
 		livenessAnalysis.analyze( functionDefinition );
-
 		bool changed = false;
-
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock == nullptr ) {
 				continue;
 			}
-
-			// Collect variables produced by GEP — stores to these are pointer stores (never dead)
 			std::unordered_set<MIRVariableIdentifier> gepResultVariables;
+			std::unordered_set<MIRVariableIdentifier> indirectCallTargetVariables;
 			for( const MIRInstruction& instruction : basicBlock->blockInstructions ) {
 				if( ( instruction.instructionKind == MIRInstructionKind::ComputeFieldAddress ||
 					  instruction.instructionKind == MIRInstructionKind::ComputeIndexAddress ) &&
 					instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					gepResultVariables.insert( instruction.destinationVariable );
 				}
+				if( instruction.instructionKind == MIRInstructionKind::CallFunction &&
+					instruction.calledFunctionQualifiedName.empty() == false ) {
+					for( const std::pair<const MIRVariableIdentifier, MIRVariableDescriptor>& entry :
+						functionDefinition.variableDescriptorTable ) {
+						if( entry.second.variableName == instruction.calledFunctionQualifiedName ) {
+							indirectCallTargetVariables.insert( entry.first );
+							break;
+						}
+					}
+				}
 			}
-
-			// Walk instructions backward, tracking which variables are read after current position
 			std::unordered_set<MIRVariableIdentifier> neededAfter = basicBlock->liveVariablesAtExit;
 			std::vector<MIRInstruction> survivingInstructions;
 			survivingInstructions.reserve( basicBlock->blockInstructions.size() );
 			bool blockChanged = false;
-
-			for( int instructionIndex = static_cast<int>( basicBlock->blockInstructions.size() ) - 1;
-				 instructionIndex >= 0; instructionIndex-- ) {
-
+			for( int instructionIndex = static_cast<int>( basicBlock->blockInstructions.size() ) - 1; instructionIndex >= 0; instructionIndex-- ) {
 				const MIRInstruction& instruction = basicBlock->blockInstructions[instructionIndex];
-
 				bool isDeadStore = false;
-
 				if( instruction.instructionKind == MIRInstructionKind::StoreVariable &&
 					instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER &&
 					neededAfter.count( instruction.destinationVariable ) == 0 &&
-					gepResultVariables.count( instruction.destinationVariable ) == 0 ) {
+					gepResultVariables.count( instruction.destinationVariable ) == 0 &&
+					indirectCallTargetVariables.count( instruction.destinationVariable ) == 0 ) {
 					isDeadStore = true;
 				}
-				
 				if( isDeadStore ) {
 					this->totalRemovedInstructions++;
 					blockChanged = true;
@@ -105,8 +103,6 @@ namespace uranite::ir::mir {
 				else {
 					survivingInstructions.push_back( instruction );
 				}
-				
-				// Update neededAfter: remove destination (defined here), add sources (used here)
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					neededAfter.erase( instruction.destinationVariable );
 				}
@@ -116,28 +112,22 @@ namespace uranite::ir::mir {
 					}
 				}
 			}
-			
 			if( blockChanged ) {
 				std::reverse( survivingInstructions.begin(), survivingInstructions.end() );
 				basicBlock->blockInstructions = std::move( survivingInstructions );
 				changed = true;
 			}
 		}
-		
 		return changed;
 	}
 	
 	bool MIROptimizer::propagateCopies( MIRFunctionDefinition& functionDefinition ) {
 		bool changed = false;
-		
-		// Build copy map: dest → source for CopyValue and LoadVariable where source is single
 		std::unordered_map<MIRVariableIdentifier, MIRVariableIdentifier> copySourceMap;
-		
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock == nullptr ) {
 				continue;
 			}
-			
 			for( const MIRInstruction& instruction : basicBlock->blockInstructions ) {
 				if( instruction.instructionKind == MIRInstructionKind::CopyValue &&
 					instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER &&
@@ -147,17 +137,13 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-		
 		if( copySourceMap.empty() ) {
 			return false;
 		}
-		
-		// Resolve transitive copies: if a→b→c, then a→c
 		for( std::pair<const MIRVariableIdentifier, MIRVariableIdentifier>& copyEntry : copySourceMap ) {
 			MIRVariableIdentifier resolvedSource = copyEntry.second;
 			std::unordered_set<MIRVariableIdentifier> visited;
 			visited.insert( copyEntry.first );
-			
 			while( copySourceMap.count( resolvedSource ) > 0 &&
 				   visited.count( resolvedSource ) == 0 ) {
 				visited.insert( resolvedSource );
@@ -165,13 +151,10 @@ namespace uranite::ir::mir {
 			}
 			copyEntry.second = resolvedSource;
 		}
-		
-		// Replace uses of copied variables with their ultimate source
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock == nullptr ) {
 				continue;
 			}
-			
 			for( MIRInstruction& instruction : basicBlock->blockInstructions ) {
 				for( MIRVariableIdentifier& sourceOperand : instruction.sourceOperands ) {
 					if( sourceOperand != INVALID_VARIABLE_IDENTIFIER &&
@@ -180,8 +163,6 @@ namespace uranite::ir::mir {
 						changed = true;
 					}
 				}
-				
-				// Phi incoming values
 				for( std::pair<MIRBlockIdentifier, MIRVariableIdentifier>& phiEntry : instruction.phiIncomingValues ) {
 					if( phiEntry.second != INVALID_VARIABLE_IDENTIFIER &&
 						copySourceMap.count( phiEntry.second ) > 0 ) {
@@ -191,14 +172,11 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-		
 		return changed;
 	}
 	
 	bool MIROptimizer::foldConstants( MIRFunctionDefinition& functionDefinition ) {
 		bool changed = false;
-		
-		// Collect known constant values: variable → (kind, intVal, floatVal, boolVal)
 		struct ConstantValue {
 			MIRInstructionKind constantKind;
 			int64_t integerValue = 0;
@@ -206,14 +184,11 @@ namespace uranite::ir::mir {
 			bool booleanValue = false;
 		};
 		std::unordered_map<MIRVariableIdentifier, ConstantValue> constantValues;
-		
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock == nullptr ) {
 				continue;
 			}
-			
 			for( MIRInstruction& instruction : basicBlock->blockInstructions ) {
-				// Record constant definitions
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					if( instruction.instructionKind == MIRInstructionKind::ConstantInteger ) {
 						ConstantValue constVal;
@@ -234,12 +209,9 @@ namespace uranite::ir::mir {
 						constantValues[instruction.destinationVariable] = constVal;
 					}
 				}
-				
-				// Try fold binary integer operations
 				if( instruction.sourceOperands.size() == 2 ) {
 					MIRVariableIdentifier leftOperand = instruction.sourceOperands[0];
 					MIRVariableIdentifier rightOperand = instruction.sourceOperands[1];
-					
 					bool leftIsConstInt = (
 						constantValues.count( leftOperand ) > 0 &&
 						constantValues[leftOperand].constantKind == MIRInstructionKind::ConstantInteger
@@ -248,15 +220,12 @@ namespace uranite::ir::mir {
 						constantValues.count( rightOperand ) > 0 &&
 						constantValues[rightOperand].constantKind == MIRInstructionKind::ConstantInteger
 					);
-					
 					if( leftIsConstInt && rightIsConstInt &&
 						instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
-						
 						int64_t leftValue = constantValues[leftOperand].integerValue;
 						int64_t rightValue = constantValues[rightOperand].integerValue;
 						bool folded = false;
 						int64_t foldedResult = 0;
-						
 						switch( instruction.instructionKind ) {
 							case MIRInstructionKind::AddInteger:
 								foldedResult = leftValue + rightValue;
@@ -309,30 +278,23 @@ namespace uranite::ir::mir {
 							default:
 								break;
 						}
-						
 						if( folded ) {
 							instruction.instructionKind = MIRInstructionKind::ConstantInteger;
 							instruction.integerConstantValue = foldedResult;
 							instruction.sourceOperands.clear();
-							
 							ConstantValue newConst;
 							newConst.constantKind = MIRInstructionKind::ConstantInteger;
 							newConst.integerValue = foldedResult;
 							constantValues[instruction.destinationVariable] = newConst;
-							
 							changed = true;
 						}
 					}
-					
-					// Fold integer comparisons
 					if( leftIsConstInt && rightIsConstInt &&
 						instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
-						
 						int64_t leftValue = constantValues[leftOperand].integerValue;
 						int64_t rightValue = constantValues[rightOperand].integerValue;
 						bool folded = false;
 						bool comparisonResult = false;
-						
 						switch( instruction.instructionKind ) {
 							case MIRInstructionKind::CompareEqual:
 								comparisonResult = ( leftValue == rightValue );
@@ -361,22 +323,17 @@ namespace uranite::ir::mir {
 							default:
 								break;
 						}
-						
 						if( folded ) {
 							instruction.instructionKind = MIRInstructionKind::ConstantBoolean;
 							instruction.booleanConstantValue = comparisonResult;
 							instruction.sourceOperands.clear();
-							
 							ConstantValue newConst;
 							newConst.constantKind = MIRInstructionKind::ConstantBoolean;
 							newConst.booleanValue = comparisonResult;
 							constantValues[instruction.destinationVariable] = newConst;
-							
 							changed = true;
 						}
 					}
-					
-					// Fold float binary operations
 					bool leftIsConstFloat = (
 						constantValues.count( leftOperand ) > 0 &&
 						constantValues[leftOperand].constantKind == MIRInstructionKind::ConstantFloat
@@ -385,15 +342,12 @@ namespace uranite::ir::mir {
 						constantValues.count( rightOperand ) > 0 &&
 						constantValues[rightOperand].constantKind == MIRInstructionKind::ConstantFloat
 					);
-					
 					if( leftIsConstFloat && rightIsConstFloat &&
 						instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
-						
 						double leftValue = constantValues[leftOperand].floatValue;
 						double rightValue = constantValues[rightOperand].floatValue;
 						bool folded = false;
 						double foldedResult = 0.0;
-						
 						switch( instruction.instructionKind ) {
 							case MIRInstructionKind::AddFloat:
 								foldedResult = leftValue + rightValue;
@@ -416,125 +370,94 @@ namespace uranite::ir::mir {
 							default:
 								break;
 						}
-						
 						if( folded ) {
 							instruction.instructionKind = MIRInstructionKind::ConstantFloat;
 							instruction.floatConstantValue = foldedResult;
 							instruction.sourceOperands.clear();
-							
 							ConstantValue newConst;
 							newConst.constantKind = MIRInstructionKind::ConstantFloat;
 							newConst.floatValue = foldedResult;
 							constantValues[instruction.destinationVariable] = newConst;
-							
 							changed = true;
 						}
 					}
 				}
-				
-				// Fold unary negate on constants
 				if( instruction.sourceOperands.size() == 1 &&
 					instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
-					
 					MIRVariableIdentifier operand = instruction.sourceOperands[0];
-					
 					if( instruction.instructionKind == MIRInstructionKind::NegateInteger &&
 						constantValues.count( operand ) > 0 &&
 						constantValues[operand].constantKind == MIRInstructionKind::ConstantInteger ) {
-						
 						instruction.instructionKind = MIRInstructionKind::ConstantInteger;
 						instruction.integerConstantValue = -constantValues[operand].integerValue;
 						instruction.sourceOperands.clear();
-						
 						ConstantValue newConst;
 						newConst.constantKind = MIRInstructionKind::ConstantInteger;
 						newConst.integerValue = instruction.integerConstantValue;
 						constantValues[instruction.destinationVariable] = newConst;
-						
 						changed = true;
 					}
 					else if( instruction.instructionKind == MIRInstructionKind::NegateFloat &&
 							 constantValues.count( operand ) > 0 &&
 							 constantValues[operand].constantKind == MIRInstructionKind::ConstantFloat ) {
-						
 						instruction.instructionKind = MIRInstructionKind::ConstantFloat;
 						instruction.floatConstantValue = -constantValues[operand].floatValue;
 						instruction.sourceOperands.clear();
-						
 						ConstantValue newConst;
 						newConst.constantKind = MIRInstructionKind::ConstantFloat;
 						newConst.floatValue = instruction.floatConstantValue;
 						constantValues[instruction.destinationVariable] = newConst;
-						
 						changed = true;
 					}
 					else if( instruction.instructionKind == MIRInstructionKind::LogicalNot &&
 							 constantValues.count( operand ) > 0 &&
 							 constantValues[operand].constantKind == MIRInstructionKind::ConstantBoolean ) {
-						
 						instruction.instructionKind = MIRInstructionKind::ConstantBoolean;
 						instruction.booleanConstantValue = ( constantValues[operand].booleanValue == false );
 						instruction.sourceOperands.clear();
-						
 						ConstantValue newConst;
 						newConst.constantKind = MIRInstructionKind::ConstantBoolean;
 						newConst.booleanValue = instruction.booleanConstantValue;
 						constantValues[instruction.destinationVariable] = newConst;
-						
 						changed = true;
 					}
 				}
 			}
 		}
-		
 		return changed;
 	}
 	
 	bool MIROptimizer::mergeLinearBlocks( MIRFunctionDefinition& functionDefinition ) {
-		MIRLivenessAnalysis livenessAnalysis;
+		MIRLivenessAnalyzer livenessAnalysis;
 		livenessAnalysis.analyze( functionDefinition );
-		
 		bool changed = false;
-		
 		for( size_t blockIndex = 0; blockIndex < functionDefinition.controlFlowBlocks.size(); blockIndex++ ) {
 			std::shared_ptr<MIRBasicBlock>& currentBlock = functionDefinition.controlFlowBlocks[blockIndex];
 			if( currentBlock == nullptr || currentBlock->blockInstructions.empty() ) {
 				continue;
 			}
-			
-			// Check if last instruction is unconditional jump to a block with single predecessor
 			const MIRInstruction& lastInstruction = currentBlock->blockInstructions.back();
 			if( lastInstruction.instructionKind != MIRInstructionKind::JumpUnconditional ) {
 				continue;
 			}
-			
 			MIRBlockIdentifier targetIdentifier = lastInstruction.trueBranchTarget;
 			if( targetIdentifier == INVALID_BLOCK_IDENTIFIER ||
 				targetIdentifier >= functionDefinition.controlFlowBlocks.size() ) {
 				continue;
 			}
-			
 			std::shared_ptr<MIRBasicBlock>& targetBlock = functionDefinition.controlFlowBlocks[targetIdentifier];
 			if( targetBlock == nullptr ) {
 				continue;
 			}
-			
-			// Target must have exactly one predecessor (this block)
 			if( targetBlock->predecessorBlocks.size() != 1 ) {
 				continue;
 			}
-			
-			// Don't merge entry block away
 			if( targetIdentifier == functionDefinition.entryBlockIdentifier ) {
 				continue;
 			}
-			
-			// Don't self-merge
 			if( targetIdentifier == currentBlock->blockIdentifier ) {
 				continue;
 			}
-			
-			// Merge: remove jump from current, append target's instructions
 			currentBlock->blockInstructions.pop_back();
 			currentBlock->blockInstructions.insert(
 				currentBlock->blockInstructions.end(),
@@ -542,11 +465,7 @@ namespace uranite::ir::mir {
 				targetBlock->blockInstructions.end()
 			);
 			currentBlock->isTerminated = targetBlock->isTerminated;
-			
-			// Update successors: current now has target's successors
 			currentBlock->successorBlocks = targetBlock->successorBlocks;
-			
-			// Update predecessors of target's successors to point to current
 			for( MIRBlockIdentifier successorIdentifier : targetBlock->successorBlocks ) {
 				if( successorIdentifier < functionDefinition.controlFlowBlocks.size() &&
 					functionDefinition.controlFlowBlocks[successorIdentifier] != nullptr ) {
@@ -559,8 +478,6 @@ namespace uranite::ir::mir {
 					}
 				}
 			}
-			
-			// Rewrite branch targets in merged instructions that reference target
 			for( MIRInstruction& instruction : currentBlock->blockInstructions ) {
 				if( instruction.trueBranchTarget == targetIdentifier ) {
 					instruction.trueBranchTarget = currentBlock->blockIdentifier;
@@ -577,16 +494,11 @@ namespace uranite::ir::mir {
 					}
 				}
 			}
-			
-			// Null out merged block
 			functionDefinition.controlFlowBlocks[targetIdentifier] = nullptr;
 			this->totalRemovedBlocks++;
 			changed = true;
-			
-			// Re-check same block index (might chain-merge)
 			blockIndex--;
 		}
-		
 		return changed;
 	}
 	
@@ -594,26 +506,20 @@ namespace uranite::ir::mir {
 		if( functionDefinition.controlFlowBlocks.empty() ) {
 			return false;
 		}
-		
-		// BFS from entry to find all reachable blocks
 		std::unordered_set<MIRBlockIdentifier> reachableBlocks;
 		std::vector<MIRBlockIdentifier> worklist;
 		worklist.push_back( functionDefinition.entryBlockIdentifier );
 		reachableBlocks.insert( functionDefinition.entryBlockIdentifier );
-		
 		while( worklist.empty() == false ) {
 			MIRBlockIdentifier currentIdentifier = worklist.back();
 			worklist.pop_back();
-			
 			if( currentIdentifier >= functionDefinition.controlFlowBlocks.size() ) {
 				continue;
 			}
-			
 			std::shared_ptr<MIRBasicBlock>& currentBlock = functionDefinition.controlFlowBlocks[currentIdentifier];
 			if( currentBlock == nullptr ) {
 				continue;
 			}
-			
 			for( MIRBlockIdentifier successorIdentifier : currentBlock->successorBlocks ) {
 				if( reachableBlocks.count( successorIdentifier ) == 0 ) {
 					reachableBlocks.insert( successorIdentifier );
@@ -621,16 +527,11 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-		
 		bool changed = false;
-		
 		for( size_t blockIndex = 0; blockIndex < functionDefinition.controlFlowBlocks.size(); blockIndex++ ) {
 			MIRBlockIdentifier blockIdentifier = static_cast<MIRBlockIdentifier>( blockIndex );
-			
 			if( functionDefinition.controlFlowBlocks[blockIndex] != nullptr &&
 				reachableBlocks.count( blockIdentifier ) == 0 ) {
-				
-				// Remove this block from predecessors of its successors
 				std::shared_ptr<MIRBasicBlock>& deadBlock = functionDefinition.controlFlowBlocks[blockIndex];
 				for( MIRBlockIdentifier successorIdentifier : deadBlock->successorBlocks ) {
 					if( successorIdentifier < functionDefinition.controlFlowBlocks.size() &&
@@ -643,14 +544,12 @@ namespace uranite::ir::mir {
 						);
 					}
 				}
-				
 				functionDefinition.controlFlowBlocks[blockIndex] = nullptr;
 				this->totalRemovedBlocks++;
 				changed = true;
 			}
 		}
-		
 		return changed;
 	}
-
+	
 } // namespace uranite::ir::mir

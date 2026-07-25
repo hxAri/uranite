@@ -21,7 +21,7 @@
 #define _URANITE_IR_MIR_OPTIMIZER_HPP_
 
 #include "uranite/ir/mir.hpp"
-#include "uranite/ir/mir-analysis.hpp"
+#include "uranite/ir/mir/analyzer.hpp"
 
 namespace uranite::ir::mir {
 	

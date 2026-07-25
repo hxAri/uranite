@@ -26,74 +26,50 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Builtin String Functions Tests ===" )
-
-    # length
+    putsln( "Builtin String Functions Tests" )
     assertEqualI64( 5, length( "hello" ), "length hello" )
     assertEqualI64( 0, length( "" ), "length empty" )
     assertEqualI64( 1, length( "a" ), "length a" )
     putsln( "length OK" )
-
-    # charAt
     assertEqualI64( 65, charAt( "ABC", 0 ), "charAt A" )
     assertEqualI64( 67, charAt( "ABC", 2 ), "charAt C" )
     putsln( "charAt OK" )
-
-    # equals
     assertTrue( equals( "abc", "abc" ), "equals same" )
     assertFalse( equals( "abc", "def" ), "equals diff" )
     assertTrue( equals( "", "" ), "equals empty" )
     assertFalse( equals( "a", "ab" ), "equals diff len" )
     putsln( "equals OK" )
-
-    # contains
     assertTrue( contains( "hello world", "world" ), "contains world" )
     assertFalse( contains( "hello world", "xyz" ), "contains xyz" )
     assertTrue( contains( "hello", "" ), "contains empty" )
     putsln( "contains OK" )
-
-    # indexOf
     assertEqualI64( 6, indexOf( "hello world", "world" ), "indexOf world" )
     assertEqualI64( -1, indexOf( "hello world", "xyz" ), "indexOf xyz" )
     assertEqualI64( 0, indexOf( "aabaa", "aa" ), "indexOf aa" )
     putsln( "indexOf OK" )
-
-    # lastIndexOf
     assertEqualI64( 3, lastIndexOf( "aabaa", "aa" ), "lastIndexOf aa" )
     assertEqualI64( -1, lastIndexOf( "hello", "xyz" ), "lastIndexOf xyz" )
     putsln( "lastIndexOf OK" )
-
-    # startsWith
     assertTrue( startsWith( "hello world", "hello" ), "startsWith hello" )
     assertFalse( startsWith( "hello", "world" ), "startsWith world" )
     assertTrue( startsWith( "hello", "" ), "startsWith empty" )
     putsln( "startsWith OK" )
-
-    # endsWith
     assertTrue( endsWith( "hello world", "world" ), "endsWith world" )
     assertFalse( endsWith( "hello", "xyz" ), "endsWith xyz" )
     assertTrue( endsWith( "hello", "" ), "endsWith empty" )
     putsln( "endsWith OK" )
-
-    # substring
     assertEqualStr( "hello", substring( "hello world", 0, 5 ), "substring hello" )
     assertEqualStr( "world", substring( "hello world", 6, 11 ), "substring world" )
     assertEqualStr( "b", substring( "abc", 1, 2 ), "substring b" )
     putsln( "substring OK" )
-
-    # trim
     assertEqualStr( "hello", trim( "  hello  " ), "trim spaces" )
     assertEqualStr( "hello", trim( "hello" ), "trim none" )
     assertEqualStr( "", trim( "   " ), "trim all spaces" )
     putsln( "trim OK" )
-
-    # toUpper / toLower
     assertEqualStr( "HELLO", toUpper( "hello" ), "toUpper" )
     assertEqualStr( "hello", toLower( "HELLO" ), "toLower" )
     assertEqualStr( "HELLO", toUpper( "HeLLo" ), "toUpper mixed" )
     putsln( "toUpper/toLower OK" )
-
-    # isDigit / isAlpha / isAlphaNumeric / isWhitespace
     assertTrue( isDigit( 48 ), "isDigit 0" )
     assertFalse( isDigit( 65 ), "isDigit A" )
     assertTrue( isAlpha( 65 ), "isAlpha A" )
@@ -103,25 +79,16 @@ public function main() -> I32:
     assertTrue( isWhitespace( 32 ), "isWhitespace space" )
     assertFalse( isWhitespace( 65 ), "isWhitespace A" )
     putsln( "char classification OK" )
-
-    # repeat
     assertEqualStr( "ababab", repeat( "ab", 3 ), "repeat ab*3" )
     assertEqualStr( "", repeat( "x", 0 ), "repeat x*0" )
     putsln( "repeat OK" )
-
-    # reverse
     assertEqualStr( "olleh", reverse( "hello" ), "reverse hello" )
     assertEqualStr( "a", reverse( "a" ), "reverse a" )
     assertEqualStr( "", reverse( "" ), "reverse empty" )
     putsln( "reverse OK" )
-
-    # concat
     assertEqualStr( "foobar", concat( "foo", "bar" ), "concat" )
     putsln( "concat OK" )
-
-    # charToString
     assertEqualStr( "A", charToString( 65 ), "charToString A" )
     putsln( "charToString OK" )
-
-    putsln( "=== All builtin function tests passed ===" )
+    putsln( "All builtin function tests passed" )
     return 0

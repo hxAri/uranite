@@ -5,52 +5,40 @@ from uranite.os.net.udp import UDP_HEADER_SIZE, UdpBindTable, UdpHeader
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Net UDP Tests ===" )
-
+    putsln( "OS Net UDP Tests" )
     assertEqualI64( 8, UDP_HEADER_SIZE, "headerSize" )
-
     UdpHeader hdr = new UdpHeader()
     assertEqualI64( 0, hdr.srcPort, "srcPort 0" )
     assertEqualI64( 0, hdr.dstPort, "dstPort 0" )
     assertEqualI64( 8, hdr.length, "length 8" )
     assertEqualI64( 0, hdr.getPayloadLength(), "payload 0" )
-
     hdr.configure( 5353, 53, 100 )
     assertEqualI64( 5353, hdr.srcPort, "srcPort" )
     assertEqualI64( 53, hdr.dstPort, "dstPort" )
     assertEqualI64( 108, hdr.length, "length 8+100" )
     assertEqualI64( 100, hdr.getPayloadLength(), "payload 100" )
     putsln( "UdpHeader OK" )
-
     UdpBindTable bt = new UdpBindTable( 8 )
     assertEqualI64( 0, bt.getCount(), "count 0" )
-
     Boolean bindOk = bt.bind( 53, 1, 0 )
     assertTrue( bindOk, "bind 53" )
     assertEqualI64( 1, bt.getCount(), "count 1" )
     assertTrue( bt.isBound( 53 ), "bound 53" )
     assertFalse( bt.isBound( 80 ), "not bound 80" )
-
     I64 lis = bt.findListener( 53, 12345 )
     assertTrue( lis >= 0, "findListener 53" )
     assertEqualI64( -1, bt.findListener( 80, 0 ), "listener miss" )
-
     Boolean bind2 = bt.bind( 8080, 2, 3232235777 )
     assertTrue( bind2, "bind 8080" )
-
     I64 lis2 = bt.findListener( 8080, 3232235777 )
     assertTrue( lis2 >= 0, "findListener matching addr" )
-
     assertFalse( bt.bind( 53, 3, 0 ), "duplicate bind" )
     putsln( "bind OK" )
-
     Boolean unbindOk = bt.unbind( 53 )
     assertTrue( unbindOk, "unbind 53" )
     assertFalse( bt.isBound( 53 ), "unbound 53" )
     assertFalse( bt.unbind( 9999 ), "unbind miss" )
     putsln( "unbind OK" )
-
     bt.destroy()
-
-    putsln( "=== All UDP tests passed ===" )
+    putsln( "All UDP tests passed" )
     return 0

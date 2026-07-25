@@ -7,19 +7,13 @@ from uranite.memory.allocator import alloc, dealloc
 from uranite.testing.assertions import assertEqualI64, assertNotEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Crypto HMAC Tests ===" )
-
-    # HMAC-SHA-256 with RFC 4231 Test Case 2:
-    # Key = "Jefe" (0x4a656665), Data = "what do ya want for nothing?" (28 bytes)
-    # Expected: 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843
+    putsln( "Crypto HMAC Tests" )
     I64 keyAddress = alloc( 4 )
     writeI8( keyAddress, 0, 0x4a )
     writeI8( keyAddress, 1, 0x65 )
     writeI8( keyAddress, 2, 0x66 )
     writeI8( keyAddress, 3, 0x65 )
-
     I64 dataAddress = alloc( 28 )
-    # "what do ya want for nothing?"
     I64 messageBytes = alloc( 28 )
     writeI8( messageBytes, 0, 0x77 )
     writeI8( messageBytes, 1, 0x68 )
@@ -49,7 +43,6 @@ public function main() -> I32:
     writeI8( messageBytes, 25, 0x6e )
     writeI8( messageBytes, 26, 0x67 )
     writeI8( messageBytes, 27, 0x3f )
-
     I64 hmac256Output = alloc( 32 )
     hmacSha256( keyAddress, 4, messageBytes, 28, hmac256Output )
     assertEqualI64( 0x5b, readI8( hmac256Output, 0 ), "HMAC-SHA256 byte 0" )
@@ -57,7 +50,6 @@ public function main() -> I32:
     assertEqualI64( -63, readI8( hmac256Output, 2 ), "HMAC-SHA256 byte 2 (0xc1)" )
     assertEqualI64( 0x46, readI8( hmac256Output, 3 ), "HMAC-SHA256 byte 3" )
     putsln( "HMAC-SHA-256 RFC 4231 test case 2 OK" )
-
     I64 hmac256Again = alloc( 32 )
     hmacSha256( keyAddress, 4, messageBytes, 28, hmac256Again )
     I64 byteIndex = 0
@@ -65,19 +57,16 @@ public function main() -> I32:
         assertEqualI64( readI8( hmac256Output, byteIndex ), readI8( hmac256Again, byteIndex ), "deterministic" )
         byteIndex = byteIndex + 1
     putsln( "HMAC-SHA-256 deterministic OK" )
-
     I64 hmac512Output = alloc( 64 )
     hmacSha512( keyAddress, 4, messageBytes, 28, hmac512Output )
     assertTrue( hmac512Output > 0, "HMAC-SHA-512 produces output" )
     assertNotEqualI64( readI8( hmac256Output, 0 ), readI8( hmac512Output, 0 ), "SHA-256 vs SHA-512 differ" )
     putsln( "HMAC-SHA-512 OK" )
-
     dealloc( keyAddress )
     dealloc( dataAddress )
     dealloc( messageBytes )
     dealloc( hmac256Output )
     dealloc( hmac256Again )
     dealloc( hmac512Output )
-
-    putsln( "=== All Crypto HMAC Tests Passed ===" )
+    putsln( "All Crypto HMAC Tests Passed" )
     return 0

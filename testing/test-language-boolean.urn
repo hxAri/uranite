@@ -5,23 +5,17 @@ from uranite.language.boolean import Boolean
 from uranite.testing.assertions import assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Boolean Tests ===" )
-
+    putsln( "Boolean Tests" )
     Boolean t = new Boolean( True )
     Boolean f = new Boolean( False )
-
     assertTrue( t.getValue(), "getValue true" )
     assertFalse( f.getValue(), "getValue false" )
     putsln( "getValue OK" )
-
-    # negate
     Boolean negT = t.negate()
     Boolean negF = f.negate()
     assertFalse( negT.getValue(), "negate true" )
     assertTrue( negF.getValue(), "negate false" )
     putsln( "negate OK" )
-
-    # logicalAnd
     Boolean andTT = t.logicalAnd( t )
     Boolean andTF = t.logicalAnd( f )
     Boolean andFF = f.logicalAnd( f )
@@ -29,8 +23,6 @@ public function main() -> I32:
     assertFalse( andTF.getValue(), "and(T,F)" )
     assertFalse( andFF.getValue(), "and(F,F)" )
     putsln( "logicalAnd OK" )
-
-    # logicalOr
     Boolean orTT = t.logicalOr( t )
     Boolean orTF = t.logicalOr( f )
     Boolean orFF = f.logicalOr( f )
@@ -38,6 +30,5 @@ public function main() -> I32:
     assertTrue( orTF.getValue(), "or(T,F)" )
     assertFalse( orFF.getValue(), "or(F,F)" )
     putsln( "logicalOr OK" )
-
-    putsln( "=== All Boolean tests passed ===" )
+    putsln( "All Boolean tests passed" )
     return 0

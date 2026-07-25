@@ -1,28 +1,199 @@
-# 
+
+#
 # @author hxAri (hxari)
 # @create 2026-05-01 15:00
-# @update 2026-06-21 01:44
+# @update 2026-07-19 20:10
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/
-# 
+#
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
-# 
-# Uranite example source file.
-# 
+#
+# Iterables: implementing the Iterator interface for custom
+# collections with for-in loop support, manual iteration patterns.
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # any later version.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-# 
-# 
+#
 
-package main
+package uranite.examples.testing.iterables
 
+from uranite.io.console import puts
+from uranite.iterators.iterator import Iterator
+from uranite.memory.memory import Memory
 
+public class RangeIterator implements Iterator<I64>:
+    
+    """
+    Stateful cursor that yields integers from a start value up to
+    (but not including) an end value, advancing by a given step.
+    """
+    
+    private I64 current
+    private I64 endValue
+    private I64 stepSize
+    
+    public function RangeIterator( self, I64 start, I64 end, I64 step ) -> Void:
+        self.current = start
+        self.endValue = end
+        self.stepSize = step
+    
+    public property has( self ) -> Boolean:
+        return self.current < self.endValue
+    
+    public property next( self ) -> I64:
+        I64 value = self.current
+        self.current = self.current + self.stepSize
+        return value
 
-public function main() -> Void:
-	return
-	
+public class IntRange implements Iterator<I64>:
+    
+    """
+    Represents an integer range [start, end) with a configurable step.
+    Implements Iterator directly for for-in loop compatibility.
+    """
+    
+    private I64 rangeStart
+    private I64 rangeEnd
+    private I64 rangeStep
+    private I64 position
+    
+    public function IntRange( self, I64 start, I64 end ) -> Void:
+        self.rangeStart = start
+        self.rangeEnd = end
+        self.rangeStep = 1
+        self.position = start
+    
+    public function IntRange( self, I64 start, I64 end, I64 step ) -> Void:
+        self.rangeStart = start
+        self.rangeEnd = end
+        self.rangeStep = step
+        self.position = start
+    
+    public property has( self ) -> Boolean:
+        return self.position < self.rangeEnd
+    
+    public property next( self ) -> I64:
+        I64 value = self.position
+        self.position = self.position + self.rangeStep
+        return value
+    
+    public function reset( self ) -> Void:
+        self.position = self.rangeStart
+
+public class FixedStack implements Iterator<I64>:
+    
+    """
+    A simple fixed-capacity stack (LIFO) that can be iterated
+    from top to bottom without consuming elements.
+    """
+    
+    private Memory<I64> storage
+    private I64 topIndex
+    private I64 stackCapacity
+    private I64 iterPosition
+    
+    public function FixedStack( self, I64 capacity ) -> Void:
+        self.stackCapacity = capacity
+        self.storage = new Memory<I64>( capacity )
+        self.topIndex = 0
+        self.iterPosition = 0
+    
+    public function push( self, I64 element ) -> Void:
+        if self.topIndex < self.stackCapacity:
+            self.storage.set( self.topIndex, element )
+            self.topIndex = self.topIndex + 1
+    
+    public function pop( self ) -> I64:
+        self.topIndex = self.topIndex - 1
+        return self.storage.get( self.topIndex )
+    
+    public property length( self ) -> I64:
+        return self.topIndex
+    
+    public property has( self ) -> Boolean:
+        return self.iterPosition < self.topIndex
+    
+    public property next( self ) -> I64:
+        I64 index = self.topIndex - 1 - self.iterPosition
+        self.iterPosition = self.iterPosition + 1
+        return self.storage.get( index )
+    
+    public function resetIterator( self ) -> Void:
+        self.iterPosition = 0
+
+public function sumRange( I64 start, I64 end ) -> I64:
+    
+    """
+    Sums integers in [start, end) by manually driving an iterator.
+    
+    Parameters:
+        start: Range start (inclusive).
+        end: Range end (exclusive).
+    
+    Returns:
+        I64: The sum of all integers in the range.
+    """
+    
+    IntRange range = new IntRange( start, end )
+    I64 total = 0
+    while range.has:
+        total = total + range.next
+    return total
+
+public function countElements( I64 start, I64 end, I64 step ) -> I64:
+    
+    """
+    Counts elements in a range by exhausting its iterator.
+    
+    Parameters:
+        start: Range start.
+        end: Range end.
+        step: Step size.
+    
+    Returns:
+        I64: Number of elements yielded.
+    """
+    
+    IntRange range = new IntRange( start, end, step )
+    I64 count = 0
+    while range.has:
+        range.next
+        count = count + 1
+    return count
+
+public function main() -> I32:
+    
+    """
+    Entry point demonstrating iterable patterns.
+    
+    Returns:
+        I32: Exit code.
+    """
+    
+    I64 sumResult = sumRange( 1, 10 )
+    puts( "Sum of 1..10: ", sumResult )
+    I64 elementCount = countElements( 0, 100, 2 )
+    puts( "Elements in 0..100 step 2: ", elementCount )
+    IntRange fiveToTen = new IntRange( 5, 10 )
+    I64 forInSum = 0
+    for I64 value in fiveToTen:
+        forInSum = forInSum + value
+    puts( "for-in sum 5..10: ", forInSum )
+    IntRange stepped = new IntRange( 0, 20, 3 )
+    puts( "Stepped 0..20 by 3:" )
+    while stepped.has:
+        I64 stepValue = stepped.next
+        puts( "  ", stepValue )
+    FixedStack stack = new FixedStack( 8 )
+    stack.push( 100 )
+    stack.push( 200 )
+    stack.push( 300 )
+    puts( "Stack iteration (top to bottom):" )
+    for I64 element in stack:
+        puts( "  ", element )
+    return 0

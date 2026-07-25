@@ -24,111 +24,101 @@ package uranite.examples.testing.classes
 
 from uranite.io.console import puts
 
-# Forward declaration
 class LinkedNode;
 
-# Basic class with constructor and methods
 class Point:
+    
     public I64 x
     public I64 y
-
+    
     public function Point( self, I64 x, I64 y ) -> Void:
         self.x = x
         self.y = y
-
+    
     public function sum( self ) -> I64:
         return self.x + self.y
 
-# Inheritance
 class Animal:
+    
     public String name
     public I64 age
-
+    
     public function Animal( self, String name, I64 age ) -> Void:
         self.name = name
         self.age = age
-
+    
     public virtual function speak( self ) -> Void:
         puts( "..." )
 
 class Dog extends Animal:
+    
     public String breed
-
+    
     public function Dog( self, String name, I64 age, String breed ) -> Void:
         self.name = name
         self.age = age
         self.breed = breed
-
+    
     public override function speak( self ) -> Void:
         puts( "Woof!" )
 
 class Cat extends Animal:
+    
     public function Cat( self, String name, I64 age ) -> Void:
         self.name = name
         self.age = age
-
+    
     public override function speak( self ) -> Void:
         puts( "Meow!" )
 
-# Readonly class (immutable after construction)
 Readonly class Config:
+    
     public I64 port
     public String host
-
+    
     public function Config( self, I64 port, String host ) -> Void:
         self.port = port
         self.host = host
-
+    
     public function describe( self ) -> Void:
         puts( "Config: ", self.host, ":", self.port )
 
-# Generic class
 class Box<T>:
+    
     public T value
-
+    
     public function Box( self, T value ) -> Void:
         self.value = value
-
+    
     public function get( self ) -> T:
         return self.value
 
-# Forward-declared class body
 class LinkedNode:
+    
     public I64 value
-
+    
     public function LinkedNode( self, I64 v ) -> Void:
         self.value = v
 
-# Nested class
 class Container:
+    
     public I64 size
-
+    
     public class Item:
         public I64 id
 
 public function main() -> I32:
-    # Basic class
     Point pt = new Point( 10, 20 )
     puts( "Point(", pt.x, ", ", pt.y, ") sum = ", pt.sum() )
-
-    # Inheritance + virtual dispatch
     Dog dog = new Dog( "Rex", 5, "Husky" )
     puts( "Dog: ", dog.name, ", age ", dog.age )
     dog.speak()
-
     Cat cat = new Cat( "Whiskers", 3 )
     cat.speak()
-
-    # Readonly
     Config cfg = new Config( 8080, "localhost" )
     cfg.describe()
-
-    # Generics
     Box<I64> intBox = new Box<I64>( 42 )
     puts( "Box value = ", intBox.get() )
-
-    # Forward-declared
     LinkedNode node = new LinkedNode( 99 )
     puts( "LinkedNode value = ", node.value )
-
     return 0

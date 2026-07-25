@@ -13,19 +13,16 @@ from uranite.os.net.ethernet import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Net Ethernet Tests ===" )
-
+    putsln( "OS Net Ethernet Tests" )
     assertEqualI64( 2048, ETHERTYPE_IPV4, "ETHERTYPE_IPV4" )
     assertEqualI64( 2054, ETHERTYPE_ARP, "ETHERTYPE_ARP" )
     assertEqualI64( 34525, ETHERTYPE_IPV6, "ETHERTYPE_IPV6" )
     assertEqualI64( 1500, ETH_MTU, "ETH_MTU" )
     assertEqualI64( 46, ETH_MIN_PAYLOAD, "ETH_MIN_PAYLOAD" )
     putsln( "constants OK" )
-
     EthernetFrame frame = new EthernetFrame()
     assertEqualI64( 0, frame.destMac, "init dest 0" )
     assertEqualI64( 0, frame.ethertype, "init etype 0" )
-
     frame.configure( 281474976710655, 1234567890, 2048, 100 )
     assertEqualI64( 281474976710655, frame.destMac, "broadcast mac" )
     assertEqualI64( 2048, frame.ethertype, "etype ipv4" )
@@ -36,17 +33,14 @@ public function main() -> I32:
     assertFalse( frame.isIpv6(), "not ipv6" )
     assertEqualI64( 114, frame.getTotalSize(), "total 14+100" )
     putsln( "EthernetFrame OK" )
-
     EthernetFrame frame2 = new EthernetFrame()
     frame2.configure( 12345, 67890, 2054, 46 )
     assertFalse( frame2.isBroadcast(), "not broadcast" )
     assertTrue( frame2.isArp(), "arp" )
     assertEqualI64( 60, frame2.getTotalSize(), "total 14+46" )
     putsln( "frame2 OK" )
-
     ArpTable arp = new ArpTable( 8 )
     assertEqualI64( 0, arp.getCount(), "arp count 0" )
-
     Boolean upd = arp.update( 3232235777, 112233445566, 1000 )
     assertTrue( upd, "update" )
     assertEqualI64( 1, arp.getCount(), "arp count 1" )
@@ -54,18 +48,14 @@ public function main() -> I32:
     assertTrue( arp.contains( 3232235777 ), "contains" )
     assertFalse( arp.contains( 0 ), "not contains 0" )
     assertEqualI64( 0, arp.lookup( 999 ), "lookup miss" )
-
     arp.update( 3232235777, 998877665544, 2000 )
     assertEqualI64( 998877665544, arp.lookup( 3232235777 ), "updated mac" )
-
     Boolean rem = arp.remove( 3232235777 )
     assertTrue( rem, "remove" )
     assertEqualI64( 0, arp.getCount(), "count after remove" )
     assertFalse( arp.contains( 3232235777 ), "not contains after remove" )
     assertFalse( arp.remove( 999 ), "remove miss" )
     putsln( "ArpTable OK" )
-
     arp.destroy()
-
-    putsln( "=== All ethernet tests passed ===" )
+    putsln( "All ethernet tests passed" )
     return 0

@@ -19,26 +19,21 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package main
+package uranite.examples.benchmarks.mandelbrot
 
+from uranite.functions.externs import clock
 from uranite.io.console import puts
 from uranite.language.double import Double
 from uranite.language.int import Int
 from uranite.language.u8 import U8
 from uranite.memory.memory import Memory
 
-extern function clock() -> I64;
-extern function putchar( I32 c ) -> I32;
-
 public function main() -> I32:
     Int n = 16000
     puts( "P4 ", n, ":", n )
-    
     I64 start = clock()
-    
     Int bytesPerRow = n / 8
     Memory<U8> bitmap = new Memory<U8>( n * bytesPerRow )
-    
     for Int y = 0; y < n; y++:
         Double Civ = ( y * 2.0 / n ) - 1.0
         for Int xByte = 0; xByte < bytesPerRow; xByte++:
@@ -46,12 +41,10 @@ public function main() -> I32:
             for Int bit = 0; bit < 8; bit++:
                 Int x = xByte * 8 + bit
                 Double Crv = ( x * 2.0 / n ) - 1.5
-                
                 Double Zrv = 0.0
                 Double Ziv = 0.0
                 Double Trv = 0.0
                 Double Tiv = 0.0
-                
                 Int i = 0
                 while i < 50 and ( Trv + Tiv <= 4.0 ):
                     Ziv = ( Zrv * Ziv ) + ( Zrv * Ziv ) + Civ
@@ -59,20 +52,13 @@ public function main() -> I32:
                     Trv = Zrv * Zrv
                     Tiv = Ziv * Ziv
                     i = i + 1
-                
                 res = res << 1
                 if Trv + Tiv <= 4.0:
                     res = res | 1
-                    
             bitmap.set( y * bytesPerRow + xByte, res )
-            
     I64 end = clock()
     Double elapsed = ( end - start ) / 1000000.0
-    
-    # In a real benchmark, we'd output the bitmap to stdout
-    # For this exercise, we'll just print the stats to stderr
     puts( "Total bits calculated: ", ( n as I64 ) * ( n as I64 ) )
     puts( "Elapsed time: ", elapsed, " seconds" )
-    
     bitmap.free()
     return 0

@@ -5,20 +5,15 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertGreaterThan
 
 public function main() -> I32:
-    putsln( "=== Threading CondVar Tests ===" )
-
+    putsln( "Threading CondVar Tests" )
     I64 cv = uraniteCondVarCreate()
     assertGreaterThan( cv, 0, "condvar handle" )
     putsln( "create OK" )
-
     uraniteCondVarSignal( cv )
     putsln( "signal OK" )
-
     uraniteCondVarBroadcast( cv )
     putsln( "broadcast OK" )
-
     uraniteCondVarDestroy( cv )
     putsln( "destroy OK" )
-
-    putsln( "=== All condvar tests passed ===" )
+    putsln( "All condvar tests passed" )
     return 0

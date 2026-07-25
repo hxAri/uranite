@@ -12,8 +12,8 @@ async function asyncMain() -> Future<I64>:
     return result
 
 public function main() -> I32:
-    putsln( "=== Async Spawn Test ===" )
+    putsln( "Async Spawn Test" )
     assertEqualI64( 1, 1, "async spawn declarations compile" )
     putsln( "async function declarations compile OK" )
-    putsln( "=== Async spawn test passed ===" )
+    putsln( "Async spawn test passed" )
     return 0

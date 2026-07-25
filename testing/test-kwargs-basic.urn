@@ -5,14 +5,14 @@ from uranite.testing.assertions import assertEqualI64
 
 function greet( String name, String opts{} ) -> I64:
     I64 count = opts.length()
+    for String option, String value in opts:
+        putsln( "Option: {}: {}".format( option, value ) )
     return count
 
 public function main() -> I32:
-    putsln( "=== Kwargs Basic Tests ===" )
-
+    putsln( "Kwargs Basic Tests" )
     I64 result = greet( "World", prefix="Mr", suffix="Jr" )
     assertEqualI64( 2, result, "kwargs count = 2" )
     putsln( "kwargs OK" )
-
-    putsln( "=== All kwargs tests passed ===" )
+    putsln( "All kwargs tests passed" )
     return 0
