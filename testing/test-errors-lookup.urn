@@ -8,59 +8,40 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== LookupError Hierarchy Tests ===" )
-
-    # LookupError construction
+    putsln( "LookupError Hierarchy Tests" )
     LookupError lookupErr = new LookupError( "generic lookup failed", 0, None )
     assertEqualStr( "generic lookup failed", lookupErr.getMessage(), "LookupError message" )
     assertEqualI64( 0, lookupErr.getCode(), "LookupError code" )
     putsln( "LookupError OK" )
-
-    # IndexError construction
     IndexError indexErr = new IndexError( 10, 5 )
     assertEqualI64( 10, indexErr.requestedIndex, "IndexError requestedIndex" )
     assertEqualI64( 5, indexErr.containerSize, "IndexError containerSize" )
     assertEqualStr( "index 10 out of range for container of size 5", indexErr.getMessage(), "IndexError message" )
     putsln( "IndexError OK" )
-
-    # IndexError negative index
     IndexError negErr = new IndexError( -1, 3 )
     assertEqualI64( -1, negErr.requestedIndex, "IndexError negative index" )
     putsln( "IndexError negative OK" )
-
-    # KeyError construction
     KeyError keyErr = new KeyError( "username" )
     assertEqualStr( "username", keyErr.requestedKey, "KeyError requestedKey" )
     assertEqualStr( "key not found: 'username'", keyErr.getMessage(), "KeyError message" )
     putsln( "KeyError OK" )
-
-    # ValueError construction
     ValueError valErr = new ValueError( "chunk size must be positive", 0, None )
     assertEqualStr( "chunk size must be positive", valErr.getMessage(), "ValueError message" )
     putsln( "ValueError OK" )
-
-    # TypeError construction
     TypeError typeErr = new TypeError( "String", "Int" )
     assertEqualStr( "String", typeErr.expectedType, "TypeError expectedType" )
     assertEqualStr( "Int", typeErr.actualType, "TypeError actualType" )
     assertEqualStr( "expected type 'String' but got 'Int'", typeErr.getMessage(), "TypeError message" )
     putsln( "TypeError OK" )
-
-    # StateError construction
     StateError stateErr = new StateError( "iterator exhausted", 0, None )
     assertEqualStr( "iterator exhausted", stateErr.getMessage(), "StateError message" )
     putsln( "StateError OK" )
-
-    # CapacityError construction
     CapacityError capErr = new CapacityError( "arena allocator full", 0, None )
     assertEqualStr( "arena allocator full", capErr.getMessage(), "CapacityError message" )
     putsln( "CapacityError OK" )
-
-    # NotImplementedError construction
     NotImplementedError notImplErr = new NotImplementedError( "doWork" )
     assertEqualStr( "doWork", notImplErr.methodName, "NotImplementedError methodName" )
     assertEqualStr( "method not implemented: 'doWork'", notImplErr.getMessage(), "NotImplementedError message" )
     putsln( "NotImplementedError OK" )
-
-    putsln( "=== All LookupError hierarchy tests passed ===" )
+    putsln( "All LookupError hierarchy tests passed" )
     return 0
