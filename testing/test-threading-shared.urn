@@ -5,25 +5,19 @@ from uranite.testing.assertions import assertEqualI64, assertGreaterThan
 from uranite.threading.shared import Shared
 
 public function main() -> I32:
-    putsln( "=== Threading Shared Tests ===" )
-
+    putsln( "Threading Shared Tests" )
     Shared<I64> s = new Shared<I64>( 42 )
-
     I64 val = s.get()
     assertEqualI64( 42, val, "initial get" )
     putsln( "get OK" )
-
     s.set( 100 )
     I64 val2 = s.get()
     assertEqualI64( 100, val2, "after set" )
     putsln( "set OK" )
-
     I64 refs = s.getRefCount()
     assertGreaterThan( refs, 0, "refcount > 0" )
     putsln( "refcount OK" )
-
     s.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All shared tests passed ===" )
+    putsln( "All shared tests passed" )
     return 0
