@@ -5,53 +5,44 @@ from uranite.os.ipc.shared-memory import SharedRegion
 from uranite.os.memory.pmm import PhysicalMemoryManager
 from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.time.clock import SystemClock
-from uranite.process.process import PROCESS_STATE_FINISHED, PROCESS_STATE_NEW, PROCESS_STATE_RUNNING
-from uranite.process.process import PROCESS_STATE_FINISHED, PROCESS_STATE_NEW, PROCESS_STATE_RUNNING
-from uranite.process.process import PROCESS_STATE_FINISHED, PROCESS_STATE_NEW, PROCESS_STATE_RUNNING
+from uranite.process.process import {
+	DEFAULT_PROCESS_PRIORITY, 
+	DEFAULT_PROCESS_STACK_PAGES, 
+	PROCESS_STATE_FINISHED, 
+	PROCESS_STATE_NEW, 
+	PROCESS_STATE_RUNNING
+}
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertGreaterThan, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Multiprocessing Process Tests ===" )
-
+    putsln( "Multiprocessing Process Tests" )
     Scheduler sched = new Scheduler()
     PhysicalMemoryManager pmm = new PhysicalMemoryManager( 1048576 )
     SystemClock clock = new SystemClock( 1000 )
     ProcessRuntime runtime = new ProcessRuntime( sched, pmm, clock, 256 )
     putsln( "runtime OK" )
-
-    # allocateProcessId
     I64 pid = runtime.allocateProcessId()
     assertGreaterThan( pid, -1, "pid >= 0" )
     putsln( "allocateProcessId OK" )
-
-    # Process construction
     Process proc = new Process( runtime, pid, DEFAULT_PROCESS_STACK_PAGES, DEFAULT_PROCESS_PRIORITY )
     assertEqualI64( pid, proc.getProcessId(), "process id" )
     assertFalse( proc.isFinished(), "not finished" )
     assertFalse( proc.hasCrashed(), "not crashed" )
     putsln( "Process OK" )
-
-    # SharedRegion
     SharedRegion region = runtime.createSharedRegion( 0, 1 )
     assertGreaterThan( region.getRegionId(), -1, "region id" )
     assertGreaterThan( region.getPageCount(), 0, "region pages" )
     assertGreaterThan( region.getSize(), 0, "region size" )
     putsln( "SharedRegion OK" )
-
-    # setResult + getResult
     proc.setResult( 123 )
     assertEqualI64( 123, proc.getResult(), "result 123" )
     putsln( "setResult OK" )
-
-    # markFinished
     proc.markFinished()
     assertTrue( proc.isFinished(), "finished after mark" )
     putsln( "markFinished OK" )
-
     proc.cleanup()
     region.release()
     runtime.destroy()
     putsln( "cleanup OK" )
-
-    putsln( "=== All process tests passed ===" )
+    putsln( "All process tests passed" )
     return 0
