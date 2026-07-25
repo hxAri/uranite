@@ -5,11 +5,9 @@ from uranite.os.hal.interrupt import InterruptTable, IrqEntry, MAX_IRQ_COUNT
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS HAL Interrupt Tests ===" )
-
+    putsln( "OS HAL Interrupt Tests" )
     assertEqualI64( 256, MAX_IRQ_COUNT, "MAX_IRQ_COUNT" )
     putsln( "const OK" )
-
     IrqEntry entry = new IrqEntry()
     assertFalse( entry.isRegistered(), "not registered" )
     assertEqualI64( 0, entry.triggerCount, "trigger 0" )
@@ -18,10 +16,8 @@ public function main() -> I32:
     entry.incrementTrigger()
     assertEqualI64( 2, entry.triggerCount, "trigger 2" )
     putsln( "IrqEntry OK" )
-
     InterruptTable table = new InterruptTable()
     assertFalse( table.isRegistered( 32 ), "32 not registered" )
-
     Boolean ok = table.registerHandler( 32, 12345 )
     assertTrue( ok, "register 32" )
     assertTrue( table.isRegistered( 32 ), "32 registered" )
@@ -29,25 +25,20 @@ public function main() -> I32:
     assertEqualI64( 12345, table.getHandler( 32 ), "handler addr" )
     assertEqualI64( 1, table.getRegisteredCount(), "registered count" )
     putsln( "register OK" )
-
     table.mask( 32 )
     assertFalse( table.isEnabled( 32 ), "32 masked" )
     table.unmask( 32 )
     assertTrue( table.isEnabled( 32 ), "32 unmasked" )
     putsln( "mask/unmask OK" )
-
     table.recordTrigger( 32 )
     assertEqualI64( 1, table.getTriggerCount( 32 ), "trigger count 1" )
     table.recordTrigger( 32 )
     assertEqualI64( 2, table.getTriggerCount( 32 ), "trigger count 2" )
     putsln( "trigger OK" )
-
     table.unregisterHandler( 32 )
     assertFalse( table.isRegistered( 32 ), "32 unregistered" )
     assertEqualI64( 0, table.getRegisteredCount(), "count 0" )
     putsln( "unregister OK" )
-
     table.destroy()
-
-    putsln( "=== All HAL interrupt tests passed ===" )
+    putsln( "All HAL interrupt tests passed" )
     return 0
