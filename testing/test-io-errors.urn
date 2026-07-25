@@ -14,34 +14,25 @@ from uranite.io.errors import {
 from uranite.testing.assertions import assertEqualI64, assertEqualStr
 
 public function main() -> I32:
-    putsln( "=== IO Error Tests ===" )
-
+    putsln( "IO Error Tests" )
     IOError e1 = new IOError( "general io error", 5, None )
     assertEqualStr( "general io error", e1.getMessage(), "IOError message" )
     assertEqualI64( 5, e1.getCode(), "IOError code" )
-
     FileNotFoundError e2 = new FileNotFoundError( "file not found", 2, None )
     assertEqualStr( "file not found", e2.getMessage(), "FileNotFoundError message" )
     assertEqualI64( 2, e2.getCode(), "FileNotFoundError code" )
-
     PermissionError e3 = new PermissionError( "permission denied", 13, None )
     assertEqualI64( 13, e3.getCode(), "PermissionError code" )
-
     FileExistsError e4 = new FileExistsError( "file exists", 17, None )
     assertEqualI64( 17, e4.getCode(), "FileExistsError code" )
-
     IsADirectoryError e5 = new IsADirectoryError( "is a directory", 21, None )
     assertEqualI64( 21, e5.getCode(), "IsADirectoryError code" )
-
     NotADirectoryError e6 = new NotADirectoryError( "not a directory", 20, None )
     assertEqualI64( 20, e6.getCode(), "NotADirectoryError code" )
-
     DirectoryNotEmptyError e7 = new DirectoryNotEmptyError( "dir not empty", 39, None )
     assertEqualI64( 39, e7.getCode(), "DirectoryNotEmptyError code" )
-
     BrokenPipeError e8 = new BrokenPipeError( "broken pipe", 32, None )
     assertEqualI64( 32, e8.getCode(), "BrokenPipeError code" )
     putsln( "all error types OK" )
-
-    putsln( "=== All IO error tests passed ===" )
+    putsln( "All IO error tests passed" )
     return 0
