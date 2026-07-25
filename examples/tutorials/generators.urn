@@ -1,3 +1,25 @@
+
+#
+# @author hxAri (hxari)
+# @create 2026-07-24 00:00
+# @update 2026-07-24 00:00
+# @github https://github.com/uranite-lang/uranite
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Generators: yield-based lazy value production, generator iteration,
+# range generators, and stateful accumulation patterns.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
 package main
 
 from uranite.io.console import puts
@@ -21,19 +43,16 @@ function fibonacci( I64 count ) -> Generator<I64>:
         b = temp
 
 public function main() -> I32:
-    puts( "=== Simple yield ===" )
+    puts( "Simple yield" )
     for I64 val in counting():
         puts( val, " " )
-    puts(  )
-
-    puts( "=== Range generator ===" )
+    puts()
+    puts( "Range generator" )
     for I64 val in range( 1, 5 ):
         puts( val, " " )
-    puts(  )
-
-    puts( "=== Fibonacci generator ===" )
+    puts()
+    puts( "Fibonacci generator" )
     for I64 val in fibonacci( 9 ):
         puts( val, " " )
-    puts(  )
-
+    puts()
     return 0
