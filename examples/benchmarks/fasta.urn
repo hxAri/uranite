@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2026-05-04 10:45
@@ -19,6 +20,7 @@
 
 package uranite.examples.benchmarks.fasta
 
+from uranite.functions.externs import clock
 from uranite.io.console import puts
 from uranite.language.double import Double
 from uranite.language.int import Int
@@ -26,10 +28,8 @@ from uranite.language.string import String
 from uranite.language.u8 import U8
 from uranite.memory.memory import Memory
 
-extern function clock() -> I64;
-extern function fwrite( Memory<U8> ptr, Int size, Int nmemb, Int stream ) -> Int;
-
 class Fasta:
+    
     private Int last = 42
     private Int IM = 139968
     private Int IA = 3877
@@ -54,18 +54,11 @@ class Fasta:
 
 public function main() -> I32:
     Int n = 25000000
-    puts( "=== Uranite Extreme Fasta Benchmark (n=", n, ") ===" )
-    
+    puts( "Uranite Extreme Fasta Benchmark (n=", n, ")" )
     I64 start = clock()
-    
     Fasta f = new Fasta()
-    
-    # IUB probabilities
     Memory<U8> iubSymbols = new Memory<U8>( 15 )
     Memory<Double> iubProbs = new Memory<Double>( 15 )
-    # Fill with standard IUB data...
-    
-    # Homo sapiens probabilities
     Memory<U8> homoSymbols = new Memory<U8>( 4 )
     Memory<Double> homoProbs = new Memory<Double>( 4 )
     homoSymbols.set( 0, 'a' as U8 )
@@ -76,34 +69,23 @@ public function main() -> I32:
     homoProbs.set( 2, 0.1975473066391 )
     homoSymbols.set( 3, 't' as U8 )
     homoProbs.set( 3, 0.3015094502008 )
-    
     f.makeCumulative( homoProbs, 4 )
-    
     Int LINE_LENGTH = 60
     Memory<U8> buffer = new Memory<U8>( LINE_LENGTH + 1 )
-    
-    # Simulate generating n characters
     Int generated = 0
     while generated < n:
         Int toGenerate = LINE_LENGTH
         if n - generated < LINE_LENGTH:
             toGenerate = n - generated
-            
         for Int i = 0; i < toGenerate; i++:
             buffer.set( i, f.selectSymbol( homoProbs, homoSymbols, 4 ) )
-        
         buffer.set( toGenerate, '\n' as U8 )
-        # fwrite(buffer, 1, toGenerate + 1, 1) # stdout
         generated = generated + toGenerate
-        
     I64 end = clock()
     Double elapsed = ( end - start ) / 1000000.0
-    
     puts( "Generated ", n, " base pairs" )
     puts( "Elapsed time: ", elapsed, " seconds" )
-    
     homoSymbols.free()
     homoProbs.free()
     buffer.free()
-    
     return 0
