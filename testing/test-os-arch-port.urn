@@ -13,10 +13,8 @@ from uranite.os.arch.port import {
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== OS Arch Port Tests ===" )
-
+    putsln( "OS Arch Port Tests" )
     assertEqualI64( 1, 1, "port functions imported" )
     putsln( "imports OK" )
-
-    putsln( "=== All port tests passed ===" )
+    putsln( "All port tests passed" )
     return 0
