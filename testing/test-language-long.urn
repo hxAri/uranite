@@ -6,40 +6,29 @@ from uranite.language.long import Long
 from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Long Tests ===" )
-
+    putsln( "Long Tests" )
     Long a = new Long( 9223372036854775807 )
     Long b = new Long( 1 )
-
     assertEqualI64( 9223372036854775807, a.getValue(), "getValue" )
     putsln( "getValue OK" )
-
-    # arithmetic (avoid overflow on add)
     Int diff = a.subtract( b )
     assertEqualI64( 9223372036854775806, diff.getValue(), "subtract" )
     Int prod = b.multiply( b )
     assertEqualI64( 1, prod.getValue(), "multiply" )
     putsln( "arithmetic OK" )
-
-    # abs / negate
     Long neg = new Long( -42 )
     Int absVal = neg.abs()
     assertEqualI64( 42, absVal.getValue(), "abs" )
     Int negated = b.negate()
     assertEqualI64( -1, negated.getValue(), "negate" )
     putsln( "abs/negate OK" )
-
-    # equals / compareTo
     Long c = new Long( 9223372036854775807 )
     assertTrue( a.equals( c ), "equals" )
     assertEqualI64( 1, a.compareTo( b ), "compareTo" )
-
-    # min / max
     Int minVal = a.min( b )
     assertEqualI64( 1, minVal.getValue(), "min" )
     Int maxVal = a.max( b )
     assertEqualI64( 9223372036854775807, maxVal.getValue(), "max" )
     putsln( "min/max OK" )
-
-    putsln( "=== All Long tests passed ===" )
+    putsln( "All Long tests passed" )
     return 0
