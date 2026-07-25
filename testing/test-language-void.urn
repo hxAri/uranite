@@ -25,16 +25,13 @@ public function nested() -> Void:
     callCount = callCount + 1
 
 public function main() -> I32:
-    putsln( "=== Void Tests ===" )
-
+    putsln( "Void Tests" )
     doNothing()
     doSomething( 42 )
     sideEffect( 10, 20 )
     multipleArgs( 1, "test", 3.14 )
     nested()
-
     assertEqualI64( 7, callCount, "all void functions called" )
     putsln( "void calls OK" )
-
-    putsln( "=== All Void tests passed ===" )
+    putsln( "All Void tests passed" )
     return 0
