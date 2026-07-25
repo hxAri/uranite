@@ -12,37 +12,30 @@ from uranite.process.errors import {
 from uranite.testing.assertions import assertEqualI64, assertEqualStr
 
 public function main() -> I32:
-    putsln( "=== Multiprocessing Errors Tests ===" )
-
+    putsln( "Multiprocessing Errors Tests" )
     ProcessError e1 = new ProcessError( "test error", 1, None )
     assertEqualStr( "test error", e1.getMessage(), "ProcessError msg" )
     assertEqualI64( 1, e1.getCode(), "ProcessError code" )
     putsln( "ProcessError OK" )
-
     ProcessCreationError e2 = new ProcessCreationError( "creation failed", 2, None )
     assertEqualStr( "creation failed", e2.getMessage(), "CreationError msg" )
     assertEqualI64( 2, e2.getCode(), "CreationError code" )
     putsln( "ProcessCreationError OK" )
-
     ProcessCommunicationError e3 = new ProcessCommunicationError( "comm failed", 3, None )
     assertEqualStr( "comm failed", e3.getMessage(), "CommError msg" )
     assertEqualI64( 3, e3.getCode(), "CommError code" )
     putsln( "ProcessCommunicationError OK" )
-
     ProcessCancellationError e4 = new ProcessCancellationError( "cancelled", 4, None )
     assertEqualStr( "cancelled", e4.getMessage(), "CancelError msg" )
     assertEqualI64( 4, e4.getCode(), "CancelError code" )
     putsln( "ProcessCancellationError OK" )
-
     ProcessTimeoutError e5 = new ProcessTimeoutError( "timeout", 5, None )
     assertEqualStr( "timeout", e5.getMessage(), "TimeoutError msg" )
     assertEqualI64( 5, e5.getCode(), "TimeoutError code" )
     putsln( "ProcessTimeoutError OK" )
-
     ProcessCrashedError e6 = new ProcessCrashedError( "crashed", 6, None )
     assertEqualStr( "crashed", e6.getMessage(), "CrashedError msg" )
     assertEqualI64( 6, e6.getCode(), "CrashedError code" )
     putsln( "ProcessCrashedError OK" )
-
-    putsln( "=== All multiprocessing error tests passed ===" )
+    putsln( "All multiprocessing error tests passed" )
     return 0
