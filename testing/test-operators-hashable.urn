@@ -5,32 +5,28 @@ from uranite.operators.hashable import Hashable
 from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public class Key implements Hashable:
+    
     public Int id
-
+    
     public function Key( self, Int id ) -> Void:
         self.id = id
-
+    
     public function hash( self ) -> I64:
         return self.id * 31
 
 public function main() -> I32:
-    putsln( "=== Hashable Tests ===" )
-
+    putsln( "Hashable Tests" )
     Key k1 = new Key( 1 )
     Key k2 = new Key( 42 )
     Key k3 = new Key( 0 )
     Key k4 = new Key( -5 )
-
     assertEqualI64( 31, k1.hash(), "hash(1)" )
     assertEqualI64( 1302, k2.hash(), "hash(42)" )
     assertEqualI64( 0, k3.hash(), "hash(0)" )
     assertEqualI64( -155, k4.hash(), "hash(-5)" )
     putsln( "hash OK" )
-
-    # same id same hash
     Key k5 = new Key( 42 )
     assertTrue( k2.hash() == k5.hash(), "same id same hash" )
     putsln( "consistency OK" )
-
-    putsln( "=== All Hashable tests passed ===" )
+    putsln( "All Hashable tests passed" )
     return 0
