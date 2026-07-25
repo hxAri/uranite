@@ -24,8 +24,6 @@ package uranite.functions
 from uranite.functions.externs import *
 from uranite.functions.runtime import *
 
-
-
 export {
     calloc,
     clock,
@@ -35,9 +33,11 @@ export {
     memcpy,
     memset,
     printf,
+    putchar,
     puts,
     realloc,
     snprintf,
+    sqrt,
     strcat,
     strcmp,
     strlen,
