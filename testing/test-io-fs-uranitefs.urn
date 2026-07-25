@@ -4,10 +4,8 @@ from uranite.io.console import putsln
 from uranite.io.fs.uranitefs import UraniteFileSystem, UraniteFsInode, UraniteFsSuperblock
 
 public function main() -> I32:
-    putsln( "=== IO FS UraniteFS Tests ===" )
-
+    putsln( "IO FS UraniteFS Tests" )
     UraniteFsSuperblock superblock = new UraniteFsSuperblock()
     putsln( "UraniteFsSuperblock constructed OK" )
-
-    putsln( "=== All IO FS UraniteFS Tests Passed ===" )
+    putsln( "All IO FS UraniteFS Tests Passed" )
     return 0
