@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -28,7 +29,7 @@ class Rectangle:
     
     public F64 width
     public F64 height
-
+    
     public function Rectangle( self, F64 w, F64 h ) -> Void:
         
         """
@@ -41,7 +42,7 @@ class Rectangle:
         
         self.width = w
         self.height = h
-
+    
     public property area( self ) -> F64:
         
         """
@@ -52,7 +53,7 @@ class Rectangle:
         """
         
         return self.width * self.height
-
+    
     public property perimeter( self ) -> F64:
         
         """
@@ -63,7 +64,7 @@ class Rectangle:
         """
         
         return 2.0 * ( self.width + self.height )
-
+    
     public property diagonal( self ) -> F64:
         
         """
@@ -74,7 +75,7 @@ class Rectangle:
         """
         
         return self.width * self.width + self.height * self.height
-
+    
     public property isSquare( self ) -> Boolean:
         
         """
@@ -91,7 +92,7 @@ class Circle:
     """ A class representing a circle with a radius """
     
     public F64 radius
-
+    
     public function Circle( self, F64 r ) -> Void:
         
         """
@@ -102,7 +103,7 @@ class Circle:
         """
         
         self.radius = r
-
+    
     public property area( self ) -> F64:
         
         """
@@ -113,7 +114,7 @@ class Circle:
         """
         
         return 3.14159265 * self.radius * self.radius
-
+    
     public property circumference( self ) -> F64:
         
         """
@@ -124,7 +125,7 @@ class Circle:
         """
         
         return 2.0 * 3.14159265 * self.radius
-
+    
     public property diameter( self ) -> F64:
         
         """
@@ -141,7 +142,7 @@ class Temperature:
     """ A class representing temperature in Celsius with property conversions """
     
     public F64 celsius
-
+    
     public function Temperature( self, F64 c ) -> Void:
         
         """
@@ -152,7 +153,7 @@ class Temperature:
         """
         
         self.celsius = c
-
+    
     public property fahrenheit( self ) -> F64:
         
         """
@@ -163,7 +164,7 @@ class Temperature:
         """
         
         return self.celsius * 1.8 + 32.0
-
+    
     public property kelvin( self ) -> F64:
         
         """
@@ -174,7 +175,7 @@ class Temperature:
         """
         
         return self.celsius + 273.15
-
+    
     public property isFreezing( self ) -> Boolean:
         
         """
@@ -185,7 +186,7 @@ class Temperature:
         """
         
         return self.celsius <= 0.0
-
+    
     public property isBoiling( self ) -> Boolean:
         
         """
@@ -206,32 +207,23 @@ public function main() -> I32:
         I32 exit code.
     """
     
-    # Rectangle
     Rectangle rect = new Rectangle( 10.0, 5.0 )
     puts( "rect area = ", rect.area )
     puts( "rect perimeter = ", rect.perimeter )
     puts( "rect diagonal^2 = ", rect.diagonal )
-
     Rectangle square = new Rectangle( 4.0, 4.0 )
     puts( "square area = ", square.area )
-
-    # Circle
     Circle c = new Circle( 5.0 )
     puts( "circle area = ", c.area )
     puts( "circle circumference = ", c.circumference )
     puts( "circle diameter = ", c.diameter )
-
-    # Temperature
     Temperature boiling = new Temperature( 100.0 )
     puts( "100C = ", boiling.fahrenheit, "F" )
     puts( "100C = ", boiling.kelvin, "K" )
-
     Temperature freezing = new Temperature( 0.0 )
     puts( "0C = ", freezing.fahrenheit, "F" )
     puts( "0C = ", freezing.kelvin, "K" )
-
     Temperature room = new Temperature( 22.0 )
     puts( "22C = ", room.fahrenheit, "F" )
-
     puts( "all property tests passed" )
     return 0
