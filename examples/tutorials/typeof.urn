@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -44,6 +45,7 @@ class Dog extends Animal:
     """ Class representing a dog, extending Animal """
     
     public I64 age
+    
     public function Dog( self, String name, I64 age ) -> Void:
     
         """
@@ -101,8 +103,6 @@ public function main() -> I32:
     Dog dog = new Dog( "Rex", 5 )
     Cat cat = new Cat( "Whiskers" )
     GoldenRetriever golden = new GoldenRetriever( "Buddy", 3 )
-
-    # instanceof checks
     if dog instanceof Dog:
         puts( "dog instanceof Dog: yes" )
     if dog instanceof Animal:
@@ -111,16 +111,12 @@ public function main() -> I32:
         puts( "golden instanceof Dog: yes" )
     if golden instanceof Animal:
         puts( "golden instanceof Animal: yes" )
-
-    # subclassof checks
     if Dog subclassof Animal:
         puts( "Dog subclassof Animal: yes" )
     if GoldenRetriever subclassof Dog:
         puts( "GoldenRetriever subclassof Dog: yes" )
     if GoldenRetriever subclassof Animal:
         puts( "GoldenRetriever subclassof Animal: yes" )
-
-    # Negative checks
     if Cat subclassof Dog:
         puts( "Cat subclassof Dog: yes (BUG)" )
     else:
@@ -129,24 +125,18 @@ public function main() -> I32:
         puts( "Animal subclassof Dog: yes (BUG)" )
     else:
         puts( "Animal subclassof Dog: no" )
-
-    # Meta<T> type identity
     Meta<String> stringType = String
     Meta<I64> intType = I64
     Meta<String> anotherString = String
-
     if stringType == anotherString:
         puts( "Meta<String> == Meta<String>: yes" )
     if stringType != intType:
         puts( "Meta<String> != Meta<I64>: yes" )
-
-    # Literal method calls
     String intStr = 42.toString()
     puts( "42.toString() = ", intStr )
     String boolStr = True.toString()
     puts( "True.toString() = ", boolStr )
     String negStr = ( -7 ).abs().toString()
     puts( "(-7).abs().toString() = ", negStr )
-
     puts( "all typeof tests passed" )
     return 0
