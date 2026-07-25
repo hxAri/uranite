@@ -5,19 +5,15 @@ from uranite.security.handle import HandleEntry, HandleTable
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== Security Handle Tests ===" )
-
+    putsln( "Security Handle Tests" )
     HandleEntry entry = new HandleEntry()
     assertEqualI64( -1, entry.nextFree, "nextFree init -1" )
     putsln( "HandleEntry constructed OK" )
-
     HandleTable table = new HandleTable( 16 )
     assertEqualI64( 0, table.getCount(), "empty initially" )
     assertEqualI64( 16, table.getCapacity(), "capacity 16" )
     putsln( "HandleTable constructed OK" )
-
     table.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All Security Handle Tests Passed ===" )
+    putsln( "All Security Handle Tests Passed" )
     return 0
