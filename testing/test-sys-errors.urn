@@ -4,9 +4,7 @@ from uranite.io.console import putsln
 from uranite.sys.errors import SyscallError
 
 public function main() -> I32:
-    putsln( "=== Sys Errors Tests ===" )
-
+    putsln( "Sys Errors Tests" )
     putsln( "SyscallError imported OK" )
-
-    putsln( "=== All Sys Errors Tests Passed ===" )
+    putsln( "All Sys Errors Tests Passed" )
     return 0
