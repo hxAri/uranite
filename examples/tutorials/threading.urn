@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -32,6 +33,7 @@ from uranite.functions.runtime import {
     uraniteThreadJoin,
     uraniteThreadSleep
 }
+
 from uranite.io.console import puts
 
 function worker() -> Void:
@@ -49,11 +51,8 @@ public function main() -> I32:
         I32 exit code.
     """
     
-    puts( "=== Threading test ===" )
-
-    # Test sleep
+    puts( "Threading test" )
     puts( "Sleeping 50ms..." )
     uraniteThreadSleep( 50 )
     puts( "Awake." )
-
     return 0
