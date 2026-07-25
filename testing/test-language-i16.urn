@@ -6,15 +6,11 @@ from uranite.language.int import Int
 from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== I16 Tests ===" )
-
+    putsln( "I16 Tests" )
     I16 a = new I16( 1000 )
     I16 b = new I16( 234 )
-
     assertEqualI64( 1000, a.getValue(), "getValue" )
     putsln( "getValue OK" )
-
-    # arithmetic
     Int sum = a.add( b )
     assertEqualI64( 1234, sum.getValue(), "add" )
     Int diff = a.subtract( b )
@@ -26,26 +22,19 @@ public function main() -> I32:
     Int mod = a.modulo( b )
     assertEqualI64( 64, mod.getValue(), "modulo" )
     putsln( "arithmetic OK" )
-
-    # abs / negate
     I16 neg = new I16( -500 )
     Int absVal = neg.abs()
     assertEqualI64( 500, absVal.getValue(), "abs" )
     Int negated = a.negate()
     assertEqualI64( -1000, negated.getValue(), "negate" )
     putsln( "abs/negate OK" )
-
-    # equals / compareTo
     I16 c = new I16( 1000 )
     assertTrue( a.equals( c ), "equals" )
     assertEqualI64( 1, a.compareTo( b ), "compareTo" )
-
-    # min / max
     Int minVal = a.min( b )
     assertEqualI64( 234, minVal.getValue(), "min" )
     Int maxVal = a.max( b )
     assertEqualI64( 1000, maxVal.getValue(), "max" )
     putsln( "min/max OK" )
-
-    putsln( "=== All I16 tests passed ===" )
+    putsln( "All I16 tests passed" )
     return 0
