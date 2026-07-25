@@ -39,23 +39,16 @@ async function taskC() -> Future<I64>:
     return 42
 
 public async function main() -> Future<I32>:
-    puts( "=== Uranite Event Loop Test ===" )
-
-    # Spawn tasks without await — get Future handles
+    puts( "Uranite Event Loop Test" )
     Future<Void> a = taskA()
     Future<Void> b = taskB()
     Future<I64> c = taskC()
-
     puts( "Tasks spawned, awaiting results..." )
-
     await a
     puts( "Task A finished." )
-
     await b
     puts( "Task B finished." )
-
     I64 result = await c
     puts( "Task C result = ", result )
-
     puts( "All tasks finished." )
     return 0
