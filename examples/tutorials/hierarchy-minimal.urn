@@ -3,33 +3,34 @@ package main
 
 from uranite.io.console import puts
 
-
 public class Shape:
+    
     public String kind
-
+    
     public function Shape( self, String kind ) -> Void:
         self.kind = kind
-
+    
     public function area( self ) -> Double:
         return 0.0
-
+    
     public function toString( self ) -> String:
         return self.kind
 
 public class Circle extends Shape:
+    
     public Double radius
-
+    
     public function Circle( self, Double radius ) -> Void:
         self.kind = "Circle"
         self.radius = radius
-
+    
     public function area( self ) -> Double:
         return 3.14159 * self.radius * self.radius
 
 public function main() -> I32:
-    puts( "=== Part 5: Inheritance ===" )
+    puts( "Part 5: Inheritance" )
     Circle c = new Circle( 5.0 )
     puts( "Circle area: ", c.area() )
     puts( "Circle kind: ", c.toString() )
-    puts( "=== Done ===" )
+    puts( "Done" )
     return 0
