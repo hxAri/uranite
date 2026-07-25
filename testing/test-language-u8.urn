@@ -6,15 +6,11 @@ from uranite.language.uint import UInt
 from uranite.testing.assertions import assertEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== U8 Tests ===" )
-
+    putsln( "U8 Tests" )
     U8 a = new U8( 200 )
     U8 b = new U8( 55 )
-
     assertEqualI64( 200, a.getValue(), "getValue" )
     putsln( "getValue OK" )
-
-    # arithmetic
     UInt sum = a.add( b )
     assertEqualI64( 255, sum.getValue(), "add" )
     UInt diff = a.subtract( b )
@@ -26,14 +22,10 @@ public function main() -> I32:
     UInt mod = a.modulo( b )
     assertEqualI64( 35, mod.getValue(), "modulo" )
     putsln( "arithmetic OK" )
-
-    # equals / compareTo
     U8 c = new U8( 200 )
     assertTrue( a.equals( c ), "equals" )
     assertEqualI64( 1, a.compareTo( b ), "compareTo" )
     putsln( "equals/compareTo OK" )
-
-    # bitwise
     UInt andResult = a.bitwiseAnd( b )
     assertEqualI64( 0, andResult.getValue(), "bitwiseAnd" )
     UInt orResult = a.bitwiseOr( b )
@@ -41,6 +33,5 @@ public function main() -> I32:
     UInt xorResult = a.bitwiseXor( b )
     assertEqualI64( 255, xorResult.getValue(), "bitwiseXor" )
     putsln( "bitwise OK" )
-
-    putsln( "=== All U8 tests passed ===" )
+    putsln( "All U8 tests passed" )
     return 0
