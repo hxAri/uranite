@@ -19,41 +19,28 @@ from uranite.net.socket import {
 from uranite.testing.assertions import assertEqualI64, assertGreaterThan, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Net Socket Tests ===" )
-
-    # htons / ntohs roundtrip
+    putsln( "Net Socket Tests" )
     I64 port = 8080
     I64 netPort = htons( port )
     I64 hostPort = ntohs( netPort )
     assertEqualI64( port, hostPort, "htons/ntohs roundtrip" )
     putsln( "htons/ntohs OK" )
-
-    # ipToInt (127.0.0.1 = 2130706433)
     I64 ip = ipToInt( 127, 0, 0, 1 )
     assertEqualI64( 2130706433, ip, "ipToInt 127.0.0.1" )
     putsln( "ipToInt OK" )
-
-    # buildSockaddrIn
     I64 addr = buildSockaddrIn( 8080, INADDR_LOOPBACK )
     assertGreaterThan( addr, 0, "sockaddr not null" )
     putsln( "buildSockaddrIn OK" )
-
-    # createTcpSocket
     I64 tcpFd = createTcpSocket()
     assertGreaterThan( tcpFd, -1, "tcp fd valid" )
     putsln( "createTcpSocket OK" )
-
-    # createUdpSocket
     I64 udpFd = createUdpSocket()
     assertGreaterThan( udpFd, -1, "udp fd valid" )
     putsln( "createUdpSocket OK" )
-
-    # socketClose
     if tcpFd >= 0:
         socketClose( tcpFd )
     if udpFd >= 0:
         socketClose( udpFd )
     putsln( "socketClose OK" )
-
-    putsln( "=== All socket tests passed ===" )
+    putsln( "All socket tests passed" )
     return 0
