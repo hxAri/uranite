@@ -5,8 +5,7 @@ from uranite.os.fs.ext4 import Ext4FileSystem, Ext4Inode, Ext4Superblock
 from uranite.testing.assertions import assertEqualI64, assertFalse
 
 public function main() -> I32:
-    putsln( "=== OS FS Ext4 Tests ===" )
-
+    putsln( "OS FS Ext4 Tests" )
     Ext4Superblock sb = new Ext4Superblock()
     assertEqualI64( 4096, sb.blockSize, "blockSize" )
     assertEqualI64( 256, sb.inodeSize, "inodeSize" )
@@ -19,17 +18,14 @@ public function main() -> I32:
     assertEqualI64( 8191, sb.getInodeIndexInGroup( 8192 ), "idx inode 8192" )
     assertEqualI64( 0, sb.getInodeIndexInGroup( 8193 ), "idx inode 8193" )
     putsln( "superblock OK" )
-
     Ext4Inode inode = new Ext4Inode()
     assertEqualI64( 0, inode.mode, "mode 0" )
     assertFalse( inode.isDirectory(), "not dir" )
     assertFalse( inode.isRegularFile(), "not file" )
     assertFalse( inode.isSymlink(), "not symlink" )
     putsln( "inode OK" )
-
     Ext4FileSystem fs = new Ext4FileSystem( 3, 1 )
     assertEqualI64( 3, fs.getDeviceId(), "deviceId" )
     putsln( "filesystem OK" )
-
-    putsln( "=== All ext4 tests passed ===" )
+    putsln( "All ext4 tests passed" )
     return 0
