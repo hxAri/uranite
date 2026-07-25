@@ -5,11 +5,9 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== Threading Thread Tests ===" )
-
+    putsln( "Threading Thread Tests" )
     uraniteThreadSleep( 10 )
     assertEqualI64( 1, 1, "sleep completed" )
     putsln( "sleep OK" )
-
-    putsln( "=== All thread tests passed ===" )
+    putsln( "All thread tests passed" )
     return 0
