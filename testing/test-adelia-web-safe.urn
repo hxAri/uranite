@@ -6,39 +6,27 @@ from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== Adelia WebSafe Tests ===" )
-
-    # snapComponent: exact web-safe values
+    putsln( "Adelia WebSafe Tests" )
     assertEqualI64( 0, WebSafe.snapComponent( 0 ) as I64, "snap 0" )
     assertEqualI64( 51, WebSafe.snapComponent( 51 ) as I64, "snap 51" )
     assertEqualI64( 255, WebSafe.snapComponent( 255 ) as I64, "snap 255" )
     putsln( "snapComponent exact OK" )
-
-    # snapComponent: between values (30 → closer to 51)
     assertEqualI64( 51, WebSafe.snapComponent( 30 ) as I64, "snap 30" )
-    # snapComponent: 128 → closer to 153
     assertEqualI64( 153, WebSafe.snapComponent( 128 ) as I64, "snap 128" )
     putsln( "snapComponent rounding OK" )
-
-    # snap RGB
     RGB snapped = WebSafe.snap( 130, 60, 200 )
     assertEqualI64( 153, snapped.red, "snap red" )
     assertEqualI64( 51, snapped.green, "snap green" )
     assertEqualI64( 204, snapped.blue, "snap blue" )
     putsln( "snap OK" )
-
-    # snap already web-safe
     RGB exact = WebSafe.snap( 255, 0, 51 )
     assertEqualI64( 255, exact.red, "exact red" )
     assertEqualI64( 0, exact.green, "exact green" )
     assertEqualI64( 51, exact.blue, "exact blue" )
     putsln( "snap exact OK" )
-
-    # isWebSafe
     assertTrue( WebSafe.isWebSafe( 0, 51, 255 ), "isWebSafe true" )
     assertFalse( WebSafe.isWebSafe( 100, 50, 200 ), "isWebSafe false" )
     assertTrue( WebSafe.isWebSafe( 0, 0, 0 ), "isWebSafe black" )
     putsln( "isWebSafe OK" )
-
-    putsln( "=== All WebSafe tests passed ===" )
+    putsln( "All WebSafe tests passed" )
     return 0
