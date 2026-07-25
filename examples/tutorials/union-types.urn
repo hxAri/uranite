@@ -1,3 +1,4 @@
+
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
@@ -21,7 +22,6 @@
 package main
 
 from uranite.io.console import puts
-
 
 function acceptUnion( I64 | String value ) -> Void:
     
@@ -60,13 +60,13 @@ public function main() -> I32:
         I32 exit code.
     """
     
-    puts( "=== Union type parameters ===" )
-
+    puts( "Union type parameters" )
+    
     acceptUnion( 42 )
     acceptUnion( "hello" )
-
+    
     acceptNumber( 100 )
     acceptNumber( 3.14 )
-
+    
     puts( "All union calls succeeded" )
     return 0
