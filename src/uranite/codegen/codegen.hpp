@@ -458,16 +458,16 @@ namespace uranite::codegen {
              */
             llvm::Type* toLLVMType( const semantic::TypeSharedPointer& type );
 			
-			// --- Runtime & Intrinsic Helpers ---
-
 			llvm::Function* getOrCreatePersonalityFunction();
 			llvm::Function* getOrCreateUraniteThrow();
 			llvm::Function* getOrCreateUraniteBeginCatch();
 			llvm::Function* getOrCreateUraniteEndCatch();
 			llvm::Function* getOrCreatePushFrame();
 			llvm::Function* getOrCreatePopFrame();
+			
 			void emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName );
 			void emitPopFrame();
+			
 			llvm::Value* createCallOrInvoke( llvm::Function* callee, llvm::ArrayRef<llvm::Value*> args, const llvm::Twine& name = "" );
 			llvm::Value* createCallOrInvoke( llvm::FunctionType* type, llvm::Value* callee, llvm::ArrayRef<llvm::Value*> args, const llvm::Twine& name = "" );
 
@@ -508,7 +508,7 @@ namespace uranite::codegen {
 			 */
 			llvm::Function* getOrCreateStringLength();
 			
-			// --- Built-in & Internal State ---
+			llvm::Function* getOrCreateStringHash();
 			
 			/**
 			 * @brief Registers all built-in structural types into the compiler's type system.
@@ -538,15 +538,12 @@ namespace uranite::codegen {
 				std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments
 			);
 			
-			
 			llvm::Value* unwrapOOPWrapperValue( llvm::Value* value, const std::string& wrapperTypeHint = "" );
 
 			bool isThrowableClass( const std::string& typeName );
 			void injectTracebackInfo( llvm::Value* objectPointer, const std::string& typeName, const lookup::SourceSharedPointer& source, bool overwriteFileAndLine = true );
 			void generateArithmeticErrorCheck( llvm::Value* condition, const std::string& errorClassName, const std::string& message, const lookup::SourceSharedPointer& source );
 			void generateThrowError( const std::string& errorClassName, const std::string& message, const lookup::SourceSharedPointer& source );
-
-			// --- Member Variables ---
 			
 			/** @brief Reference to the semantic analyzer. */
 			semantic::Analyzer& analyzer;
