@@ -14,19 +14,16 @@ from uranite.io.path import {
 from uranite.testing.assertions import assertEqualStr, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== IO Path Tests ===" )
-
+    putsln( "IO Path Tests" )
     assertEqualStr( "/home/user", join( "/home", "user" ), "join" )
     assertEqualStr( "/home/user", dirname( "/home/user/file.txt" ), "dirname" )
     assertEqualStr( "file.txt", basename( "/home/user/file.txt" ), "basename" )
     assertEqualStr( "txt", extension( "/home/user/file.txt" ), "extension" )
     assertEqualStr( "file", stem( "/home/user/file.txt" ), "stem" )
     putsln( "path parsing OK" )
-
     assertTrue( exists( "/tmp" ), "exists /tmp" )
     assertTrue( isDir( "/tmp" ), "isDir /tmp" )
     assertFalse( isFile( "/tmp" ), "not isFile /tmp" )
     putsln( "path checks OK" )
-
-    putsln( "=== All IO path tests passed ===" )
+    putsln( "All IO path tests passed" )
     return 0
