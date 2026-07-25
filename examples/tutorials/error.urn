@@ -24,13 +24,11 @@ package uranite.examples.testing.error
 from uranite.errors.exception import Exception
 from uranite.io.console import puts
 
-# Basic try/except
 public function safe_divide( I64 a, I64 b ) -> I64:
     if b == 0:
         raise new Exception( "division by zero", 0, None )
     return a / b
 
-# Function demonstrating finally
 public function with_cleanup() -> Void:
     try:
         puts( "doing work..." )
@@ -40,7 +38,6 @@ public function with_cleanup() -> Void:
     finally:
         puts( "cleanup always runs" )
 
-# Nested try/except
 public function nested_handling() -> Void:
     try:
         try:
@@ -52,26 +49,18 @@ public function nested_handling() -> Void:
         puts( "outer handler (should not reach)" )
 
 public function main() -> I32:
-    # Basic exception handling
     try:
         I64 result = safe_divide( 10, 0 )
         puts( "result = ", result )
     except as e:
         puts( "caught: division by zero" )
-
-    # Successful path
     try:
         I64 quotient = safe_divide( 100, 5 )
         puts( "100 / 5 = ", quotient )
     except as e:
         puts( "unexpected error" )
-
-    # With finally
     puts( "\nWith cleanup:" )
     with_cleanup()
-
-    # Nested
     puts( "\nNested handling:" )
     nested_handling()
-
     return 0
