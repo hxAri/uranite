@@ -1,86 +1,65 @@
 package testing
 
 from uranite.collection.hash-map import HashMap, HashMapIterator
+from uranite.collection.pair import Pair
 from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== HashMap Tests ===" )
-
+    putsln( "HashMap Tests" )
     HashMap<String, Int> map = new HashMap<String, Int>()
     map.put( "one", 1 )
     map.put( "two", 2 )
     map.put( "three", 3 )
     assertEqualI64( 3, map.length, "length after 3 puts" )
     putsln( "put OK" )
-
     assertEqualI64( 1, map.get( "one" ), "get(one)" )
     assertEqualI64( 2, map.get( "two" ), "get(two)" )
     assertEqualI64( 3, map.get( "three" ), "get(three)" )
     putsln( "get OK" )
-
     assertEqualI64( 99, map.getOrDefault( "missing", 99 ), "getOrDefault missing" )
     assertEqualI64( 1, map.getOrDefault( "one", 99 ), "getOrDefault found" )
     putsln( "getOrDefault OK" )
-
     assertTrue( map.containsKey( "two" ), "containsKey(two)" )
     assertFalse( map.containsKey( "four" ), "not containsKey(four)" )
     assertTrue( map.containsValue( 3 ), "containsValue(3)" )
     assertFalse( map.containsValue( 99 ), "not containsValue(99)" )
     putsln( "contains OK" )
-
-    # putIfAbsent
     Int existing = map.putIfAbsent( "one", 100 )
     assertEqualI64( 1, existing, "putIfAbsent existing" )
     Int newVal = map.putIfAbsent( "four", 4 )
     assertEqualI64( 4, newVal, "putIfAbsent new" )
     assertEqualI64( 4, map.get( "four" ), "get(four) after putIfAbsent" )
     putsln( "putIfAbsent OK" )
-
-    # replace
     Int old = map.replace( "one", 100 )
     assertEqualI64( 1, old, "replace old" )
     assertEqualI64( 100, map.get( "one" ), "get(one) after replace" )
-
-    # replaceEntry
     Boolean replaced = map.replaceEntry( "two", 2, 200 )
     assertTrue( replaced, "replaceEntry" )
     assertEqualI64( 200, map.get( "two" ), "get(two) after replaceEntry" )
     putsln( "replace OK" )
-
-    # removeEntry
     Boolean removedEntry = map.removeEntry( "three", 3 )
     assertTrue( removedEntry, "removeEntry" )
     putsln( "removeEntry OK" )
-
-    # pop
     map.put( "five", 5 )
     Int removedVal = map.pop( "five" )
     assertEqualI64( 5, removedVal, "pop(five)" )
     putsln( "pop OK" )
-
     assertFalse( map.empty, "not empty" )
     putsln( "empty OK" )
-
-    # clear
     HashMap<String, Int> clearMap = new HashMap<String, Int>()
     clearMap.put( "a", 1 )
     clearMap.clear()
     assertEqualI64( 0, clearMap.length, "clear length" )
     assertTrue( clearMap.empty, "clear empty" )
     putsln( "clear OK" )
-
-    # iterator
     HashMap<String, Int> itMap = new HashMap<String, Int>()
     itMap.put( "x", 10 )
     itMap.put( "y", 20 )
-    HashMapIterator<Int> it = itMap.iterator
     I64 iterSum = 0
-    while it.has:
-        Int val = it.next
-        iterSum = iterSum + val
+    for String iterKey, Int iterValue in itMap:
+        iterSum = iterSum + iterValue
     assertEqualI64( 30, iterSum, "iterator sum" )
     putsln( "iterator OK" )
-
-    putsln( "=== All HashMap tests passed ===" )
+    putsln( "All HashMap tests passed" )
     return 0
