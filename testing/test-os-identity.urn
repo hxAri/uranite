@@ -11,14 +11,12 @@ from uranite.os.identity.identity import {
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Identity Tests ===" )
-
+    putsln( "OS Identity Tests" )
     assertEqualI64( 0, ROOT_UID, "ROOT_UID" )
     assertEqualI64( 0, ROOT_GID, "ROOT_GID" )
     assertEqualI64( 65534, NOBODY_UID, "NOBODY_UID" )
     assertEqualI64( 65534, NOBODY_GID, "NOBODY_GID" )
     putsln( "constants OK" )
-
     ProcessIdentity identity = new ProcessIdentity( 1000, 1000, 42 )
     assertEqualI64( 1000, identity.getUid(), "uid" )
     assertEqualI64( 1000, identity.getGid(), "gid" )
@@ -27,7 +25,6 @@ public function main() -> I32:
     assertEqualI64( 1000, identity.getEffectiveGid(), "egid" )
     assertFalse( identity.isRoot(), "not root" )
     putsln( "construct OK" )
-
     assertTrue( identity.verifyToken( 42 ), "token match" )
     assertFalse( identity.verifyToken( 99 ), "token mismatch" )
     assertTrue( identity.matches( 1000, 1000 ), "matches self" )
@@ -35,16 +32,13 @@ public function main() -> I32:
     assertTrue( identity.inGroup( 1000 ), "inGroup" )
     assertFalse( identity.inGroup( 0 ), "not inGroup 0" )
     putsln( "verify OK" )
-
     identity.setEffectiveUid( 0 )
     assertTrue( identity.isRoot(), "root after setEuid" )
     assertEqualI64( 0, identity.getEffectiveUid(), "euid 0" )
     assertEqualI64( 1000, identity.getUid(), "real uid unchanged" )
-
     identity.setEffectiveGid( 0 )
     assertEqualI64( 0, identity.getEffectiveGid(), "egid 0" )
     assertTrue( identity.matches( 0, 0 ), "matches root" )
     putsln( "privilege OK" )
-
-    putsln( "=== All identity tests passed ===" )
+    putsln( "All identity tests passed" )
     return 0
