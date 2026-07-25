@@ -5,29 +5,24 @@ from uranite.os.debug.perf import PerfCounters
 from uranite.testing.assertions import assertEqualI64
 
 public function main() -> I32:
-    putsln( "=== OS Debug Perf Tests ===" )
-
+    putsln( "OS Debug Perf Tests" )
     PerfCounters pc = new PerfCounters( 8 )
     assertEqualI64( 8, pc.capacity, "capacity" )
     assertEqualI64( 0, pc.getCount(), "count 0" )
-
     I64 id0 = pc.allocate()
     assertEqualI64( 0, id0, "id0" )
     I64 id1 = pc.allocate()
     assertEqualI64( 1, id1, "id1" )
     assertEqualI64( 2, pc.getCount(), "count 2" )
     putsln( "allocate OK" )
-
     assertEqualI64( 0, pc.getValue( id0 ), "init val" )
     assertEqualI64( 0, pc.getSampleCount( id0 ), "init samples" )
-
     pc.increment( id0, 10 )
     assertEqualI64( 10, pc.getValue( id0 ), "incr(10)" )
     assertEqualI64( 1, pc.getSampleCount( id0 ), "samples 1" )
     pc.increment( id0, 5 )
     assertEqualI64( 15, pc.getValue( id0 ), "incr(5)" )
     putsln( "increment OK" )
-
     pc.record( id1, 50 )
     assertEqualI64( 50, pc.getValue( id1 ), "record(50)" )
     assertEqualI64( 50, pc.getMin( id1 ), "min 50" )
@@ -36,13 +31,10 @@ public function main() -> I32:
     assertEqualI64( 20, pc.getMin( id1 ), "min 20" )
     assertEqualI64( 50, pc.getMax( id1 ), "max 50" )
     putsln( "record OK" )
-
     pc.reset( id0 )
     assertEqualI64( 0, pc.getValue( id0 ), "reset val" )
     assertEqualI64( 0, pc.getSampleCount( id0 ), "reset samples" )
     putsln( "reset OK" )
-
     pc.destroy()
-
-    putsln( "=== All perf tests passed ===" )
+    putsln( "All perf tests passed" )
     return 0
