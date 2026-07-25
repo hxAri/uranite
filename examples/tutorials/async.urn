@@ -52,7 +52,7 @@ class DataStore:
     
     public async function load( self, I64 id ) -> Future<I64>:
         return self.base + id
-
+    
     public async function transform( self, I64 value ) -> Future<I64>:
         I64 loaded = await self.load( value )
         return loaded * 3
