@@ -5,21 +5,18 @@ from uranite.ipc.message import Message, MessageChannel
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
-    putsln( "=== IPC Message Tests ===" )
-
+    putsln( "IPC Message Tests" )
     MessageChannel channel = new MessageChannel( 1, 100, 8, 4 )
     assertTrue( channel.isEmpty(), "empty initially" )
     assertFalse( channel.isFull(), "not full" )
     assertEqualI64( 0, channel.pending(), "0 pending" )
     assertEqualI64( 1, channel.getPortId(), "port id 1" )
     putsln( "MessageChannel constructed OK" )
-
     Boolean sent = channel.send( 42, 1, 99 )
     assertTrue( sent, "send OK" )
     assertEqualI64( 1, channel.pending(), "1 pending after send" )
     assertFalse( channel.isEmpty(), "not empty after send" )
     putsln( "send OK" )
-
     Message dest = new Message( 4 )
     Boolean received = channel.receive( dest )
     assertTrue( received, "receive OK" )
@@ -28,14 +25,11 @@ public function main() -> I32:
     assertEqualI64( 99, dest.getWord( 0 ), "payload word 0" )
     assertEqualI64( 0, channel.pending(), "0 pending after receive" )
     putsln( "receive OK" )
-
     Boolean emptyRecv = channel.receive( dest )
     assertFalse( emptyRecv, "receive from empty" )
     putsln( "empty receive OK" )
-
     channel.destroy()
     dest.destroy()
     putsln( "destroy OK" )
-
-    putsln( "=== All IPC Message Tests Passed ===" )
+    putsln( "All IPC Message Tests Passed" )
     return 0
