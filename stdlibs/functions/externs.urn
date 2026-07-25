@@ -47,6 +47,9 @@ extern function memset( *Void ptr, I32 value, I64 size ) -> *Void;
 extern function printf( String format, ... ) -> I32;
 """ Print a formatted string to standard output, returning the number of characters written. """
 
+extern function putchar( I32 c ) -> I32;
+""" Write a char followed by a newline to standard output, returning a non-negative value on success. """
+
 extern function puts( String string ) -> I32;
 """ Write a string followed by a newline to standard output, returning a non-negative value on success. """
 
@@ -55,6 +58,8 @@ extern function realloc( *Void ptr, I64 size ) -> *Void;
 
 extern function snprintf( String buffer, I64 size, String format, ... ) -> I32;
 """ Write a formatted string into a buffer with a maximum size limit, returning the number of characters that would have been written. """
+
+extern function sqrt( Double x ) -> Double;
 
 extern function strcat( String dest, String src ) -> String;
 """ Append the source string to the end of the destination string, returning a pointer to the destination. """
@@ -74,9 +79,11 @@ export {
     memcpy,
     memset,
     printf,
+    putchar,
     puts,
     realloc,
     snprintf,
+    sqrt,
     strcat,
     strcmp,
     strlen
