@@ -22,8 +22,6 @@
 
 package uranite.functions.runtime
 
-
-
 extern function uraniteAtomicAdd( I64 ptr, I64 val ) -> I64;
 """ Atomically add a value to the 64-bit integer at the given pointer, returning the previous value. """
 
