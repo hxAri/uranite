@@ -5,22 +5,18 @@ from uranite.testing.assertions import assertEqualI64, assertEqualStr
 from uranite.threading.errors import ThreadChannelError, ThreadError, ThreadPoisonError
 
 public function main() -> I32:
-    putsln( "=== Threading Errors Tests ===" )
-
+    putsln( "Threading Errors Tests" )
     ThreadError err = new ThreadError( "test error", 42, None )
     assertEqualStr( "test error", err.getMessage(), "ThreadError msg" )
     assertEqualI64( 42, err.getCode(), "ThreadError code" )
     putsln( "ThreadError OK" )
-
     ThreadPoisonError perr = new ThreadPoisonError( "poisoned", 1, None )
     assertEqualStr( "poisoned", perr.getMessage(), "PoisonError msg" )
     assertEqualI64( 1, perr.getCode(), "PoisonError code" )
     putsln( "ThreadPoisonError OK" )
-
     ThreadChannelError cerr = new ThreadChannelError( "channel closed", 2, None )
     assertEqualStr( "channel closed", cerr.getMessage(), "ChannelError msg" )
     assertEqualI64( 2, cerr.getCode(), "ChannelError code" )
     putsln( "ThreadChannelError OK" )
-
-    putsln( "=== All threading error tests passed ===" )
+    putsln( "All threading error tests passed" )
     return 0
