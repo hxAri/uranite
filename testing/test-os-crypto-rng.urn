@@ -5,28 +5,23 @@ from uranite.os.crypto.rng import Csprng
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertNotEqualI64, assertTrue
 
 public function main() -> I32:
-    putsln( "=== OS Crypto RNG Tests ===" )
-
+    putsln( "OS Crypto RNG Tests" )
     Csprng rng = new Csprng()
     assertFalse( rng.isInitialized(), "not initialized" )
     assertEqualI64( 0, rng.s0, "s0 init 0" )
-
     rng.seed( 111, 222, 333, 444 )
     assertTrue( rng.isInitialized(), "initialized" )
     assertEqualI64( 111, rng.s0, "s0" )
     assertEqualI64( 222, rng.s1, "s1" )
     putsln( "seed OK" )
-
     I64 val1 = rng.next()
     I64 val2 = rng.next()
     assertNotEqualI64( val1, val2, "vals differ" )
     putsln( "next OK" )
-
     I64 bounded = rng.nextBounded( 100 )
     assertTrue( bounded >= 0, "bounded >= 0" )
     assertTrue( bounded < 100, "bounded < 100" )
     assertEqualI64( 0, rng.nextBounded( 0 ), "bounded(0)" )
     putsln( "nextBounded OK" )
-
-    putsln( "=== All RNG tests passed ===" )
+    putsln( "All RNG tests passed" )
     return 0
