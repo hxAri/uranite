@@ -32,7 +32,6 @@
 #include <llvm/TargetParser/Triple.h>
 #include <llvm/TargetParser/Host.h>
 
-#include "uranite/codegen/codegen.hpp"
 #include "uranite/compiler/driver.hpp"
 #include "uranite/ir/hir/lowering.hpp"
 #include "uranite/ir/hir/printer.hpp"
@@ -1043,189 +1042,141 @@ namespace uranite::compiler {
 			if( this->options.verbose ) {
 				spdlog::info( "Borrow check passed" );
 			}
-			if( this->options.verbose || this->options.dumpHIR || this->options.dumpMIR || this->options.useMIR ) {
-				if( this->options.useMIR ) {
-					std::set<std::string> existingClassNames;
-					std::set<std::string> existingConstantNames;
-					std::set<std::string> existingEnumNames;
-					for( const ast::nodes::DeclarationSharedPointer& existingDeclaration : programRoot->declarations ) {
-						if( existingDeclaration == nullptr ) {
-							continue;
-						}
-						if( existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
-							existingClassNames.insert( static_cast<const ast::nodes::ClassDeclaration&>( *existingDeclaration ).name );
-						}
-						else if( existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
-							existingClassNames.insert( static_cast<const ast::nodes::StructDeclaration&>( *existingDeclaration ).name );
-						}
-						else if( existingDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
-							existingConstantNames.insert( static_cast<const ast::nodes::ConstantDeclaration&>( *existingDeclaration ).name );
-						}
-						else if( existingDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
-							existingEnumNames.insert( static_cast<const ast::nodes::EnumDeclaration&>( *existingDeclaration ).name );
-						}
-					}
-					for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
-						if( moduleEntry.second.program == nullptr ) {
-							continue;
-						}
-						for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleEntry.second.program->declarations ) {
-							if( moduleDeclaration == nullptr ) {
-								continue;
-							}
-							if( moduleDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
-								std::string className = static_cast<ast::nodes::ClassDeclaration&>( *moduleDeclaration ).name;
-								if( existingClassNames.count( className ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingClassNames.insert( className );
-								}
-							}
-							else if( moduleDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
-								std::string structName = static_cast<ast::nodes::StructDeclaration&>( *moduleDeclaration ).name;
-								if( existingClassNames.count( structName ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingClassNames.insert( structName );
-								}
-							}
-							else if( moduleDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
-								std::string constantName = static_cast<ast::nodes::ConstantDeclaration&>( *moduleDeclaration ).name;
-								if( existingConstantNames.count( constantName ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingConstantNames.insert( constantName );
-								}
-							}
-							else if( moduleDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
-								std::string enumName = static_cast<ast::nodes::EnumDeclaration&>( *moduleDeclaration ).name;
-								if( existingEnumNames.count( enumName ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingEnumNames.insert( enumName );
-								}
-							}
-						}
-					}
+			std::set<std::string> existingClassNames;
+			std::set<std::string> existingConstantNames;
+			std::set<std::string> existingEnumNames;
+			for( const ast::nodes::DeclarationSharedPointer& existingDeclaration : programRoot->declarations ) {
+				if( existingDeclaration == nullptr ) {
+					continue;
 				}
-				if( this->options.verbose ) {
-					spdlog::info( "Stage 4.5: HIR Lowering" );
+				if( existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+					existingClassNames.insert( static_cast<const ast::nodes::ClassDeclaration&>( *existingDeclaration ).name );
 				}
-				ir::hir::HIRLowering hirLoweringPass( semanticAnalyzer, this->diagnostic );
-				std::shared_ptr<ir::hir::HIRModule> hirModule = hirLoweringPass.lower( *programRoot );
-				ir::hir::HIRValidator hirValidatorPass( this->diagnostic );
-				bool hirIsValid = hirValidatorPass.validate( *hirModule );
-				if( this->options.verbose ) {
-					if( hirIsValid ) {
-						spdlog::info( "HIR validation passed" );
-					}
-					else {
-						spdlog::warn( "HIR validation found {} issue(s)", hirValidatorPass.validationErrors().size() );
-					}
+				else if( existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+					existingClassNames.insert( static_cast<const ast::nodes::StructDeclaration&>( *existingDeclaration ).name );
 				}
-				if( this->options.dumpHIR ) {
-					ir::hir::HIRPrinter hirPrinter;
-					std::string hirOutput = hirPrinter.print( *hirModule );
-					fmt::print( "=== HIR ===\n{}\n", hirOutput );
-					return 0;
+				else if( existingDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
+					existingConstantNames.insert( static_cast<const ast::nodes::ConstantDeclaration&>( *existingDeclaration ).name );
 				}
-				if( this->options.verbose || this->options.dumpMIR || this->options.useMIR ) {
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.6: MIR Lowering" );
+				else if( existingDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+					existingEnumNames.insert( static_cast<const ast::nodes::EnumDeclaration&>( *existingDeclaration ).name );
+				}
+			}
+			for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
+				if( moduleEntry.second.program == nullptr ) {
+					continue;
+				}
+				for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleEntry.second.program->declarations ) {
+					if( moduleDeclaration == nullptr ) {
+						continue;
 					}
-					ir::mir::MIRLowering mirLoweringPass( this->diagnostic, &semanticAnalyzer.types() );
-					std::shared_ptr<ir::mir::MIRModuleDefinition> mirModule = mirLoweringPass.lower( *hirModule );
-					if( this->options.verbose ) {
-						size_t totalBlocks = 0;
-						for( const std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
-							totalBlocks+= mirFunction->controlFlowBlocks.size();
-						}
-						spdlog::info( "MIR: {} functions, {} basic blocks", mirModule->functionDefinitions.size(), totalBlocks );
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.7: MIR Liveness Analysis" );
-					}
-					ir::mir::MIRLivenessAnalyzer mirLivenessPass;
-					for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
-						if( mirFunction != nullptr ) {
-							mirLivenessPass.analyze( *mirFunction );
+					if( moduleDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+						std::string className = static_cast<ast::nodes::ClassDeclaration&>( *moduleDeclaration ).name;
+						if( existingClassNames.count( className ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingClassNames.insert( className );
 						}
 					}
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.8: MIR Borrow Checker" );
-					}
-					ir::mir::MIRBorrowChecker mirBorrowChecker( this->diagnostic );
-					for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
-						if( mirFunction != nullptr ) {
-							mirBorrowChecker.check( *mirFunction );
+					else if( moduleDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+						std::string structName = static_cast<ast::nodes::StructDeclaration&>( *moduleDeclaration ).name;
+						if( existingClassNames.count( structName ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingClassNames.insert( structName );
 						}
 					}
-					if( this->options.verbose ) {
-						spdlog::info( "MIR borrow check: {} violation(s)", mirBorrowChecker.violationCount() );
+					else if( moduleDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
+						std::string constantName = static_cast<ast::nodes::ConstantDeclaration&>( *moduleDeclaration ).name;
+						if( existingConstantNames.count( constantName ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingConstantNames.insert( constantName );
+						}
 					}
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.9: MIR Optimization" );
-					}
-					ir::mir::MIROptimizer mirOptimizer;
-					mirOptimizer.optimize( *mirModule );
-					if( this->options.verbose ) {
-						spdlog::info( "MIR optimizer: {} instructions removed, {} blocks removed",
-							mirOptimizer.removedInstructionCount(), mirOptimizer.removedBlockCount() );
-					}
-					if( this->options.dumpMIR ) {
-						ir::mir::MIRPrinter mirPrinter;
-						std::string mirOutput = mirPrinter.print( *mirModule );
-						fmt::print( "=== MIR ===\n{}\n", mirOutput );
-						return 0;
-					}
-					if( this->options.useMIR ) {
-						if( this->options.verbose ) {
-							spdlog::info( "Stage 5.0: MIR → LLVM IR Code Generation" );
+					else if( moduleDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+						std::string enumName = static_cast<ast::nodes::EnumDeclaration&>( *moduleDeclaration ).name;
+						if( existingEnumNames.count( enumName ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingEnumNames.insert( enumName );
 						}
-						ir::mir::MIRCodegen mirCodegenInstance( semanticAnalyzer, this->diagnostic );
-						if( this->options.targetTriple.empty() == false ) {
-							mirCodegenInstance.setTargetTriple( this->options.targetTriple );
-						}
-						if( mirCodegenInstance.generate( *mirModule ) == false ) {
-							fmt::print( stderr, "Compilation failed during MIR code generation.\n" );
-							return 1;
-						}
-						if( this->options.verbose ) {
-							spdlog::info( "MIR codegen: LLVM IR generated successfully" );
-						}
-						if( this->options.dumpIR ) {
-							fmt::print( "=== LLVM IR (MIR) ===\n" );
-							mirCodegenInstance.getModule()->print( llvm::errs(), nullptr );
-						}
-						if( this->options.output.kind == Output::Kind::LLVMIR ) {
-							std::string irOutputPath = this->options.output.target;
-							if( irOutputPath.empty() ) {
-								irOutputPath = fmt::format( "{}.ll", this->options.output.source );
-							}
-							if( mirCodegenInstance.writeIR( irOutputPath ) == false ) {
-								return 1;
-							}
-							return 0;
-						}
-						std::string mirTempIrFile = fmt::format( "/tmp/uranite-mir-{}.ll", getpid() );
-						mirCodegenInstance.writeIR( mirTempIrFile );
-						return this->linkFromIR( mirTempIrFile );
 					}
 				}
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 5: Optimization Passes" );
+				spdlog::info( "Stage 5: HIR Lowering" );
 			}
-			optimizer::Optimizer codeOptimizer( this->diagnostic, this->options.optimization );
-			codeOptimizer.optimize( *programRoot );
+			ir::hir::HIRLowering hirLoweringPass( semanticAnalyzer, this->diagnostic );
+			std::shared_ptr<ir::hir::HIRModule> hirModule = hirLoweringPass.lower( *programRoot );
+			ir::hir::HIRValidator hirValidatorPass( this->diagnostic );
+			bool hirIsValid = hirValidatorPass.validate( *hirModule );
 			if( this->options.verbose ) {
-				const optimizer::Statistic& optimizationStatistics = codeOptimizer.stats();
-				spdlog::info( "Optimizations: {} TCO, {} constexpr, {} devirtualized, {} dead branches, {} unused vars, {} unused funcs, {} unreachable stmts", optimizationStatistics.tailCallsOptimized, optimizationStatistics.constantExpressionResionEvaluated, optimizationStatistics.functionsDevirtualized, optimizationStatistics.deadBranchesEliminated, optimizationStatistics.unusedVariablesEliminated, optimizationStatistics.unusedFunctionsEliminated, optimizationStatistics.unreachableStatementsEliminated );
+				if( hirIsValid ) {
+					spdlog::info( "HIR validation passed" );
+				}
+				else {
+					spdlog::warn( "HIR validation found {} issue(s)", hirValidatorPass.validationErrors().size() );
+				}
+			}
+			if( this->options.dumpHIR ) {
+				ir::hir::HIRPrinter hirPrinter;
+				std::string hirOutput = hirPrinter.print( *hirModule );
+				fmt::print( "=== HIR ===\n{}\n", hirOutput );
+				return 0;
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 6: LLVM IR Code Generation" );
+				spdlog::info( "Stage 6: MIR Lowering" );
 			}
-			codegen::LLVMCodegen llvmCodegenInstance( semanticAnalyzer, this->diagnostic );
+			ir::mir::MIRLowering mirLoweringPass( this->diagnostic, &semanticAnalyzer.types() );
+			std::shared_ptr<ir::mir::MIRModuleDefinition> mirModule = mirLoweringPass.lower( *hirModule );
+			if( this->options.verbose ) {
+				size_t totalBlocks = 0;
+				for( const std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
+					totalBlocks+= mirFunction->controlFlowBlocks.size();
+				}
+				spdlog::info( "MIR: {} functions, {} basic blocks", mirModule->functionDefinitions.size(), totalBlocks );
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "Stage 7: MIR Liveness Analysis" );
+			}
+			ir::mir::MIRLivenessAnalyzer mirLivenessPass;
+			for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
+				if( mirFunction != nullptr ) {
+					mirLivenessPass.analyze( *mirFunction );
+				}
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "Stage 8: MIR Borrow Checker" );
+			}
+			ir::mir::MIRBorrowChecker mirBorrowChecker( this->diagnostic );
+			for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
+				if( mirFunction != nullptr ) {
+					mirBorrowChecker.check( *mirFunction );
+				}
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "MIR borrow check: {} violation(s)", mirBorrowChecker.violationCount() );
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "Stage 9: MIR Optimization" );
+			}
+			ir::mir::MIROptimizer mirOptimizer;
+			mirOptimizer.optimize( *mirModule );
+			if( this->options.verbose ) {
+				spdlog::info( "MIR optimizer: {} instructions removed, {} blocks removed",
+					mirOptimizer.removedInstructionCount(), mirOptimizer.removedBlockCount() );
+			}
+			if( this->options.dumpMIR ) {
+				ir::mir::MIRPrinter mirPrinter;
+				std::string mirOutput = mirPrinter.print( *mirModule );
+				fmt::print( "=== MIR ===\n{}\n", mirOutput );
+				return 0;
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "Stage 10: LLVM IR Code Generation" );
+			}
+			ir::mir::MIRCodegen mirCodegenInstance( semanticAnalyzer, this->diagnostic );
 			if( this->options.targetTriple.empty() == false ) {
-				llvmCodegenInstance.setTargetTriple( this->options.targetTriple );
+				mirCodegenInstance.setTargetTriple( this->options.targetTriple );
 			}
-			if( llvmCodegenInstance.generate( *programRoot ) == false ) {
+			if( mirCodegenInstance.generate( *mirModule ) == false ) {
 				fmt::print( stderr, "Compilation failed during code generation.\n" );
 				return 1;
 			}
@@ -1234,14 +1185,14 @@ namespace uranite::compiler {
 			}
 			if( this->options.dumpIR ) {
 				fmt::print( "=== LLVM IR ===\n" );
-				llvmCodegenInstance.dump();
+				mirCodegenInstance.getModule()->print( llvm::errs(), nullptr );
 			}
 			if( this->options.output.kind == Output::Kind::LLVMIR ) {
 				std::string irOutputPath = this->options.output.target;
 				if( irOutputPath.empty() ) {
 					irOutputPath = fmt::format( "{}.ll", this->options.output.source );
 				}
-				if( llvmCodegenInstance.writeIR( irOutputPath ) == false ) {
+				if( mirCodegenInstance.writeIR( irOutputPath ) == false ) {
 					return 1;
 				}
 				if( this->options.verbose ) {
@@ -1250,7 +1201,7 @@ namespace uranite::compiler {
 				return 0;
 			}
 			std::string tempIrFile = fmt::format( "/tmp/uranite-{}.ll", getpid() );
-			llvmCodegenInstance.writeIR( tempIrFile );
+			mirCodegenInstance.writeIR( tempIrFile );
 			return this->linkFromIR( tempIrFile );
 		}
 		catch( const diagnostic::DiagnosticLimitReachedError& ) {
