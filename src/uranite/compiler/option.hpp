@@ -114,9 +114,6 @@ namespace uranite::compiler {
 		/** @brief The target architecture triple for cross-compilation. */
 		std::string targetTriple;
 		
-		/** @brief Flag to use MIR-based LLVM codegen instead of AST-direct codegen. */
-		bool useMIR = false;
-
 		/** @brief Flag to enable verbose logging during the compilation process. */
 		bool verbose = false;
 		
