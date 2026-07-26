@@ -79,6 +79,7 @@ namespace uranite::ir::mir {
 			MIRBlockIdentifier headerBlockIdentifier;
 			MIRBlockIdentifier exitBlockIdentifier;
 			MIRBlockIdentifier updateBlockIdentifier;
+			size_t deferCountAtEntry = 0;
 		};
 		
 		// State
