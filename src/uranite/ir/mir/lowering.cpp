@@ -822,6 +822,9 @@ namespace uranite::ir::mir {
 			case hir::HIRNodeKind::Break: {
 				if( this->loopContextStack.empty() == false ) {
 					LoopContext& loopContext = this->loopContextStack.top();
+					for( size_t deferIndex = this->deferredStatements.size(); deferIndex > loopContext.deferCountAtEntry; --deferIndex ) {
+						this->lowerStatement( this->deferredStatements[deferIndex - 1] );
+					}
 					MIRInstruction jumpInstruction( MIRInstructionKind::JumpUnconditional );
 					jumpInstruction.trueBranchTarget = loopContext.exitBlockIdentifier;
 					jumpInstruction.sourceLocation = hirStatement->sourceLocation;
@@ -832,6 +835,9 @@ namespace uranite::ir::mir {
 			case hir::HIRNodeKind::Continue: {
 				if( this->loopContextStack.empty() == false ) {
 					LoopContext& loopContext = this->loopContextStack.top();
+					for( size_t deferIndex = this->deferredStatements.size(); deferIndex > loopContext.deferCountAtEntry; --deferIndex ) {
+						this->lowerStatement( this->deferredStatements[deferIndex - 1] );
+					}
 					MIRBlockIdentifier continueTarget = loopContext.updateBlockIdentifier;
 					if( continueTarget == INVALID_BLOCK_IDENTIFIER ) {
 						continueTarget = loopContext.headerBlockIdentifier;
@@ -1022,17 +1028,21 @@ namespace uranite::ir::mir {
 			loopContext.headerBlockIdentifier = headerBlock->blockIdentifier;
 			loopContext.exitBlockIdentifier = exitBlock->blockIdentifier;
 			loopContext.updateBlockIdentifier = updateBlock->blockIdentifier;
+			loopContext.deferCountAtEntry = this->deferredStatements.size();
 			this->loopContextStack.push( loopContext );
 			this->switchToBlock( bodyBlock );
 			if( hirLoop.loopBody != nullptr ) {
 				this->lowerBlock( *hirLoop.loopBody );
 			}
 			if( this->currentBlock->isTerminated == false ) {
+				for( size_t deferIndex = this->deferredStatements.size(); deferIndex > loopContext.deferCountAtEntry; --deferIndex ) {
+					this->lowerStatement( this->deferredStatements[deferIndex - 1] );
+				}
 				MIRInstruction jumpToUpdate( MIRInstructionKind::JumpUnconditional );
 				jumpToUpdate.trueBranchTarget = updateBlock->blockIdentifier;
 				this->emitTerminator( jumpToUpdate );
 			}
-			
+
 			// Update: loopVar = loopVar + 1
 			this->switchToBlock( updateBlock );
 			MIRInstruction reloadVar( MIRInstructionKind::LoadVariable );
@@ -1143,6 +1153,7 @@ namespace uranite::ir::mir {
 				loopContext.headerBlockIdentifier = headerBlock->blockIdentifier;
 				loopContext.exitBlockIdentifier = exitBlock->blockIdentifier;
 				loopContext.updateBlockIdentifier = INVALID_BLOCK_IDENTIFIER;
+				loopContext.deferCountAtEntry = this->deferredStatements.size();
 				this->loopContextStack.push( loopContext );
 				this->switchToBlock( bodyBlock );
 				MIRInstruction gepInstruction( MIRInstructionKind::ComputeIndexAddress );
@@ -1187,6 +1198,10 @@ namespace uranite::ir::mir {
 				storeNext.sourceOperands.push_back( nextIndex );
 				this->emitInstruction( storeNext );
 				if( this->currentBlock->isTerminated == false ) {
+					LoopContext& activeLoopContext = this->loopContextStack.top();
+					for( size_t deferIndex = this->deferredStatements.size(); deferIndex > activeLoopContext.deferCountAtEntry; --deferIndex ) {
+						this->lowerStatement( this->deferredStatements[deferIndex - 1] );
+					}
 					MIRInstruction backToHeader( MIRInstructionKind::JumpUnconditional );
 					backToHeader.trueBranchTarget = headerBlock->blockIdentifier;
 					this->emitTerminator( backToHeader );
@@ -1245,6 +1260,7 @@ namespace uranite::ir::mir {
 				loopContext.headerBlockIdentifier = headerBlock->blockIdentifier;
 				loopContext.exitBlockIdentifier = exitBlock->blockIdentifier;
 				loopContext.updateBlockIdentifier = INVALID_BLOCK_IDENTIFIER;
+				loopContext.deferCountAtEntry = this->deferredStatements.size();
 				this->loopContextStack.push( loopContext );
 				this->switchToBlock( bodyBlock );
 				MIRInstruction nextCall( MIRInstructionKind::CallFunction );
@@ -1262,6 +1278,10 @@ namespace uranite::ir::mir {
 					this->lowerBlock( *hirLoop.loopBody );
 				}
 				if( this->currentBlock->isTerminated == false ) {
+					LoopContext& activeLoopContext = this->loopContextStack.top();
+					for( size_t deferIndex = this->deferredStatements.size(); deferIndex > activeLoopContext.deferCountAtEntry; --deferIndex ) {
+						this->lowerStatement( this->deferredStatements[deferIndex - 1] );
+					}
 					MIRInstruction backToHeader( MIRInstructionKind::JumpUnconditional );
 					backToHeader.trueBranchTarget = headerBlock->blockIdentifier;
 					this->emitTerminator( backToHeader );
@@ -1405,6 +1425,7 @@ namespace uranite::ir::mir {
 			loopContext.headerBlockIdentifier = headerBlock->blockIdentifier;
 			loopContext.exitBlockIdentifier = exitBlock->blockIdentifier;
 			loopContext.updateBlockIdentifier = INVALID_BLOCK_IDENTIFIER;
+			loopContext.deferCountAtEntry = this->deferredStatements.size();
 			this->loopContextStack.push( loopContext );
 			this->switchToBlock( bodyBlock );
 			MIRInstruction nextCall( MIRInstructionKind::CallFunction );
@@ -1468,6 +1489,10 @@ namespace uranite::ir::mir {
 				this->lowerBlock( *hirLoop.loopBody );
 			}
 			if( this->currentBlock->isTerminated == false ) {
+				LoopContext& activeLoopContext = this->loopContextStack.top();
+				for( size_t deferIndex = this->deferredStatements.size(); deferIndex > activeLoopContext.deferCountAtEntry; --deferIndex ) {
+					this->lowerStatement( this->deferredStatements[deferIndex - 1] );
+				}
 				MIRInstruction jumpBack( MIRInstructionKind::JumpUnconditional );
 				jumpBack.trueBranchTarget = headerBlock->blockIdentifier;
 				this->emitTerminator( jumpBack );
@@ -1526,12 +1551,16 @@ namespace uranite::ir::mir {
 		loopContext.headerBlockIdentifier = headerBlock->blockIdentifier;
 		loopContext.exitBlockIdentifier = exitBlock->blockIdentifier;
 		loopContext.updateBlockIdentifier = ( updateBlock != nullptr ) ? updateBlock->blockIdentifier : INVALID_BLOCK_IDENTIFIER;
+		loopContext.deferCountAtEntry = this->deferredStatements.size();
 		this->loopContextStack.push( loopContext );
 		this->switchToBlock( bodyBlock );
 		if( hirLoop.loopBody != nullptr ) {
 			this->lowerBlock( *hirLoop.loopBody );
 		}
 		if( this->currentBlock->isTerminated == false ) {
+			for( size_t deferIndex = this->deferredStatements.size(); deferIndex > loopContext.deferCountAtEntry; --deferIndex ) {
+				this->lowerStatement( this->deferredStatements[deferIndex - 1] );
+			}
 			MIRBlockIdentifier backEdgeTarget = ( updateBlock != nullptr ) ? updateBlock->blockIdentifier : headerBlock->blockIdentifier;
 			MIRInstruction jumpBack( MIRInstructionKind::JumpUnconditional );
 			jumpBack.trueBranchTarget = backEdgeTarget;
