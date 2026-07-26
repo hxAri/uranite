@@ -310,7 +310,6 @@ TEST_F( IntegrationTest, DeferStatement ) {
 	EXPECT_NE( compiled.output.find( "end" ), std::string::npos );
 	EXPECT_NE( compiled.output.find( "defer2" ), std::string::npos );
 	EXPECT_NE( compiled.output.find( "defer1" ), std::string::npos );
-	// defer2 should come before defer1 (LIFO order)
 	EXPECT_LT( compiled.output.find( "defer2" ), compiled.output.find( "defer1" ) );
 }
 
@@ -331,7 +330,6 @@ TEST_F( IntegrationTest, DeferInLoopWithBreak ) {
 	);
 	EXPECT_EQ( compiled.status, 0 );
 	EXPECT_NE( compiled.output.find( "done" ), std::string::npos );
-	// Defer runs on break and on normal loop iterations (3 times total: counter=0,1,2)
 	size_t firstCleanup = compiled.output.find( "cleanup" );
 	EXPECT_NE( firstCleanup, std::string::npos );
 	size_t secondCleanup = compiled.output.find( "cleanup", firstCleanup + 1 );
@@ -415,14 +413,17 @@ TEST_F( IntegrationTest, EnumAndMatch ) {
 		"    unit South\n"
 		"    unit East\n"
 		"    unit West\n"
-		"public function main() -> I32:\n"
-		"    Direction d = Direction.East\n"
-		"    return match d in \\\n"
+		"public function describe( Direction d ) -> Void:\n"
+		"    match d in \\\n"
 		"        Direction.North => puts( \"N\" ),\\\n"
 		"        Direction.East => puts( \"E\" ),\\\n"
 		"        Direction.South => puts( \"S\" ),\\\n"
 		"        Direction.West => puts( \"W\" ),\\\n"
 		"        * => 0\n"
+		"public function main() -> I32:\n"
+		"    Direction d = Direction.East\n"
+		"    describe( d )\n"
+		"    return 0\n"
 	);
 	EXPECT_EQ( compiled.status, 0 );
 	EXPECT_NE( compiled.output.find( "E" ), std::string::npos );
@@ -435,12 +436,15 @@ TEST_F( IntegrationTest, EnumLegacyAndUnitMixed ) {
 		"enum Status:\n"
 		"    unit Active\n"
 		"    unit Inactive\n"
-		"public function main() -> I32:\n"
-		"    Status s = Status.Active\n"
-		"    return match s in \\\n"
+		"public function describe( Status s ) -> Void:\n"
+		"    match s in \\\n"
 		"        Status.Active => puts( \"active\" ), \\\n"
 		"        Status.Inactive => puts( \"inactive\" ), \\\n"
-		"        * => 0"
+		"        * => 0\n"
+		"public function main() -> I32:\n"
+		"    Status s = Status.Active\n"
+		"    describe( s )\n"
+		"    return 0\n"
 	);
 	EXPECT_EQ( compiled.status, 0 );
 	EXPECT_NE( compiled.output.find( "active" ), std::string::npos );
@@ -454,13 +458,16 @@ TEST_F( IntegrationTest, EnumWithBackedType ) {
 		"    unit Red 1\n"
 		"    unit Green 2\n"
 		"    unit Blue 3\n"
-		"public function main() -> I32:\n"
-		"    Color c = Color.Green\n"
-		"    return match c in \\\n"
+		"public function describe( Color c ) -> Void:\n"
+		"    match c in \\\n"
 		"        Color.Red => puts( \"R\" ), \\\n"
 		"        Color.Green => puts( \"G\" ), \\\n"
 		"        Color.Blue => puts( \"B\" ), \\\n"
 		"        * => 0\n"
+		"public function main() -> I32:\n"
+		"    Color c = Color.Green\n"
+		"    describe( c )\n"
+		"    return 0\n"
 	);
 	EXPECT_EQ( compiled.status, 0 );
 	EXPECT_NE( compiled.output.find( "G" ), std::string::npos );
@@ -475,14 +482,17 @@ TEST_F( IntegrationTest, EnumWithUnitKeyword ) {
 		"    unit South\n"
 		"    unit East\n"
 		"    unit West\n"
-		"public function main() -> I32:\n"
-		"    Direction d = Direction.East\n"
-		"    return match d in \\\n"
+		"public function describe( Direction d ) -> Void:\n"
+		"    match d in \\\n"
 		"        Direction.North => puts( \"N\" ), \\\n"
 		"        Direction.East => puts( \"E\" ), \\\n"
 		"        Direction.South => puts( \"S\" ), \\\n"
 		"        Direction.West => puts( \"W\" ), \\\n"
 		"        * => 0\n"
+		"public function main() -> I32:\n"
+		"    Direction d = Direction.East\n"
+		"    describe( d )\n"
+		"    return 0\n"
 	);
 	EXPECT_EQ( compiled.status, 0 );
 	EXPECT_NE( compiled.output.find( "E" ), std::string::npos );
