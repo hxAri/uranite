@@ -192,12 +192,10 @@ function main() {
 	
 	function testing() {
 		puts ""
-		puts "  <<- i > ${basepath}/build: cd"
 		compile
 		local builded=$?
 		if [[ $builded -eq 0 ]]; then
-			cd "${basepath}/build"
-			subshell "ctest -V -R $@"
+			subshell "${basepath}/build/uranite-tests -V -R $@"
 			return $SUBSHELLSTATUS
 		fi
 		return $builded
