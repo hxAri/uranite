@@ -104,10 +104,6 @@ int main( int argc, char* argv[] ) {
 		.help( "Dump LLVM IR to stdout" )
 		.default_value( false )
 		.implicit_value( true );
-	program.add_argument( "--use-mir" )
-		.help( "Use MIR-based LLVM codegen instead of AST-direct codegen" )
-		.default_value( false )
-		.implicit_value( true );
 	program.add_argument( "-v", "--verbose" )
 		.help( "Enable verbose output" )
 		.default_value( false )
@@ -190,7 +186,6 @@ int main( int argc, char* argv[] ) {
 	options.dumpHIR = program.get<bool>( "--dump-hir" );
 	options.dumpMIR = program.get<bool>( "--dump-mir" );
 	options.dumpIR = program.get<bool>( "--dump-ir" );
-	options.useMIR = program.get<bool>( "--use-mir" );
 	options.verbose = program.get<bool>( "--verbose" );
 	options.stripDebugInfo = !program.get<bool>( "--no-strip" );
 	options.linkLibraries = program.get<std::vector<std::string>>( "--link" );
