@@ -73,7 +73,6 @@ function main() {
 	for argument in "$@"; do
 		case "$argument" in
 			--gdb) debugable=1 ;;
-			--mir) mir=1 ;;
 			*) arguments+=( "$argument" ) ;;
 		esac
 	done
