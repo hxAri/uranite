@@ -61,10 +61,6 @@ class MIRAnalysisTest : public ::testing::Test {
 	
 };
 
-// ==========================================================================
-// Liveness Analysis Tests
-// ==========================================================================
-
 TEST_F( MIRAnalysisTest, LivenessAnalysisSimpleFunction ) {
 	std::shared_ptr<uranite::ir::mir::MIRModuleDefinition> mirModule = this->lowerToMIR(
 		"function add( I64 left, I64 right ) -> I64:\n"
@@ -72,18 +68,13 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisSimpleFunction ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
-	
-	// Entry block should have parameters live at entry (they're used in the add)
 	uranite::ir::mir::MIRFunctionDefinition& functionDef = *mirModule->functionDefinitions[0];
 	ASSERT_GE( functionDef.controlFlowBlocks.size(), 1 );
 	std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& entryBlock =
 		functionDef.controlFlowBlocks[functionDef.entryBlockIdentifier];
 	ASSERT_NE( entryBlock, nullptr );
-	
-	// Entry block should have defined or used variables (parameters are registered)
 	EXPECT_FALSE( entryBlock->definedVariables.empty() && entryBlock->usedVariables.empty() );
 }
 
@@ -95,17 +86,12 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisDeadVariable ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
-	
-	// The unused variable should NOT be in liveVariablesAtExit of entry block
 	uranite::ir::mir::MIRFunctionDefinition& functionDef = *mirModule->functionDefinitions[0];
 	std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& entryBlock =
 		functionDef.controlFlowBlocks[functionDef.entryBlockIdentifier];
 	ASSERT_NE( entryBlock, nullptr );
-	
-	// Check that def set contains the unused variable
 	EXPECT_FALSE( entryBlock->definedVariables.empty() );
 }
 
@@ -119,11 +105,8 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisIfBranch ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
-	
-	// Should have multiple blocks (entry/cond, then, else, merge)
 	uranite::ir::mir::MIRFunctionDefinition& functionDef = *mirModule->functionDefinitions[0];
 	EXPECT_GE( functionDef.controlFlowBlocks.size(), 3 );
 }
@@ -138,19 +121,13 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisBuildsPredecessorSuccessorEdges ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	livenessAnalysis.analyze( *mirModule->functionDefinitions[0] );
-	
 	uranite::ir::mir::MIRFunctionDefinition& functionDef = *mirModule->functionDefinitions[0];
-	
-	// Entry block should have successors
 	std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& entryBlock =
 		functionDef.controlFlowBlocks[functionDef.entryBlockIdentifier];
 	ASSERT_NE( entryBlock, nullptr );
 	EXPECT_FALSE( entryBlock->successorBlocks.empty() );
-	
-	// Non-entry blocks should have predecessors
 	bool foundBlockWithPredecessor = false;
 	for( size_t blockIndex = 0; blockIndex < functionDef.controlFlowBlocks.size(); blockIndex++ ) {
 		if( functionDef.controlFlowBlocks[blockIndex] != nullptr &&
@@ -163,10 +140,6 @@ TEST_F( MIRAnalysisTest, LivenessAnalysisBuildsPredecessorSuccessorEdges ) {
 	EXPECT_TRUE( foundBlockWithPredecessor );
 }
 
-// ==========================================================================
-// Borrow Checker Tests
-// ==========================================================================
-
 TEST_F( MIRAnalysisTest, BorrowCheckerNoViolationsSimple ) {
 	std::shared_ptr<uranite::ir::mir::MIRModuleDefinition> mirModule = this->lowerToMIR(
 		"function simple( I64 value ) -> I64:\n"
@@ -174,12 +147,10 @@ TEST_F( MIRAnalysisTest, BorrowCheckerNoViolationsSimple ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::diagnostic::Engine diagnostic( 100, 100 );
 	diagnostic.setConsolPrintable( false );
 	uranite::ir::mir::MIRBorrowChecker borrowChecker( diagnostic );
 	borrowChecker.check( *mirModule->functionDefinitions[0] );
-	
 	EXPECT_EQ( borrowChecker.violationCount(), 0 );
 }
 
@@ -190,12 +161,10 @@ TEST_F( MIRAnalysisTest, BorrowCheckerParameterOwned ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::diagnostic::Engine diagnostic( 100, 100 );
 	diagnostic.setConsolPrintable( false );
 	uranite::ir::mir::MIRBorrowChecker borrowChecker( diagnostic );
 	borrowChecker.check( *mirModule->functionDefinitions[0] );
-	
 	EXPECT_EQ( borrowChecker.violationCount(), 0 );
 }
 
@@ -207,12 +176,10 @@ TEST_F( MIRAnalysisTest, BorrowCheckerLocalVariable ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::diagnostic::Engine diagnostic( 100, 100 );
 	diagnostic.setConsolPrintable( false );
 	uranite::ir::mir::MIRBorrowChecker borrowChecker( diagnostic );
 	borrowChecker.check( *mirModule->functionDefinitions[0] );
-	
 	EXPECT_EQ( borrowChecker.violationCount(), 0 );
 }
 
@@ -226,18 +193,12 @@ TEST_F( MIRAnalysisTest, BorrowCheckerIfBranchNoViolation ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::diagnostic::Engine diagnostic( 100, 100 );
 	diagnostic.setConsolPrintable( false );
 	uranite::ir::mir::MIRBorrowChecker borrowChecker( diagnostic );
 	borrowChecker.check( *mirModule->functionDefinitions[0] );
-	
 	EXPECT_EQ( borrowChecker.violationCount(), 0 );
 }
-
-// ==========================================================================
-// Optimizer Tests
-// ==========================================================================
 
 TEST_F( MIRAnalysisTest, OptimizerConstantFolding ) {
 	std::shared_ptr<uranite::ir::mir::MIRModuleDefinition> mirModule = this->lowerToMIR(
@@ -246,11 +207,8 @@ TEST_F( MIRAnalysisTest, OptimizerConstantFolding ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIROptimizer optimizer;
 	optimizer.optimizeFunction( *mirModule->functionDefinitions[0] );
-	
-	// After constant folding, should have a ConstantInteger(5) somewhere
 	bool foundFoldedConstant = false;
 	for( std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& basicBlock :
 		mirModule->functionDefinitions[0]->controlFlowBlocks ) {
@@ -277,7 +235,6 @@ TEST_F( MIRAnalysisTest, OptimizerRunsWithoutCrash ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIROptimizer optimizer;
 	EXPECT_NO_THROW( optimizer.optimize( *mirModule ) );
 }
@@ -289,7 +246,6 @@ TEST_F( MIRAnalysisTest, OptimizerEliminateUnreachableBlocks ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	size_t blockCountBefore = 0;
 	for( std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& basicBlock :
 		mirModule->functionDefinitions[0]->controlFlowBlocks ) {
@@ -297,10 +253,8 @@ TEST_F( MIRAnalysisTest, OptimizerEliminateUnreachableBlocks ) {
 			blockCountBefore++;
 		}
 	}
-	
 	uranite::ir::mir::MIROptimizer optimizer;
 	optimizer.optimizeFunction( *mirModule->functionDefinitions[0] );
-	
 	size_t blockCountAfter = 0;
 	for( std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& basicBlock :
 		mirModule->functionDefinitions[0]->controlFlowBlocks ) {
@@ -308,8 +262,6 @@ TEST_F( MIRAnalysisTest, OptimizerEliminateUnreachableBlocks ) {
 			blockCountAfter++;
 		}
 	}
-	
-	// After optimization, should have same or fewer blocks
 	EXPECT_LE( blockCountAfter, blockCountBefore );
 }
 
@@ -321,11 +273,8 @@ TEST_F( MIRAnalysisTest, OptimizerPreservesCorrectness ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIROptimizer optimizer;
 	optimizer.optimizeFunction( *mirModule->functionDefinitions[0] );
-	
-	// Function should still have at least one block with a return
 	bool hasReturn = false;
 	for( std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& basicBlock :
 		mirModule->functionDefinitions[0]->controlFlowBlocks ) {
@@ -347,11 +296,8 @@ TEST_F( MIRAnalysisTest, OptimizerRemovedCountsTracked ) {
 		"    return 10 + 20\n"
 	);
 	ASSERT_NE( mirModule, nullptr );
-	
 	uranite::ir::mir::MIROptimizer optimizer;
 	optimizer.optimize( *mirModule );
-	
-	// Counts should be non-negative (may or may not have optimized anything)
 	EXPECT_GE( optimizer.removedInstructionCount(), 0 );
 	EXPECT_GE( optimizer.removedBlockCount(), 0 );
 }
@@ -368,8 +314,6 @@ TEST_F( MIRAnalysisTest, OptimizerWhileLoopSurvivesOptimization ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
-	// Verify pre-optimization structure: should have multiple blocks for loop
 	size_t preOptBlockCount = 0;
 	for( std::shared_ptr<uranite::ir::mir::MIRBasicBlock>& basicBlock :
 		mirModule->functionDefinitions[0]->controlFlowBlocks ) {
@@ -378,15 +322,9 @@ TEST_F( MIRAnalysisTest, OptimizerWhileLoopSurvivesOptimization ) {
 		}
 	}
 	EXPECT_GE( preOptBlockCount, 3 );
-	
-	// Optimizer should not crash on loop CFG
 	uranite::ir::mir::MIROptimizer optimizer;
 	EXPECT_NO_THROW( optimizer.optimizeFunction( *mirModule->functionDefinitions[0] ) );
 }
-
-// ==========================================================================
-// Integration: Liveness + Borrow Checker + Optimizer pipeline
-// ==========================================================================
 
 TEST_F( MIRAnalysisTest, FullAnalysisPipelineNoErrors ) {
 	std::shared_ptr<uranite::ir::mir::MIRModuleDefinition> mirModule = this->lowerToMIR(
@@ -399,21 +337,14 @@ TEST_F( MIRAnalysisTest, FullAnalysisPipelineNoErrors ) {
 	);
 	ASSERT_NE( mirModule, nullptr );
 	ASSERT_GE( mirModule->functionDefinitions.size(), 1 );
-	
 	uranite::ir::mir::MIRFunctionDefinition& functionDef = *mirModule->functionDefinitions[0];
-	
-	// 1. Liveness analysis
 	uranite::ir::mir::MIRLivenessAnalyzer livenessAnalysis;
 	EXPECT_NO_THROW( livenessAnalysis.analyze( functionDef ) );
-	
-	// 2. Borrow checker
 	uranite::diagnostic::Engine diagnostic( 100, 100 );
 	diagnostic.setConsolPrintable( false );
 	uranite::ir::mir::MIRBorrowChecker borrowChecker( diagnostic );
 	EXPECT_NO_THROW( borrowChecker.check( functionDef ) );
 	EXPECT_EQ( borrowChecker.violationCount(), 0 );
-	
-	// 3. Optimizer
 	uranite::ir::mir::MIROptimizer optimizer;
 	EXPECT_NO_THROW( optimizer.optimizeFunction( functionDef ) );
 }
