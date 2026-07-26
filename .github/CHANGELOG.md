@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.0-2026.8 2026-07-26
+
+**Changed**
+- AST-direct codegen pipeline removed — MIR/HIR is now the sole compilation pipeline; all compilation flows through HIR lowering → MIR lowering → MIR liveness → MIR borrow check → MIR optimization → MIR codegen
+- `--use-mir` CLI flag and `Options::useMIR` field removed — no longer needed since MIR/HIR is the only path
+- `codegen/codegen.hpp` include removed from driver — AST codegen no longer linked into the compilation driver
+- Pipeline stage numbers renumbered: HIR lowering (5), MIR lowering (6), MIR liveness (7), MIR borrow check (8), MIR optimization (9), LLVM IR codegen (10)
+
+**Fixed**
+- Defer-in-loop not firing before `break`, `continue`, or normal iteration end — `LoopContext` now tracks `deferCountAtEntry`; loop-scoped deferred statements emitted in LIFO order before break jumps, continue jumps, and iteration fallthrough in all five loop types (range-for, string iteration, generator, iterator, while/C-style-for)
+- Integration tests using `return match ... => puts(...)` returning non-zero exit code — `puts` return value is implementation-defined; tests restructured to separate match side effects from `main` return value
+
 ## v1.1.0-2026.7 2026-07-24
 
 **Added**
