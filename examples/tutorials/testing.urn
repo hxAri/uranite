@@ -2,13 +2,16 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-21 01:44
-# @github https://github.com/uranite-lang/uranite/blob/prod/examples/
+# @update 2026-07-27 21:50
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/tutorials/testing.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
-# A comprehensive showcase of Uranite language syntax and features.
+# Supreme Graph Processing, Combinatorial Analysis, and Polymorphic Memory Stress Test.
+# Designed to aggressively hunt segmentation faults and compiler memory leaks.
+# Integrates deep generics, interfaces, inheritance, structs, enums, match expressions,
+# nullables, explicit memory deletion, defers, closures, and compound assignments.
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,344 +22,419 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package main
+package uranite.examples.tutorials.testing
 
+from uranite.collection import {
+    ArrayList, 
+    Generator, 
+    HashMap, 
+    HashSet, 
+    MutableSequence, 
+    Map, 
+    Pair, 
+    Set, 
+    Tuple
+}
 from uranite.errors.exception import Exception
-from uranite.io.console import puts
+from uranite.functions.externs import clock
+from uranite.iterators import Iterable
+from uranite.io import puts
+from uranite.language.double import Double
 
-class TreeNode;
+enum ResonancePhase:
+    unit Quiescent
+    unit Oscillating
+    unit Cascading
+    unit Divergent
 
-enum Direction:
-    
-    """ Represents the four cardinal directions """
-    
+enum CardinalDirection:
     unit North
     unit South
     unit East
     unit West
 
-interface Printable:
+interface Transmittable:
     
-    """ An interface for objects that can be displayed to the console """
-    
-    public function display( self ) -> Void:
-        
-        """ Displays the object's information """
+    public function evaluateResonance( self ) -> F64;
 
-class Box<T>:
+interface Displayable:
     
-    """ A simple generic container class """
-    
-    public T value
-    
-    public function Box( self, T value ) -> Void:
-        
-        """
-        Initializes a new Box with a value.
-        
-        Parameters:
-            value: The value to store in the box.
-        """
-        
-        self.value = value
-    
-    public function get( self ) -> T:
-        
-        """
-        Retrieves the value from the box.
-        
-        Returns:
-            The stored value.
-        """
-        
-        return self.value
+    public function displayInformation( self ) -> Void;
 
-class Shape:
+class BaseEntity:
     
-    """ Base class for geometric shapes """
+    public String designation
     
-    public String kind
+    public function BaseEntity( self, String desig ) -> Void:
+        self.designation = desig
+
+class QuantumVertex extends BaseEntity implements Transmittable:
     
-    public function Shape( self, String kind ) -> Void:
-        
-        """
-        Initializes a new Shape.
-        
-        Parameters:
-            kind: The kind of shape.
-        """
-        
-        self.kind = kind
+    public F64 baselineFrequency
     
-    public virtual function area( self ) -> I64:
-        
-        """
-        Calculates the area of the shape.
-        
-        Returns:
-            The area as an I64.
-        """
-        
+    public function QuantumVertex( self, String desig, F64 frequency ) -> Void:
+        self.designation = desig
+        self.baselineFrequency = frequency
+    
+    public function evaluateResonance( self ) -> F64:
+        return self.baselineFrequency * 1.61803
+
+class GeometricShape:
+    
+    public String shapeKind
+    
+    public function GeometricShape( self, String kind ) -> Void:
+        self.shapeKind = kind
+    
+    public virtual function calculateArea( self ) -> I64:
         return 0
 
-class Square extends Shape implements Printable:
+class PerfectSquare extends GeometricShape implements Displayable:
     
-    """ A class representing a square, extending Shape and implementing Printable """
+    public I64 sideLength
     
-    public I64 side
+    public function PerfectSquare( self, I64 side ) -> Void:
+        self.shapeKind = "PerfectSquare"
+        self.sideLength = side
     
-    public function Square( self, I64 side ) -> Void:
-        
-        """
-        Initializes a new Square instance.
-        
-        Parameters:
-            side: The length of one side of the square.
-        """
-        
-        self.kind = "Square"
-        self.side = side
+    public override function calculateArea( self ) -> I64:
+        return self.sideLength * self.sideLength
     
-    public override function area( self ) -> I64:
-        
-        """
-        Calculates the area of the square.
-        
-        Returns:
-            The calculated area.
-        """
-        
-        return self.side * self.side
-    
-    public function display( self ) -> Void:
-        
-        """ Displays the square's information to the console. """
-        
-        puts( "Square(", self.side, ") area=", self.area() )
+    public function displayInformation( self ) -> Void:
+        puts( "Displayable: ", self.shapeKind, " with area ", self.calculateArea() )
 
-Readonly class Config:
+struct Vector2D:
     
-    """ A readonly configuration class """
+    public F64 xAxis
+    public F64 yAxis
     
-    public I64 port
-    public String host
+    public function Vector2D( self, F64 x, F64 y ) -> Void:
+        self.xAxis = x
+        self.yAxis = y
     
-    public function Config( self, I64 port, String host ) -> Void:
-        
-        """
-        Initializes a new Config instance.
-        
-        Parameters:
-            port: The port number.
-            host: The host address.
-        """
-        
-        self.port = port
-        self.host = host
+    public function computeSquaredLength( self ) -> F64:
+        return self.xAxis * self.xAxis + self.yAxis * self.yAxis
 
-struct Vec2:
+Readonly class SystemConfiguration:
     
-    """ A 2D vector struct with basic methods """
+    public I64 operationalPort
+    public String hostAddress
     
-    public F64 x
-    public F64 y
-    
-    public function Vec2( self, F64 x, F64 y ) -> Void:
-        
-        """
-        Initializes a new Vec2 instance.
-        
-        Parameters:
-            x: The x coordinate.
-            y: The y coordinate.
-        """
-        
-        self.x = x
-        self.y = y
-    
-    public function length_sq( self ) -> F64:
-        
-        """
-        Calculates the squared length of the vector.
-        
-        Returns:
-            The squared length as an F64.
-        """
-        
-        return self.x * self.x + self.y * self.y
+    public function SystemConfiguration( self, I64 port, String host ) -> Void:
+        self.operationalPort = port
+        self.hostAddress = host
 
-class TreeNode:
+class GenericContainer<T>:
     
-    """ A class representing a node in a tree structure """
+    public T payloadValue
     
-    public I64 value
+    public function GenericContainer( self, T val ) -> Void:
+        self.payloadValue = val
     
-    public function TreeNode( self, I64 v ) -> Void:
-        
-        """
-        Initializes a new TreeNode.
-        
-        Parameters:
-            v: The integer value for the node.
-        """
-        
-        self.value = v
+    public function retrieve( self ) -> T:
+        return self.payloadValue
 
-public function factorial( I64 n ) -> I64:
+class SpatialTreeNode:
     
-    """
-    Calculates the factorial of a number recursively.
+    public GenericContainer<GeometricShape> nodeData
+    public ?SpatialTreeNode leftBranch
+    public ?SpatialTreeNode rightBranch
     
-    Parameters:
-        n: The number to calculate the factorial of.
-    
-    Returns:
-        The factorial of n.
-    """
-    
-    if n <= 1:
-        return 1
-    return n * factorial( n - 1 )
+    public function SpatialTreeNode( self, GeometricShape shapeData ) -> Void:
+        self.nodeData = new GenericContainer<GeometricShape>( shapeData )
+        self.leftBranch = None
+        self.rightBranch = None
 
-public function fib( I64 n ) -> I64:
+struct EigenTensor:
+    public F64 realPart
+    public F64 imaginaryPart
     
-    """
-    Calculates the nth Fibonacci number recursively.
+    public function EigenTensor( self, F64 r, F64 i ) -> Void:
+        self.realPart = r
+        self.imaginaryPart = i
     
-    Parameters:
-        n: The position in the Fibonacci sequence.
-    
-    Returns:
-        The nth Fibonacci number.
-    """
-    
-    if n <= 0:
-        return 0
-    if n == 1:
-        return 1
-    return fib( n - 1 ) + fib( n - 2 )
+    public function computeMagnitudeSquared( self ) -> F64:
+        return self.realPart * self.realPart + self.imaginaryPart * self.imaginaryPart
 
-public function direction_value( Direction d ) -> I32:
+class DimensionalCollapseException extends Exception:
+    public function DimensionalCollapseException( self, String message, I64 code, ?Exception cause ) -> Void:
+        parent( message, code, cause )
+
+class PayloadCapsule<T>:
     
-    """
-    Maps a Direction enum value to an integer.
+    public T dataPayload
+    public I64 traversalHops
     
-    Parameters:
-        d: The Direction enum value.
+    public function PayloadCapsule( self, T payload, I64 hops ) -> Void:
+        self.dataPayload = payload
+        self.traversalHops = hops
     
-    Returns:
-        An integer representing the direction.
-    """
-    
-    return match d in \
-        Direction.North => 0, \
-        Direction.South => 1, \
-        Direction.East => 2, \
-        Direction.West => 3, \
+    public function extract( self ) -> T:
+        return self.dataPayload
+
+private function resolvePhaseMultiplier( ResonancePhase phase ) -> F64:
+    return match phase in \
+        ResonancePhase.Quiescent => 0.5, \
+        ResonancePhase.Oscillating => 1.2, \
+        ResonancePhase.Cascading => 2.5, \
+        ResonancePhase.Divergent => 0.0, \
+        * => 1.0
+
+private function mapDirectionToCoordinate( CardinalDirection direction ) -> I32:
+    return match direction in \
+        CardinalDirection.North => 1, \
+        CardinalDirection.South => 2, \
+        CardinalDirection.East => 3, \
+        CardinalDirection.West => 4, \
         * => 0 - 1
 
-public function main() -> I32:
-    
-    """
-    The main entry point demonstrating various Uranite language features.
-    
-    Returns:
-        I32 exit code.
-    """
-    
-    puts( "Uranite Syntax Showcase" )
-    
-    I64 a = 10
-    I64 b = 20
-    I64 sum = a + b
-    I64 product = a * b
-    puts( "arithmetic: ", a, " + ", b, " = ", sum, ", ", a, " * ", b, " = ", product )
-    I64 x = 5
-    x += 10
-    x -= 3
-    x *= 2
-    puts( "compound: 5 +10 -3 *2 = ", x )
-    F64 pi = 3.14159
-    F64 radius = 5.0
-    F64 area = pi * radius * radius
-    puts( "circle area(r=5) = ", area )
-    I64 val = 42
-    if val > 100:
-        puts( "big" )
-    elif val > 0:
-        puts( "positive" )
-    else:
-        puts( "non-positive" )
-    I64 total = 0
-    I64 i = 1
-    while i <= 10:
-        total += i
-        i += 1
-    puts( "sum(1..10) = ", total )
-    puts( "c-for: " )
-    for I64 j = 0; j < 5; j++:
-        puts( j, " " )
-    puts()
-    puts( "range 0..5: " )
-    for I64 k in 0..5:
-        puts( k, " " )
-    puts()
-    puts( "range 1...5: " )
-    for I64 k in 1...5:
-        puts( k, " " )
-    puts()
-    puts( "chars: " )
-    for Char c in "Uranite":
-        puts( c, " " )
-    puts()
-    I64 found = 0
-    I64 idx = 0
-    while idx < 100:
-        idx += 1
-        if idx > 7:
-            found = idx
-            break
-    puts( "first > 7: ", found )
-    I64 odd_sum = 0
-    for I64 n in 1...10:
-        I64 rem = n - ( n / 2 ) * 2
-        if rem == 0:
+private function computeRecursiveFactorial( I64 number ) -> I64:
+    if number <= 1:
+        return 1
+    return number * computeRecursiveFactorial( number - 1 )
+
+private function computeRecursiveFibonacci( I64 position ) -> I64:
+    if position <= 0:
+        return 0
+    if position == 1:
+        return 1
+    return computeRecursiveFibonacci( position - 1 ) + computeRecursiveFibonacci( position - 2 )
+
+private function enumerate<E>( Iterable<E> elements, Int start=0 ) -> Generator<Pair<Int,E>>:
+    Int position = start
+    for E element in elements:
+        puts( "Loop enumerate: yielding position ", position )
+        yield new Pair<>( position++, element )
+
+private function listOf<V>( V args[] ) -> MutableSequence<V>:
+    ArrayList<V> lists = new ArrayList<>()
+    for V argument in args:
+        puts( "Loop listOf: adding argument to list" )
+        lists.add( argument )
+    return lists
+
+private function mapOf<V>( V kwargs{} ) -> Map<String,V>:
+    HashMap<String,V> maps = new HashMap<>()
+    for String keyset, V value in kwargs:
+        puts( "Loop mapOf: putting keyset ", keyset )
+        maps.put( keyset, value )
+    return maps
+
+private function setOf<V>( V args[] ) -> Set<V>:
+    Set<V> sets = new HashSet<>()
+    for V argument in args:
+        puts( "Loop setOf: adding argument to set" )
+        sets.add( argument )
+    return sets
+
+private function initializeDataWarehouse() -> Map<String, MutableSequence<String>>:
+    return mapOf<MutableSequence<String>>(
+        Alpha=listOf<String>( "Beta", "Gamma", "Delta" ),
+        Beta=listOf<String>( "Epsilon", "Zeta" ),
+        Gamma=listOf<String>( "Zeta", "Eta" ),
+        Delta=listOf<String>( "Eta", "Theta" ),
+        Epsilon=listOf<String>( "Iota" ),
+        Zeta=listOf<String>( "Iota", "Kappa" ),
+        Eta=listOf<String>( "Kappa", "Lambda" ),
+        Theta=listOf<String>( "Lambda" ),
+        Iota=listOf<String>( "Mu" ),
+        Kappa=listOf<String>( "Mu" ),
+        Lambda=listOf<String>( "Mu" ),
+        Mu=listOf<String>()
+    )
+
+private function calculateInDegrees( Map<String, MutableSequence<String>> graph ) -> Map<String, Int>:
+    HashMap<String, Int> inDegrees = new HashMap<>()
+    for String node, MutableSequence<String> edges in graph:
+        puts( "Loop calculateInDegrees outer: inspecting node ", node )
+        if not inDegrees.containsKey( node ):
+            inDegrees.put( node, 0 )
+        for String target in edges:
+            puts( "Loop calculateInDegrees inner: incrementing degree for target ", target )
+            if not inDegrees.containsKey( target ):
+                inDegrees.put( target, 0 )
+            Int current = inDegrees.get( target )
+            inDegrees.put( target, current + 1 )
+    return inDegrees
+
+private function performTopologicalSort( Map<String, MutableSequence<String>> graph, Map<String, Int> inDegrees ) -> MutableSequence<String>:
+    MutableSequence<String> sortedList = new ArrayList<>()
+    MutableSequence<String> queue = new ArrayList<>()
+    Int queueSize = 0
+    for String node, Int degree in inDegrees:
+        puts( "Loop performTopologicalSort init: checking node ", node, " with degree ", degree )
+        if degree == 0:
+            queue.add( node )
+            queueSize = queueSize + 1
+    Int head = 0
+    while head < queueSize:
+        puts( "Loop performTopologicalSort process queue: head index ", head )
+        String current = queue.get( head )
+        head = head + 1
+        sortedList.add( current )
+        MutableSequence<String> neighbors = graph.get( current )
+        if neighbors != None:
+            for String neighbor in neighbors:
+                puts( "Loop performTopologicalSort neighbors: reducing degree for ", neighbor )
+                Int newDegree = inDegrees.get( neighbor ) - 1
+                inDegrees.put( neighbor, newDegree )
+                if newDegree == 0:
+                    queue.add( neighbor )
+                    queueSize = queueSize + 1
+    return sortedList
+
+private function computeReachability( Map<String, MutableSequence<String>> graph, MutableSequence<String> topologicalOrder ) -> Map<String, Set<String>>:
+    HashMap<String, Set<String>> reachability = new HashMap<>()
+    Int totalNodes = 0
+    for String node in topologicalOrder:
+        puts( "Loop computeReachability init: allocating set for node ", node )
+        reachability.put( node, setOf<String>() )
+        totalNodes = totalNodes + 1
+    Int currentIndex = totalNodes - 1
+    while currentIndex >= 0:
+        puts( "Loop computeReachability backtrack: processing index ", currentIndex )
+        String current = topologicalOrder.get( currentIndex )
+        Set<String> currentReach = reachability.get( current )
+        MutableSequence<String> neighbors = graph.get( current )
+        if neighbors != None:
+            for String neighbor in neighbors:
+                puts( "Loop computeReachability direct edges: adding neighbor ", neighbor )
+                currentReach.add( neighbor )
+                Set<String> neighborReach = reachability.get( neighbor )
+                for String reachableNode in neighborReach:
+                    puts( "Loop computeReachability transitive edges: adding reachable node ", reachableNode )
+                    currentReach.add( reachableNode )
+        currentIndex = currentIndex - 1
+    return reachability
+
+private function analyzeNetworkSignatures( Map<String, Set<String>> reachability ) -> Void:
+    for String node, Set<String> reachableSet in reachability:
+        puts( "Loop analyzeNetworkSignatures outer: evaluating node ", node )
+        puts( "Node Signature [{}]:".format( node ) )
+        Int count = 0
+        for Int index, String target in enumerate<String>( reachableSet, start=1 ):
+            puts( "Loop analyzeNetworkSignatures inner: enumerating path ", index )
+            puts( "  -> Path {}: Reaches {}".format( index, target ) )
+            count = count + 1
+        if count == 0:
+            puts( "  -> Terminal Node (No outward paths)" )
+
+private function executeMathematicalAndLexicalStress() -> Void:
+    puts( "Initiating Mathematical and Lexical Stress Phase" )
+    I64 compoundValue = 5
+    compoundValue += 10
+    compoundValue -= 3
+    compoundValue *= 2
+    puts( "Compound operations resolved to: ", compoundValue )
+    I64 rangeSum = 0
+    for I64 iterator in 0..10:
+        puts( "Loop exclusive range evaluation: step ", iterator )
+        rangeSum += iterator
+    I64 oddSum = 0
+    for I64 step in 1...15:
+        puts( "Loop inclusive range evaluation: step ", step )
+        I64 remainder = step - ( step / 2 ) * 2
+        if remainder == 0:
             continue
-        odd_sum += n
-    puts( "odd sum(1..10) = ", odd_sum )
-    puts( "factorial(5) = ", factorial( 5 ) )
-    puts( "fib(10) = ", fib( 10 ) )
-    function helper( I64 n ) -> I64:
-        return n * n + 1
-    puts( "helper(6) = ", helper( 6 ) )
-    defer puts( "deferred: last line" )
-    Square sq = new Square( 7 )
-    sq.display()
-    Box<I64> box = new Box<I64>( 99 )
-    puts( "Box<", "I64", "> = ", box.get() )
-    Config cfg = new Config( 8080, "localhost" )
-    puts( "Config: ", cfg.host, ":", cfg.port )
-    Vec2 v = new Vec2( 3.0, 4.0 )
-    puts( "Vec2(3,4) len^2 = ", v.length_sq() )
-    Direction north = Direction.North
-    Direction west = Direction.West
-    puts( "north = ", direction_value( north ), ", west = ", direction_value( west ) )
-    TreeNode node = new TreeNode( 42 )
-    puts( "TreeNode = ", node.value )
-    ?String maybe = None
-    if maybe == None:
-        puts( "nullable: is None" )
-    ?String present = "hello"
-    if present != None:
-        puts( "nullable: has value" )
+        oddSum += step
+        if oddSum > 20:
+            puts( "Odd sum threshold breached, breaking loop" )
+            break
+    for I64 cForIndex = 0; cForIndex < 3; cForIndex++:
+        puts( "Loop c-style iterator: index ", cForIndex )
+    function nestedStateMutator( I64 seed ) -> I64:
+        return seed * seed + oddSum
+    puts( "Nested closure execution: ", nestedStateMutator( 6 ) )
+    puts( "Factorial computed (5): ", computeRecursiveFactorial( 5 ) )
+    puts( "Fibonacci computed (10): ", computeRecursiveFibonacci( 10 ) )
+    String lexiconStream = "UraniteCompiler"
+    for Char symbol in lexiconStream:
+        puts( "Loop lexical character extraction: ", symbol )
+
+private function executePolymorphicTreeStress() -> Void:
+    puts( "Initiating Polymorphic Spatial Tree Allocation" )
+    SystemConfiguration activeConfig = new SystemConfiguration( 8080, "localhost" )
+    puts( "System configuration locked on ", activeConfig.hostAddress, ":", activeConfig.operationalPort )
+    Vector2D structuralVector = new Vector2D( 3.0, 4.0 )
+    puts( "Vector2D squared magnitude: ", structuralVector.computeSquaredLength() )
+    CardinalDirection searchPath = CardinalDirection.East
+    puts( "Search trajectory established mapped to coordinate: ", mapDirectionToCoordinate( searchPath ) )
+    GeometricShape baseShape = new GeometricShape( "BaseShape" )
+    PerfectSquare rootSquare = new PerfectSquare( 10 )
+    rootSquare.displayInformation()
+    SpatialTreeNode rootNode = new SpatialTreeNode( rootSquare )
+    SpatialTreeNode branchLeft = new SpatialTreeNode( baseShape )
+    SpatialTreeNode branchRight = new SpatialTreeNode( new PerfectSquare( 5 ) )
+    rootNode.leftBranch = branchLeft
+    rootNode.rightBranch = branchRight
+    ?SpatialTreeNode cursor = rootNode.rightBranch
+    if cursor != None:
+        puts( "Polymorphic node successfully retrieved from optional wrapper" )
+    puts( "Manually dismantling polymorphic spatial tree" )
+    delete branchLeft
+    delete branchRight
+    delete rootNode
+    puts( "Spatial tree memory successfully purged" )
+
+private function performStressTestVolatility() -> Void:
+    puts( "Initiating Volatility Stress Test and memory anomaly sequence" )
+    defer puts( "Volatility stress test cleanup operations successfully deferred and completed" )
+    ?QuantumVertex unstableNode = new QuantumVertex( "AnomalyMatrix", 999.9 )
+    if unstableNode != None:
+        puts( "Unstable QuantumVertex node successfully manifested in heap" )
     try:
-        raise new Exception( "test error", 0, None )
-    except as e:
-        puts( "caught exception" )
+        I64 fluctuationIndex = 0
+        while fluctuationIndex < 5:
+            puts( "Loop volatility fluctuation: expanding anomaly index ", fluctuationIndex )
+            fluctuationIndex += 1
+            if fluctuationIndex == 4:
+                raise new DimensionalCollapseException( "Critical dimensional strain detected at AnomalyMatrix", 101, None )
+    except DimensionalCollapseException as ex:
+        puts( "Intercepted DimensionalCollapseException, stabilizing memory continuum" )
     finally:
-        puts( "finally block ran" )
-    TreeNode tmp = new TreeNode( 0 )
-    delete tmp
-    puts( "memory: allocated and freed" )
-    puts( "Done" )
-    return 0
+        puts( "Executing mandatory purge of volatile allocations inside finally block" )
+        delete unstableNode
+
+public function main() -> Void:
+    puts( "Starting Complex Collections and Extreme Graph Analysis..." )
+    I64 startTotal = clock()
+    I64 startInit = clock()
+    Map<String, MutableSequence<String>> network = initializeDataWarehouse()
+    I64 endInit = clock()
+    Double elapsedInit = ( endInit - startInit ) / 1000000.0
+    puts( "Phase 1: Initialization complete in {} seconds".format( elapsedInit ) )
+    I64 startDegree = clock()
+    Map<String, Int> inDegrees = calculateInDegrees( network )
+    I64 endDegree = clock()
+    Double elapsedDegree = ( endDegree - startDegree ) / 1000000.0
+    puts( "Phase 2: In-Degree calculation complete in {} seconds".format( elapsedDegree ) )
+    I64 startSort = clock()
+    MutableSequence<String> topologicalOrder = performTopologicalSort( network, inDegrees )
+    I64 endSort = clock()
+    Double elapsedSort = ( endSort - startSort ) / 1000000.0
+    puts( "Phase 3: Topological Sort complete in {} seconds".format( elapsedSort ) )
+    I64 startReach = clock()
+    Map<String, Set<String>> reachability = computeReachability( network, topologicalOrder )
+    I64 endReach = clock()
+    Double elapsedReach = ( endReach - startReach ) / 1000000.0
+    puts( "Phase 4: Reachability Matrix complete in {} seconds".format( elapsedReach ) )
+    analyzeNetworkSignatures( reachability )
+    I64 startMath = clock()
+    executeMathematicalAndLexicalStress()
+    I64 endMath = clock()
+    Double elapsedMath = ( endMath - startMath ) / 1000000.0
+    puts( "Phase 5: Mathematical Stress complete in {} seconds".format( elapsedMath ) )
+    I64 startPoly = clock()
+    executePolymorphicTreeStress()
+    I64 endPoly = clock()
+    Double elapsedPoly = ( endPoly - startPoly ) / 1000000.0
+    puts( "Phase 6: Polymorphic Tree evaluation complete in {} seconds".format( elapsedPoly ) )
+    I64 startStress = clock()
+    performStressTestVolatility()
+    I64 endStress = clock()
+    Double elapsedStress = ( endStress - startStress ) / 1000000.0
+    puts( "Phase 7: Volatility sequence complete in {} seconds".format( elapsedStress ) )
+    I64 endTotal = clock()
+    Double elapsedTotal = ( endTotal - startTotal ) / 1000000.0
+    puts( "Total Analysis Time: {} seconds".format( elapsedTotal ) )
+    puts( "Supreme compiler benchmark PASSED" )
