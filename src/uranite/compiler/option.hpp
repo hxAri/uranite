@@ -20,6 +20,7 @@
 #ifndef _URANITE_COMPILER_OPTION_HPP_
 #define _URANITE_COMPILER_OPTION_HPP_
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -83,6 +84,9 @@ namespace uranite::compiler {
 		
 		/** @brief Flag to automatically execute the program after successful compilation. */
 		bool executeAfterCompilation = false;
+
+		/** @brief GDB flags when running under GDB with --run. nullopt means no GDB. */
+		std::optional<std::string> gdbFlags;
 		
 		/** @brief List of directory paths to search for header/include files. */
 		std::vector<std::string> includePaths;
