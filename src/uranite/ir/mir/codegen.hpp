@@ -38,34 +38,34 @@
 #include "uranite/semantic/analyzer.hpp"
 
 namespace uranite::ir::mir {
-
+	
 	/** @brief Generates LLVM IR from the MIR control-flow graph representation. */
 	class MIRCodegen {
 	public:
-
+		
 		MIRCodegen( semantic::Analyzer& semanticAnalyzer, diagnostic::Engine& diagnosticEngine );
-
+		
 		/** @brief Overrides the target triple for cross-compilation. */
 		void setTargetTriple( const std::string& triple );
-
+		
 		/** @brief Generates LLVM IR for all functions in the MIR module. */
 		bool generate( MIRModuleDefinition& mirModule );
-
+		
 		/** @brief Returns the generated LLVM module. */
 		llvm::Module* getModule();
-
+		
 		/** @brief Writes generated IR to a text file. */
 		bool writeIR( const std::string& filename );
-
+		
 		/** @brief Writes generated IR to an object file. */
 		bool writeObject( const std::string& filename );
-
+	
 	private:
-
+		
 		void generateFunction( MIRFunctionDefinition& functionDefinition );
 		void generateBasicBlock( MIRBasicBlock& basicBlock, MIRFunctionDefinition& functionDefinition );
 		void generateInstruction( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
-
+		
 		// Instruction category generators
 		void generateAllocateLocal( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateLoadVariable( const MIRInstruction& instruction );
@@ -98,7 +98,7 @@ namespace uranite::ir::mir {
 		void generateYield( const MIRInstruction& instruction );
 		void generateGeneratorFunction( MIRFunctionDefinition& functionDefinition, const std::string& llvmFunctionName, llvm::Function* llvmFunction );
 		void generateAsyncFunction( MIRFunctionDefinition& functionDefinition, const std::string& llvmFunctionName, llvm::Function* llvmFunction );
-
+		
 		// Helpers
 		llvm::Type* toLLVMType( const semantic::TypeSharedPointer& semanticType );
 		llvm::Type* resolveReturnType( const semantic::TypeSharedPointer& returnTypeDescriptor );
@@ -132,50 +132,50 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreatePopFrame();
 		void emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName );
 		void emitPopFrame();
-
+		
 		semantic::Analyzer& semanticAnalyzer;
 		diagnostic::Engine& diagnosticEngine;
 		descriptor::Builtin builtinRegistry;
 		std::shared_ptr<codegen::RuntimeInterface> runtimeInterface_;
-
+		
 		llvm::LLVMContext llvmContext;
 		std::unique_ptr<llvm::Module> llvmModule;
 		llvm::IRBuilder<> irBuilder;
-
+		
 		// Per-function mappings
 		std::unordered_map<MIRVariableIdentifier, llvm::Value*> variableValueMap;
 		std::unordered_map<MIRBlockIdentifier, llvm::BasicBlock*> blockMap;
-
+		
 		// Struct type cache
 		std::unordered_map<std::string, llvm::StructType*> structTypeCache;
-
+		
 		// Function resolution: MIR name → LLVM function
 		std::unordered_map<std::string, llvm::Function*> functionResolutionMap;
-
+		
 		// Cross-compilation target triple override (empty = host default)
 		std::string targetTriple_;
-
+		
 		// Current module being generated (for type layout lookups)
 		MIRModuleDefinition* currentMIRModule = nullptr;
-
+		
 		// Current function being generated (for variable descriptor lookups)
 		MIRFunctionDefinition* currentMIRFunction = nullptr;
-
+		
 		// MIR function lookup for variadic parameter detection at call sites
 		std::unordered_map<std::string, MIRFunctionDefinition*> mirFunctionDefinitionMap;
-
+		
 		// Names registered by extern declarations (take priority over Uranite functions)
 		std::unordered_set<std::string> externDeclaredNames;
-
+		
 		// Tracks concrete class name for variables assigned via ConstructObject
 		std::unordered_map<MIRVariableIdentifier, std::string> concreteClassMap;
-
+		
 		// Precomputed: functions that always return a construct of a specific class
 		std::unordered_map<std::string, std::string> functionReturnConcreteClass;
-
+		
 		// Memory<T> element type per variable (compiler intrinsic tracking)
 		std::unordered_map<MIRVariableIdentifier, llvm::Type*> memoryElementTypes;
-
+		
 		struct GeneratorContext {
 			llvm::AllocaInst* stateVar = nullptr;
 			llvm::AllocaInst* valueVar = nullptr;
@@ -189,24 +189,30 @@ namespace uranite::ir::mir {
 			std::unordered_set<MIRVariableIdentifier> parameterVariables;
 			std::unordered_map<std::string, llvm::GlobalVariable*> persistedLocals;
 		};
-
+		
 		GeneratorContext* currentGeneratorContext = nullptr;
 		bool isGeneratingAsyncWrapper = false;
 		bool programHasAsyncFunctions = false;
 		llvm::BasicBlock* asyncWrapperCatchBlock = nullptr;
-
+		
 		// Interface dispatch: class name → itable global variable
 		std::unordered_map<std::string, llvm::GlobalVariable*> interfaceTableMap;
-
+		
 		// Interface dispatch: interface qualified name → ordered method names
 		std::unordered_map<std::string, std::vector<std::string>> interfaceMethodOrder;
-
+		
 		// Classes that have vtable pointers (implement interfaces)
 		std::unordered_set<std::string> classesWithVtable;
-
+		
 		// Interfaces that have direct itable implementations (safe for vtable dispatch)
 		std::unordered_set<std::string> interfacesWithDirectItable;
-
+		
+		// Abstract class dispatch: abstract class name → concrete subclass names
+		std::unordered_map<std::string, std::vector<std::string>> abstractClassSubclasses;
+		
+		// Per-class vtable identifier constant (itable global or unique marker)
+		std::unordered_map<std::string, llvm::Constant*> classVtableIdentifier;
+	
 	};
 
 } // namespace uranite::ir::mir
