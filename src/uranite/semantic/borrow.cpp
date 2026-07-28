@@ -158,6 +158,7 @@ namespace uranite::semantic {
 							if( argument->semanticType && argument->semanticType->isPrimitive() == false &&
 								argument->semanticType->kind != Type::Kind::Enum &&
 								argument->semanticType->kind != Type::Kind::Class &&
+								argument->semanticType->kind != Type::Kind::Interface &&
 								argument->semanticType->kind != Type::Kind::Struct ) {
 								this->moveValue( identifierExpression.name, argument->source );
 							}
@@ -204,6 +205,7 @@ namespace uranite::semantic {
 							if( argument->semanticType && argument->semanticType->isPrimitive() == false &&
 								argument->semanticType->kind != Type::Kind::Enum &&
 								argument->semanticType->kind != Type::Kind::Class &&
+								argument->semanticType->kind != Type::Kind::Interface &&
 								argument->semanticType->kind != Type::Kind::Struct ) {
 								this->moveValue( identifierExpression.name, argument->source );
 							}
@@ -254,6 +256,9 @@ namespace uranite::semantic {
 		this->pushScope();
 		bool isCStyleForControl = ( statement.initializer != nullptr || statement.update != nullptr );
 		this->declareOwnership( statement.variable, isCStyleForControl, statement.source );
+		if( statement.variable2.empty() == false ) {
+			this->declareOwnership( statement.variable2, false, statement.source );
+		}
 		if( statement.initializer ) {
 			this->checkExpression( statement.initializer );
 		}
