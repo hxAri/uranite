@@ -129,7 +129,7 @@ namespace uranite::semantic {
 		this->userSourceFile_ = sourceFile;
 		this->userImportedIdentifiers_ = importedIdentifiers;
 	}
-
+	
 	void Analyzer::importModuleTypes( const std::unordered_map<std::string, TypeSharedPointer>& types ) {
 		for( const std::pair<const std::string, TypeSharedPointer>& entry : types ) {
 			if( entry.second->kind == Type::Kind::Class ) {
@@ -326,18 +326,58 @@ namespace uranite::semantic {
 				}
 			}
 		}
-		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
-			if( declaration == nullptr || declaration->kind != ast::Node::Kind::InterfaceDeclaration ) {
-				continue;
-			}
-			InterfaceTypeSharedPointer interfaceType = std::dynamic_pointer_cast<InterfaceType>( this->typeRegistry.lookupType( static_cast<ast::nodes::InterfaceDeclaration&>( *declaration ).name ) );
-			if( interfaceType == nullptr ) {
-				continue;
-			}
-			interfaceType->methodOrder.clear();
-			for( int methodIndex = 0; methodIndex < (int)interfaceType->methods.size(); methodIndex++ ) {
-				interfaceType->methods[methodIndex].interfaceTableIndex = methodIndex;
-				interfaceType->methodOrder.push_back( interfaceType->methods[methodIndex].name );
+		{
+			bool methodOrderChanged = true;
+			int methodOrderLimit = 100;
+			while( methodOrderChanged && methodOrderLimit-- > 0 ) {
+				methodOrderChanged = false;
+				for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
+					if( declaration == nullptr || declaration->kind != ast::Node::Kind::InterfaceDeclaration ) {
+						continue;
+					}
+					InterfaceTypeSharedPointer interfaceType = std::dynamic_pointer_cast<InterfaceType>( this->typeRegistry.lookupType( static_cast<ast::nodes::InterfaceDeclaration&>( *declaration ).name ) );
+					if( interfaceType == nullptr ) {
+						continue;
+					}
+					std::vector<std::string> orderedNames;
+					std::set<std::string> addedNames;
+					for( const TypeSharedPointer& superType : interfaceType->superInterfaces ) {
+						if( superType == nullptr || superType->kind != Type::Kind::Interface ) {
+							continue;
+						}
+						InterfaceType* superInterface = static_cast<InterfaceType*>( superType.get() );
+						for( const std::string& methodName : superInterface->methodOrder ) {
+							if( addedNames.count( methodName ) == 0 ) {
+								orderedNames.push_back( methodName );
+								addedNames.insert( methodName );
+							}
+						}
+					}
+					for( const MethodInfo& method : interfaceType->methods ) {
+						if( addedNames.count( method.name ) == 0 ) {
+							orderedNames.push_back( method.name );
+							addedNames.insert( method.name );
+						}
+					}
+					if( orderedNames != interfaceType->methodOrder ) {
+						std::vector<MethodInfo> reorderedMethods;
+						for( const std::string& name : orderedNames ) {
+							for( const MethodInfo& existingMethod : interfaceType->methods ) {
+								if( existingMethod.name == name ) {
+									reorderedMethods.push_back( existingMethod );
+									break;
+								}
+							}
+						}
+						interfaceType->methods = reorderedMethods;
+						interfaceType->methodOrder.clear();
+						for( int methodIndex = 0; methodIndex < (int)interfaceType->methods.size(); methodIndex++ ) {
+							interfaceType->methods[methodIndex].interfaceTableIndex = methodIndex;
+							interfaceType->methodOrder.push_back( interfaceType->methods[methodIndex].name );
+						}
+						methodOrderChanged = true;
+					}
+				}
 			}
 		}
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
@@ -633,18 +673,58 @@ namespace uranite::semantic {
 				}
 			}
 		}
-		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
-			if( declaration == nullptr || declaration->kind != ast::Node::Kind::InterfaceDeclaration ) {
-				continue;
-			}
-			InterfaceTypeSharedPointer interfaceType = std::dynamic_pointer_cast<InterfaceType>( this->typeRegistry.lookupType( static_cast<ast::nodes::InterfaceDeclaration&>( *declaration ).name ) );
-			if( interfaceType == nullptr ) {
-				continue;
-			}
-			interfaceType->methodOrder.clear();
-			for( int methodIndex = 0; methodIndex < (int)interfaceType->methods.size(); methodIndex++ ) {
-				interfaceType->methods[methodIndex].interfaceTableIndex = methodIndex;
-				interfaceType->methodOrder.push_back( interfaceType->methods[methodIndex].name );
+		{
+			bool methodOrderChanged = true;
+			int methodOrderLimit = 100;
+			while( methodOrderChanged && methodOrderLimit-- > 0 ) {
+				methodOrderChanged = false;
+				for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
+					if( declaration == nullptr || declaration->kind != ast::Node::Kind::InterfaceDeclaration ) {
+						continue;
+					}
+					InterfaceTypeSharedPointer interfaceType = std::dynamic_pointer_cast<InterfaceType>( this->typeRegistry.lookupType( static_cast<ast::nodes::InterfaceDeclaration&>( *declaration ).name ) );
+					if( interfaceType == nullptr ) {
+						continue;
+					}
+					std::vector<std::string> orderedNames;
+					std::set<std::string> addedNames;
+					for( const TypeSharedPointer& superType : interfaceType->superInterfaces ) {
+						if( superType == nullptr || superType->kind != Type::Kind::Interface ) {
+							continue;
+						}
+						InterfaceType* superInterface = static_cast<InterfaceType*>( superType.get() );
+						for( const std::string& methodName : superInterface->methodOrder ) {
+							if( addedNames.count( methodName ) == 0 ) {
+								orderedNames.push_back( methodName );
+								addedNames.insert( methodName );
+							}
+						}
+					}
+					for( const MethodInfo& method : interfaceType->methods ) {
+						if( addedNames.count( method.name ) == 0 ) {
+							orderedNames.push_back( method.name );
+							addedNames.insert( method.name );
+						}
+					}
+					if( orderedNames != interfaceType->methodOrder ) {
+						std::vector<MethodInfo> reorderedMethods;
+						for( const std::string& name : orderedNames ) {
+							for( const MethodInfo& existingMethod : interfaceType->methods ) {
+								if( existingMethod.name == name ) {
+									reorderedMethods.push_back( existingMethod );
+									break;
+								}
+							}
+						}
+						interfaceType->methods = reorderedMethods;
+						interfaceType->methodOrder.clear();
+						for( int methodIndex = 0; methodIndex < (int)interfaceType->methods.size(); methodIndex++ ) {
+							interfaceType->methods[methodIndex].interfaceTableIndex = methodIndex;
+							interfaceType->methodOrder.push_back( interfaceType->methods[methodIndex].name );
+						}
+						methodOrderChanged = true;
+					}
+				}
 			}
 		}
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
@@ -677,6 +757,13 @@ namespace uranite::semantic {
 				}
 				case ast::Node::Kind::FunctionDeclaration: {
 					ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *declaration );
+					std::vector<std::pair<std::string, TypeSharedPointer>> savedPreRegGenericTypes;
+					for( ast::nodes::GenericParameterSharedPointer& genericParameter : functionDeclaration.genericParameters ) {
+						TypeSharedPointer existing = this->typeRegistry.lookupType( genericParameter->name );
+						savedPreRegGenericTypes.emplace_back( genericParameter->name, existing );
+						GenericParameterTypeSharedPointer genericParameterType = std::make_shared<GenericParameterType>( genericParameter->name );
+						this->typeRegistry.registerType( genericParameter->name, genericParameterType );
+					}
 					for( ast::nodes::StatementSharedPointer& bodyStatement : functionDeclaration.body ) {
 						if( statementContainsYield( bodyStatement ) ) {
 							functionDeclaration.isGenerator = true;
@@ -743,6 +830,9 @@ namespace uranite::semantic {
 					concreteFuncType->keywordValueType = preRegKwargValType;
 					concreteFuncType->keywordOnlyParamNames = std::move( preRegKwOnlyNames );
 					concreteFuncType->keywordOnlyParamTypes = std::move( preRegKwOnlyTypes );
+					for( ast::nodes::GenericParameterSharedPointer& genericParameter : functionDeclaration.genericParameters ) {
+						concreteFuncType->genericParameterNames.push_back( genericParameter->name );
+					}
 					if( functionDeclaration.raisesTypes.empty() == false ) {
 						for( ast::nodes::TypeNodeSharedPointer& raiseTypeNode : functionDeclaration.raisesTypes ) {
 							TypeSharedPointer resolvedException = this->resolveType( raiseTypeNode );
@@ -757,6 +847,14 @@ namespace uranite::semantic {
 					if( this->currentScope->define( functionDeclaration.name, functionSymbol ) == false ) {
 						std::string duplicateOverloadMessage = fmt::format( "function \"{}\" already has an overload with the same parameter signature", functionDeclaration.name );
 						this->diagnostic.error( functionDeclaration.source, duplicateOverloadMessage );
+					}
+					for( const std::pair<std::string, TypeSharedPointer>& saved : savedPreRegGenericTypes ) {
+						if( saved.second != nullptr ) {
+							this->typeRegistry.registerType( saved.first, saved.second );
+						}
+						else {
+							this->typeRegistry.unregisterType( saved.first );
+						}
 					}
 					break;
 				}
@@ -834,7 +932,7 @@ namespace uranite::semantic {
 				methodInformation.isOverride = functionDeclaration.isOverride;
 				methodInformation.isProperty = functionDeclaration.isProperty;
 				methodInformation.isStatic = functionDeclaration.isStatic;
-				methodInformation.isVirtual = functionDeclaration.isVirtual;
+				methodInformation.isVirtual = functionDeclaration.isVirtual || functionDeclaration.isAbstract;
 				methodInformation.name = functionDeclaration.name;
 				methodInformation.type = methodFunctionType;
 				methodInformation.virtualTableIndex = -1;
@@ -979,6 +1077,19 @@ namespace uranite::semantic {
 						}
 					}
 				}
+				{
+					bool isEqualityOp = expression.operation == token::Type::Equal || expression.operation == token::Type::NotEqual;
+					bool isNoneComparison = rightSideType->isNone() || leftSideType->isNone();
+					if( isEqualityOp && isNoneComparison ) {
+						return this->typeRegistry.getBool();
+					}
+				}
+				if( leftSideType->kind == Type::Kind::Interface ) {
+					bool isEqualityOp = expression.operation == token::Type::Equal || expression.operation == token::Type::NotEqual;
+					if( isEqualityOp ) {
+						return this->typeRegistry.getBool();
+					}
+				}
 				if( this->typeRegistry.isComparable( leftSideType, rightSideType ) == false ) {
 					std::string compareErrorMessage = fmt::format( "cannot compare types \"{}\" and \"{}\"", leftSideType->toString(), rightSideType->toString() );
 					this->diagnostic.error( expression.source, compareErrorMessage );
@@ -1104,16 +1215,47 @@ namespace uranite::semantic {
 			return callableType->returnType;
 		}
 		if( calleeType->kind != Type::Kind::Function ) {
-			if( calleeType->kind == Type::Kind::Class || calleeType->kind == Type::Kind::Struct ) {
-				for( ast::nodes::ExpressionSharedPointer& argument : expression.arguments ) {
-					this->analyzeExpression( argument );
+			if( calleeType->kind == Type::Kind::Interface || calleeType->kind == Type::Kind::Trait ) {
+				std::string errorMessage = fmt::format( "cannot instantiate {} \"{}\"", calleeType->kind == Type::Kind::Interface ? "interface" : "trait", calleeType->name );
+				this->diagnostic.error( expression.source, errorMessage );
+				return this->typeRegistry.getError();
+			}
+			if( calleeType->kind == Type::Kind::Class ) {
+				ClassTypeSharedPointer classType = std::static_pointer_cast<ClassType>( calleeType );
+				if( classType->isAbstract ) {
+					std::string errorMessage = fmt::format( "cannot instantiate abstract class \"{}\"", calleeType->name );
+					this->diagnostic.error( expression.source, errorMessage );
+					return this->typeRegistry.getError();
 				}
-				return calleeType;
+				std::string errorMessage = fmt::format( "cannot call class \"{}\" as a function — use \"new {}(...)\" to construct an instance", calleeType->name, calleeType->name );
+				this->diagnostic.error( expression.source, errorMessage );
+				return this->typeRegistry.getError();
+			}
+			if( calleeType->kind == Type::Kind::Struct ) {
+				std::string errorMessage = fmt::format( "cannot call struct \"{}\" as a function — use \"new {}(...)\" to construct an instance", calleeType->name, calleeType->name );
+				this->diagnostic.error( expression.source, errorMessage );
+				return this->typeRegistry.getError();
 			}
 			this->diagnostic.error( expression.source, "expression is not callable" );
 			return this->typeRegistry.getError();
 		}
 		FunctionTypeSharedPointer functionType = std::static_pointer_cast<FunctionType>( calleeType );
+		if( functionType->genericParameterNames.empty() == false ) {
+			std::string calleeName = "anonymous";
+			if( expression.callee->kind == ast::Node::Kind::IdentifierExpression ) {
+				calleeName = static_cast<ast::nodes::IdentifierExpression&>( *expression.callee ).name;
+			}
+			if( expression.typeArguments.empty() ) {
+				std::string genericErrorMessage = fmt::format( "generic function \"{}\" requires explicit type arguments: {}<{}>(…)", calleeName, calleeName, fmt::join( functionType->genericParameterNames, ", " ) );
+				this->diagnostic.error( expression.source, genericErrorMessage );
+				return this->typeRegistry.getError();
+			}
+			if( expression.typeArguments.size() != functionType->genericParameterNames.size() ) {
+				std::string countErrorMessage = fmt::format( "generic function \"{}\" expects {} type argument(s) but {} provided", calleeName, functionType->genericParameterNames.size(), expression.typeArguments.size() );
+				this->diagnostic.error( expression.source, countErrorMessage );
+				return this->typeRegistry.getError();
+			}
+		}
 		if( expression.callee->kind == ast::Node::Kind::IdentifierExpression ) {
 			ast::nodes::IdentifierExpression& identifierCallee = static_cast<ast::nodes::IdentifierExpression&>( *expression.callee );
 			std::vector<SymbolSharedPointer> overloadCandidates = this->currentScope->lookupAll( identifierCallee.name );
@@ -1213,9 +1355,19 @@ namespace uranite::semantic {
 			fixedParamCount = functionType->parameterTypes.size();
 		}
 		size_t positionalArgCount = expression.arguments.size();
-		if( positionalArgCount < fixedParamCount ) {
+		size_t matchedKeywordArgCount = 0;
+		for( const ast::nodes::KeywordArgument& kwarg : expression.keywordArguments ) {
+			for( size_t paramIndex = 0; paramIndex < functionType->parameterNames.size(); paramIndex++ ) {
+				if( functionType->parameterNames[paramIndex] == kwarg.name ) {
+					matchedKeywordArgCount++;
+					break;
+				}
+			}
+		}
+		size_t totalSuppliedArgCount = positionalArgCount + matchedKeywordArgCount;
+		if( totalSuppliedArgCount < fixedParamCount ) {
 			std::string expectedCount = std::to_string( fixedParamCount );
-			std::string actualCount = std::to_string( positionalArgCount );
+			std::string actualCount = std::to_string( totalSuppliedArgCount );
 			std::string argumentUnderflowErrorMessage = fmt::format( "expected at least {} arguments but got {}", expectedCount, actualCount );
 			this->diagnostic.error( expression.source, argumentUnderflowErrorMessage );
 		}
@@ -1226,12 +1378,42 @@ namespace uranite::semantic {
 			this->diagnostic.error( expression.source, argumentOverflowErrorMessage );
 		}
 		if( expression.keywordArguments.empty() == false && functionType->keywordParameterIndex < 0 && functionType->keywordOnlyParamNames.empty() ) {
-			this->diagnostic.error( expression.source, "function does not accept keyword arguments" );
+			bool hasUnmatchedKeywordArg = false;
+			for( const ast::nodes::KeywordArgument& kwarg : expression.keywordArguments ) {
+				bool matched = false;
+				for( const std::string& paramName : functionType->parameterNames ) {
+					if( paramName == kwarg.name ) {
+						matched = true;
+						break;
+					}
+				}
+				if( matched == false ) {
+					std::string unknownKwargMessage = fmt::format( "unknown keyword argument \"{}\"", kwarg.name );
+					this->diagnostic.error( kwarg.source, unknownKwargMessage );
+					hasUnmatchedKeywordArg = true;
+				}
+			}
+			if( hasUnmatchedKeywordArg && functionType->parameterNames.empty() ) {
+				this->diagnostic.error( expression.source, "function does not accept keyword arguments" );
+			}
+		}
+		std::unordered_map<std::string, TypeSharedPointer> genericSubstitutionMap;
+		if( functionType->genericParameterNames.empty() == false && expression.typeArguments.empty() == false ) {
+			for( size_t genericIndex = 0; genericIndex < functionType->genericParameterNames.size(); genericIndex++ ) {
+				TypeSharedPointer resolvedTypeArg = this->resolveType( expression.typeArguments[genericIndex] );
+				if( resolvedTypeArg != nullptr ) {
+					genericSubstitutionMap[functionType->genericParameterNames[genericIndex]] = resolvedTypeArg;
+				}
+			}
 		}
 		for( size_t index = 0; index < fixedParamCount && index < positionalArgCount; index++ ) {
 			TypeSharedPointer argumentType = this->analyzeExpression( expression.arguments[index] );
-			if( argumentType && this->typeRegistry.isAssignable( functionType->parameterTypes[index], argumentType ) == false ) {
-				std::string expectedTypeName = functionType->parameterTypes[index]->toString();
+			TypeSharedPointer expectedType = functionType->parameterTypes[index];
+			if( genericSubstitutionMap.empty() == false ) {
+				expectedType = this->substituteGenericParameters( expectedType, genericSubstitutionMap );
+			}
+			if( argumentType && this->typeRegistry.isAssignable( expectedType, argumentType ) == false ) {
+				std::string expectedTypeName = expectedType->toString();
 				std::string foundTypeName = argumentType->toString();
 				std::string functionArgumentMismatchErrorMessage = fmt::format( "argument type mismatch: expected \"{}\" but found \"{}\"", expectedTypeName, foundTypeName );
 				this->diagnostic.error( expression.arguments[index]->source, functionArgumentMismatchErrorMessage );
@@ -1361,7 +1543,11 @@ namespace uranite::semantic {
 				this->diagnostic.error( expression.source, exceptionSafetyErrorMessage );
 			}
 		}
-		return functionType->returnType;
+		TypeSharedPointer resultReturnType = functionType->returnType;
+		if( genericSubstitutionMap.empty() == false ) {
+			resultReturnType = this->substituteGenericParameters( resultReturnType, genericSubstitutionMap );
+		}
+		return resultReturnType;
 	}
 	
 	void Analyzer::analyzeClassDeclaration( ast::nodes::ClassDeclaration& declaration ) {
@@ -1582,7 +1768,7 @@ namespace uranite::semantic {
 				methodInformation.name = functionMethod.name;
 				methodInformation.type = methodFunctionType;
 				methodInformation.access = functionMethod.access;
-				methodInformation.isVirtual = functionMethod.isVirtual;
+				methodInformation.isVirtual = functionMethod.isVirtual || functionMethod.isAbstract;
 				methodInformation.isOverride = functionMethod.isOverride;
 				methodInformation.isStatic = functionMethod.isStatic;
 				methodInformation.isFinal = functionMethod.isFinal;
@@ -1796,17 +1982,11 @@ namespace uranite::semantic {
 		switch( expression->kind ) {
 			case ast::Node::Kind::ArrayExpression: {
 				ast::nodes::ArrayExpression& arrayExpression = static_cast<ast::nodes::ArrayExpression&>( *expression );
-				TypeSharedPointer elementBaseType;
 				for( ast::nodes::ExpressionSharedPointer& element : arrayExpression.elements ) {
-					TypeSharedPointer elementType = this->analyzeExpression( element );
-					if( elementBaseType == nullptr ) {
-						elementBaseType = elementType;
-					}
+					this->analyzeExpression( element );
 				}
-				if( elementBaseType == nullptr ) {
-					elementBaseType = this->typeRegistry.getError();
-				}
-				expressionType = this->typeRegistry.makeArray( elementBaseType, static_cast<int>( arrayExpression.elements.size() ) );
+				TypeSharedPointer arrayListType = this->typeRegistry.lookupType( "ArrayList" );
+				expressionType = arrayListType ? arrayListType : std::make_shared<Type>( Type::Kind::Class, "ArrayList" );
 				break;
 			}
 			case ast::Node::Kind::AwaitExpression: {
@@ -1887,8 +2067,67 @@ namespace uranite::semantic {
 						this->diagnostic.error( comprehensionExpression.condition->source, "comprehension condition must be boolean" );
 					}
 				}
+				if( comprehensionExpression.keyExpression ) {
+					this->analyzeExpression( comprehensionExpression.keyExpression );
+				}
 				this->popScope();
-				expressionType = bodyType ? this->typeRegistry.makeArray( bodyType, -1 ) : this->typeRegistry.getError();
+				switch( comprehensionExpression.comprehensionKind ) {
+					case ast::nodes::ComprehensionExpression::ComprehensionKind::Map: {
+						TypeSharedPointer hashMapType = this->typeRegistry.lookupType( "HashMap" );
+						expressionType = hashMapType ? hashMapType : std::make_shared<Type>( Type::Kind::Class, "HashMap" );
+						break;
+					}
+					case ast::nodes::ComprehensionExpression::ComprehensionKind::Set: {
+						TypeSharedPointer hashSetType = this->typeRegistry.lookupType( "HashSet" );
+						expressionType = hashSetType ? hashSetType : std::make_shared<Type>( Type::Kind::Class, "HashSet" );
+						break;
+					}
+					default: {
+						TypeSharedPointer arrayListType = this->typeRegistry.lookupType( "ArrayList" );
+						expressionType = arrayListType ? arrayListType : std::make_shared<Type>( Type::Kind::Class, "ArrayList" );
+						break;
+					}
+				}
+				break;
+			}
+			case ast::Node::Kind::TupleExpression: {
+				ast::nodes::TupleExpression& tupleExpression = static_cast<ast::nodes::TupleExpression&>( *expression );
+				for( ast::nodes::ExpressionSharedPointer& element : tupleExpression.elements ) {
+					this->analyzeExpression( element );
+				}
+				TypeSharedPointer tupleClassType = this->typeRegistry.lookupType( "Tuple" );
+				expressionType = tupleClassType ? tupleClassType : std::make_shared<Type>( Type::Kind::Class, "Tuple" );
+				break;
+			}
+			case ast::Node::Kind::MapLiteralExpression: {
+				ast::nodes::MapLiteralExpression& mapLiteral = static_cast<ast::nodes::MapLiteralExpression&>( *expression );
+				TypeSharedPointer keyType;
+				TypeSharedPointer valueType;
+				for( std::pair<ast::nodes::ExpressionSharedPointer, ast::nodes::ExpressionSharedPointer>& entry : mapLiteral.entries ) {
+					TypeSharedPointer entryKeyType = this->analyzeExpression( entry.first );
+					TypeSharedPointer entryValueType = this->analyzeExpression( entry.second );
+					if( keyType == nullptr && entryKeyType != nullptr ) {
+						keyType = entryKeyType;
+					}
+					if( valueType == nullptr && entryValueType != nullptr ) {
+						valueType = entryValueType;
+					}
+				}
+				TypeSharedPointer hashMapType = this->typeRegistry.lookupType( "HashMap" );
+				expressionType = hashMapType ? hashMapType : std::make_shared<Type>( Type::Kind::Class, "HashMap" );
+				break;
+			}
+			case ast::Node::Kind::SetLiteralExpression: {
+				ast::nodes::SetLiteralExpression& setLiteral = static_cast<ast::nodes::SetLiteralExpression&>( *expression );
+				TypeSharedPointer elementType;
+				for( ast::nodes::ExpressionSharedPointer& element : setLiteral.elements ) {
+					TypeSharedPointer elemType = this->analyzeExpression( element );
+					if( elementType == nullptr && elemType != nullptr ) {
+						elementType = elemType;
+					}
+				}
+				TypeSharedPointer hashSetType = this->typeRegistry.lookupType( "HashSet" );
+				expressionType = hashSetType ? hashSetType : std::make_shared<Type>( Type::Kind::Class, "HashSet" );
 				break;
 			}
 			case ast::Node::Kind::ConstructExpression: {
@@ -1901,6 +2140,19 @@ namespace uranite::semantic {
 				}
 				if( expressionType == nullptr ) {
 					expressionType = this->typeRegistry.getError();
+				}
+				else if( expressionType->kind == Type::Kind::Interface || expressionType->kind == Type::Kind::Trait ) {
+					std::string errorMessage = fmt::format( "cannot instantiate {} \"{}\"", expressionType->kind == Type::Kind::Interface ? "interface" : "trait", expressionType->name );
+					this->diagnostic.error( constructExpression.source, errorMessage );
+					expressionType = this->typeRegistry.getError();
+				}
+				else if( expressionType->kind == Type::Kind::Class ) {
+					ClassTypeSharedPointer classType = std::static_pointer_cast<ClassType>( expressionType );
+					if( classType->isAbstract ) {
+						std::string errorMessage = fmt::format( "cannot instantiate abstract class \"{}\"", expressionType->name );
+						this->diagnostic.error( constructExpression.source, errorMessage );
+						expressionType = this->typeRegistry.getError();
+					}
 				}
 				break;
 			}
@@ -1985,7 +2237,7 @@ namespace uranite::semantic {
 				break;
 			}
 			case ast::Node::Kind::NoneLiteral: {
-				expressionType = this->typeRegistry.getVoid();
+				expressionType = this->typeRegistry.getNone();
 				break;
 			}
 			case ast::Node::Kind::RangeExpression: {
@@ -2141,6 +2393,33 @@ namespace uranite::semantic {
 						}
 					}
 				}
+				else if( targetType->kind == Type::Kind::Interface ) {
+					InterfaceTypeSharedPointer interfaceType = std::static_pointer_cast<InterfaceType>( targetType );
+					std::unordered_set<std::string> visited;
+					if( isIteratorOrIterable( targetType, visited ) == false ) {
+						return TypeSharedPointer( nullptr );
+					}
+					MethodInfo* nextMethod = interfaceType->findMethod( "next" );
+					if( nextMethod && nextMethod->type && nextMethod->type->kind == Type::Kind::Function ) {
+						return std::static_pointer_cast<FunctionType>( nextMethod->type )->returnType;
+					}
+					MethodInfo* iteratorMethod = interfaceType->findMethod( "iterator" );
+					if( iteratorMethod && iteratorMethod->type && iteratorMethod->type->kind == Type::Kind::Function ) {
+						TypeSharedPointer iteratorReturnType = std::static_pointer_cast<FunctionType>( iteratorMethod->type )->returnType;
+						if( iteratorReturnType ) {
+							MethodInfo* iteratorNextMethod = nullptr;
+							if( iteratorReturnType->kind == Type::Kind::Class ) {
+								iteratorNextMethod = std::static_pointer_cast<ClassType>( iteratorReturnType )->findMethod( "next" );
+							}
+							else if( iteratorReturnType->kind == Type::Kind::Interface ) {
+								iteratorNextMethod = std::static_pointer_cast<InterfaceType>( iteratorReturnType )->findMethod( "next" );
+							}
+							if( iteratorNextMethod && iteratorNextMethod->type && iteratorNextMethod->type->kind == Type::Kind::Function ) {
+								return std::static_pointer_cast<FunctionType>( iteratorNextMethod->type )->returnType;
+							}
+						}
+					}
+				}
 				return TypeSharedPointer( nullptr );
 			};
 			TypeSharedPointer variableType = this->typeRegistry.getError();
@@ -2266,6 +2545,21 @@ namespace uranite::semantic {
 	}
 	
 	void Analyzer::analyzeFunctionDeclaration( ast::nodes::FunctionDeclaration& declaration ) {
+		std::vector<std::string> functionGenericNames;
+		std::vector<std::pair<std::string, TypeSharedPointer>> savedFunctionGenericTypes;
+		for( ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
+			TypeSharedPointer existing = this->typeRegistry.lookupType( genericParameter->name );
+			savedFunctionGenericTypes.emplace_back( genericParameter->name, existing );
+			GenericParameterTypeSharedPointer genericParameterType = std::make_shared<GenericParameterType>( genericParameter->name );
+			for( ast::nodes::TypeNodeSharedPointer& constraint : genericParameter->constraints ) {
+				TypeSharedPointer resolvedConstraintType = this->resolveType( constraint );
+				if( resolvedConstraintType && resolvedConstraintType->isError() == false ) {
+					genericParameterType->constraints.push_back( resolvedConstraintType );
+				}
+			}
+			this->typeRegistry.registerType( genericParameter->name, genericParameterType );
+			functionGenericNames.push_back( genericParameter->name );
+		}
 		bool hasYieldExpression = false;
 		for( ast::nodes::StatementSharedPointer& bodyStatement : declaration.body ) {
 			if( statementContainsYield( bodyStatement ) ) {
@@ -2283,6 +2577,7 @@ namespace uranite::semantic {
 			declaration.isGenerator = true;
 		}
 		std::vector<TypeSharedPointer> parameterTypes;
+		std::vector<std::string> parameterNames;
 		int variadicParamIndex = -1;
 		int keywordParamIndex = -1;
 		bool bodySeenVariadic = false;
@@ -2337,6 +2632,7 @@ namespace uranite::semantic {
 					bodyKwOnlyTypes.push_back( parameterType ? parameterType : this->typeRegistry.getError() );
 				}
 			}
+			parameterNames.push_back( parameter->name );
 			paramTypeIndex++;
 		}
 		TypeSharedPointer returnType = declaration.returnType ? this->resolveType( declaration.returnType ) : this->typeRegistry.getVoid();
@@ -2350,12 +2646,14 @@ namespace uranite::semantic {
 		}
 		TypeSharedPointer functionType = this->typeRegistry.makeFunction( parameterTypes, exposedReturnType );
 		FunctionTypeSharedPointer concreteFunctionType = std::static_pointer_cast<FunctionType>( functionType );
+		concreteFunctionType->parameterNames = std::move( parameterNames );
 		concreteFunctionType->variadicParameterIndex = variadicParamIndex;
 		concreteFunctionType->keywordParameterIndex = keywordParamIndex;
 		concreteFunctionType->variadicElementType = variadicElemType;
 		concreteFunctionType->keywordValueType = kwargValType;
 		concreteFunctionType->keywordOnlyParamNames = std::move( bodyKwOnlyNames );
 		concreteFunctionType->keywordOnlyParamTypes = std::move( bodyKwOnlyTypes );
+		concreteFunctionType->genericParameterNames = functionGenericNames;
 		if( declaration.raisesTypes.empty() == false ) {
 			for( ast::nodes::TypeNodeSharedPointer& raiseTypeNode : declaration.raisesTypes ) {
 				TypeSharedPointer resolvedRaiseType = this->resolveType( raiseTypeNode );
@@ -2410,16 +2708,71 @@ namespace uranite::semantic {
 			this->currentScope->define( parameter->name, parameterSymbol );
 		}
 		for( ast::nodes::DeclarationSharedPointer& nestedFunction : declaration.nestedFunctions ) {
-			this->analyzeDeclaration( nestedFunction );
+			ast::nodes::FunctionDeclaration& nestedDecl = static_cast<ast::nodes::FunctionDeclaration&>( *nestedFunction );
+			std::vector<TypeSharedPointer> preRegParamTypes;
+			std::vector<std::string> preRegParamNames;
+			int preRegVarIndex = -1;
+			int preRegKwIndex = -1;
+			TypeSharedPointer preRegVarElemType = nullptr;
+			TypeSharedPointer preRegKwValType = nullptr;
+			for( ast::nodes::FunctionParameterSharedPointer& param : nestedDecl.parameters ) {
+				if( param->isSelf ) {
+					continue;
+				}
+				TypeSharedPointer paramType = this->resolveType( param->type );
+				if( param->isVariadic ) {
+					preRegVarIndex = static_cast<int>( preRegParamTypes.size() );
+					TypeSharedPointer elemType = paramType;
+					if( paramType && paramType->kind == Type::Kind::Array ) {
+						elemType = std::static_pointer_cast<ArrayType>( paramType )->elementType;
+					}
+					preRegVarElemType = elemType;
+					paramType = this->monomorphizeGenericType( "Args", { elemType ? elemType : this->typeRegistry.getError() }, param->source );
+				}
+				else if( param->isKeyword ) {
+					preRegKwIndex = static_cast<int>( preRegParamTypes.size() );
+					preRegKwValType = paramType;
+					paramType = this->monomorphizeGenericType( "Kwargs", { paramType ? paramType : this->typeRegistry.getError() }, param->source );
+				}
+				preRegParamTypes.push_back( paramType ? paramType : this->typeRegistry.getError() );
+				preRegParamNames.push_back( param->name );
+			}
+			TypeSharedPointer preRegRetType = nestedDecl.returnType ? this->resolveType( nestedDecl.returnType ) : this->typeRegistry.getVoid();
+			TypeSharedPointer preRegExposedRetType = preRegRetType;
+			if( nestedDecl.isGenerator && preRegRetType->kind != Type::Kind::Generator ) {
+				preRegExposedRetType = this->typeRegistry.makeGenerator( preRegRetType );
+			}
+			TypeSharedPointer preRegFuncType = this->typeRegistry.makeFunction( preRegParamTypes, preRegExposedRetType );
+			FunctionTypeSharedPointer preRegConcrete = std::static_pointer_cast<FunctionType>( preRegFuncType );
+			preRegConcrete->parameterNames = std::move( preRegParamNames );
+			preRegConcrete->variadicParameterIndex = preRegVarIndex;
+			preRegConcrete->keywordParameterIndex = preRegKwIndex;
+			preRegConcrete->variadicElementType = preRegVarElemType;
+			preRegConcrete->keywordValueType = preRegKwValType;
+			SymbolSharedPointer preRegSymbol = std::make_shared<Symbol>( nestedDecl.name, Symbol::Kind::Function, nestedDecl.source, preRegFuncType );
+			preRegSymbol->access = nestedDecl.access;
+			preRegSymbol->isInitialized = true;
+			this->currentScope->define( nestedDecl.name, preRegSymbol );
 		}
 		for( ast::nodes::StatementSharedPointer& bodyStatement : declaration.body ) {
 			this->analyzeStatement( bodyStatement );
+		}
+		for( ast::nodes::DeclarationSharedPointer& nestedFunction : declaration.nestedFunctions ) {
+			this->analyzeDeclaration( nestedFunction );
 		}
 		this->popScope();
 		this->currentReturnType = nullptr;
 		this->isInsideAsyncFunction = savedAsyncStatus;
 		this->isInUserCode_ = savedUserCodeStatus;
 		this->currentExceptionTypes = savedRaisesTypes;
+		for( const std::pair<std::string, TypeSharedPointer>& saved : savedFunctionGenericTypes ) {
+			if( saved.second != nullptr ) {
+				this->typeRegistry.registerType( saved.first, saved.second );
+			}
+			else {
+				this->typeRegistry.unregisterType( saved.first );
+			}
+		}
 	}
 	
 	TypeSharedPointer Analyzer::analyzeIdentifierExpression( ast::nodes::IdentifierExpression& expression ) {
@@ -2521,10 +2874,55 @@ namespace uranite::semantic {
 			ClassTypeSharedPointer classType = std::dynamic_pointer_cast<ClassType>( objectType );
 			if( classType ) {
 				bool implementsIndexable = false;
-				for( TypeSharedPointer& iface : classType->interfaces ) {
-					if( iface && iface->qualified == qname::INDEXABLE ) {
+				std::vector<TypeSharedPointer> interfacesToCheck = classType->interfaces;
+				if( classType->astDeclaration ) {
+					TypeSharedPointer baseTemplateType = this->typeRegistry.lookupType( classType->astDeclaration->name );
+					if( baseTemplateType && baseTemplateType->kind == Type::Kind::Class ) {
+						ClassTypeSharedPointer baseClassType = std::static_pointer_cast<ClassType>( baseTemplateType );
+						for( TypeSharedPointer& iface : baseClassType->interfaces ) {
+							interfacesToCheck.push_back( iface );
+						}
+					}
+				}
+				std::vector<TypeSharedPointer> checkedInterfaces;
+				while( interfacesToCheck.empty() == false ) {
+					TypeSharedPointer currentInterface = interfacesToCheck.back();
+					interfacesToCheck.pop_back();
+					if( currentInterface == nullptr || std::find( checkedInterfaces.begin(), checkedInterfaces.end(), currentInterface ) != checkedInterfaces.end() ) {
+						continue;
+					}
+					checkedInterfaces.push_back( currentInterface );
+					std::string baseName = currentInterface->name;
+					size_t angleBracketPos = baseName.find( '<' );
+					if( angleBracketPos != std::string::npos ) {
+						baseName = baseName.substr( 0, angleBracketPos );
+					}
+					if( currentInterface->qualified.find( qname::INDEXABLE ) == 0 || baseName == "Indexable" ) {
 						implementsIndexable = true;
 						break;
+					}
+					if( currentInterface->kind == Type::Kind::Interface ) {
+						InterfaceTypeSharedPointer ifaceType = std::static_pointer_cast<InterfaceType>( currentInterface );
+						for( TypeSharedPointer& superInterface : ifaceType->superInterfaces ) {
+							interfacesToCheck.push_back( superInterface );
+						}
+						if( ifaceType->superInterfaces.empty() && ifaceType->astDeclaration ) {
+							for( ast::nodes::TypeNodeSharedPointer& superNode : ifaceType->astDeclaration->superInterfaces ) {
+								std::string superName;
+								if( superNode->kind == ast::Node::Kind::SimpleType ) {
+									superName = static_cast<ast::nodes::SimpleTypeNode&>( *superNode ).name;
+								}
+								else if( superNode->kind == ast::Node::Kind::GenericType ) {
+									superName = static_cast<ast::nodes::GenericTypeNode&>( *superNode ).name;
+								}
+								if( superName.empty() == false ) {
+									TypeSharedPointer resolvedType = this->typeRegistry.lookupType( superName );
+									if( resolvedType ) {
+										interfacesToCheck.push_back( resolvedType );
+									}
+								}
+							}
+						}
 					}
 				}
 				if( implementsIndexable ) {
@@ -2532,6 +2930,53 @@ namespace uranite::semantic {
 					if( getMethod && getMethod->type && getMethod->type->kind == Type::Kind::Function ) {
 						FunctionTypeSharedPointer functionType = std::static_pointer_cast<FunctionType>( getMethod->type );
 						return functionType->returnType;
+					}
+				}
+			}
+		}
+		if( objectType->kind == Type::Kind::Interface ) {
+			InterfaceTypeSharedPointer interfaceType = std::static_pointer_cast<InterfaceType>( objectType );
+			std::vector<TypeSharedPointer> typesToCheck;
+			typesToCheck.push_back( interfaceType );
+			for( TypeSharedPointer& superInterface : interfaceType->superInterfaces ) {
+				typesToCheck.push_back( superInterface );
+			}
+			if( interfaceType->superInterfaces.empty() && interfaceType->astDeclaration ) {
+				for( ast::nodes::TypeNodeSharedPointer& superNode : interfaceType->astDeclaration->superInterfaces ) {
+					std::string superName;
+					if( superNode->kind == ast::Node::Kind::SimpleType ) {
+						superName = static_cast<ast::nodes::SimpleTypeNode&>( *superNode ).name;
+					}
+					else if( superNode->kind == ast::Node::Kind::GenericType ) {
+						superName = static_cast<ast::nodes::GenericTypeNode&>( *superNode ).name;
+					}
+					if( superName.empty() == false ) {
+						TypeSharedPointer resolvedType = this->typeRegistry.lookupType( superName );
+						if( resolvedType ) {
+							typesToCheck.push_back( resolvedType );
+						}
+					}
+				}
+			}
+			for( TypeSharedPointer& checkType : typesToCheck ) {
+				std::string checkBaseName = checkType->name;
+				size_t angleBracketPos = checkBaseName.find( '<' );
+				if( angleBracketPos != std::string::npos ) {
+					checkBaseName = checkBaseName.substr( 0, angleBracketPos );
+				}
+				if( checkType->qualified.find( qname::INDEXABLE ) == 0 || checkBaseName == "Indexable" ) {
+					MethodInfo* getMethod = interfaceType->findMethod( "get" );
+					if( getMethod && getMethod->type && getMethod->type->kind == Type::Kind::Function ) {
+						FunctionTypeSharedPointer functionType = std::static_pointer_cast<FunctionType>( getMethod->type );
+						TypeSharedPointer returnType = functionType->returnType;
+						if( interfaceType->typeSubstitutions.empty() == false && returnType->kind == Type::Kind::GenericParameter ) {
+							std::string paramName = returnType->name;
+							auto substitution = interfaceType->typeSubstitutions.find( paramName );
+							if( substitution != interfaceType->typeSubstitutions.end() ) {
+								return substitution->second;
+							}
+						}
+						return returnType;
 					}
 				}
 			}
@@ -3298,6 +3743,22 @@ namespace uranite::semantic {
 				this->diagnostic.error( expression.source, cannotDereferenceErrorMessage );
 				return this->typeRegistry.getError();
 			}
+			case token::Type::Increment:
+			case token::Type::Decrement: {
+				if( operandType->isNumeric() == false && operandType->isIntegral() == false ) {
+					static const std::set<std::string> numericOopNames = {
+						"Int", "I8", "I16", "I32", "I64",
+						"UInt", "U8", "U16", "U32", "U64",
+						"Float", "F32", "F64", "Double"
+					};
+					if( numericOopNames.count( operandType->name ) == 0 ) {
+						std::string errorMessage = fmt::format( "increment/decrement requires numeric type, got \"{}\"", operandType->toString() );
+						this->diagnostic.error( expression.source, errorMessage );
+						return this->typeRegistry.getError();
+					}
+				}
+				return operandType;
+			}
 			default:
 				return operandType;
 		}
@@ -3673,7 +4134,7 @@ namespace uranite::semantic {
 			methodInformation.name = functionDecl.name;
 			methodInformation.type = methodFuncType;
 			methodInformation.access = functionDecl.access;
-			methodInformation.isVirtual = functionDecl.isVirtual;
+			methodInformation.isVirtual = functionDecl.isVirtual || functionDecl.isAbstract;
 			methodInformation.isOverride = functionDecl.isOverride;
 			methodInformation.isStatic = functionDecl.isStatic;
 			methodInformation.isFinal = functionDecl.isFinal;
@@ -3769,6 +4230,38 @@ namespace uranite::semantic {
 		}
 		for( std::unordered_map<std::string, TypeSharedPointer>::iterator savedIterator = savedGenericParams.begin(); savedIterator != savedGenericParams.end(); ++savedIterator ) {
 			this->typeRegistry.registerType( savedIterator->first, savedIterator->second );
+		}
+		{
+			std::vector<std::string> orderedNames;
+			std::set<std::string> addedNames;
+			for( const TypeSharedPointer& superType : interfaceType->superInterfaces ) {
+				if( superType == nullptr || superType->kind != Type::Kind::Interface ) {
+					continue;
+				}
+				InterfaceType* superInterface = static_cast<InterfaceType*>( superType.get() );
+				for( const std::string& methodName : superInterface->methodOrder ) {
+					if( addedNames.count( methodName ) == 0 ) {
+						orderedNames.push_back( methodName );
+						addedNames.insert( methodName );
+					}
+				}
+			}
+			for( const MethodInfo& method : interfaceType->methods ) {
+				if( addedNames.count( method.name ) == 0 ) {
+					orderedNames.push_back( method.name );
+					addedNames.insert( method.name );
+				}
+			}
+			std::vector<MethodInfo> reorderedMethods;
+			for( const std::string& name : orderedNames ) {
+				for( const MethodInfo& existingMethod : interfaceType->methods ) {
+					if( existingMethod.name == name ) {
+						reorderedMethods.push_back( existingMethod );
+						break;
+					}
+				}
+			}
+			interfaceType->methods = reorderedMethods;
 		}
 		interfaceType->methodOrder.clear();
 		for( int methodIndex = 0; methodIndex < static_cast<int>( interfaceType->methods.size() ); methodIndex++ ) {
@@ -3872,6 +4365,9 @@ namespace uranite::semantic {
 					ClassTypeSharedPointer existingClass = std::static_pointer_cast<ClassType>( existing );
 					if( existingClass->astDeclaration != nullptr ) {
 						existingClass->astDeclaration = &classDeclaration;
+						existingClass->isAbstract = classDeclaration.isAbstract;
+						existingClass->isFinal = classDeclaration.isFinal;
+						existingClass->isReadonly = classDeclaration.isReadonly;
 						if( existingClass->package.empty() ) {
 							existingClass->package = this->currentPackageName;
 							existingClass->qualified = thisQualified;
@@ -3884,6 +4380,9 @@ namespace uranite::semantic {
 				}
 				ClassTypeSharedPointer classType = std::make_shared<ClassType>( classDeclaration.name );
 				classType->astDeclaration = &classDeclaration;
+				classType->isAbstract = classDeclaration.isAbstract;
+				classType->isFinal = classDeclaration.isFinal;
+				classType->isReadonly = classDeclaration.isReadonly;
 				classType->package = this->currentPackageName;
 				classType->qualified = thisQualified;
 				for( ast::nodes::GenericParameterSharedPointer& genericParameter : classDeclaration.genericParameters ) {
@@ -4587,4 +5086,92 @@ namespace uranite::semantic {
 		return this->resolveType( typeNode );
 	}
 	
+	TypeSharedPointer Analyzer::substituteGenericParameters( TypeSharedPointer type, const std::unordered_map<std::string, TypeSharedPointer>& substitutionMap ) {
+		if( type == nullptr || substitutionMap.empty() ) {
+			return type;
+		}
+		if( type->kind == Type::Kind::GenericParameter ) {
+			std::unordered_map<std::string, TypeSharedPointer>::const_iterator it = substitutionMap.find( type->name );
+			if( it != substitutionMap.end() ) {
+				return it->second;
+			}
+			return type;
+		}
+		if( type->kind == Type::Kind::Optional ) {
+			TypeSharedPointer inner = this->substituteGenericParameters( std::static_pointer_cast<OptionalType>( type )->inner, substitutionMap );
+			return this->typeRegistry.makeOptional( inner );
+		}
+		if( type->kind == Type::Kind::Array ) {
+			ArrayTypeSharedPointer arrayType = std::static_pointer_cast<ArrayType>( type );
+			return this->typeRegistry.makeArray( this->substituteGenericParameters( arrayType->elementType, substitutionMap ), arrayType->size );
+		}
+		if( type->kind == Type::Kind::Future ) {
+			return this->typeRegistry.makeFuture( this->substituteGenericParameters( std::static_pointer_cast<FutureType>( type )->innerType, substitutionMap ) );
+		}
+		if( type->kind == Type::Kind::Generator ) {
+			return this->typeRegistry.makeGenerator( this->substituteGenericParameters( std::static_pointer_cast<GeneratorType>( type )->yieldType, substitutionMap ) );
+		}
+		if( type->kind == Type::Kind::Reference ) {
+			ReferenceTypeSharedPointer referenceType = std::static_pointer_cast<ReferenceType>( type );
+			return this->typeRegistry.makeReference( this->substituteGenericParameters( referenceType->inner, substitutionMap ), referenceType->isMutable );
+		}
+		if( type->kind == Type::Kind::Pointer ) {
+			PointerTypeSharedPointer pointerType = std::static_pointer_cast<PointerType>( type );
+			return this->typeRegistry.makePointer( this->substituteGenericParameters( pointerType->inner, substitutionMap ), pointerType->isMutable );
+		}
+		if( type->kind == Type::Kind::Function ) {
+			FunctionTypeSharedPointer functionType = std::static_pointer_cast<FunctionType>( type );
+			std::vector<TypeSharedPointer> substitutedParams;
+			for( TypeSharedPointer& paramType : functionType->parameterTypes ) {
+				substitutedParams.push_back( this->substituteGenericParameters( paramType, substitutionMap ) );
+			}
+			return this->typeRegistry.makeFunction( substitutedParams, this->substituteGenericParameters( functionType->returnType, substitutionMap ), functionType->isVariadic );
+		}
+		if( type->kind == Type::Kind::Class || type->kind == Type::Kind::Interface || type->kind == Type::Kind::Struct ) {
+			std::vector<TypeSharedPointer> genericParams;
+			std::unordered_map<std::string, TypeSharedPointer> existingSubstitutions;
+			std::string baseName;
+			if( type->kind == Type::Kind::Class ) {
+				ClassTypeSharedPointer classType = std::static_pointer_cast<ClassType>( type );
+				genericParams = classType->genericParameters;
+				existingSubstitutions = classType->typeSubstitutions;
+				baseName = classType->astDeclaration != nullptr ? classType->astDeclaration->name : classType->name;
+			}
+			else if( type->kind == Type::Kind::Interface ) {
+				InterfaceTypeSharedPointer interfaceType = std::static_pointer_cast<InterfaceType>( type );
+				genericParams = interfaceType->genericParameters;
+				existingSubstitutions = interfaceType->typeSubstitutions;
+				baseName = interfaceType->astDeclaration != nullptr ? interfaceType->astDeclaration->name : interfaceType->name;
+			}
+			else {
+				StructTypeSharedPointer structType = std::static_pointer_cast<StructType>( type );
+				genericParams = structType->genericParameters;
+				existingSubstitutions = structType->typeSubstitutions;
+				baseName = structType->astDeclaration != nullptr ? structType->astDeclaration->name : structType->name;
+			}
+			if( genericParams.empty() ) {
+				return type;
+			}
+			bool hasSubstitution = false;
+			std::vector<TypeSharedPointer> substitutedArgs;
+			for( TypeSharedPointer& genericParam : genericParams ) {
+				TypeSharedPointer current = genericParam;
+				std::unordered_map<std::string, TypeSharedPointer>::const_iterator existingIt = existingSubstitutions.find( genericParam->name );
+				if( existingIt != existingSubstitutions.end() ) {
+					current = existingIt->second;
+				}
+				TypeSharedPointer substituted = this->substituteGenericParameters( current, substitutionMap );
+				if( substituted != current || current != genericParam ) {
+					hasSubstitution = true;
+				}
+				substitutedArgs.push_back( substituted );
+			}
+			if( hasSubstitution == false ) {
+				return type;
+			}
+			return this->monomorphizeGenericType( baseName, substitutedArgs, nullptr );
+		}
+		return type;
+	}
+
 }
