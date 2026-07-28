@@ -176,6 +176,7 @@ namespace uranite::parser {
 			case token::Type::KeywordParent:
 			case token::Type::KeywordSelf:
 			case token::Type::KeywordTrue:
+			case token::Type::LeftBrace:
 			case token::Type::LeftBracket:
 			case token::Type::LeftParenthesis:
 			case token::Type::LiteralChar:
@@ -233,6 +234,37 @@ namespace uranite::parser {
 	
 	bool Parser::match( token::Type type, bool optional ) {
 		return this->match( type ) == optional;
+	}
+	
+	bool Parser::looksLikeGenericCall() {
+		if( this->peek( 0 ).type != token::Type::LessThan ) {
+			return false;
+		}
+		int depth = 1;
+		int offset = 1;
+		while( depth > 0 ) {
+			token::Type tokenType = this->peek( offset ).type;
+			if( tokenType == token::Type::Eof || tokenType == token::Type::Newline ) {
+				return false;
+			}
+			if( tokenType == token::Type::LessThan ) {
+				depth++;
+			}
+			else if( tokenType == token::Type::GreaterThan ) {
+				depth--;
+			}
+			else if( tokenType == token::Type::ShiftRight ) {
+				depth -= 2;
+			}
+			else if( tokenType != token::Type::Identifier &&
+					 tokenType != token::Type::Comma &&
+					 tokenType != token::Type::Question &&
+					 tokenType != token::Type::Dot ) {
+				return false;
+			}
+			offset++;
+		}
+		return this->peek( offset ).type == token::Type::LeftParenthesis;
 	}
 	
 	ast::nodes::ProgramSharedPointer Parser::parse() {
@@ -337,6 +369,103 @@ namespace uranite::parser {
 		}
 		this->expect( token::Type::RightBracket, "expected ']'" );
 		return std::make_shared<ast::nodes::ArrayExpression>( std::move( elements ), source );
+	}
+	
+	ast::nodes::ExpressionSharedPointer Parser::parseMapOrSetExpression() {
+		lookup::SourceSharedPointer source = this->current().source;
+		this->expect( token::Type::LeftBrace, "" );
+		if( this->check( token::Type::RightBrace ) ) {
+			this->advance();
+			return std::make_shared<ast::nodes::MapLiteralExpression>(
+				std::vector<std::pair<ast::nodes::ExpressionSharedPointer, ast::nodes::ExpressionSharedPointer>>{},
+				source
+			);
+		}
+		ast::nodes::ExpressionSharedPointer firstExpression = this->parseExpression();
+		if( this->check( token::Type::Colon ) ) {
+			this->advance();
+			ast::nodes::ExpressionSharedPointer firstValue = this->parseExpression();
+			if( this->check( token::Type::KeywordFor ) ) {
+				this->advance();
+				ast::nodes::TypeNodeSharedPointer variableType;
+				std::string variableName;
+				if( this->check( token::Type::Identifier ) && this->peek( 1 ).type == token::Type::Identifier ) {
+					variableType = this->parseTypeNode();
+					variableName = this->expect( token::Type::Identifier, "expected variable name" ).value;
+				}
+				else if( this->check( token::Type::Identifier ) && this->peek( 1 ).type == token::Type::KeywordIn ) {
+					variableName = this->current().value;
+					this->advance();
+				}
+				else {
+					variableName = this->expect( token::Type::Identifier, "expected variable name" ).value;
+				}
+				this->expect( token::Type::KeywordIn, "expected 'in' in comprehension" );
+				ast::nodes::ExpressionSharedPointer iterable = this->parseExpression();
+				ast::nodes::ExpressionSharedPointer condition;
+				if( this->match( token::Type::KeywordIf ) ) {
+					condition = this->parseExpression();
+				}
+				this->expect( token::Type::RightBrace, "expected '}' after map comprehension" );
+				std::shared_ptr<ast::nodes::ComprehensionExpression> comprehension = std::make_shared<ast::nodes::ComprehensionExpression>(
+					firstValue, condition, iterable, source, variableName, variableType
+				);
+				comprehension->comprehensionKind = ast::nodes::ComprehensionExpression::ComprehensionKind::Map;
+				comprehension->keyExpression = firstExpression;
+				return comprehension;
+			}
+			std::vector<std::pair<ast::nodes::ExpressionSharedPointer, ast::nodes::ExpressionSharedPointer>> entries;
+			entries.push_back( { firstExpression, firstValue } );
+			while( this->match( token::Type::Comma ) ) {
+				if( this->check( token::Type::RightBrace ) ) {
+					break;
+				}
+				ast::nodes::ExpressionSharedPointer key = this->parseExpression();
+				this->expect( token::Type::Colon, "expected ':' in map literal" );
+				ast::nodes::ExpressionSharedPointer value = this->parseExpression();
+				entries.push_back( { key, value } );
+			}
+			this->expect( token::Type::RightBrace, "expected '}'" );
+			return std::make_shared<ast::nodes::MapLiteralExpression>( std::move( entries ), source );
+		}
+		if( this->check( token::Type::KeywordFor ) ) {
+			this->advance();
+			ast::nodes::TypeNodeSharedPointer variableType;
+			std::string variableName;
+			if( this->check( token::Type::Identifier ) && this->peek( 1 ).type == token::Type::Identifier ) {
+				variableType = this->parseTypeNode();
+				variableName = this->expect( token::Type::Identifier, "expected variable name" ).value;
+			}
+			else if( this->check( token::Type::Identifier ) && this->peek( 1 ).type == token::Type::KeywordIn ) {
+				variableName = this->current().value;
+				this->advance();
+			}
+			else {
+				variableName = this->expect( token::Type::Identifier, "expected variable name" ).value;
+			}
+			this->expect( token::Type::KeywordIn, "expected 'in' in comprehension" );
+			ast::nodes::ExpressionSharedPointer iterable = this->parseExpression();
+			ast::nodes::ExpressionSharedPointer condition;
+			if( this->match( token::Type::KeywordIf ) ) {
+				condition = this->parseExpression();
+			}
+			this->expect( token::Type::RightBrace, "expected '}' after set comprehension" );
+			std::shared_ptr<ast::nodes::ComprehensionExpression> comprehension = std::make_shared<ast::nodes::ComprehensionExpression>(
+				firstExpression, condition, iterable, source, variableName, variableType
+			);
+			comprehension->comprehensionKind = ast::nodes::ComprehensionExpression::ComprehensionKind::Set;
+			return comprehension;
+		}
+		std::vector<ast::nodes::ExpressionSharedPointer> elements;
+		elements.push_back( firstExpression );
+		while( this->match( token::Type::Comma ) ) {
+			if( this->check( token::Type::RightBrace ) ) {
+				break;
+			}
+			elements.push_back( this->parseExpression() );
+		}
+		this->expect( token::Type::RightBrace, "expected '}'" );
+		return std::make_shared<ast::nodes::SetLiteralExpression>( std::move( elements ), source );
 	}
 	
 	ast::nodes::TypeNodeSharedPointer Parser::parseBaseTypeNode() {
@@ -550,7 +679,17 @@ namespace uranite::parser {
 					declaration->methods.push_back( method );
 				}
 				else if( this->check( token::Type::KeywordClass ) ) {
-					declaration->nestedDeclarations.push_back( this->parseClassDeclaration( memberAccess ) );
+					ast::nodes::ClassDeclarationSharedPointer nestedClass = this->parseClassDeclaration( memberAccess );
+					if( memberAbstract ) {
+						nestedClass->isAbstract = true;
+					}
+					if( memberFinal ) {
+						nestedClass->isFinal = true;
+					}
+					if( memberReadonly ) {
+						nestedClass->isReadonly = true;
+					}
+					declaration->nestedDeclarations.push_back( nestedClass );
 				}
 				else if( this->check( token::Type::KeywordInterface ) ) {
 					declaration->nestedDeclarations.push_back( this->parseInterfaceDeclaration( memberAccess ) );
@@ -667,6 +806,9 @@ namespace uranite::parser {
 			}
 			case token::Type::KeywordClass: {
 				ast::nodes::ClassDeclarationSharedPointer declaration = this->parseClassDeclaration( access );
+				if( isAbstract ) {
+					declaration->isAbstract = true;
+				}
 				if( isFinal ) {
 					declaration->isFinal = true;
 				}
@@ -953,7 +1095,7 @@ namespace uranite::parser {
 					lookup::SourceSharedPointer variableSource = this->current().source;
 					std::string variableName = this->expect( token::Type::Identifier, "expected variant name" ).value;
 					ast::nodes::EnumVariantSharedPointer variant = std::make_shared<ast::nodes::EnumVariantNode>( variableName, variableSource );
-					if( this->check({ token::Type::KeywordFalse, token::Type::LiteralFloat, token::Type::LiteralInteger, token::Type::LiteralString, token::Type::KeywordTrue }) ) {
+					if( this->check({ token::Type::KeywordFalse, token::Type::LiteralFloat, token::Type::LiteralInteger, token::Type::LiteralString, token::Type::KeywordTrue, token::Type::Minus }) ) {
 						variant->backedValue = parseExpression();
 					}
 					if( this->match( token::Type::LeftParenthesis ) ) {
@@ -1033,6 +1175,11 @@ namespace uranite::parser {
 				else if( this->check( token::Type::Identifier ) ) {
 					std::string hintMessage( fmt::format( "use 'unit {}' to declare an enum variant", this->current().value ) );
 					this->diagnostic.error( this->current().source, "enum variants must be declared with 'unit' keyword", hintMessage );
+					this->advance();
+				}
+				else if( this->check( { token::Type::Dedent, token::Type::Eof, token::Type::Newline }, false ) ) {
+					std::string errorMessage( fmt::format( "unexpected token '{}' in enum body", this->current().value ) );
+					this->diagnostic.error( this->current().source, errorMessage, "expected 'unit', 'function', or 'property'" );
 					this->advance();
 				}
 				this->skipNewline();
@@ -1214,8 +1361,17 @@ namespace uranite::parser {
 		ast::nodes::TypeNodeSharedPointer variableType2 = nullptr;
 		std::string variable2;
 		if( this->match( token::Type::Comma ) ) {
-			if( this->check( token::Type::Identifier ) && 
+			if( this->check( token::Type::Identifier ) &&
 				this->peek().type == token::Type::Identifier ) {
+				variableType2 = this->parseTypeNode();
+				variable2 = this->expect( token::Type::Identifier, "expected second loop variable" ).value;
+			}
+			else if( this->check( token::Type::Identifier ) &&
+				this->peek().type == token::Type::LessThan ) {
+				variableType2 = this->parseTypeNode();
+				variable2 = this->expect( token::Type::Identifier, "expected second loop variable" ).value;
+			}
+			else if( this->check( token::Type::Question ) ) {
 				variableType2 = this->parseTypeNode();
 				variable2 = this->expect( token::Type::Identifier, "expected second loop variable" ).value;
 			}
@@ -1405,7 +1561,7 @@ namespace uranite::parser {
 				break;
 			}
 		}
-		this->expect( token::Type::GreaterThan, "expected '>' after generic arguments" );
+		this->consumeGreaterThan( "expected '>' after generic arguments" );
 		return arguments;
 	}
 	
@@ -1432,7 +1588,7 @@ namespace uranite::parser {
 				break;
 			}
 		}
-		this->expect( token::Type::GreaterThan, "expected '>' after generic parameters" );
+		this->consumeGreaterThan( "expected '>' after generic parameters" );
 		return parameters;
 	}
 	
@@ -1798,7 +1954,42 @@ namespace uranite::parser {
 			return nullptr;
 		}
 		while( true ) {
-			if( this->check( token::Type::LeftParenthesis ) ) {
+			if( this->check( token::Type::LessThan ) &&
+				expression->kind == ast::Node::Kind::IdentifierExpression &&
+				this->looksLikeGenericCall() ) {
+				std::vector<ast::nodes::TypeNodeSharedPointer> typeArgs = this->parseGenericArguments();
+				lookup::SourceSharedPointer source = this->current().source;
+				this->advance();
+				std::vector<ast::nodes::ExpressionSharedPointer> arguments;
+				std::vector<ast::nodes::KeywordArgument> keywordArguments;
+				bool seenKeywordArg = false;
+				if( this->check( token::Type::RightParenthesis, false ) ) {
+					do {
+						ast::nodes::ExpressionSharedPointer argExpr = this->parseExpression();
+						if( argExpr->kind == ast::Node::Kind::IdentifierExpression &&
+							this->check( token::Type::Assignment ) ) {
+							ast::nodes::IdentifierExpression& identExpr = static_cast<ast::nodes::IdentifierExpression&>( *argExpr );
+							this->advance();
+							ast::nodes::ExpressionSharedPointer valueExpr = this->parseExpression();
+							keywordArguments.push_back( { identExpr.name, valueExpr, argExpr->source } );
+							seenKeywordArg = true;
+						}
+						else {
+							if( seenKeywordArg ) {
+								this->diagnostic.error( argExpr->source, "positional argument cannot follow keyword argument" );
+							}
+							arguments.push_back( argExpr );
+						}
+					}
+					while( this->match( token::Type::Comma ) );
+				}
+				this->expect( token::Type::RightParenthesis, "expected ')' after arguments" );
+				ast::nodes::CallExpression* callExpr = new ast::nodes::CallExpression( expression, std::move( arguments ), source );
+				callExpr->keywordArguments = std::move( keywordArguments );
+				callExpr->typeArguments = std::move( typeArgs );
+				expression = std::shared_ptr<ast::nodes::CallExpression>( callExpr );
+			}
+			else if( this->check( token::Type::LeftParenthesis ) ) {
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
 				std::vector<ast::nodes::ExpressionSharedPointer> arguments;
@@ -1836,6 +2027,10 @@ namespace uranite::parser {
 				if( this->check( token::Type::Identifier ) ) {
 					member = this->advance().value;
 				}
+				std::vector<ast::nodes::TypeNodeSharedPointer> methodTypeArgs;
+				if( this->check( token::Type::LessThan ) && this->looksLikeGenericCall() ) {
+					methodTypeArgs = this->parseGenericArguments();
+				}
 				if( this->check( token::Type::LeftParenthesis ) ) {
 					this->advance();
 					std::vector<ast::nodes::ExpressionSharedPointer> arguments;
@@ -1864,6 +2059,7 @@ namespace uranite::parser {
 					this->expect( token::Type::RightParenthesis, "expected ')' after method arguments" );
 					ast::nodes::MethodCallExpression* methodCallExpr = new ast::nodes::MethodCallExpression( expression, member, std::move( arguments ), source );
 					methodCallExpr->keywordArguments = std::move( methodKeywordArguments );
+					methodCallExpr->typeArguments = std::move( methodTypeArgs );
 					expression = std::shared_ptr<ast::nodes::MethodCallExpression>( methodCallExpr );
 				}
 				else {
@@ -1904,6 +2100,12 @@ namespace uranite::parser {
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
 				expression = std::make_shared<ast::nodes::UnaryExpression>( token::Type::Question, expression, false, source );
+			}
+			else if( this->check( token::Type::Increment ) || this->check( token::Type::Decrement ) ) {
+				lookup::SourceSharedPointer source = this->current().source;
+				token::Type operation = this->current().type;
+				this->advance();
+				expression = std::make_shared<ast::nodes::UnaryExpression>( operation, expression, false, source );
 			}
 			else {
 				break;
@@ -2011,17 +2213,28 @@ namespace uranite::parser {
 				ast::nodes::TypeNodeSharedPointer type = this->parseTypeNode();
 				std::vector<std::pair<std::string,ast::nodes::ExpressionSharedPointer>> fields;
 				if( this->match( token::Type::LeftParenthesis ) ) {
-					std::vector<ast::nodes::ExpressionSharedPointer> arguments;
+					bool seenNamedArg = false;
 					if( this->check( token::Type::RightParenthesis, false ) ) {
 						do {
-							arguments.push_back( this->parseExpression() );
+							ast::nodes::ExpressionSharedPointer argExpr = this->parseExpression();
+							if( argExpr->kind == ast::Node::Kind::IdentifierExpression &&
+								this->check( token::Type::Assignment ) ) {
+								ast::nodes::IdentifierExpression& identExpr = static_cast<ast::nodes::IdentifierExpression&>( *argExpr );
+								this->advance();
+								ast::nodes::ExpressionSharedPointer valueExpr = this->parseExpression();
+								fields.emplace_back( identExpr.name, std::move( valueExpr ) );
+								seenNamedArg = true;
+							}
+							else {
+								if( seenNamedArg ) {
+									this->diagnostic.error( argExpr->source, "positional argument cannot follow named argument" );
+								}
+								fields.emplace_back( "", std::move( argExpr ) );
+							}
 						}
 						while( this->match( token::Type::Comma ) );
 					}
 					this->expect( token::Type::RightParenthesis, "expected ')' after constructor arguments" );
-					for( size_t i=0; i<arguments.size(); i++ ) {
-						fields.emplace_back( "", std::move( arguments[i] ) );
-					}
 				}
 				return std::make_shared<ast::nodes::ConstructExpression>( std::move( fields ), source, type );
 			}
@@ -2043,6 +2256,8 @@ namespace uranite::parser {
 			}
 			case token::Type::KeywordMatch:
 				return this->parseMatchExpression();
+			case token::Type::LeftBrace:
+				return this->parseMapOrSetExpression();
 			case token::Type::LeftBracket:
 				return this->parseArrayExpression();
 			case token::Type::LeftParenthesis: {
@@ -2668,6 +2883,12 @@ namespace uranite::parser {
 			case token::Type::Tilde: {
 				this->advance();
 				return std::make_shared<ast::nodes::UnaryExpression>( token::Type::Tilde, this->parseUnaryExpression(), true, unarySource );
+			}
+			case token::Type::Increment:
+			case token::Type::Decrement: {
+				token::Type operation = this->current().type;
+				this->advance();
+				return std::make_shared<ast::nodes::UnaryExpression>( operation, this->parseUnaryExpression(), true, unarySource );
 			}
 			default:
 				return this->parsePostfixExpression();
