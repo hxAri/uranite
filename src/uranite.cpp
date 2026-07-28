@@ -120,6 +120,10 @@ int main( int argc, char* argv[] ) {
 		.help( "Compile and immediately execute the program" )
 		.default_value( false )
 		.implicit_value( true );
+	program.add_argument( "--gdb" )
+		.help( "Run under GDB (requires --run). Pass GDB flags via --gdb-{flag} [value]" )
+		.default_value( false )
+		.implicit_value( true );
 	program.add_argument( "--repl" )
 		.help( "Start interactive REPL mode" )
 		.default_value( false )
@@ -142,19 +146,44 @@ int main( int argc, char* argv[] ) {
 		.help( "Show detailed version information" )
 		.default_value( false )
 		.implicit_value( true );
-	int argcForParser = argc;
+	std::vector<std::string> gdbDynamicFlags;
+	std::vector<char*> filteredArgv;
+	for( int i = 0; i < argc; i++ ) {
+		std::string arg( argv[i] );
+		if( arg.rfind( "--gdb-", 0 ) == 0 ) {
+			std::string flag = "-" + arg.substr( 6 );
+			if( i + 1 < argc && argv[i + 1][0] != '-' ) {
+				std::string value( argv[i + 1] );
+				if( value.find( ' ' ) != std::string::npos ) {
+					gdbDynamicFlags.push_back( fmt::format( "{} '{}'", flag, value ) );
+				}
+				else {
+					gdbDynamicFlags.push_back( fmt::format( "{} {}", flag, value ) );
+				}
+				i++;
+			}
+			else {
+				gdbDynamicFlags.push_back( flag );
+			}
+		}
+		else {
+			filteredArgv.push_back( argv[i] );
+		}
+	}
+	int argcForParser = static_cast<int>( filteredArgv.size() );
+	char** argvForParser = filteredArgv.data();
 	std::vector<std::string> programArguments;
-	for( int i = 1; i < argc; i++ ) {
-		if( std::string( argv[i] ) == "--" ) {
+	for( int i = 1; i < argcForParser; i++ ) {
+		if( std::string( argvForParser[i] ) == "--" ) {
 			argcForParser = i;
-			for( int j = i + 1; j < argc; j++ ) {
-				programArguments.push_back( argv[j] );
+			for( int j = i + 1; j < static_cast<int>( filteredArgv.size() ); j++ ) {
+				programArguments.push_back( argvForParser[j] );
 			}
 			break;
 		}
 	}
 	try {
-		program.parse_args( argcForParser, argv );
+		program.parse_args( argcForParser, argvForParser );
 	}
 	catch( const std::runtime_error& e ) {
 		return uranite::common::functions::printerr( e );
@@ -190,6 +219,14 @@ int main( int argc, char* argv[] ) {
 	options.stripDebugInfo = !program.get<bool>( "--no-strip" );
 	options.linkLibraries = program.get<std::vector<std::string>>( "--link" );
 	options.executeAfterCompilation = program.get<bool>( "--run" );
+	if( program.get<bool>( "--gdb" ) || gdbDynamicFlags.empty() == false ) {
+		std::string gdbFlagsJoined;
+		for( size_t i = 0; i < gdbDynamicFlags.size(); i++ ) {
+			if( i > 0 ) gdbFlagsJoined += " ";
+			gdbFlagsJoined += gdbDynamicFlags[i];
+		}
+		options.gdbFlags = gdbFlagsJoined;
+	}
 	options.maximumErrorCount = static_cast<uint32_t>( program.get<int>( "--max-errors" ) );
 	options.modulesPath = program.get<std::string>( "--modules-path" );
 	options.includePaths = program.get<std::vector<std::string>>( "--include" );
