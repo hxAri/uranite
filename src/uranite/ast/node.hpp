@@ -131,6 +131,7 @@ namespace uranite::ast {
 			InstanceofExpression,
 			IntegerLiteral,
 			LambdaExpression,
+			MapLiteralExpression,
 			MatchArm,
 			MatchExpression,
 			MemberAccessExpression,
@@ -139,6 +140,7 @@ namespace uranite::ast {
 			RangeExpression,
 			RegexLiteral,
 			SelfExpression,
+			SetLiteralExpression,
 			StringLiteral,
 			SubclassofExpression,
 			SuperExpression,
@@ -276,6 +278,8 @@ namespace uranite::ast {
 					return "InterfaceDeclaration";
 				case Kind::LambdaExpression:
 					return "LambdaExpression";
+				case Kind::MapLiteralExpression:
+					return "MapLiteralExpression";
 				case Kind::MatchArm:
 					return "MatchArm";
 				case Kind::MatchExpression:
@@ -312,6 +316,8 @@ namespace uranite::ast {
 					return "RegexLiteral";
 				case Kind::SelfExpression:
 					return "SelfExpression";
+				case Kind::SetLiteralExpression:
+					return "SetLiteralExpression";
 				case Kind::SimpleType:
 					return "SimpleType";
 				case Kind::StringLiteral:
@@ -1329,30 +1335,17 @@ namespace uranite::ast {
 		 */
 		struct ComprehensionExpression : Expression {
 			
-			/** @brief The expression that produces the value for each iteration. */
+			enum class ComprehensionKind { List, Set, Map };
+			
+			ComprehensionKind comprehensionKind = ComprehensionKind::List;
+			
 			ExpressionSharedPointer bodyExpression;
-			
-			/** @brief Optional filtering condition that must be true for the iteration to yield a value. */
+			ExpressionSharedPointer keyExpression;
 			ExpressionSharedPointer condition;
-			
-			/** @brief The source collection or iterable being traversed. */
 			ExpressionSharedPointer iterable;
-			
-			/** @brief The name of the iteration variable. */
 			std::string variable;
-			
-			/** @brief The explicit or inferred type of the iteration variable. */
 			TypeNodeSharedPointer variableType;
 			
-			/**
-			 * @brief Constructs a new Comprehension Expression object.
-			 * @param bodyExpression The value-producing expression.
-			 * @param condition Optional filtering expression.
-			 * @param iterable The source collection.
-			 * @param source Shared pointer to the source code location.
-			 * @param variable The name of the iterator.
-			 * @param variableType The type node of the iterator.
-			 */
 			ComprehensionExpression(
 				ExpressionSharedPointer bodyExpression,
 				ExpressionSharedPointer condition,
@@ -1834,6 +1827,32 @@ namespace uranite::ast {
 				std::vector<ExpressionSharedPointer> elements,
 				const lookup::SourceSharedPointer& source
 			) : Expression( Node::Kind::TupleExpression, source ),
+				elements( std::move( elements ) ) {
+			}
+			
+		};
+		
+		struct MapLiteralExpression : Expression {
+			
+			std::vector<std::pair<ExpressionSharedPointer, ExpressionSharedPointer>> entries;
+			
+			MapLiteralExpression(
+				std::vector<std::pair<ExpressionSharedPointer, ExpressionSharedPointer>> entries,
+				const lookup::SourceSharedPointer& source
+			) : Expression( Node::Kind::MapLiteralExpression, source ),
+				entries( std::move( entries ) ) {
+			}
+			
+		};
+		
+		struct SetLiteralExpression : Expression {
+			
+			std::vector<ExpressionSharedPointer> elements;
+			
+			SetLiteralExpression(
+				std::vector<ExpressionSharedPointer> elements,
+				const lookup::SourceSharedPointer& source
+			) : Expression( Node::Kind::SetLiteralExpression, source ),
 				elements( std::move( elements ) ) {
 			}
 			
@@ -2399,7 +2418,7 @@ namespace uranite::ast {
 			std::string constraint;
 			ExpressionSharedPointer expression;
 		};
-
+		
 		struct InlineAssemblyArchVariant {
 			std::string targetArch;
 			std::string asmTemplate;
@@ -2407,16 +2426,16 @@ namespace uranite::ast {
 			std::vector<InlineAssemblyOperand> inputs;
 			std::vector<std::string> clobbers;
 		};
-
+		
 		struct InlineAssemblyStatement : Statement {
-
+			
 			bool isVolatile;
 			std::string asmTemplate;
 			std::vector<InlineAssemblyOperand> outputs;
 			std::vector<InlineAssemblyOperand> inputs;
 			std::vector<std::string> clobbers;
 			std::vector<InlineAssemblyArchVariant> archVariants;
-
+			
 			InlineAssemblyStatement(
 				bool isVolatile,
 				const std::string& asmTemplate,
@@ -2431,7 +2450,7 @@ namespace uranite::ast {
 				inputs( std::move( inputs ) ),
 				clobbers( std::move( clobbers ) ) {
 			}
-
+			
 			InlineAssemblyStatement(
 				bool isVolatile,
 				std::vector<InlineAssemblyArchVariant> archVariants,
@@ -2440,7 +2459,7 @@ namespace uranite::ast {
 				isVolatile( isVolatile ),
 				archVariants( std::move( archVariants ) ) {
 			}
-
+			
 		};
 		
 		/**
