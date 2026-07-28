@@ -334,6 +334,7 @@ namespace uranite::compiler {
 				existingDeclarationNames.insert( existingIdentifier );
 			}
 		}
+		std::set<std::string> foundImportedIdentifiers;
 		for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleProgram->declarations ) {
 			if( moduleDeclaration == nullptr ) {
 				continue;
@@ -363,6 +364,10 @@ namespace uranite::compiler {
 			else if( moduleDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
 				declarationIdentifier = static_cast<ast::nodes::ConstantDeclaration&>( *moduleDeclaration ).name;
 			}
+			if( isSelectiveImportOperation && declarationIdentifier.empty() == false &&
+				selectivelyImportedIdentifiers.count( declarationIdentifier ) > 0 ) {
+				foundImportedIdentifiers.insert( declarationIdentifier );
+			}
 			bool isVisibleIdentifier = moduleDeclaration->access == ast::AccessModifier::Public || exportedIdentifiers.count( declarationIdentifier );
 			if( isVisibleIdentifier == false && moduleDeclaration->access != ast::AccessModifier::Default ) {
 				continue;
@@ -388,6 +393,24 @@ namespace uranite::compiler {
 				existingDeclarationNames.insert( declarationIdentifier );
 			}
 			targetProgram.declarations.push_back( moduleDeclaration );
+		}
+		if( isSelectiveImportOperation && importDeclaration != nullptr ) {
+			for( const ast::nodes::ImportItem& importItem : importDeclaration->importItems ) {
+				if( foundImportedIdentifiers.count( importItem.name ) == 0 ) {
+					std::string formattedModulePath;
+					for( size_t pathIndex = 0; pathIndex < importDeclaration->path.size(); pathIndex++ ) {
+						if( pathIndex > 0 ) {
+							formattedModulePath += ".";
+						}
+						formattedModulePath += importDeclaration->path[pathIndex];
+					}
+					std::string errorMessage = fmt::format(
+						"cannot import \"{}\" from module \"{}\": entity does not exist",
+						importItem.name, formattedModulePath
+					);
+					this->diagnostic.error( importDeclaration->source, errorMessage );
+				}
+			}
 		}
 		return true;
 	}
@@ -819,7 +842,18 @@ namespace uranite::compiler {
 					spdlog::info( "Executable written to \"{}\"", outputFilePath );
 				}
 				if( this->options.executeAfterCompilation && this->options.targetTriple.empty() ) {
-					std::string executionCommand = outputFilePath;
+					std::string executionCommand;
+					if( this->options.gdbFlags.has_value() ) {
+						if( this->options.gdbFlags->empty() ) {
+							executionCommand = fmt::format( "gdb --args {}", outputFilePath );
+						}
+						else {
+							executionCommand = fmt::format( "gdb {} --args {}", *this->options.gdbFlags, outputFilePath );
+						}
+					}
+					else {
+						executionCommand = outputFilePath;
+					}
 					for( std::string& executionArgument : this->options.arguments ) {
 						executionCommand = fmt::format( "{} {}", executionCommand, executionArgument );
 					}
