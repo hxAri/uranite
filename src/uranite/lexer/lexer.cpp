@@ -704,6 +704,7 @@ namespace uranite::lexer {
 					break;
 				}
 				case '{':
+					this->parenDepth++;
 					this->tokens.push_back( token::Token( token::Type::LeftBrace, operatorSource, "{" ) );
 					break;
 				case '|': {
@@ -716,6 +717,7 @@ namespace uranite::lexer {
 					break;
 				}
 				case '}':
+					this->parenDepth--;
 					this->tokens.push_back( token::Token( token::Type::RightBrace, operatorSource, "}" ) );
 					break;
 				case '~':
