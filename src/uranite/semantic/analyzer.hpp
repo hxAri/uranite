@@ -166,6 +166,7 @@ namespace uranite::semantic {
 			 * @return The return type of the call.
 			 */
 			TypeSharedPointer analyzeCallExpression( ast::nodes::CallExpression& expression );
+			TypeSharedPointer substituteGenericParameters( TypeSharedPointer type, const std::unordered_map<std::string, TypeSharedPointer>& substitutionMap );
 			
 			/**
 			 * @brief Analyzes a class declaration and its members.
@@ -447,11 +448,11 @@ namespace uranite::semantic {
 			
 			/** @brief The registry containing all known primitive and user-defined types. */
 			Registry typeRegistry;
-
+			
 			std::string userSourceFile_;
 			std::unordered_set<std::string> userImportedIdentifiers_;
 			bool isInUserCode_ = false;
-
+			
 	};
 	
 } // namespace uranite::semantic
