@@ -2,6 +2,7 @@
 //
 // @author hxAri (hxari)
 // @create 2025-02-24 15:15
+// @update 2026-07-27 01:25
 // @github https://github.com/uranite-lang/uranite
 //
 // Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -50,11 +51,14 @@ static void uranite_exception_cleanup( _Unwind_Reason_Code reason, struct _Unwin
     free( exc );
 }
 
-typedef struct {
+typedef struct UraniteThrowableLayout {
+    void* itable;
     int64_t code;
     char* file;
     int64_t line;
     char* message;
+    struct UraniteThrowableLayout* previous;
+    void* traceback;
 } UraniteThrowableLayout;
 
 static void print_source_context( const char* filepath, int64_t errorLine ) {
@@ -117,17 +121,33 @@ static void print_call_stack( void ) {
     }
 }
 
-static void report_unhandled_exception( void* object, const char* typeName ) {
-    UraniteThrowableLayout* throwable = (UraniteThrowableLayout*)object;
+static void print_throwable( UraniteThrowableLayout* throwable, const char* typeName, int depth ) {
+    if( throwable == NULL ) {
+        return;
+    }
     const char* name = ( typeName != NULL && typeName[0] != '\0' ) ? typeName : "Exception";
     const char* message = ( throwable->message != NULL ) ? throwable->message : "(no message)";
     const char* file = throwable->file;
     int64_t line = throwable->line;
+    int64_t code = throwable->code;
 
-    fprintf( stderr, "\n" );
-    print_call_stack();
+    if( depth == 0 ) {
+        if( code != 0 ) {
+            fprintf( stderr, "\n\033[1;31mUnhandled %s\033[0m: \033[1;33m%ld\033[0m: %s\n", name, (long)code, message );
+        }
+        else {
+            fprintf( stderr, "\n\033[1;31mUnhandled %s\033[0m: %s\n", name, message );
+        }
+    }
+    else {
+        if( code != 0 ) {
+            fprintf( stderr, "\n\033[1;35mCaused by %s\033[0m: \033[1;33m%ld\033[0m: %s\n", name, (long)code, message );
+        }
+        else {
+            fprintf( stderr, "\n\033[1;35mCaused by %s\033[0m: %s\n", name, message );
+        }
+    }
 
-    fprintf( stderr, "\n\033[1;31mUnhandled %s\033[0m: %s\n", name, message );
     if( file != NULL && file[0] != '\0' && line > 0 ) {
         fprintf( stderr, "  at \033[1;36m%s:%ld\033[0m\n\n", file, (long)line );
         print_source_context( file, line );
@@ -136,6 +156,18 @@ static void report_unhandled_exception( void* object, const char* typeName ) {
     else {
         fprintf( stderr, "\n" );
     }
+
+    if( throwable->previous != NULL ) {
+        print_throwable( throwable->previous, "Exception", depth + 1 );
+    }
+}
+
+static void report_unhandled_exception( void* object, const char* typeName ) {
+    UraniteThrowableLayout* throwable = (UraniteThrowableLayout*)object;
+
+    fprintf( stderr, "\n" );
+    print_call_stack();
+    print_throwable( throwable, typeName, 0 );
 }
 
 void __uranite_throw( void* object, const char* typeName ) {
