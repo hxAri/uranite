@@ -255,6 +255,71 @@ namespace uranite::semantic {
 				}
 			}
 		}
+		if( target->kind == Type::Kind::Interface && source->kind == Type::Kind::Interface ) {
+			InterfaceTypeSharedPointer targetInterfaceType = std::static_pointer_cast<InterfaceType>( target );
+			InterfaceTypeSharedPointer sourceInterfaceType = std::static_pointer_cast<InterfaceType>( source );
+			if( sourceInterfaceType->astDeclaration && targetInterfaceType->astDeclaration && sourceInterfaceType->astDeclaration == targetInterfaceType->astDeclaration ) {
+				return true;
+			}
+			std::vector<TypeSharedPointer> typesToCheck = sourceInterfaceType->superInterfaces;
+			if( typesToCheck.empty() && sourceInterfaceType->astDeclaration ) {
+				for( ast::nodes::TypeNodeSharedPointer& superNode : sourceInterfaceType->astDeclaration->superInterfaces ) {
+					if( superNode->kind == ast::Node::Kind::SimpleType ) {
+						ast::nodes::SimpleTypeNode& simpleTypeNode = static_cast<ast::nodes::SimpleTypeNode&>( *superNode );
+						TypeSharedPointer resolvedType = this->lookupType( simpleTypeNode.name );
+						if( resolvedType ) {
+							typesToCheck.push_back( resolvedType );
+						}
+					}
+					else if( superNode->kind == ast::Node::Kind::GenericType ) {
+						ast::nodes::GenericTypeNode& genericTypeNode = static_cast<ast::nodes::GenericTypeNode&>( *superNode );
+						TypeSharedPointer resolvedType = this->lookupType( genericTypeNode.name );
+						if( resolvedType ) {
+							typesToCheck.push_back( resolvedType );
+						}
+					}
+				}
+			}
+			std::vector<TypeSharedPointer> checkedTypes;
+			while( typesToCheck.empty() == false ) {
+				TypeSharedPointer currentType = typesToCheck.back();
+				typesToCheck.pop_back();
+				if( currentType == nullptr || std::find( checkedTypes.begin(), checkedTypes.end(), currentType ) != checkedTypes.end() ) {
+					continue;
+				}
+				checkedTypes.push_back( currentType );
+				if( typeIdentityMatch( currentType, target ) ) {
+					return true;
+				}
+				if( currentType->kind == Type::Kind::Interface ) {
+					InterfaceTypeSharedPointer currentInterfaceType = std::static_pointer_cast<InterfaceType>( currentType );
+					if( currentInterfaceType->astDeclaration && targetInterfaceType->astDeclaration && currentInterfaceType->astDeclaration == targetInterfaceType->astDeclaration ) {
+						return true;
+					}
+					for( TypeSharedPointer& parentInterfaceType : currentInterfaceType->superInterfaces ) {
+						typesToCheck.push_back( parentInterfaceType );
+					}
+					if( currentInterfaceType->superInterfaces.empty() && currentInterfaceType->astDeclaration ) {
+						for( ast::nodes::TypeNodeSharedPointer& superNode : currentInterfaceType->astDeclaration->superInterfaces ) {
+							if( superNode->kind == ast::Node::Kind::SimpleType ) {
+								ast::nodes::SimpleTypeNode& simpleTypeNode = static_cast<ast::nodes::SimpleTypeNode&>( *superNode );
+								TypeSharedPointer resolvedType = this->lookupType( simpleTypeNode.name );
+								if( resolvedType ) {
+									typesToCheck.push_back( resolvedType );
+								}
+							}
+							else if( superNode->kind == ast::Node::Kind::GenericType ) {
+								ast::nodes::GenericTypeNode& genericTypeNode = static_cast<ast::nodes::GenericTypeNode&>( *superNode );
+								TypeSharedPointer resolvedType = this->lookupType( genericTypeNode.name );
+								if( resolvedType ) {
+									typesToCheck.push_back( resolvedType );
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer sourceClassType = std::static_pointer_cast<ClassType>( source );
 			if( sourceClassType->baseClass && typeIdentityMatch( sourceClassType->baseClass, target ) ) {
@@ -317,7 +382,7 @@ namespace uranite::semantic {
 			return true;
 		}
 		if( target->kind == Type::Kind::Optional ) {
-			if( source->isVoid() ) {
+			if( source->isVoid() || source->isNone() ) {
 				return true;
 			}
 			OptionalTypeSharedPointer targetOptionalType = std::static_pointer_cast<OptionalType>( target );
@@ -491,10 +556,13 @@ namespace uranite::semantic {
 		if( x->equals( y ) ) {
 			return true;
 		}
-		if( x->kind == Type::Kind::Optional && y->isVoid() ) {
+		if( x->kind == Type::Kind::Optional && ( y->isVoid() || y->isNone() ) ) {
 			return true;
 		}
-		if( y->kind == Type::Kind::Optional && x->isVoid() ) {
+		if( y->kind == Type::Kind::Optional && ( x->isVoid() || x->isNone() ) ) {
+			return true;
+		}
+		if( x->isNone() || y->isNone() ) {
 			return true;
 		}
 		if( x->kind == Type::Kind::Optional ) {
@@ -589,6 +657,10 @@ namespace uranite::semantic {
 		}
 	}
 	
+	void Registry::unregisterType( const std::string& name ) {
+		this->userTypesType.erase( name );
+	}
+	
 	void Registry::registerAlias( const std::string& shortName, const std::string& qualifiedName ) {
 		this->typeAliases[shortName] = qualifiedName;
 	}
@@ -618,7 +690,7 @@ namespace uranite::semantic {
 		}
 		return false;
 	}
-
+	
 	std::vector<std::string> Registry::typeNames() const {
 		std::vector<std::string> names;
 		for( std::pair<std::string,TypeSharedPointer> primitiveEntry : this->primitivesTypes ) {
