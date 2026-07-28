@@ -44,6 +44,7 @@ namespace uranite::ir::mir {
 		
 		// Declaration lowering
 		void lowerFunctionDefinition( hir::HIRFunctionDefinition& hirFunction );
+		void lowerNestedFunction( hir::HIRFunctionDefinition& hirNested );
 		void lowerClassDefinition( hir::HIRClassDefinition& hirClass );
 		void lowerStructDefinition( hir::HIRStructDefinition& hirStruct );
 		void lowerEnumMethodDefinitions( hir::HIREnumDefinition& hirEnum );
@@ -90,24 +91,34 @@ namespace uranite::ir::mir {
 		MIRInstructionIdentifier nextInstructionIdentifier = 0;
 		std::string currentClassName;
 		std::string currentParentClassName;
-
+		
 		// Maps variable names to their MIR variable identifiers within current function
 		std::unordered_map<std::string, MIRVariableIdentifier> variableNameMap;
-
+		
 		// Lambda counter for generating unique names
 		unsigned int lambdaCounter = 0;
-
+		
+		// Captured variable names per nested function (populated by lowerNestedFunction)
+		std::unordered_map<std::string, std::vector<std::string>> nestedFunctionCaptures;
+		
+		// Free variable collection for nested functions and lambdas
+		void collectFreeVariables(
+			const hir::HIRNodeSharedPointer& node,
+			const std::unordered_set<std::string>& boundNames,
+			std::vector<std::string>& capturedNames,
+			std::unordered_set<std::string>& seenCaptures );
+		
 		// Deferred statements accumulated during function lowering (emitted LIFO before returns)
 		std::vector<hir::HIRNodeSharedPointer> deferredStatements;
-
+		
 		void emitDeferredStatements();
-
+		
 		// Active landing pad for try/catch — when set, calls emit InvokeFunction instead of CallFunction
 		MIRBlockIdentifier activeLandingPad = INVALID_BLOCK_IDENTIFIER;
-
+		
 		// Generic class type substitutions: className -> (paramName -> concreteTypeName)
 		std::unordered_map<std::string, std::unordered_map<std::string, std::string>> genericClassSubstitutions;
-
+		
 		const semantic::Registry* typeRegistry;
 		diagnostic::Engine& diagnosticEngine;
 	
