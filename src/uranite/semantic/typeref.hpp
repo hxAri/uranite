@@ -56,6 +56,7 @@ namespace uranite::semantic {
 			Integer,
 			Interface,
 			Meta,       /**< Meta<T> — type-as-value */
+			None,       /**< None — absence of value, distinct from Void */
 			Optional,
 			Pointer,
 			Reference,
@@ -181,6 +182,10 @@ namespace uranite::semantic {
 		bool isVoid() const {
 			return this->kind == Kind::Void ||
 				this->qualified == qname::VOID || this->qualified == qname::PRIM_VOID;
+		}
+		
+		bool isNone() const {
+			return this->kind == Kind::None;
 		}
 		
 		/**
@@ -351,6 +356,9 @@ namespace uranite::semantic {
 		
 		/** @brief Types of keyword-only params (parallel to keywordOnlyParamNames). */
 		std::vector<TypeSharedPointer> keywordOnlyParamTypes;
+		
+		/** @brief Names of generic type parameters declared on this function. */
+		std::vector<std::string> genericParameterNames;
 		
 		/** @brief The names of the function's parameters, used for snippet generation. */
 		std::vector<std::string> parameterNames;
@@ -647,13 +655,13 @@ namespace uranite::semantic {
 			}
 			return nullptr;
 		}
-
+		
 		bool implementsInterface( const std::string& qualifiedName ) const;
-
+		
 	};
-
+	
 	using ClassTypeSharedPointer = std::shared_ptr<ClassType>;
-
+	
 	/**
 	 * @brief Represents a structd data type within the compiler's type system.
 	 * 
@@ -869,7 +877,7 @@ namespace uranite::semantic {
 			}
 			return nullptr;
 		}
-
+		
 		bool extendsInterface( const std::string& qualifiedName ) const {
 			for( const TypeSharedPointer& superIface : this->superInterfaces ) {
 				if( superIface->qualified == qualifiedName ||
@@ -884,9 +892,9 @@ namespace uranite::semantic {
 			}
 			return false;
 		}
-
+		
 	};
-
+	
 	using InterfaceTypeSharedPointer = std::shared_ptr<InterfaceType>;
 	
 	/**
@@ -1314,6 +1322,11 @@ namespace uranite::semantic {
 				return this->voidType;
 			}
 			
+			TypeSharedPointer getNone() const {
+				static TypeSharedPointer noneType = std::make_shared<Type>( Type::Kind::None, "None" );
+				return noneType;
+			}
+			
 			/**
 			 * @brief Checks if the source type can be assigned to the target type.
 			 *
@@ -1442,6 +1455,7 @@ namespace uranite::semantic {
 			 * @param type The type reference to associate with the name.
 			 */
 			void registerType( const std::string& name, TypeSharedPointer type );
+		void unregisterType( const std::string& name );
 			
 			void registerAlias( const std::string& shortName, const std::string& qualifiedName );
 			
