@@ -1,7 +1,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:30
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/hash-set.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -19,7 +19,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.collection.hashset
+package uranite.collection.hash-set
 
 from uranite.collection.array-list import ArrayList
 from uranite.collection.collection import Collection
@@ -82,6 +82,18 @@ public class HashSet<E> implements MutableSet<E>:
         self.data = new Memory<E>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
+
+    public function HashSet( self, Memory<E> elements, Int elementCount ) -> Void:
+        self.capacity = elementCount * 2
+        if self.capacity < 16:
+            self.capacity = 16
+        self.data = new Memory<E>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+        Int copyIndex = 0
+        while copyIndex < elementCount:
+            self.add( elements.get( copyIndex ) )
+            copyIndex = copyIndex + 1
 
     private function computeIndex( self, E element ) -> Int:
         
