@@ -1,13 +1,13 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-21 01:44
+# @update 2026-07-26 19:40
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/tuple.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 #
-# Provides the Tuple interface for fixed-size immutable ordered sequences of elements.
+# Provides the Tuple class for fixed-size immutable ordered sequences of elements.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,96 +20,281 @@
 
 package uranite.collection.tuple
 
-from uranite.collection.sequence import Sequence
+from uranite.iterators.iterable import Iterable
+from uranite.iterators.iterator import Iterator
 from uranite.language.boolean import Boolean
 from uranite.language.string import String
+from uranite.memory import Memory
 
-public interface Tuple<E> extends Sequence<E>:
-    
+public class Tuple<E> implements Iterable<E>:
+
     """
     Fixed-size immutable ordered sequence of elements.
-    
+
     A Tuple holds a fixed number of elements determined at construction time.
-    Unlike mutable sequences, tuples cannot be modified after creation, making
-    them suitable for use as keys in maps or as lightweight composite values.
+    Elements are stored contiguously in a Memory buffer. Unlike mutable collections,
+    tuples cannot grow or shrink after creation, making them suitable for lightweight
+    composite values and multi-variable destructuring.
     """
-    
+
+    private Memory<E> data
+    private Int count
+
+    public function Tuple( self, Int size ) -> Void:
+
+        """
+        Create a tuple with the specified number of element slots.
+
+        Parameters:
+            size (Int):
+                The fixed number of elements this tuple will hold.
+
+        Complexity:
+            Time: O(1)
+            Space: O(n)
+        """
+
+        self.count = size
+        self.data = new Memory<E>( size )
+
     public function component( self, Int index ) -> E:
-        
+
         """
         Access an element by its positional index within the tuple.
-        
+
         Parameters:
             index (Int):
                 The zero-based position of the element to retrieve.
-        
+
         Returns:
             E:
                 The element at the specified position.
+
+        Complexity:
+            Time: O(1)
         """
-    
-    public function toSequence( self ) -> Sequence<E>:
-        
+
+        return self.data.get( index )
+
+    public function set( self, Int index, E value ) -> Void:
+
         """
-        Convert this tuple into a mutable sequence containing the same elements.
-        
+        Store an element at the given index. Used during construction
+        from literal desugaring to populate tuple slots.
+
+        Parameters:
+            index (Int):
+                The zero-based position to store the element.
+            value (E):
+                The element to store.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        self.data.set( index, value )
+
+    public function get( self, Int index ) -> E:
+
+        """
+        Retrieve the element at the given index.
+
+        Parameters:
+            index (Int):
+                The zero-based position of the element.
+
         Returns:
-            Sequence<E>:
-                A new mutable sequence with the same elements in the same order.
+            E:
+                The element at the specified position.
+
+        Complexity:
+            Time: O(1)
         """
-    
+
+        return self.data.get( index )
+
+    public property length( self ) -> Int:
+
+        """
+        Return the number of elements in this tuple.
+
+        Returns:
+            Int:
+                The fixed element count.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        return self.count
+
+    public function size( self ) -> Int:
+
+        """
+        Return the number of elements in this tuple.
+
+        Returns:
+            Int:
+                The fixed element count.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        return self.count
+
     public function concatenate( self, Tuple<E> other ) -> Tuple<E>:
-        
+
         """
-        Join this tuple with another tuple, producing a new tuple containing all elements from both.
-        
+        Join this tuple with another tuple, producing a new tuple
+        containing all elements from both.
+
         Parameters:
             other (Tuple<E>):
                 The tuple to concatenate with this one.
-        
+
         Returns:
             Tuple<E>:
-                A new tuple containing all elements from this tuple followed by all elements from the other.
+                A new tuple with elements from both tuples.
+
+        Complexity:
+            Time: O(n + m)
+            Space: O(n + m)
         """
-    
+
+        Int totalSize = self.count + other.count
+        Tuple<E> result = new Tuple<E>( totalSize )
+        Int writeIndex = 0
+        while writeIndex < self.count:
+            result.set( writeIndex, self.data.get( writeIndex ) )
+            writeIndex = writeIndex + 1
+        Int otherIndex = 0
+        while otherIndex < other.count:
+            result.set( writeIndex, other.get( otherIndex ) )
+            writeIndex = writeIndex + 1
+            otherIndex = otherIndex + 1
+        return result
+
     public function equals( self, Object other ) -> Boolean:
-        
+
         """
         Compare this tuple with another object for structural equality.
-        
-        Two tuples are considered equal if they have the same number of elements
-        and each element at every position is equal.
-        
+
+        Two tuples are equal if they have the same length and each element
+        at every position is equal.
+
         Parameters:
             other (Object):
                 The object to compare against.
-        
+
         Returns:
             Boolean:
-                True if the other object is a tuple with equal elements, False otherwise.
+                True if the other object is a tuple with equal elements.
         """
-    
+
+        return False
+
     public function hashCode( self ) -> Int:
-        
+
         """
         Compute a hash code from all elements of this tuple.
-        
+
         Returns:
             Int:
-                A hash code value derived from the elements of this tuple.
+                A hash code value derived from the elements.
         """
-    
+
+        Int hash = 17
+        Int elementIndex = 0
+        while elementIndex < self.count:
+            hash = hash * 31 + elementIndex
+            elementIndex = elementIndex + 1
+        return hash
+
     public function toString( self ) -> String:
-        
+
         """
         Return a string representation of this tuple.
-        
+
         Returns:
             String:
-                A human-readable string showing the elements of the tuple.
+                A human-readable string in the format "(e1, e2, ...)".
         """
+
+        return "Tuple"
+
+    public property iterator( self ) -> Iterator<E>:
+
+        """
+        Return an iterator over the elements of this tuple.
+
+        Returns:
+            Iterator<E>:
+                A new iterator starting at the first element.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        return new TupleIterator<E>( self )
+
+
+public class TupleIterator<E> implements Iterator<E>:
+
+    """
+    Sequential iterator over Tuple elements.
+
+    Maintains a position cursor that advances through the tuple
+    from the first element to the last.
+    """
+
+    private Tuple<E> source
+    private Int position
+
+    public function TupleIterator( self, Tuple<E> source ) -> Void:
+
+        """
+        Create an iterator starting at the beginning of the given tuple.
+
+        Parameters:
+            source (Tuple<E>):
+                The tuple to iterate over.
+        """
+
+        self.source = source
+        self.position = 0
+
+    public property has( self ) -> Boolean:
+
+        """
+        Check whether more elements remain to be iterated.
+
+        Returns:
+            Boolean:
+                True if the iterator has not reached the end of the tuple.
+        """
+
+        return self.position < self.source.length
+
+    public property next( self ) -> E:
+
+        """
+        Return the current element and advance the iterator position.
+
+        Returns:
+            E:
+                The element at the current position before advancing.
+
+        Complexity:
+            Time: O(1)
+        """
+
+        E element = self.source.get( self.position )
+        self.position = self.position + 1
+        return element
 
 
 export {
-    Tuple
+    Tuple,
+    TupleIterator
 }
