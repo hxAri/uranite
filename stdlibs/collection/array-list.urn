@@ -1,7 +1,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:30
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/array-list.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -19,7 +19,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.collection.arraylist
+package uranite.collection.array-list
 
 from uranite.collection.collection import Collection
 from uranite.collection.mutable-sequence import MutableSequence
@@ -81,6 +81,18 @@ public class ArrayList<E> implements MutableSequence<E>:
         self.data = new Memory<E>( self.capacity )
         self.count = 0
     
+    public function ArrayList( self, Memory<E> elements, Int elementCount ) -> Void:
+        self.capacity = elementCount * 2
+        if self.capacity < 16:
+            self.capacity = 16
+        self.data = new Memory<E>( self.capacity )
+        self.count = 0
+        Int copyIndex = 0
+        while copyIndex < elementCount:
+            self.data.set( self.count, elements.get( copyIndex ) )
+            self.count = self.count + 1
+            copyIndex = copyIndex + 1
+
     public function append( self, E element ) -> ArrayList<E>:
         
         """
