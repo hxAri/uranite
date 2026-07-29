@@ -2,16 +2,16 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-07-27 21:50
+# @update 2026-07-28 01:34
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/tutorials/testing.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
-# Supreme Graph Processing, Combinatorial Analysis, and Polymorphic Memory Stress Test.
-# Designed to aggressively hunt segmentation faults and compiler memory leaks.
-# Integrates deep generics, interfaces, inheritance, structs, enums, match expressions,
-# nullables, explicit memory deletion, defers, closures, and compound assignments.
+# Supreme Compiler Architecture Stress Test and Verification.
+# Aggressively tests Collection Literals, Backed Enums, Traits, Abstract Classes,
+# Polymorphic Dispatch, Closures, and Graph Combinatorics.
+# Validates memory layout and runtime evaluation integrity.
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -41,17 +41,24 @@ from uranite.iterators import Iterable
 from uranite.io import puts
 from uranite.language.double import Double
 
-enum ResonancePhase:
-    unit Quiescent
-    unit Oscillating
-    unit Cascading
-    unit Divergent
+enum ResonancePhase backed F64:
+    
+    unit Quiescent    0.5:
+        public override property expand( self ) -> F64:
+            return ( self.value * 2 ) + 4
+    
+    unit Oscillating  1.2
+    unit Cascading    2.5
+    unit Divergent    0.0
+    
+    public property expand( self ) -> F64:
+        return self.value * 2
 
-enum CardinalDirection:
-    unit North
-    unit South
-    unit East
-    unit West
+enum CardinalDirection backed String:
+    unit North  "N"
+    unit South  "S"
+    unit East   "E"
+    unit West   "W"
 
 interface Transmittable:
     
@@ -61,45 +68,69 @@ interface Displayable:
     
     public function displayInformation( self ) -> Void;
 
-class BaseEntity:
+trait SpatialAnalyzer:
+    
+    public function computeSpatialHash( self ) -> I64:
+        puts( "Executing SpatialAnalyzer trait computation" )
+        return 1024
+
+abstract class BaseEntity:
     
     public String designation
     
     public function BaseEntity( self, String desig ) -> Void:
         self.designation = desig
+        
+    public abstract function getEntitySignature( self ) -> String;
 
 class QuantumVertex extends BaseEntity implements Transmittable:
     
     public F64 baselineFrequency
     
     public function QuantumVertex( self, String desig, F64 frequency ) -> Void:
-        self.designation = desig
+        parent( desig )
         self.baselineFrequency = frequency
     
+    public override function getEntitySignature( self ) -> String:
+        return self.designation
+    
     public function evaluateResonance( self ) -> F64:
-        return self.baselineFrequency * 1.61803
+        return self.baselineFrequency * ResonancePhase.Oscillating.value
 
-class GeometricShape:
+abstract class GeometricShape:
     
     public String shapeKind
     
     public function GeometricShape( self, String kind ) -> Void:
         self.shapeKind = kind
     
-    public virtual function calculateArea( self ) -> I64:
-        return 0
+    public abstract function calculateArea( self ) -> I64;
 
 class PerfectSquare extends GeometricShape implements Displayable:
     
     public I64 sideLength
     
     public function PerfectSquare( self, I64 side ) -> Void:
-        self.shapeKind = "PerfectSquare"
+        parent( "PerfectSquare" )
         self.sideLength = side
     
     public override function calculateArea( self ) -> I64:
         return self.sideLength * self.sideLength
     
+    public function displayInformation( self ) -> Void:
+        puts( "Displayable: ", self.shapeKind, " with area ", self.calculateArea() )
+
+class PerfectCircle extends GeometricShape implements Displayable:
+    
+    public I64 radius
+    
+    public function PerfectCircle( self, I64 r ) -> Void:
+        parent( "PerfectCircle" )
+        self.radius = r
+        
+    public override function calculateArea( self ) -> I64:
+        return self.radius * self.radius * 3
+        
     public function displayInformation( self ) -> Void:
         puts( "Displayable: ", self.shapeKind, " with area ", self.calculateArea() )
 
@@ -136,6 +167,8 @@ class GenericContainer<T>:
 
 class SpatialTreeNode:
     
+    use SpatialAnalyzer
+    
     public GenericContainer<GeometricShape> nodeData
     public ?SpatialTreeNode leftBranch
     public ?SpatialTreeNode rightBranch
@@ -145,48 +178,9 @@ class SpatialTreeNode:
         self.leftBranch = None
         self.rightBranch = None
 
-struct EigenTensor:
-    public F64 realPart
-    public F64 imaginaryPart
-    
-    public function EigenTensor( self, F64 r, F64 i ) -> Void:
-        self.realPart = r
-        self.imaginaryPart = i
-    
-    public function computeMagnitudeSquared( self ) -> F64:
-        return self.realPart * self.realPart + self.imaginaryPart * self.imaginaryPart
-
 class DimensionalCollapseException extends Exception:
     public function DimensionalCollapseException( self, String message, I64 code, ?Exception cause ) -> Void:
         parent( message, code, cause )
-
-class PayloadCapsule<T>:
-    
-    public T dataPayload
-    public I64 traversalHops
-    
-    public function PayloadCapsule( self, T payload, I64 hops ) -> Void:
-        self.dataPayload = payload
-        self.traversalHops = hops
-    
-    public function extract( self ) -> T:
-        return self.dataPayload
-
-private function resolvePhaseMultiplier( ResonancePhase phase ) -> F64:
-    return match phase in \
-        ResonancePhase.Quiescent => 0.5, \
-        ResonancePhase.Oscillating => 1.2, \
-        ResonancePhase.Cascading => 2.5, \
-        ResonancePhase.Divergent => 0.0, \
-        * => 1.0
-
-private function mapDirectionToCoordinate( CardinalDirection direction ) -> I32:
-    return match direction in \
-        CardinalDirection.North => 1, \
-        CardinalDirection.South => 2, \
-        CardinalDirection.East => 3, \
-        CardinalDirection.West => 4, \
-        * => 0 - 1
 
 private function computeRecursiveFactorial( I64 number ) -> I64:
     if number <= 1:
@@ -206,51 +200,58 @@ private function enumerate<E>( Iterable<E> elements, Int start=0 ) -> Generator<
         puts( "Loop enumerate: yielding position ", position )
         yield new Pair<>( position++, element )
 
-private function listOf<V>( V args[] ) -> MutableSequence<V>:
-    ArrayList<V> lists = new ArrayList<>()
-    for V argument in args:
-        puts( "Loop listOf: adding argument to list" )
-        lists.add( argument )
-    return lists
-
-private function mapOf<V>( V kwargs{} ) -> Map<String,V>:
-    HashMap<String,V> maps = new HashMap<>()
-    for String keyset, V value in kwargs:
-        puts( "Loop mapOf: putting keyset ", keyset )
-        maps.put( keyset, value )
-    return maps
-
-private function setOf<V>( V args[] ) -> Set<V>:
-    Set<V> sets = new HashSet<>()
-    for V argument in args:
-        puts( "Loop setOf: adding argument to set" )
-        sets.add( argument )
-    return sets
-
 private function initializeDataWarehouse() -> Map<String, MutableSequence<String>>:
-    return mapOf<MutableSequence<String>>(
-        Alpha=listOf<String>( "Beta", "Gamma", "Delta" ),
-        Beta=listOf<String>( "Epsilon", "Zeta" ),
-        Gamma=listOf<String>( "Zeta", "Eta" ),
-        Delta=listOf<String>( "Eta", "Theta" ),
-        Epsilon=listOf<String>( "Iota" ),
-        Zeta=listOf<String>( "Iota", "Kappa" ),
-        Eta=listOf<String>( "Kappa", "Lambda" ),
-        Theta=listOf<String>( "Lambda" ),
-        Iota=listOf<String>( "Mu" ),
-        Kappa=listOf<String>( "Mu" ),
-        Lambda=listOf<String>( "Mu" ),
-        Mu=listOf<String>()
-    )
+    Map<String,MutableSequence<String>> graph = {
+        "Alpha": [
+            "Beta",
+            "Gamma",
+            "Delta"
+        ],
+        "Beta": [
+            "Epsilon",
+            "Zeta"
+        ],
+        "Gamma": [
+            "Zeta",
+            "Eta"
+        ],
+        "Delta": [
+            "Eta",
+            "Theta"
+        ],
+        "Epsilon": [
+            "Iota"
+        ],
+        "Zeta": [
+            "Iota",
+            "Kappa"
+        ],
+        "Eta": [
+            "Kappa",
+            "Lambda"
+        ],
+        "Theta": [
+            "Lambda"
+        ],
+        "Iota": [
+            "Mu"
+        ],
+        "Kappa": [
+            "Mu"
+        ],
+        "Lambda": [
+            "Mu"
+        ],
+        "Mu": []
+    }
+    return graph
 
 private function calculateInDegrees( Map<String, MutableSequence<String>> graph ) -> Map<String, Int>:
     HashMap<String, Int> inDegrees = new HashMap<>()
     for String node, MutableSequence<String> edges in graph:
-        puts( "Loop calculateInDegrees outer: inspecting node ", node )
         if not inDegrees.containsKey( node ):
             inDegrees.put( node, 0 )
         for String target in edges:
-            puts( "Loop calculateInDegrees inner: incrementing degree for target ", target )
             if not inDegrees.containsKey( target ):
                 inDegrees.put( target, 0 )
             Int current = inDegrees.get( target )
@@ -262,20 +263,17 @@ private function performTopologicalSort( Map<String, MutableSequence<String>> gr
     MutableSequence<String> queue = new ArrayList<>()
     Int queueSize = 0
     for String node, Int degree in inDegrees:
-        puts( "Loop performTopologicalSort init: checking node ", node, " with degree ", degree )
         if degree == 0:
             queue.add( node )
             queueSize = queueSize + 1
     Int head = 0
     while head < queueSize:
-        puts( "Loop performTopologicalSort process queue: head index ", head )
         String current = queue.get( head )
         head = head + 1
         sortedList.add( current )
         MutableSequence<String> neighbors = graph.get( current )
         if neighbors != None:
             for String neighbor in neighbors:
-                puts( "Loop performTopologicalSort neighbors: reducing degree for ", neighbor )
                 Int newDegree = inDegrees.get( neighbor ) - 1
                 inDegrees.put( neighbor, newDegree )
                 if newDegree == 0:
@@ -283,158 +281,160 @@ private function performTopologicalSort( Map<String, MutableSequence<String>> gr
                     queueSize = queueSize + 1
     return sortedList
 
-private function computeReachability( Map<String, MutableSequence<String>> graph, MutableSequence<String> topologicalOrder ) -> Map<String, Set<String>>:
-    HashMap<String, Set<String>> reachability = new HashMap<>()
-    Int totalNodes = 0
-    for String node in topologicalOrder:
-        puts( "Loop computeReachability init: allocating set for node ", node )
-        reachability.put( node, setOf<String>() )
-        totalNodes = totalNodes + 1
-    Int currentIndex = totalNodes - 1
-    while currentIndex >= 0:
-        puts( "Loop computeReachability backtrack: processing index ", currentIndex )
-        String current = topologicalOrder.get( currentIndex )
-        Set<String> currentReach = reachability.get( current )
-        MutableSequence<String> neighbors = graph.get( current )
-        if neighbors != None:
-            for String neighbor in neighbors:
-                puts( "Loop computeReachability direct edges: adding neighbor ", neighbor )
-                currentReach.add( neighbor )
-                Set<String> neighborReach = reachability.get( neighbor )
-                for String reachableNode in neighborReach:
-                    puts( "Loop computeReachability transitive edges: adding reachable node ", reachableNode )
-                    currentReach.add( reachableNode )
-        currentIndex = currentIndex - 1
-    return reachability
-
-private function analyzeNetworkSignatures( Map<String, Set<String>> reachability ) -> Void:
-    for String node, Set<String> reachableSet in reachability:
-        puts( "Loop analyzeNetworkSignatures outer: evaluating node ", node )
-        puts( "Node Signature [{}]:".format( node ) )
-        Int count = 0
-        for Int index, String target in enumerate<String>( reachableSet, start=1 ):
-            puts( "Loop analyzeNetworkSignatures inner: enumerating path ", index )
-            puts( "  -> Path {}: Reaches {}".format( index, target ) )
-            count = count + 1
-        if count == 0:
-            puts( "  -> Terminal Node (No outward paths)" )
-
-private function executeMathematicalAndLexicalStress() -> Void:
-    puts( "Initiating Mathematical and Lexical Stress Phase" )
+private function executeMathematicalAndLexicalStress() -> I64:
+    puts( "Initiating Mathematical, Lexical, and Literal Stress Phase" )
+    I64 faults = 0
+    
+    Set<String> uniqueSymbols = { "U", "r", "a", "n", "i", "t", "e" }
+    MutableSequence<I64> matrixVector = [ 100, 200, 300 ]
+    Map<String, I64> metrics = { "Core": 1, "Edge": 2 }
+    
+    puts( "Collection literals successfully allocated in memory" )
+    
     I64 compoundValue = 5
     compoundValue += 10
     compoundValue -= 3
     compoundValue *= 2
-    puts( "Compound operations resolved to: ", compoundValue )
+    
     I64 rangeSum = 0
     for I64 iterator in 0..10:
-        puts( "Loop exclusive range evaluation: step ", iterator )
         rangeSum += iterator
+        
     I64 oddSum = 0
     for I64 step in 1...15:
-        puts( "Loop inclusive range evaluation: step ", step )
         I64 remainder = step - ( step / 2 ) * 2
         if remainder == 0:
             continue
         oddSum += step
         if oddSum > 20:
-            puts( "Odd sum threshold breached, breaking loop" )
             break
-    for I64 cForIndex = 0; cForIndex < 3; cForIndex++:
-        puts( "Loop c-style iterator: index ", cForIndex )
+    
+    Callable<I64,<I64>> callback = lambda I64 seed: seed * seed + oddSum
+    
+    I64 callbackResult = callback( 6 )
+    
     function nestedStateMutator( I64 seed ) -> I64:
         return seed * seed + oddSum
-    puts( "Nested closure execution: ", nestedStateMutator( 6 ) )
-    puts( "Factorial computed (5): ", computeRecursiveFactorial( 5 ) )
-    puts( "Fibonacci computed (10): ", computeRecursiveFibonacci( 10 ) )
-    String lexiconStream = "UraniteCompiler"
-    for Char symbol in lexiconStream:
-        puts( "Loop lexical character extraction: ", symbol )
+    
+    I64 nestedResult = nestedStateMutator( 6 )
+    
+    puts( "Lambda function execution resolved to: ", callbackResult )
+    if callbackResult != 61:
+        puts( "FAULT: Lambda function capture mismatch" )
+        faults += 1
+    
+    puts( "Nested function execution resolved to: ", nestedResult )
+    if nestedResult != 61:
+        puts( "FAULT: Nested function capture mismatch" )
+        faults += 1
+    
+    if ResonancePhase.Cascading.name != "Cascading":
+        puts( "FAULT: Enum name property evaluation failed" )
+        faults += 1
+        
+    if ResonancePhase.Cascading.value != 2.5:
+        puts( "FAULT: Enum backed value property evaluation failed" )
+        faults += 1
+        
+    if CardinalDirection.East.value != "E":
+        puts( "FAULT: String-backed Enum value failed" )
+        faults += 1
 
-private function executePolymorphicTreeStress() -> Void:
-    puts( "Initiating Polymorphic Spatial Tree Allocation" )
+    return faults
+
+private function executePolymorphicTreeStress() -> I64:
+    puts( "Initiating Polymorphic Spatial Tree and Abstract Class Stress" )
+    I64 faults = 0
+    
     SystemConfiguration activeConfig = new SystemConfiguration( 8080, "localhost" )
-    puts( "System configuration locked on ", activeConfig.hostAddress, ":", activeConfig.operationalPort )
     Vector2D structuralVector = new Vector2D( 3.0, 4.0 )
-    puts( "Vector2D squared magnitude: ", structuralVector.computeSquaredLength() )
-    CardinalDirection searchPath = CardinalDirection.East
-    puts( "Search trajectory established mapped to coordinate: ", mapDirectionToCoordinate( searchPath ) )
-    GeometricShape baseShape = new GeometricShape( "BaseShape" )
+    
     PerfectSquare rootSquare = new PerfectSquare( 10 )
-    rootSquare.displayInformation()
+    PerfectCircle branchCircle = new PerfectCircle( 5 )
+    
     SpatialTreeNode rootNode = new SpatialTreeNode( rootSquare )
-    SpatialTreeNode branchLeft = new SpatialTreeNode( baseShape )
+    SpatialTreeNode branchLeft = new SpatialTreeNode( branchCircle )
     SpatialTreeNode branchRight = new SpatialTreeNode( new PerfectSquare( 5 ) )
+    
     rootNode.leftBranch = branchLeft
     rootNode.rightBranch = branchRight
-    ?SpatialTreeNode cursor = rootNode.rightBranch
-    if cursor != None:
-        puts( "Polymorphic node successfully retrieved from optional wrapper" )
-    puts( "Manually dismantling polymorphic spatial tree" )
+    
+    I64 traitHash = rootNode.computeSpatialHash()
+    puts( "Trait method resolution hash: ", traitHash )
+    if traitHash != 1024:
+        puts( "FAULT: Trait method dispatch failed" )
+        faults += 1
+        
+    GeometricShape polymorphicShape = rootNode.nodeData.retrieve()
+    if polymorphicShape.calculateArea() != 100:
+        puts( "FAULT: Abstract class polymorphic virtual dispatch failed" )
+        faults += 1
+        
     delete branchLeft
     delete branchRight
     delete rootNode
-    puts( "Spatial tree memory successfully purged" )
+    puts( "Spatial tree memory purged successfully" )
+    
+    return faults
 
-private function performStressTestVolatility() -> Void:
+private function performStressTestVolatility() -> I64:
     puts( "Initiating Volatility Stress Test and memory anomaly sequence" )
+    I64 faults = 0
     defer puts( "Volatility stress test cleanup operations successfully deferred and completed" )
     ?QuantumVertex unstableNode = new QuantumVertex( "AnomalyMatrix", 999.9 )
-    if unstableNode != None:
-        puts( "Unstable QuantumVertex node successfully manifested in heap" )
     try:
         I64 fluctuationIndex = 0
         while fluctuationIndex < 5:
-            puts( "Loop volatility fluctuation: expanding anomaly index ", fluctuationIndex )
             fluctuationIndex += 1
             if fluctuationIndex == 4:
                 raise new DimensionalCollapseException( "Critical dimensional strain detected at AnomalyMatrix", 101, None )
     except DimensionalCollapseException as ex:
         puts( "Intercepted DimensionalCollapseException, stabilizing memory continuum" )
     finally:
-        puts( "Executing mandatory purge of volatile allocations inside finally block" )
         delete unstableNode
+    return faults
 
 public function main() -> Void:
-    puts( "Starting Complex Collections and Extreme Graph Analysis..." )
+    puts( "Starting Supreme Compiler Verification..." )
     I64 startTotal = clock()
+    
+    I64 totalFaults = 0
+
     I64 startInit = clock()
     Map<String, MutableSequence<String>> network = initializeDataWarehouse()
     I64 endInit = clock()
-    Double elapsedInit = ( endInit - startInit ) / 1000000.0
-    puts( "Phase 1: Initialization complete in {} seconds".format( elapsedInit ) )
+    puts( "Phase 1: Literal Construction complete in {} seconds".format( ( endInit - startInit ) / 1000000.0 ) )
+
     I64 startDegree = clock()
     Map<String, Int> inDegrees = calculateInDegrees( network )
     I64 endDegree = clock()
-    Double elapsedDegree = ( endDegree - startDegree ) / 1000000.0
-    puts( "Phase 2: In-Degree calculation complete in {} seconds".format( elapsedDegree ) )
+    puts( "Phase 2: In-Degree mapping complete in {} seconds".format( ( endDegree - startDegree ) / 1000000.0 ) )
+
     I64 startSort = clock()
     MutableSequence<String> topologicalOrder = performTopologicalSort( network, inDegrees )
     I64 endSort = clock()
-    Double elapsedSort = ( endSort - startSort ) / 1000000.0
-    puts( "Phase 3: Topological Sort complete in {} seconds".format( elapsedSort ) )
-    I64 startReach = clock()
-    Map<String, Set<String>> reachability = computeReachability( network, topologicalOrder )
-    I64 endReach = clock()
-    Double elapsedReach = ( endReach - startReach ) / 1000000.0
-    puts( "Phase 4: Reachability Matrix complete in {} seconds".format( elapsedReach ) )
-    analyzeNetworkSignatures( reachability )
+    puts( "Phase 3: Topological Sort complete in {} seconds".format( ( endSort - startSort ) / 1000000.0 ) )
+
     I64 startMath = clock()
-    executeMathematicalAndLexicalStress()
+    totalFaults += executeMathematicalAndLexicalStress()
     I64 endMath = clock()
-    Double elapsedMath = ( endMath - startMath ) / 1000000.0
-    puts( "Phase 5: Mathematical Stress complete in {} seconds".format( elapsedMath ) )
+    puts( "Phase 4: Mathematical, Literal & Enum Validation complete in {} seconds".format( ( endMath - startMath ) / 1000000.0 ) )
+
     I64 startPoly = clock()
-    executePolymorphicTreeStress()
+    totalFaults += executePolymorphicTreeStress()
     I64 endPoly = clock()
-    Double elapsedPoly = ( endPoly - startPoly ) / 1000000.0
-    puts( "Phase 6: Polymorphic Tree evaluation complete in {} seconds".format( elapsedPoly ) )
+    puts( "Phase 5: Abstract Polymorphism & Traits Validation complete in {} seconds".format( ( endPoly - startPoly ) / 1000000.0 ) )
+
     I64 startStress = clock()
-    performStressTestVolatility()
+    totalFaults += performStressTestVolatility()
     I64 endStress = clock()
-    Double elapsedStress = ( endStress - startStress ) / 1000000.0
-    puts( "Phase 7: Volatility sequence complete in {} seconds".format( elapsedStress ) )
+    puts( "Phase 6: Volatility Sequence complete in {} seconds".format( ( endStress - startStress ) / 1000000.0 ) )
+
     I64 endTotal = clock()
     Double elapsedTotal = ( endTotal - startTotal ) / 1000000.0
     puts( "Total Analysis Time: {} seconds".format( elapsedTotal ) )
-    puts( "Supreme compiler benchmark PASSED" )
+    
+    if totalFaults == 0:
+        puts( "VERDICT: TEST PASSED" )
+    else:
+        puts( "VERDICT: COMPILER BUGS PRESENT (Total faults: ", totalFaults, ")" )
