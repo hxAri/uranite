@@ -2,7 +2,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-01 15:00
-# @update 2026-07-19 20:10
+# @update 2026-07-29 17:29
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -20,7 +20,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.examples.testing.iterables
+package uranite.examples.tutorials.iterables
 
 from uranite.io.console import puts
 from uranite.iterators.iterator import Iterator
