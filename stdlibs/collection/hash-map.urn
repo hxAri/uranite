@@ -1,7 +1,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:30
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/hash-map.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -19,7 +19,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.collection.hashmap
+package uranite.collection.hash-map
 
 from uranite.collection.array-list import ArrayList
 from uranite.collection.collection import Collection
@@ -89,6 +89,19 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.valueData = new Memory<V>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
+
+    public function HashMap( self, Memory<K> keys, Memory<V> values, Int entryCount ) -> Void:
+        self.capacity = entryCount * 2
+        if self.capacity < 16:
+            self.capacity = 16
+        self.keyData = new Memory<K>( self.capacity )
+        self.valueData = new Memory<V>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+        Int copyIndex = 0
+        while copyIndex < entryCount:
+            self.put( keys.get( copyIndex ), values.get( copyIndex ) )
+            copyIndex = copyIndex + 1
 
     private function computeIndex( self, K key ) -> Int:
         
