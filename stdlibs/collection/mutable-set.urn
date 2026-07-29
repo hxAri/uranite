@@ -1,7 +1,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:30
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/mutable-set.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.collection.mutableset
+package uranite.collection.mutable-set
 
 from uranite.collection.sequence import Sequence
 from uranite.collection.set import Set
