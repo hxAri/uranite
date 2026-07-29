@@ -1,5 +1,5 @@
 
-package main
+package uranite.examples.tutorials.hierarchy-minimal
 
 from uranite.io.console import puts
 
