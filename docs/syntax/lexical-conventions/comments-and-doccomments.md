@@ -1,6 +1,6 @@
 # Comments and Doccomments
 
-Uranite supports three comment forms: single-line comments (`#`), nestable block comments (`#{...}#`), and triple-quoted doccomments (`"""..."""`). Each form interacts differently with the lexer, the formatter, the linter, and the documentation generator. This document specifies how each form is parsed, where it is preserved or discarded, and the structured format required for public API documentation.
+Uranite supports three comment forms: single-line comments (`#`), nestable block comments (`#{...}#`), and triple-quoted doccomments (`"""..."""`). Each form serves a different purpose — single-line comments annotate implementation details, block comments disable sections of code, and doccomments provide structured documentation extracted by the documentation generator. This document specifies the syntax, placement rules, and structural format for each form.
 
 ---
 
@@ -10,17 +10,16 @@ Uranite supports three comment forms: single-line comments (`#`), nestable block
   - [Table of Contents](#table-of-contents)
   - [Single-Line Comments](#single-line-comments)
     - [Syntax](#syntax)
-    - [Lexer Behavior](#lexer-behavior)
     - [Interaction with Indentation](#interaction-with-indentation)
     - [Trailing Comments](#trailing-comments)
   - [Block Comments](#block-comments)
     - [Block Comment Syntax](#block-comment-syntax)
     - [Nesting](#nesting)
-    - [Lexer Behavior for Block Comments](#lexer-behavior-for-block-comments)
+    - [Inline Block Comments](#inline-block-comments)
+    - [Unterminated Block Comments](#unterminated-block-comments)
   - [Triple-Quoted Doccomments](#triple-quoted-doccomments)
     - [Doccomment Syntax](#doccomment-syntax)
     - [Placement Rules](#placement-rules)
-    - [Lexer Behavior for Doccomments](#lexer-behavior-for-doccomments)
     - [Doccomment Structural Format](#doccomment-structural-format)
     - [The Summary Line](#the-summary-line)
     - [The Parameters Section](#the-parameters-section)
@@ -29,13 +28,8 @@ Uranite supports three comment forms: single-line comments (`#`), nestable block
     - [The Complexity Section](#the-complexity-section)
     - [Extended Description](#extended-description)
     - [Complete Doccomment Example](#complete-doccomment-example)
-  - [The Comment Processing Pipeline](#the-comment-processing-pipeline)
-    - [Stage 1: Lexer Discards](#stage-1-lexer-discards)
-    - [Stage 2: CommentExtractor Harvests](#stage-2-commentextractor-harvests)
-    - [Stage 3: CommentReattacher Restores](#stage-3-commentreattacher-restores)
-    - [Stage 4: DoccommentParser Structures](#stage-4-doccommentparser-structures)
-    - [Stage 5: DoccommentValidator Verifies](#stage-5-doccommentvalidator-verifies)
-  - [Indentation Stripping in Doccomments](#indentation-stripping-in-doccomments)
+  - [Indentation in Doccomments](#indentation-in-doccomments)
+  - [Comment Preservation During Formatting](#comment-preservation-during-formatting)
   - [Linter Enforcement Rules](#linter-enforcement-rules)
   - [What Not to Do](#what-not-to-do)
 
@@ -53,23 +47,11 @@ A single-line comment begins with `#` and extends to the end of the line. Everyt
 I64 threshold = 100  # This is a trailing comment after code
 ```
 
-There is no multi-character variant like `//` or `--`. The `#` character is the sole single-line comment delimiter.
-
-### Lexer Behavior
-
-When the lexer encounters `#` (and the next character is not `{`, which would start a block comment), it calls `skipLineComment()`. This method advances the cursor position to the next newline character, consuming all bytes in between. No token is emitted. The comment text is completely discarded from the token stream — the parser never sees it.
-
-The newline character following the comment is not consumed by `skipLineComment()`. It remains for the main tokenization loop to process, which emits a `Newline` token and sets the `atLineStart` flag. This ensures that a comment at the end of a line does not suppress the line boundary.
+There is no multi-character variant like `//` or `--`. The `#` character is the sole single-line comment delimiter. If `#` is immediately followed by `{`, it begins a block comment instead (see [Block Comments](#block-comments)).
 
 ### Interaction with Indentation
 
-Comment-only lines do not produce `Indent` or `Dedent` tokens. The `handleIndentation()` method detects this case explicitly:
-
-1. At line start, `handleIndentation()` counts leading whitespace.
-2. After counting, it checks if the first non-whitespace character is `#`.
-3. If so, it calls `skipLineComment()` and returns immediately — no indentation comparison occurs.
-
-This means comments can appear at any indentation level without disturbing the block structure:
+Comment-only lines do not affect block structure. A line that contains only a `#` comment (with any amount of leading whitespace) is skipped entirely during indentation processing. This means comments can appear at any indentation level without opening or closing blocks:
 
 ```uranite
 public function process( I64 value ) -> I64:
@@ -81,17 +63,20 @@ public function process( I64 value ) -> I64:
     return 0
 ```
 
-In this example, the comment at level 0 between the `if` body and the `return 0` does not cause a `Dedent` from level 8 to level 0 followed by an `Indent` back to level 4. The lexer skips the comment line entirely and processes the next non-comment line normally. The `return 0` at indentation level 4 produces a `Dedent` from level 8 to level 4 as expected.
+In this example, the comment at level 0 between the `if` body and `return 0` does not close any blocks or open new ones. The compiler skips the comment line entirely and processes `return 0` at indentation level 4 normally — closing the `if` body (from level 8 to level 4) as expected.
+
+This behavior is important when commenting out code during debugging. You can comment out lines without worrying about disrupting the indentation structure of surrounding code.
 
 ### Trailing Comments
 
-A comment that follows code on the same line is also consumed by the lexer. The code tokens are emitted normally, then the `#` triggers `skipLineComment()`, which discards the rest of the line:
+A comment that follows code on the same line is called a trailing comment. The code tokens are processed normally, then the `#` causes the rest of the line to be discarded:
 
 ```uranite
 I64 bufferSize = 4096  # Maximum buffer allocation
+Boolean isReady = False   # Will be set to True after initialization
 ```
 
-The token stream for this line contains `Identifier("I64")`, `Identifier("bufferSize")`, `Assignment("=")`, `LiteralInteger("4096")`, `Newline`. The comment text "Maximum buffer allocation" is not present.
+The comment text is invisible to the compiler. It exists only in the source file for human readers.
 
 ---
 
@@ -109,15 +94,21 @@ Block comments open with `#{` and close with `}#`. They can span multiple lines:
 }#
 ```
 
-Block comments can also appear inline within a single line, though this is uncommon:
+Block comments produce no tokens. The entire content between `#{` and `}#` is discarded. Block comments are particularly useful for temporarily disabling sections of code during development:
 
 ```uranite
-I64 value = #{ temporary override }# 42
+#{
+public function oldImplementation( I64 value ) -> I64:
+    return value * 2
+}#
+
+public function newImplementation( I64 value ) -> I64:
+    return value * 3
 ```
 
 ### Nesting
 
-Block comments support nesting. The lexer tracks a `nestingDepth` counter that increments on each `#{` and decrements on each `}#`. The block comment is closed when the depth returns to zero:
+Block comments support nesting. Each `#{` increases a nesting depth, and each `}#` decreases it. The block comment is closed when the depth returns to zero:
 
 ```uranite
 #{
@@ -130,21 +121,34 @@ Block comments support nesting. The lexer tracks a `nestingDepth` counter that i
 }#
 ```
 
-The nesting support means that commenting out a section of code that already contains block comments works correctly — the inner `}#` delimiters do not prematurely close the outer comment.
+Nesting support means that commenting out a section of code that already contains block comments works correctly — the inner `}#` delimiters do not prematurely close the outer comment. This is a common need when iteratively disabling larger sections of code:
 
-### Lexer Behavior for Block Comments
+```uranite
+#{
+    # This entire block is commented out, including its own block comment
 
-When the lexer encounters `#` followed by `{`, it calls `skipBlockComment()`. This method:
+    public function helper() -> Void:
+        #{
+            This inner block comment was already here.
+            It does not interfere with the outer one.
+        }#
+        pass
+}#
+```
 
-1. Advances past the `{` character.
-2. Sets `nestingDepth` to 1.
-3. Loops through characters:
-   - On `#{`: increments `nestingDepth`, advances past both characters.
-   - On `}#`: decrements `nestingDepth`, advances past both characters. If depth reaches 0, returns.
-   - On any other character: advances one position.
-4. If the file ends before the block comment closes (`nestingDepth` never reaches 0), the comment runs to the end of the file. No explicit error is emitted for an unterminated block comment.
+### Inline Block Comments
 
-No token is emitted. The entire block comment content is discarded from the token stream.
+Block comments can appear inline within a single line, though this is uncommon:
+
+```uranite
+I64 value = #{ temporary override }# 42
+```
+
+The compiler sees only `I64 value = 42`. The block comment between `#{` and `}#` is discarded entirely.
+
+### Unterminated Block Comments
+
+If the file ends before a block comment is closed (the nesting depth never reaches zero), the comment runs to the end of the file. Everything from the opening `#{` to the last byte of the file is treated as comment content. No explicit error is emitted for an unterminated block comment — the code that was intended to follow the comment simply does not exist in the token stream.
 
 ---
 
@@ -171,7 +175,9 @@ public function fibonacci( I64 position ) -> I64:
 
     Complexity:
         Time: O(2^n)
+            Exponential due to redundant recursive calls without memoization.
         Space: O(n)
+            Call stack depth is proportional to the position value.
     """
 
     if position <= 1:
@@ -181,9 +187,11 @@ public function fibonacci( I64 position ) -> I64:
 
 Triple double-quotes (`"""`) are the canonical form. Triple single-quotes (`'''`) are accepted as an equivalent alternative.
 
+Doccomments have zero impact on compilation — they do not affect type checking, code generation, or program behavior. They exist solely for documentation purposes and are extracted by the documentation generator (`uranite-doc`) and validated by the linter (`uranite-fmt --lint`).
+
 ### Placement Rules
 
-Doccomments are placed **after** the declaration they document — inside the function or class body, before the implementation code. This is the opposite of many languages where documentation precedes the declaration:
+Doccomments are placed **after** the declaration they document — inside the function or class body, as the first statement before the implementation code. This is the opposite of many languages where documentation precedes the declaration:
 
 ```uranite
 public class EventDispatcher:
@@ -191,12 +199,11 @@ public class EventDispatcher:
     """
     Manages event registration and dispatch for application-level signals.
 
-    Parameters:
-        (none)
-
     Complexity:
         Time: O(1) for dispatch
+            Single hash lookup to find handler list, then sequential invocation.
         Space: O(n) where n is the number of registered handlers
+            Each registered handler reference stored in per-event lists.
     """
 
     private HashMap<String, ArrayList<Callable<Void, <String>>>> handlers
@@ -208,7 +215,9 @@ public class EventDispatcher:
 
         Complexity:
             Time: O(1)
+                Single allocation of an empty hash map.
             Space: O(1)
+                Only the handler map reference is stored.
         """
 
         self.handlers = new HashMap<>()
@@ -231,7 +240,9 @@ public class EventDispatcher:
 
         Complexity:
             Time: O(1) amortized
+                Hash map insertion is constant time on average, with rare rehashing.
             Space: O(1)
+                Stores one additional handler reference in the existing list.
         """
 
         if self.handlers.containsKey( eventName ) == False:
@@ -239,17 +250,11 @@ public class EventDispatcher:
         self.handlers.get( eventName ).add( handler )
 ```
 
-### Lexer Behavior for Doccomments
-
-The main compiler lexer treats triple-quoted strings as comments. When it encounters `"""` (or `'''`), it calls `skipTripleQuoteComment()`, which advances past all characters until the matching closing `"""` (or `'''`). No token is emitted.
-
-This means doccomments are invisible to the parser and semantic analyzer. They have zero impact on compilation — they do not appear in the AST, are not type-checked, and produce no code.
-
-The doccomment content is recovered separately by the formatter's `CommentExtractor` and the documentation generator's `DoccommentParser`, both of which re-scan the raw source text independently of the main lexer.
+This "after" placement convention applies to all documentable entities: classes, interfaces, enums, structs, functions, methods, and constructors.
 
 ### Doccomment Structural Format
 
-The `DoccommentParser` in the documentation generator (`src/uranite-doc/extractor/doccomment-parser.cpp`) parses doccomments into a structured `ParsedDoccomment` object. The parser recognizes six sections, identified by section headers ending with a colon:
+Doccomments follow a structured format with recognized sections. Each section is identified by a header ending with a colon, appearing on its own line:
 
 | Section | Header | Required For | Description |
 |---|---|---|---|
@@ -257,10 +262,10 @@ The `DoccommentParser` in the documentation generator (`src/uranite-doc/extracto
 | Extended Description | (lines after summary, before first section) | Optional | Multi-line detailed explanation, usage notes. |
 | Parameters | `Parameters:` | Functions with parameters | Typed parameter documentation. |
 | Returns | `Returns:` | Functions with return values | Return type and description. |
-| Raises | `Raises:` | Functions that throw | Exception types and conditions. |
+| Raises | `Raises:` | Functions that raise exceptions | Exception types and conditions. |
 | Complexity | `Complexity:` | All public entities (linter-enforced) | Big-O time and space bounds. |
 
-The parser processes the doccomment line by line, using section headers as state transitions. Each section header must appear on its own line, left-aligned relative to the doccomment body, followed by a colon.
+Sections must appear in this order when present. Omitting an optional section is fine; reordering sections produces linter warnings.
 
 ### The Summary Line
 
@@ -276,7 +281,7 @@ public function hash( I64 value ) -> I64:
     return value * 2654435761
 ```
 
-If the summary spans multiple lines before a blank line separator, the lines are joined with spaces. The summary ends at the first blank line, which transitions the parser to the Extended Description section.
+If the summary spans multiple lines before a blank line separator, the lines are joined with spaces. The summary ends at the first blank line, which transitions to the Extended Description or the first section header.
 
 ### The Parameters Section
 
@@ -309,7 +314,9 @@ public function clamp( I64 value, I64 minimum, I64 maximum ) -> I64:
 
     Complexity:
         Time: O(1)
+            At most two comparisons regardless of input.
         Space: O(1)
+            No additional memory allocated.
     """
 
     if value < minimum:
@@ -319,29 +326,83 @@ public function clamp( I64 value, I64 minimum, I64 maximum ) -> I64:
     return value
 ```
 
-The parser detects parameter entries by indentation level. Lines at the section's base indentation plus up to 8 spaces are treated as new parameter headers. Lines indented further are continuation text for the current parameter's description.
-
-The `(Type)` annotation in the parameter header is optional but recommended. The parser extracts it by finding the `(` and `)` delimiters:
+The `(Type)` annotation in the parameter header is optional but recommended:
 
 - `value (I64):` — name is "value", type is "I64"
 - `value:` — name is "value", type is unspecified
 - `value` — name is "value", type and colon both absent
 
+When the type annotation is present, the documentation generator can cross-reference it against the actual function signature and warn on mismatches.
+
 ### The Returns Section
 
-The "Returns:" section documents the function's return value. It follows the same indented structure:
+The "Returns:" section documents the function's return value. It follows the same indented structure as parameters:
 
-```
-Returns:
-    I64:
-        The computed result.
+```uranite
+public function absolute( I64 value ) -> I64:
+
+    """
+    Compute the absolute value of an integer.
+
+    Parameters:
+        value (I64):
+            The input integer.
+
+    Returns:
+        I64:
+            The non-negative absolute value. If value is I64 minimum
+            (-9223372036854775808), the result overflows.
+
+    Complexity:
+        Time: O(1)
+            Single comparison and conditional negation.
+        Space: O(1)
+            No additional memory allocated.
+    """
+
+    if value < 0:
+        return -value
+    return value
 ```
 
-The first line after "Returns:" is parsed as the return type (if it ends with `:`). Subsequent indented lines form the description. If the first line does not end with a colon, the entire text is treated as description only.
+The first line after "Returns:" is the return type (if it ends with `:`). Subsequent indented lines form the description. For `Void` functions, the "Returns:" section is typically omitted.
 
 ### The Raises Section
 
-The "Raises:" section documents exceptions that the function may throw. Each entry names an exception type and the condition under which it is thrown:
+The "Raises:" section documents exceptions that the function may raise. Each entry names an exception type and the condition under which it is raised:
+
+```uranite
+public function divide( I64 dividend, I64 divisor ) -> I64:
+
+    """
+    Perform integer division.
+
+    Parameters:
+        dividend (I64):
+            The number to divide.
+
+        divisor (I64):
+            The number to divide by.
+
+    Returns:
+        I64:
+            The integer quotient, truncated toward zero.
+
+    Raises:
+        ZeroDivisionError:
+            When the divisor is zero.
+
+    Complexity:
+        Time: O(1)
+            Single hardware division instruction.
+        Space: O(1)
+            No additional memory allocated.
+    """
+
+    return dividend / divisor
+```
+
+Multiple exception types can be documented:
 
 ```
 Raises:
@@ -352,10 +413,6 @@ Raises:
         When the result exceeds the maximum value of I64.
 ```
 
-The parser identifies new exception entries by the same indentation-based heuristic as parameter entries. The exception type name is extracted from the text before the colon.
-
-The `DoccommentValidator` cross-references exception types against a registry of known error types (`registerKnownErrorType()`), warning when a documented exception type does not match any recognized type in the codebase.
-
 ### The Complexity Section
 
 The "Complexity:" section documents algorithmic performance using Big-O notation. It supports two sub-fields:
@@ -363,12 +420,14 @@ The "Complexity:" section documents algorithmic performance using Big-O notation
 ```
 Complexity:
     Time: O(n log n)
+        Dominated by the comparison-based sorting step.
     Space: O(n)
+        Auxiliary storage proportional to input size.
 ```
 
-The parser recognizes lines starting with "Time:" and "Space:" within this section. Each is extracted into the `ComplexityDocumentation` struct's `timeComplexity` and `spaceComplexity` fields.
+Both "Time:" and "Space:" sub-fields should be present. Valid Big-O formats include `O(1)`, `O(n)`, `O(n^2)`, `O(log n)`, `O(n log n)`, `O(2^n)`, and `O(n!)`. The linter validates that complexity values match recognized Big-O patterns.
 
-The linter (`uranite-fmt --lint`) enforces the presence of a "Complexity:" section on all public entities via the `missing-complexity` rule. It also validates that the complexity values match valid Big-O notation patterns via the `invalid-complexity-format` rule.
+The linter enforces the presence of a "Complexity:" section on all public entities via the `missing-complexity` rule. This is an unusual requirement compared to most languages, but it reflects Uranite's emphasis on performance-aware coding. Every public function, class, and interface should document its computational characteristics.
 
 ### Extended Description
 
@@ -397,7 +456,9 @@ public function binarySearch( ArrayList<I64> sorted, I64 target ) -> I64:
 
     Complexity:
         Time: O(log n)
+            Search range halves with each iteration.
         Space: O(1)
+            Only three index variables regardless of list size.
     """
 
     I64 low = 0
@@ -448,7 +509,9 @@ public function mergeIntervals(
 
     Complexity:
         Time: O(n log n)
+            Dominated by sorting intervals by start value before merging.
         Space: O(n)
+            Output list may contain up to n intervals if none overlap.
     """
 
     if intervals.size() <= 1:
@@ -459,79 +522,11 @@ public function mergeIntervals(
 
 ---
 
-## The Comment Processing Pipeline
+## Indentation in Doccomments
 
-Comments flow through up to five processing stages depending on the tool being used. Understanding this pipeline explains why the lexer discards comments but the formatter preserves them.
+Doccomments are typically indented to align with the surrounding code. The documentation generator strips leading whitespace from each line before processing, so the absolute indentation level of the doccomment does not matter. Only the relative indentation between section headers and their content matters.
 
-### Stage 1: Lexer Discards
-
-The main compiler lexer (`src/uranite/lexer/lexer.cpp`) discards all three comment forms. `skipLineComment()` handles `#` comments, `skipBlockComment()` handles `#{...}#` comments, and `skipTripleQuoteComment()` handles `"""..."""` doccomments. No tokens are emitted. The parser and semantic analyzer never see comment text.
-
-This is intentional — comments have no semantic meaning and should not affect compilation.
-
-### Stage 2: CommentExtractor Harvests
-
-The `CommentExtractor` class (`src/uranite-fmt/comments/comment-extractor.cpp`) runs a separate micro-lexer pass over the raw source text. This pass is independent of the main lexer and operates before the formatter or linter runs.
-
-The extractor identifies `#` comments and `"""..."""` doccomments, recording each as a `CommentEntry` with:
-
-- **`commentKind`** — `SingleLine` or `DocComment`
-- **`attachmentStrategy`** — How the comment relates to surrounding code:
-  - `LeadingDeclaration` — Comment precedes a declaration (class, function, etc.)
-  - `TrailingStatement` — Comment follows code on the same line
-  - `FloatingBlock` — Standalone comment not attached to any specific entity
-- **`commentContent`** — The raw text of the comment
-- **`startLine`, `startColumn`, `endLine`, `endColumn`** — Source coordinates
-
-The attachment strategy is determined heuristically. For doccomments, the strategy is always `LeadingDeclaration`. For single-line comments, the extractor checks whether the next non-blank line starts with a declaration keyword (`public`, `function`, `class`, `interface`, etc.) and assigns `LeadingDeclaration` if so, or checks whether code precedes the `#` on the same line for `TrailingStatement`.
-
-### Stage 3: CommentReattacher Restores
-
-When `uranite-fmt` formats a file, it:
-
-1. Runs `CommentExtractor` to harvest all comments from the original source.
-2. Runs the main lexer and parser to produce an AST.
-3. Runs the `Formatter` visitor to pretty-print the AST into a new source string (which contains no comments, since the parser never saw them).
-4. Runs `CommentReattacher` to re-inject the extracted comments into the formatted output at their correct logical positions.
-
-The `CommentReattacher` compares the original source layout with the formatted output to calculate where each comment should be placed. This is how `uranite-fmt` preserves comments across formatting — they are extracted before formatting, then reattached after.
-
-### Stage 4: DoccommentParser Structures
-
-The documentation generator (`uranite-doc`) uses `DoccommentParser::parse()` to convert raw doccomment text into a `ParsedDoccomment` struct. The parser:
-
-1. Strips the `"""` / `'''` delimiters from the raw text.
-2. Splits the remaining text into lines.
-3. Processes lines sequentially, using section headers ("Parameters:", "Returns:", "Raises:", "Complexity:") as state transitions.
-4. Extracts parameter names and types from the `name (Type):` format.
-5. Extracts return types from the `Type:` format in the Returns section.
-6. Extracts time and space complexity from the "Time:" and "Space:" sub-fields.
-7. Accumulates multi-line descriptions for each parameter, return value, and exception.
-
-The result is a structured object that the documentation renderer uses to generate HTML or Markdown documentation pages.
-
-### Stage 5: DoccommentValidator Verifies
-
-The `DoccommentValidator` cross-references parsed doccomments against the AST to detect:
-
-- **Missing doccomments** — Public entities without any doccomment.
-- **Missing parameters** — Parameters present in the function signature but not documented.
-- **Unknown exception types** — Exception types in the "Raises:" section that do not match any registered error type.
-- **Structural syntax errors** — Malformed section headers, unclosed tags, or invalid notation.
-
-Validation diagnostics are emitted with severity levels (Warning or Error) and include the source file path and line number.
-
----
-
-## Indentation Stripping in Doccomments
-
-Doccomments are typically indented to align with the surrounding code. The `DoccommentParser` handles this through its `trimLeadingWhitespace()` and `measureIndentation()` methods:
-
-1. Each line of the doccomment is processed individually.
-2. `trimLeadingWhitespace()` removes all leading spaces and tabs from each line before evaluating its content against section headers and description text.
-3. `measureIndentation()` counts leading whitespace (spaces count as 1, tabs count as 4) to determine the nesting level of parameter descriptions and other sub-sections relative to their section header.
-
-This means the following two doccomments produce identical parsed results:
+This means the following two doccomments produce identical documentation output:
 
 ```uranite
 public function example() -> Void:
@@ -545,7 +540,9 @@ public function example() -> Void:
 
     Complexity:
         Time: O(1)
+            Constant time regardless of input.
         Space: O(1)
+            No additional memory allocated.
     """
 
     pass
@@ -563,13 +560,25 @@ public function example() -> Void:
 
             Complexity:
                 Time: O(1)
+                    Constant time regardless of input.
                 Space: O(1)
+                    No additional memory allocated.
             """
 
             pass
 ```
 
-Both produce a `ParsedDoccomment` with summary "Summary line.", one parameter "value" of type "I64" with description "Description text.", and complexity "O(1)" for both time and space. The absolute indentation is irrelevant — only the relative indentation between section headers and their content matters.
+Both produce documentation with summary "Summary line.", one parameter "value" of type "I64" with description "Description text.", and complexity "O(1)" for both time and space. The standard convention is to indent the doccomment body at the same level as the function body (typically 4 spaces from the function signature), which the formatter enforces automatically.
+
+---
+
+## Comment Preservation During Formatting
+
+When `uranite-fmt` reformats a source file, all comments are preserved. The formatter extracts comments from the original source before formatting, reformats the code, and then reattaches comments at their correct logical positions in the reformatted output.
+
+This means you can run `uranite-fmt --write` on any file without losing comments. Trailing comments remain on the same logical line as the code they annotate. Standalone comment lines maintain their position relative to the surrounding declarations. Doccomments stay inside their parent declaration body.
+
+The formatter may adjust comment indentation to match the reformatted code's indentation level, but the comment content is never modified.
 
 ---
 
@@ -607,7 +616,9 @@ public function add( I64 first, I64 second ) -> I64:
 
     Complexity:
         Time: O(1)
+            Single addition operation.
         Space: O(1)
+            No additional memory allocated.
     """
 
     return first + second
@@ -638,7 +649,7 @@ public function add( I64 first, I64 second ) -> I64:
 ```uranite
 """
 This doccomment is not associated with the function below.
-The lexer skips it as a top-level triple-quoted string.
+It is treated as a top-level triple-quoted string and discarded.
 """
 public function misplaced() -> Void:
     pass
@@ -654,7 +665,9 @@ public function correct() -> Void:
 
     Complexity:
         Time: O(1)
+            Constant time regardless of input.
         Space: O(1)
+            No additional memory allocated.
     """
 
     pass
@@ -675,10 +688,13 @@ public function broken() -> Void:
 
     """
     This doccomment contains a """nested""" triple-quote.
-    The parser sees the second """ as the closing delimiter.
+    The second """ is treated as the closing delimiter.
+    Everything after it is interpreted as code.
     """
 
     pass
 ```
 
-To include literal triple-quotes in documentation text, there is no escape mechanism. Use a different quoting convention in prose (e.g., describe the syntax rather than embedding it).
+To include literal triple-quotes in documentation text, there is no escape mechanism. Describe the syntax in prose rather than embedding it directly.
+
+**Do not omit the Complexity section on public entities.** The linter flags public functions, classes, and interfaces without a "Complexity:" section. Even for simple constant-time operations, explicitly document `O(1)` — it confirms the author considered the algorithmic characteristics rather than forgetting about them.

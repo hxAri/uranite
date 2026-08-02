@@ -1,59 +1,63 @@
 # Boolean and None Literals
 
-Uranite provides three keyword-driven literal values: `True`, `False`, and `None`. Boolean literals represent truth values and map to LLVM `i1` constants. `None` represents the absence of a value and maps to an LLVM null pointer. All three are reserved keywords in the token registry — they are recognized by the lexer during identifier scanning and emitted as dedicated keyword tokens, not as general identifiers.
+Uranite provides three keyword literals for truth values and absence of value: `True`, `False`, and `None`. Boolean literals represent logical truth values used in conditions, comparisons, and logical expressions. `None` represents the explicit absence of a value, used with optional types to indicate that no value is present. All three are reserved keywords — they cannot be used as variable names, function names, or type names.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Boolean Literals](#boolean-literals)
-  - [Syntax and Casing](#syntax-and-casing)
-  - [Lexer Recognition](#lexer-recognition)
-  - [Parser Construction](#parser-construction)
-  - [Semantic Type Assignment](#semantic-type-assignment)
-  - [HIR Representation](#hir-representation)
-  - [MIR Lowering](#mir-lowering)
-  - [LLVM Code Generation](#llvm-code-generation)
-- [Logical Operators](#logical-operators)
-  - [The "and" Operator](#the-and-operator)
-  - [The "or" Operator](#the-or-operator)
-  - [The "not" Operator](#the-not-operator)
-  - [Truthiness Coercion](#truthiness-coercion)
-  - [Short-Circuit Semantics](#short-circuit-semantics)
-- [The Boolean OOP Wrapper](#the-boolean-oop-wrapper)
-  - [Class Structure](#class-structure)
-  - [Methods](#methods)
-- [None Literal](#none-literal)
-  - [Syntax and Semantics](#syntax-and-semantics)
-  - [Lexer Recognition](#none-lexer-recognition)
-  - [Parser Construction](#none-parser-construction)
-  - [Semantic Type Assignment](#none-semantic-type-assignment)
-  - [HIR Representation](#none-hir-representation)
-  - [MIR Lowering](#none-mir-lowering)
-  - [LLVM Code Generation](#none-llvm-code-generation)
-- [None vs Null Pointers](#none-vs-null-pointers)
-- [Optional Types](#optional-types)
-  - [The Optional Type Wrapper](#the-optional-type-wrapper)
+- [Boolean and None Literals](#boolean-and-none-literals)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Boolean Literals](#boolean-literals)
+    - [Syntax and Casing](#syntax-and-casing)
+    - [Type of Boolean Literals](#type-of-boolean-literals)
+    - [Boolean in Conditions](#boolean-in-conditions)
+    - [Boolean as Return Values](#boolean-as-return-values)
+  - [Logical Operators](#logical-operators)
+    - [The "and" Operator](#the-and-operator)
+    - [The "or" Operator](#the-or-operator)
+    - [The "not" Operator](#the-not-operator)
+    - [Operator Precedence](#operator-precedence)
+    - [Evaluation Behavior](#evaluation-behavior)
+    - [Complete Truth Table](#complete-truth-table)
+  - [The Boolean Class](#the-boolean-class)
+    - [Class Overview](#class-overview)
+    - [Methods](#methods)
+    - [Method Examples](#method-examples)
+  - [None Literal](#none-literal)
+    - [What None Represents](#what-none-represents)
+    - [None Syntax](#none-syntax)
+    - [None is a Reserved Keyword](#none-is-a-reserved-keyword)
+  - [Optional Types](#optional-types)
+    - [Declaring Optional Types](#declaring-optional-types)
+    - [Assigning Values to Optionals](#assigning-values-to-optionals)
+    - [Returning Optional Values](#returning-optional-values)
+    - [Optional Type Naming](#optional-type-naming)
   - [None Comparison](#none-comparison)
-- [Type Summary](#type-summary)
-- [Examples](#examples)
-  - [Boolean Literals](#boolean-literal-examples)
-  - [Logical Operations](#logical-operation-examples)
-  - [None Handling](#none-handling-examples)
-  - [Practical Usage](#practical-usage)
+    - [Equality Comparison](#equality-comparison)
+    - [Identity Check with "is"](#identity-check-with-is)
+    - [Equality vs Identity](#equality-vs-identity)
+    - [None in Conditional Chains](#none-in-conditional-chains)
+  - [The Boolean Type Name](#the-boolean-type-name)
+  - [None Has No Wrapper Class](#none-has-no-wrapper-class)
+  - [Examples](#examples)
+    - [Boolean Literal Examples](#boolean-literal-examples)
+    - [Logical Operation Examples](#logical-operation-examples)
+    - [None Handling Examples](#none-handling-examples)
+    - [Practical Usage](#practical-usage)
 
 ---
 
 ## Overview
 
-| Literal | Token Type | AST Node | Semantic Type | LLVM IR |
-|---|---|---|---|---|
-| `True` | `KeywordTrue` | `BoolLiteralExpression(true)` | `Boolean` | `i1 1` |
-| `False` | `KeywordFalse` | `BoolLiteralExpression(false)` | `Boolean` | `i1 0` |
-| `None` | `KeywordNone` | `NoneLiteralExpression` | `None` | `null` (opaque pointer) |
+| Literal | Type | Description |
+|---|---|---|
+| `True` | `Boolean` | Boolean truth value representing logical true |
+| `False` | `Boolean` | Boolean truth value representing logical false |
+| `None` | `None` | Sentinel value representing the absence of a value |
 
-All three are PascalCase keywords registered in the token keymaps hash table. The lexer's `readIdentifierOrKeyword()` method recognizes them during scanning — they are never treated as user identifiers.
+All three literals are PascalCase. This casing is mandatory and consistent across all Uranite keyword literals. Lowercase variants (`true`, `false`, `none`) are not boolean or none literals — they are treated as ordinary identifiers, which will fail during compilation if no variable with that name exists in scope.
 
 ---
 
@@ -61,356 +65,503 @@ All three are PascalCase keywords registered in the token keymaps hash table. Th
 
 ### Syntax and Casing
 
-Boolean literals use PascalCase: `True` and `False`. This is mandatory — `true`, `false`, `TRUE`, and `FALSE` are not recognized as boolean literals. Lowercase `true` and `false` are parsed as regular identifiers, which will fail during semantic analysis if no such variable exists in scope.
+Boolean literals use PascalCase: `True` and `False`. No other casing is accepted:
+
+```uranite
+Boolean isActive = True
+Boolean isDeleted = False
+```
+
+The following are **not** boolean literals:
+
+| Attempted | What Happens |
+|---|---|
+| `true` | Treated as an identifier. Compilation error if no variable named `true` exists. |
+| `false` | Treated as an identifier. Compilation error if no variable named `false` exists. |
+| `TRUE` | Treated as an identifier. Compilation error if no variable named `TRUE` exists. |
+| `FALSE` | Treated as an identifier. Compilation error if no variable named `FALSE` exists. |
+
+Uranite follows Python's convention of PascalCase boolean literals, not the lowercase convention used by C, Java, Rust, or Go. This is consistent with Uranite's PascalCase convention for `None` and type names.
+
+### Type of Boolean Literals
+
+Every boolean literal has the type `Boolean`. The `Boolean` type can hold exactly two values: `True` and `False`. No other values are possible — there is no implicit conversion from integers, strings, or pointers to `Boolean`.
 
 ```uranite
 Boolean flag = True
 Boolean empty = False
 ```
 
-Uranite follows Python's casing convention for boolean literals, not C/Java's lowercase convention. This is consistent with the PascalCase convention used for `None` and type names.
+Boolean values occupy 1 bit of logical storage. A `Bool` variable stores nothing more than a single truth value.
 
-### Lexer Recognition
+### Boolean in Conditions
 
-The lexer does not have dedicated scanning logic for boolean literals. Instead, `True` and `False` are entries in the keymaps hash table:
+Boolean values are the native type for `if`, `elif`, and `while` conditions. These control flow statements expect a `Boolean` expression:
 
-| Key | Token Type |
-|---|---|
-| `"True"` | `KeywordTrue` |
-| `"False"` | `KeywordFalse` |
+```uranite
+Boolean shouldRun = True
 
-When `readIdentifierOrKeyword()` scans an identifier, it looks up the result in the keymaps table. If the identifier matches "True" or "False", the token type is set to `KeywordTrue` or `KeywordFalse` respectively. No special-case code is needed — the hash table handles recognition in O(1).
+if shouldRun:
+    puts( "running" )
 
-### Parser Construction
-
-The parser handles `KeywordTrue` and `KeywordFalse` tokens in the expression dispatch switch:
-
-**For `KeywordFalse`:**
-1. Advance past the token.
-2. Return `BoolLiteralExpression(false, source)`.
-
-**For `KeywordTrue`:**
-1. Advance past the token.
-2. Return `BoolLiteralExpression(true, source)`.
-
-The `BoolLiteralExpression` AST node stores a single `bool value` field — a C++ `bool` that is either `true` or `false`.
-
-### Semantic Type Assignment
-
-The semantic analyzer processes `BooleanLiteral` nodes:
-
-1. Look up the `Boolean` class type via `typeRegistry.lookupType("Boolean")` using `qualname::classes::boolean::Name`.
-2. If found, use the class type (OOP wrapper `uranite.language.boolean.Boolean`).
-3. If not found (fallback), use the primitive boolean type `typeRegistry.getBool()` (primitive `uranite.builtin.bool`).
-
-This dual-lookup pattern — OOP wrapper first, primitive fallback second — is identical to the pattern used for `String`, `Char`, and all other literal types.
-
-### HIR Representation
-
-HIR preserves the boolean value in an `HIRBooleanLiteral` node:
-
-| Field | Type | Description |
-|---|---|---|
-| `booleanValue` | `bool` | `true` or `false`. |
-| `resolvedType` | `TypeSharedPointer` | The `Boolean` type from semantic analysis. |
-| `sourceLocation` | `SourceSharedPointer` | Source file position. |
-
-HIR lowering extracts `boolLiteral.value` from the AST node and passes it to the `HIRBooleanLiteral` constructor.
-
-### MIR Lowering
-
-MIR lowering creates a `ConstantBoolean` instruction:
-
-1. Extract `booleanValue` from the `HIRBooleanLiteral` node.
-2. Create a `MIRInstruction` with kind `ConstantBoolean`.
-3. Set `booleanConstantValue` to the boolean value.
-4. Set `operandType` to the resolved `Boolean` type.
-5. Allocate a variable named `_const_bool` to hold the result.
-6. Emit the instruction.
-
-The `booleanConstantValue` field on `MIRInstruction` is typed as C++ `bool` and defaults to `false`.
-
-### LLVM Code Generation
-
-The `generateConstantBoolean()` method emits the LLVM IR:
-
-```
-llvm::Value* constValue = llvm::ConstantInt::get(
-    llvm::Type::getInt1Ty( this->llvmContext ),
-    instruction.booleanConstantValue ? 1 : 0
-);
+while shouldRun:
+    puts( "looping" )
+    shouldRun = False
 ```
 
-Boolean values are represented as LLVM `i1` (1-bit integer) constants:
+Boolean expressions formed by comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) also produce `Boolean` values:
 
-| Uranite | LLVM Constant |
-|---|---|
-| `True` | `i1 1` |
-| `False` | `i1 0` |
+```uranite
+I64 count = 10
 
-The `i1` type is the smallest integer type in LLVM IR. It can hold exactly two values: 0 and 1. This maps directly to the two boolean states.
+if count > 0:
+    puts( "count is positive" )
+
+Boolean isZero = count == 0
+```
+
+### Boolean as Return Values
+
+Functions can return `Boolean` to indicate success, presence, validity, or any binary state:
+
+```uranite
+public function isEven( I64 number ) -> Boolean:
+    return number % 2 == 0
+
+public function isPositive( I64 number ) -> Boolean:
+    return number > 0
+```
+
+The return value is a `Boolean` literal or a boolean expression. Both forms are valid:
+
+```uranite
+public function alwaysTrue() -> Boolean:
+    return True
+
+public function isAdult( I64 age ) -> Boolean:
+    return age >= 18
+```
 
 ---
 
 ## Logical Operators
 
-Uranite uses English-word logical operators: `and`, `or`, and `not`. The symbolic equivalents (`&&`, `||`, `!`) are not valid syntax.
+Uranite uses English-word logical operators: `and`, `or`, and `not`. The symbolic equivalents (`&&`, `||`, `!`) are **not valid syntax** and will produce compilation errors.
 
 ### The "and" Operator
 
-The `and` operator performs logical conjunction. Both operands are evaluated, and the result is `True` only if both are `True`:
+The `and` operator performs logical conjunction. The result is `True` only when both operands are `True`:
 
 ```uranite
-Boolean result = True and False
+Boolean result = True and True
+Boolean mixed = True and False
+Boolean neither = False and False
 ```
 
-At the LLVM level, `and` emits a `CreateAnd` instruction on `i1` operands:
+The variable `result` is `True`. The variable `mixed` is `False`. The variable `neither` is `False`.
 
+Both operands must be `Boolean`. Passing non-boolean operands (integers, strings, objects) produces a compilation error: "logical operators require boolean operands."
+
+```uranite
+Boolean valid = isActive and isVerified
+Boolean both = count > 0 and name != ""
 ```
-%and = and i1 %lhs, %rhs
-```
+
+Comparison expressions produce `Boolean`, so they can serve as operands to `and` directly.
 
 ### The "or" Operator
 
-The `or` operator performs logical disjunction. The result is `True` if either operand is `True`:
+The `or` operator performs logical disjunction. The result is `True` when at least one operand is `True`:
 
 ```uranite
 Boolean result = False or True
+Boolean either = True or False
+Boolean neither = False or False
 ```
 
-At the LLVM level, `or` emits a `CreateOr` instruction on `i1` operands:
+The variable `result` is `True`. The variable `either` is `True`. The variable `neither` is `False`.
 
-```
-%or = or i1 %lhs, %rhs
+Like `and`, both operands must be `Boolean`:
+
+```uranite
+Boolean allowed = isAdmin or isModerator
+Boolean hasContent = name != "" or fallback != ""
 ```
 
 ### The "not" Operator
 
-The `not` operator performs logical negation. It is a unary prefix operator that inverts the truth value:
+The `not` operator performs logical negation. It is a unary prefix operator that inverts a boolean value:
 
 ```uranite
 Boolean result = not True
+Boolean positive = not False
 ```
 
-The codegen for `not` handles three operand types:
+The variable `result` is `False`. The variable `positive` is `True`.
 
-| Operand Type | LLVM Operation | Description |
+The `not` operator is especially useful for negating function return values and boolean variables:
+
+```uranite
+Boolean isInvalid = not isValid
+Boolean notFound = not contains
+
+if not isReady:
+    puts( "waiting" )
+```
+
+The `not` operator also works on non-boolean values through truthiness rules:
+
+| Operand Type | Truthiness Rule |
+|---|---|
+| `Boolean` | Direct inversion: `True` becomes `False`, `False` becomes `True` |
+| Integer | Zero is truthy under `not` (produces `True`), non-zero is falsy under `not` (produces `False`) |
+| Pointer / Optional | `None` is truthy under `not` (produces `True`), non-`None` is falsy under `not` (produces `False`) |
+
+```uranite
+I64 count = 0
+Boolean isEmpty = not count
+```
+
+The variable `isEmpty` is `True` because `not` applied to zero produces `True`.
+
+Note: while `not` accepts non-boolean values, `and` and `or` require strictly `Boolean` operands. This is an intentional asymmetry — `not` serves as both a logical negator and a truthiness converter.
+
+### Operator Precedence
+
+When combining logical operators, `not` binds tightest, then `and`, then `or`:
+
+| Precedence | Operator | Associativity |
 |---|---|---|
-| `i1` (boolean) | `CreateNot` | Direct bitwise NOT on 1-bit value. Flips 0 to 1 and 1 to 0. |
-| Integer (`i8`-`i64`) | `CreateICmpEQ(operand, 0)` | Compare against zero. Non-zero becomes `False`, zero becomes `True`. |
-| Pointer | `CreateICmpEQ(operand, null)` | Compare against null pointer. Non-null becomes `False`, null becomes `True`. |
+| Highest | `not` | Unary (prefix) |
+| Middle | `and` | Left-to-right |
+| Lowest | `or` | Left-to-right |
 
-This type-aware dispatch means `not` works on non-boolean values by applying truthiness rules.
+This means `True or False and not False` is parsed as `True or (False and (not False))`:
 
-### Truthiness Coercion
+```uranite
+Boolean result = True or False and not False
+```
 
-When `and` or `or` receive non-boolean integer operands, the codegen automatically coerces them to `i1` before applying the logical operation:
+The `not False` evaluates to `True`. Then `False and True` evaluates to `False`. Then `True or False` evaluates to `True`. The variable `result` is `True`.
 
-- For non-`i1` integer operands: `CreateICmpNE(operand, 0)` — any non-zero value is `True`.
+Use parentheses to override precedence when the default grouping is not what you intend:
 
-This coercion is applied independently to each operand. If one operand is already `i1`, only the other is coerced.
+```uranite
+Boolean explicit = ( True or False ) and not False
+```
 
-### Short-Circuit Semantics
+The parenthesized `True or False` evaluates to `True`. Then `not False` evaluates to `True`. Then `True and True` evaluates to `True`. The variable `explicit` is `True`.
 
-At the MIR instruction level, `LogicalAnd` and `LogicalOr` are two-operand instructions. Both operands are lowered before the logical instruction is emitted. The current codegen evaluates both sides — the `CreateAnd`/`CreateOr` LLVM instructions are bitwise operations on `i1`, not control-flow-based short circuits.
+### Evaluation Behavior
+
+Both `and` and `or` evaluate **both operands** before producing a result. Uranite does **not** implement short-circuit evaluation for logical operators. Both sides of `and` and `or` are always evaluated, even when the result could be determined from the left operand alone:
+
+```uranite
+Boolean result = False and expensiveCheck()
+```
+
+In this example, `expensiveCheck()` is called even though the left operand is `False` and the final result of `and` must be `False` regardless. If `expensiveCheck()` has side effects (printing, modifying state, performing I/O), those side effects will occur.
+
+To achieve short-circuit behavior, use nested `if` statements:
+
+```uranite
+if isReady:
+    if expensiveCheck():
+        puts( "both conditions met" )
+```
+
+This ensures `expensiveCheck()` is only called when `isReady` is `True`.
+
+### Complete Truth Table
+
+| Expression | Result |
+|---|---|
+| `True and True` | `True` |
+| `True and False` | `False` |
+| `False and True` | `False` |
+| `False and False` | `False` |
+| `True or True` | `True` |
+| `True or False` | `True` |
+| `False or True` | `True` |
+| `False or False` | `False` |
+| `not True` | `False` |
+| `not False` | `True` |
+
+Compound expressions follow from these rules:
+
+| Expression | Steps | Result |
+|---|---|---|
+| `not True and False` | `(not True) and False` = `False and False` | `False` |
+| `not ( True and False )` | `not False` | `True` |
+| `True or False and True` | `True or (False and True)` = `True or False` | `True` |
+| `( True or False ) and not True` | `True and False` | `False` |
+| `not False or not True` | `True or False` | `True` |
+| `not ( False or True )` | `not True` | `False` |
 
 ---
 
-## The Boolean OOP Wrapper
+## The Boolean Class
 
-### Class Structure
+### Class Overview
 
-The `Boolean` class (`uranite.language.boolean.Boolean`) is a `final` class — it cannot be subclassed. It wraps a primitive `Boolean` value:
+`Boolean` is a `final` class — it cannot be subclassed. It wraps a primitive boolean value and provides methods for logical operations, negation, and string conversion. The `Boolean` class is the OOP wrapper for the `Bool` primitive type, located in the `uranite.language.boolean` package.
 
-```uranite
-final class Boolean:
-    protect Boolean value
-    public function Boolean( self, Boolean value ) -> Void
-```
-
-The `value` field is `protect`, accessible only within the class. The constructor stores the truth value.
+Every boolean literal (`True`, `False`) is typed as `Boolean`. Method calls are available directly on boolean values and boolean variables.
 
 ### Methods
 
-| Method | Signature | Description |
+| Method | Return Type | Description |
 |---|---|---|
-| `getValue` | `() -> Boolean` | Return the underlying truth value. |
-| `toString` | `() -> String` | Return `"True"` if the value is truthy, `"False"` otherwise. |
-| `negate` | `() -> Boolean` | Return a new `Boolean` with the opposite truth value via `not self.value`. |
-| `logicalAnd` | `(Boolean other) -> Boolean` | Return a new `Boolean` representing `self.value and other.value`. |
-| `logicalOr` | `(Boolean other) -> Boolean` | Return a new `Boolean` representing `self.value or other.value`. |
+| `getValue()` | `Boolean` | Return the underlying truth value |
+| `toString()` | `String` | Return "True" if the value is `True`, "False" if the value is `False` |
+| `negate()` | `Boolean` | Return a new `Boolean` with the opposite truth value |
+| `logicalAnd( Boolean other )` | `Boolean` | Return a new `Boolean` representing `self and other` |
+| `logicalOr( Boolean other )` | `Boolean` | Return a new `Boolean` representing `self or other` |
 
-All methods return new `Boolean` instances — the original is never modified. The `toString()` method returns the PascalCase strings "True" and "False", matching the literal syntax.
+All methods return new `Boolean` instances. The original value is never modified — `Boolean` is immutable.
+
+### Method Examples
+
+```uranite
+Boolean flag = True
+
+Boolean value = flag.getValue()
+String text = flag.toString()
+Boolean opposite = flag.negate()
+```
+
+The variable `value` is `True`. The variable `text` is "True". The variable `opposite` is `False`.
+
+The `logicalAnd()` and `logicalOr()` methods provide method-call alternatives to the `and`/`or` operators:
+
+```uranite
+Boolean left = True
+Boolean right = False
+
+Boolean conjunction = left.logicalAnd( right )
+Boolean disjunction = left.logicalOr( right )
+```
+
+The variable `conjunction` is `False`. The variable `disjunction` is `True`.
+
+The `toString()` method returns PascalCase strings matching the literal syntax — "True" for a true value, "False" for a false value. This is useful for including boolean values in output:
+
+```uranite
+from uranite.io.console import puts
+
+Boolean isReady = True
+puts( "Ready: " + isReady.toString() )
+```
+
+This prints "Ready: True".
 
 ---
 
 ## None Literal
 
-### Syntax and Semantics
+### What None Represents
 
-`None` represents the absence of a value. It is a keyword literal with PascalCase casing, consistent with `True` and `False`:
+`None` represents the explicit absence of a value. It is not zero, not an empty string, not false — it is a distinct concept meaning "no value exists here." `None` is used with optional types to indicate that a variable, parameter, or return value holds nothing.
+
+In languages like Python, `None` serves a similar role. In languages like Rust, `None` corresponds to the `None` variant of `Option<T>`. In languages like Java, it corresponds to `null` — but Uranite's `None` is type-safe and cannot be assigned to non-optional variables.
+
+### None Syntax
+
+`None` is a PascalCase keyword literal. It appears wherever an expression is expected:
 
 ```uranite
 String? name = None
 ```
 
-`None` is not a value in the traditional sense — it is a sentinel that indicates "no value is present." It is used with optional types (`?T`) to represent the empty state.
+The `?` suffix on the type annotation marks the variable as optional — it can hold either a `String` value or `None`. Without the `?`, assigning `None` would be a type error.
 
-### None Lexer Recognition
+### None is a Reserved Keyword
 
-Like `True` and `False`, `None` is an entry in the keymaps hash table:
-
-| Key | Token Type |
-|---|---|
-| `"None"` | `KeywordNone` |
-
-The lexer recognizes "None" during identifier scanning and emits a `KeywordNone` token. The identifier "None" cannot be used as a variable name, function name, or type name — it is permanently reserved.
-
-### None Parser Construction
-
-The parser handles `KeywordNone` in the expression dispatch:
-
-1. Advance past the token.
-2. Return `NoneLiteralExpression(source)`.
-
-The `NoneLiteralExpression` AST node stores no value — it has only the source location inherited from `Expression`. There is nothing to store because `None` carries no data.
-
-### None Semantic Type Assignment
-
-The semantic analyzer assigns the `None` type directly:
+`None` cannot be used as a variable name, function name, parameter name, class name, or any other identifier:
 
 ```
-expressionType = this->typeRegistry.getNone();
+I64 None = 42
 ```
 
-Unlike boolean, string, and char literals, `None` does not use the dual-lookup pattern (OOP wrapper then primitive fallback). There is no `None` OOP wrapper class. The type is a singleton created on first access:
+This produces a compilation error. The identifier `None` is permanently reserved by the language.
 
-```
-TypeSharedPointer getNone() const {
-    static TypeSharedPointer noneType = std::make_shared<Type>(
-        Type::Kind::None, "None"
-    );
-    return noneType;
-}
-```
-
-The `None` type has `Kind::None` and is checked via the `isNone()` method on `Type`.
-
-### None HIR Representation
-
-HIR stores `None` in an `HIRNoneLiteral` node:
-
-| Field | Type | Description |
-|---|---|---|
-| `resolvedType` | `TypeSharedPointer` | The `None` type. |
-| `sourceLocation` | `SourceSharedPointer` | Source file position. |
-
-No value field exists — `HIRNoneLiteral` stores only type and location metadata.
-
-### None MIR Lowering
-
-MIR lowering creates a `ConstantNone` instruction:
-
-1. Create a `MIRInstruction` with kind `ConstantNone`.
-2. Set `operandType` to the resolved `None` type from the HIR node.
-3. Allocate a variable named `_const_none` to hold the result.
-4. Emit the instruction.
-
-No constant value field is set — the instruction kind itself conveys the value.
-
-### None LLVM Code Generation
-
-The `generateConstantNone()` method emits a null pointer:
-
-```
-llvm::Value* constValue = llvm::ConstantPointerNull::get(
-    llvm::PointerType::getUnqual( this->llvmContext )
-);
-```
-
-`None` is represented as an opaque null pointer (`ptr null` in LLVM IR). `PointerType::getUnqual` creates an unqualified (address-space 0) opaque pointer type, and `ConstantPointerNull::get` creates the null constant for that type.
-
-| Uranite | LLVM Constant |
-|---|---|
-| `None` | `ptr null` |
-
----
-
-## None vs Null Pointers
-
-`None` in Uranite is semantically different from null pointers in C or C++:
-
-| Property | Uranite `None` | C/C++ `NULL`/`nullptr` |
-|---|---|---|
-| Type system integration | Has its own `Type::Kind::None` type. | Typed as `void*` or `nullptr_t`. |
-| Assignment | Only assignable to optional types (`?T`). | Assignable to any pointer type. |
-| Dereferencing | Cannot be dereferenced without explicit check. | Undefined behavior on dereference. |
-| Comparison | Uses `==` / `!=` with None-specific semantic rules. | Pointer comparison. |
-| Representation | `ConstantPointerNull` (opaque pointer). | `ConstantPointerNull` or integer 0. |
-
-While the LLVM representation is the same (a null pointer), the semantic analyzer enforces type safety around `None`. The `None` type is compatible with optional types through the type system, preventing accidental null pointer usage on non-optional variables.
+Like `True` and `False`, the casing is strict. Lowercase `none` is not the `None` literal — it would be treated as an ordinary identifier.
 
 ---
 
 ## Optional Types
 
-### The Optional Type Wrapper
+### Declaring Optional Types
 
-Optional types are declared with the `?` prefix syntax:
+Optional types are declared with the `?` prefix on the type name:
 
 ```uranite
 String? maybeName = None
 I64? maybeCount = None
+Boolean? maybeFlag = None
+Char? maybeChar = None
 ```
 
-The `?T` syntax creates an `OptionalType` wrapping the inner type `T`. The `OptionalType` struct stores the inner type and generates the name `"Optional<T>"`:
+The `?` syntax wraps the inner type in an optional container. A `String?` variable can hold either a `String` value or `None`. A `I64?` variable can hold either an `I64` value or `None`. Any type can be made optional — primitives, classes, structs, interfaces, and even other optional types.
 
-| Property | Value |
+An optional variable without an initial value defaults to holding a value of its inner type, not `None`. To explicitly start with no value, assign `None`:
+
+```uranite
+String? name = None
+```
+
+### Assigning Values to Optionals
+
+An optional variable accepts both values of its inner type and `None`:
+
+```uranite
+String? greeting = "hello"
+greeting = None
+greeting = "world"
+```
+
+The variable `greeting` starts as a `String` with value "hello", then becomes `None`, then becomes a `String` again with value "world". All three assignments are valid because `String?` accepts both `String` and `None`.
+
+A non-optional variable does **not** accept `None`:
+
+```uranite
+String name = None
+```
+
+This produces a compilation error. The type `String` (without `?`) requires a `String` value. To allow `None`, the type must be declared as `String?`.
+
+### Returning Optional Values
+
+Functions can declare optional return types to indicate they may not produce a value:
+
+```uranite
+public function findUser( String username ) -> String?:
+    if username == "admin":
+        return "Administrator"
+    return None
+```
+
+The return type `String?` allows the function to return either a `String` value or `None`. Callers must handle the possibility that the return value is `None`:
+
+```uranite
+String? user = findUser( "admin" )
+if user is None:
+    puts( "user not found" )
+```
+
+### Optional Type Naming
+
+When Uranite reports optional types in error messages or diagnostics, the type name appears as `Optional<T>` where `T` is the inner type:
+
+| Declaration | Full Type Name |
 |---|---|
-| Kind | `Type::Kind::Optional` |
-| Name | `Optional<T>` (e.g., `Optional<String>`) |
-| String representation | `?T` (e.g., `?String`) |
-| Inner type | The wrapped `T` |
+| `String?` | `Optional<String>` |
+| `I64?` | `Optional<I64>` |
+| `Boolean?` | `Optional<Boolean>` |
+| `ArrayList<I64>?` | `Optional<ArrayList<I64>>` |
 
-An optional type can hold either a value of type `T` or `None`.
+The `?` suffix is the standard way to declare optional types in source code.
 
-### None Comparison
+---
 
-The semantic analyzer has special handling for `None` comparisons. When either operand of an equality check (`==` or `!=`) has the `None` type, the analyzer accepts the comparison and returns `Boolean`:
+## None Comparison
+
+### Equality Comparison
+
+The equality operators `==` and `!=` work with `None` on either side. When comparing against `None`, the comparison checks whether the optional value is absent:
 
 ```uranite
+String? name = None
+
 if name == None:
-    puts( "no name provided" )
+    puts( "name is absent" )
+
+if name != None:
+    puts( "name is present" )
 ```
 
-This special case bypasses the normal type-compatibility check for comparisons. The `isNone()` method on `Type` is used to detect when either side is `None`, and the result type is always `Boolean`.
+The `==` operator returns `True` when the optional holds `None`, `False` when it holds a value. The `!=` operator returns the opposite.
 
-The `is` keyword can also be used for identity checks with `None`:
+None comparison is special-cased in the type system. Normally, `==` and `!=` require compatible types on both sides. But when either operand is `None`, the comparison is always allowed regardless of the other operand's type, and the result is always `Boolean`.
+
+### Identity Check with "is"
+
+The `is` keyword performs an identity check. It is commonly used to check whether an optional value is `None`:
 
 ```uranite
+String? name = None
+
 if name is None:
     puts( "name is absent" )
 ```
 
+The `is` keyword always produces a `Boolean` result. It checks reference identity — whether the value literally is `None`, not whether it is equal to `None` through some equality method.
+
+### Equality vs Identity
+
+For `None` checks, `==` and `is` behave identically in practice:
+
+| Expression | Behavior |
+|---|---|
+| `value == None` | Equality comparison. Returns `True` if value is `None`. |
+| `value is None` | Identity check. Returns `True` if value is `None`. |
+| `value != None` | Inequality comparison. Returns `True` if value is not `None`. |
+
+Both forms are idiomatic. Use `is None` when checking for the absence of a value (reads naturally in English). Use `== None` when the comparison is part of a larger equality expression.
+
+The `is` keyword is not limited to `None` checks — it can compare any two values for reference identity. But its most common use is with `None`.
+
+### None in Conditional Chains
+
+None checks commonly appear in conditional chains where different actions are taken depending on whether a value is present:
+
+```uranite
+public function displayUser( String? name, I64? age ) -> Void:
+    if name is None and age is None:
+        puts( "no information available" )
+        return
+    if name is None:
+        puts( "name unknown, age: " + age.toString() )
+        return
+    if age is None:
+        puts( "name: " + name + ", age unknown" )
+        return
+    puts( "name: " + name + ", age: " + age.toString() )
+```
+
+Each branch handles a specific combination of present and absent values. After confirming a value is not `None`, it can be used as its inner type (`String` or `I64`) within that branch.
+
 ---
 
-## Type Summary
+## The Boolean Type Name
 
-### Primitive Types
+The type name for boolean values in Uranite is `Boolean` — always spelled out in full. There is no shorthand like `Bool` or `bool`. Use `Boolean` for all variable declarations, function parameters, return types, and generic type arguments:
 
-| Literal | Kind | Short Name | Qualified Name | LLVM Type | LLVM Width |
-|---|---|---|---|---|---|
-| `True` / `False` | `Type::Kind::Bool` | `bool` | `uranite.builtin.bool` | `i1` | 1 bit |
-| `None` | `Type::Kind::None` | `None` | (no package) | `ptr` | pointer-sized |
+```uranite
+Boolean flag = True
+Boolean alsoFlag = False
+```
 
-### OOP Wrappers
+Because `Boolean` is a `final` class in the `uranite.language.boolean` package, boolean values have full method access. Every `True` and `False` literal is an instance of `Boolean`:
 
-| Literal | Wrapper Class | Qualified Name | Final |
-|---|---|---|---|
-| `True` / `False` | `Boolean` | `uranite.language.boolean.Boolean` | Yes |
-| `None` | (none) | (no wrapper) | N/A |
+```uranite
+String text = flag.toString()
+Boolean negated = alsoFlag.negate().getValue()
+```
 
-`None` has no OOP wrapper — it is a type-system concept, not a value that needs methods.
+---
+
+## None Has No Wrapper Class
+
+Unlike `Boolean`, `Char`, `String`, and the numeric types that all have OOP wrapper classes, `None` has no wrapper class. `None` is a type-system concept representing the absence of a value — it carries no data and needs no methods.
+
+You cannot call methods on `None`:
+
+```uranite
+String? empty = None
+```
+
+The variable `empty` holds `None`. There are no methods to call on it. To check whether an optional holds `None`, use comparison operators (`==`, `!=`) or the `is` keyword on the optional variable, not on `None` itself.
 
 ---
 
@@ -423,6 +574,9 @@ Boolean isActive = True
 Boolean isDeleted = False
 Boolean isEnabled = True
 Boolean isEmpty = False
+
+Boolean copy = isActive
+Boolean inverted = not isDeleted
 ```
 
 ### Logical Operation Examples
@@ -430,19 +584,19 @@ Boolean isEmpty = False
 ```uranite
 Boolean both = True and True
 Boolean either = False or True
-Boolean neither = not True
-Boolean complex = ( True or False ) and not False
+Boolean negated = not True
+Boolean compound = ( True or False ) and not False
 ```
 
-| Expression | Result |
-|---|---|
-| `True and True` | `True` |
-| `True and False` | `False` |
-| `False or True` | `True` |
-| `False or False` | `False` |
-| `not True` | `False` |
-| `not False` | `True` |
-| `( True or False ) and not False` | `True` |
+The variable `both` is `True`. The variable `either` is `True`. The variable `negated` is `False`. The variable `compound` is `True` (parenthesized `True or False` produces `True`, `not False` produces `True`, `True and True` produces `True`).
+
+```uranite
+Boolean canAccess = isActive and isVerified
+Boolean hasPermission = isAdmin or isModerator
+Boolean isBlocked = not isActive or isDeleted
+```
+
+The variable `isBlocked` evaluates as `(not isActive) or isDeleted` due to `not` binding tighter than `or`.
 
 ### None Handling Examples
 
@@ -452,7 +606,10 @@ I64? count = None
 Boolean? flag = None
 
 String? greeting = "hello"
+I64? total = 42
 ```
+
+The first three variables hold `None`. The variable `greeting` holds a `String` value "hello". The variable `total` holds an `I64` value 42.
 
 ```uranite
 if name == None:
@@ -465,7 +622,11 @@ if name is None:
     puts( "name identity check" )
 ```
 
+All three patterns are valid ways to check for `None`.
+
 ### Practical Usage
+
+A complete example demonstrating boolean logic, optional types, `None` handling, and `Boolean` class methods:
 
 ```uranite
 from uranite.io.console import puts
@@ -489,6 +650,13 @@ public function checkPermissions( Boolean isAdmin, Boolean isActive ) -> Boolean
         return True
     return False
 
+public function describeAccess( Boolean isAdmin, Boolean isModerator, Boolean isBanned ) -> String:
+    if isBanned:
+        return "access denied: banned"
+    if isAdmin or isModerator:
+        return "access granted: elevated"
+    return "access granted: standard"
+
 public function main() -> I32:
     String? user = findUser( "admin" )
     String message = greet( user )
@@ -504,12 +672,35 @@ public function main() -> I32:
     if allowed:
         puts( "access granted" )
     if not denied:
-        puts( "access denied" )
+        puts( "access denied for inactive user" )
 
-    Boolean result = True and ( not False or True )
-    Boolean negated = result.negate().getValue()
+    String accessLevel = describeAccess( False, True, False )
+    puts( accessLevel )
+
+    Boolean flag = True
+    Boolean opposite = flag.negate().getValue()
+    puts( "flag: " + flag.toString() )
+    puts( "opposite: " + opposite.toString() )
+
+    Boolean conjunction = flag.logicalAnd( opposite )
+    Boolean disjunction = flag.logicalOr( opposite )
+    puts( "True AND False: " + conjunction.toString() )
+    puts( "True OR False: " + disjunction.toString() )
+
+    String? firstName = "Alice"
+    String? middleName = None
+    String? lastName = "Smith"
+
+    if firstName is None or lastName is None:
+        puts( "incomplete name" )
+    else:
+        String fullName = firstName + " " + lastName
+        if middleName is None:
+            puts( "full name: " + fullName )
+        else:
+            puts( "full name: " + firstName + " " + middleName + " " + lastName )
 
     return 0
 ```
 
-This example demonstrates optional return types with `None`, `None` identity checking via `is`, logical operator chains with `and`/`or`/`not`, boolean method calls on the OOP wrapper (`negate()`, `getValue()`), and conditional branching based on boolean values.
+This example demonstrates optional return types with `None` for absent values, `None` identity checking via `is` and equality checking via `==`, logical operator chains with `and`, `or`, and `not`, boolean method calls on the `Boolean` wrapper (`negate()`, `getValue()`, `toString()`, `logicalAnd()`, `logicalOr()`), conditional branching based on boolean values and `None` checks, and multi-variable `None` handling in conditional chains.
