@@ -1,366 +1,411 @@
 # Reserved Keywords
 
-Uranite reserves 75 unique keywords. These identifiers are unconditionally reserved — they cannot be used as variable names, function names, type names, parameter names, or any other user-defined identifier. This document catalogs every keyword, explains the lexer mechanism that enforces reservation, and details the relationship between keywords and the compiler's builtin identifier registry.
+Uranite reserves 78 keywords. These identifiers are unconditionally reserved — they cannot be used as variable names, function names, type names, parameter names, or any other user-defined identifier. Attempting to use a reserved keyword as an identifier produces a compilation error. This document catalogs every keyword, explains case sensitivity rules, and provides usage examples for each category.
 
 ---
 
 ## Table of Contents
 
-- [Keyword Recognition Mechanism](#keyword-recognition-mechanism)
-  - [The keymaps Registry](#the-keymaps-registry)
-  - [The readIdentifierOrKeyword Method](#the-readidentifierorkeyword-method)
+- [Reserved Keywords](#reserved-keywords)
+  - [Table of Contents](#table-of-contents)
+  - [Unconditional Reservation](#unconditional-reservation)
   - [Case Sensitivity](#case-sensitivity)
-- [Keyword Categories](#keyword-categories)
-  - [Control Flow](#control-flow)
-  - [Declarations](#declarations)
-  - [Access Modifiers](#access-modifiers)
-  - [Object-Oriented Programming](#object-oriented-programming)
-  - [Memory and Safety](#memory-and-safety)
-  - [Logical Operators](#logical-operators)
-  - [Literal Values](#literal-values)
-  - [Error Handling](#error-handling)
-  - [General Purpose](#general-purpose)
-- [Complete Keyword Reference Table](#complete-keyword-reference-table)
-- [Builtin Identifiers](#builtin-identifiers)
-  - [The builtinIdentifiers Registry](#the-builtinidentifiers-registry)
-  - [Distinction from Keywords](#distinction-from-keywords)
-- [Keyword Usage Examples](#keyword-usage-examples)
-  - [Control Flow](#control-flow-examples)
-  - [Declarations and Modules](#declarations-and-modules-examples)
-  - [Memory and Ownership](#memory-and-ownership-examples)
-  - [Error Handling](#error-handling-examples)
-  - [Async and Concurrency](#async-and-concurrency-examples)
-  - [Pattern Matching and Enums](#pattern-matching-and-enums-examples)
-- [What Cannot Be a Keyword](#what-cannot-be-a-keyword)
+  - [Keyword Categories](#keyword-categories)
+    - [Control Flow](#control-flow)
+    - [Declarations](#declarations)
+    - [Access Modifiers](#access-modifiers)
+    - [Object-Oriented Programming](#object-oriented-programming)
+    - [Memory and Safety](#memory-and-safety)
+    - [Logical Operators](#logical-operators)
+    - [Literal Values](#literal-values)
+    - [Error Handling](#error-handling)
+    - [General Purpose](#general-purpose)
+  - [Complete Keyword Reference](#complete-keyword-reference)
+  - [Builtin Type Names](#builtin-type-names)
+    - [How Builtin Types Differ from Keywords](#how-builtin-types-differ-from-keywords)
+    - [Complete Builtin Type List](#complete-builtin-type-list)
+  - [Usage Examples](#usage-examples)
+    - [Control Flow Examples](#control-flow-examples)
+    - [Declaration and Module Examples](#declaration-and-module-examples)
+    - [Object-Oriented Examples](#object-oriented-examples)
+    - [Memory and Ownership Examples](#memory-and-ownership-examples)
+    - [Error Handling Examples](#error-handling-examples)
+    - [Async and Concurrency Examples](#async-and-concurrency-examples)
+    - [Pattern Matching and Enum Examples](#pattern-matching-and-enum-examples)
+  - [Common Errors with Keywords](#common-errors-with-keywords)
 
 ---
 
-## Keyword Recognition Mechanism
+## Unconditional Reservation
 
-### The keymaps Registry
+Keywords in Uranite are **unconditionally reserved**. There is no context in which a keyword can be used as a user-defined identifier. The compiler always recognizes a keyword as a keyword, regardless of where it appears.
 
-Keywords are defined in a single static `std::unordered_map<std::string, Type>` returned by the `keymaps()` function in `src/uranite/token/token.cpp`. This map contains 76 entries mapping string literals to `token::Type` enum values. Two entries ("readonly" and "Readonly") map to the same `KeywordReadonly` token type, yielding 75 unique keywords.
-
-The map is constructed once on first access (static local initialization) and persists for the lifetime of the process. It is never modified after construction.
-
-### The readIdentifierOrKeyword Method
-
-When the lexer encounters an alphabetic character or underscore, it calls `readIdentifierOrKeyword()`. This method:
-
-1. Accumulates consecutive alphanumeric and underscore characters into an `identifierValue` string.
-2. Looks up `identifierValue` in the `keymaps()` registry.
-3. If found, returns a token with the matched keyword type (e.g., `KeywordIf`, `KeywordClass`).
-4. If not found, returns a token with type `Identifier`.
-
-This is a simple hash-table lookup — O(1) average case. There is no separate lexer mode for keywords, no priority rules, and no context-dependent keyword resolution. If the string matches a keymaps entry, it is a keyword. Always.
-
-This means keywords are **unconditionally reserved**. The following code is invalid:
+The following code is invalid:
 
 ```uranite
 I64 class = 5
 ```
 
-The lexer produces `Identifier("I64")` `KeywordClass` `Assignment` `LiteralInteger("5")`, and the parser fails because it encounters `KeywordClass` where it expects an identifier.
+The compiler interprets `class` as the keyword for declaring a class type, not as a variable name. This produces a syntax error because the parser encounters a class declaration keyword where it expects an identifier.
 
-### Case Sensitivity
+This applies to all 78 keywords without exception. Even keywords that are reserved for future use (like `switch` and `trait`) cannot be used as identifiers.
 
-Keyword matching is case-sensitive. Most keywords are entirely lowercase. Four exceptions have non-lowercase forms:
+---
+
+## Case Sensitivity
+
+Keyword matching is case-sensitive. Most keywords are entirely lowercase. Five exceptions have non-lowercase forms:
 
 | Keyword | Case | Notes |
 |---|---|---|
-| `False` | Capital F | Boolean literal. Lowercase "false" is not a keyword. |
-| `True` | Capital T | Boolean literal. Lowercase "true" is not a keyword. |
-| `None` | Capital N | Null-equivalent literal. Lowercase "none" is not a keyword. |
-| `readonly` / `Readonly` | Both forms | Dual-cased — both map to `KeywordReadonly`. |
+| `False` | Capital F | Boolean literal. Lowercase `false` is a valid identifier, not a keyword. |
+| `True` | Capital T | Boolean literal. Lowercase `true` is a valid identifier, not a keyword. |
+| `None` | Capital N | Null-equivalent literal. Lowercase `none` is a valid identifier, not a keyword. |
+| `Readonly` | Capital R | Alternate casing of `readonly`. Both forms are accepted. |
+| `readonly` | All lowercase | Primary casing. Identical in meaning to `Readonly`. |
 
-The `readonly` / `Readonly` dual entry is the only keyword with two accepted casings. All other keywords have exactly one valid form.
+The `readonly` / `Readonly` pair is the only keyword with two accepted casings. All other keywords have exactly one valid form.
 
-Because the keymaps registry uses exact string matching, `IF`, `Class`, `RETURN`, and similar variants are not keywords — they are valid identifiers. Only the exact casing listed in the registry is reserved.
+Because matching is exact, `IF`, `Class`, `RETURN`, `TRUE`, and similar capitalization variants are not keywords. They are valid user-defined identifiers. Only the exact casing listed in the reference table is reserved:
+
+```uranite
+I64 TRUE = 1
+I64 FALSE = 0
+```
+
+This compiles without error because `TRUE` and `FALSE` (all uppercase) are not keywords. Only `True` and `False` (capital first letter, lowercase rest) are reserved. While this is valid, using identifier names that resemble keywords is strongly discouraged because it creates confusing code.
 
 ---
 
 ## Keyword Categories
 
-The compiler organizes keywords into nine categories, each backed by a dedicated helper function that returns the category's token types. These categories are used internally for parser dispatch and diagnostic messages.
+Keywords are organized into nine functional categories.
 
 ### Control Flow
 
 Keywords that alter execution flow within a function body.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `break` | `KeywordBreak` | Exit the innermost loop. |
-| `continue` | `KeywordContinue` | Skip to the next iteration of the innermost loop. |
-| `else` | `KeywordElse` | Fallback branch in conditional chains. |
-| `elif` | `KeywordElif` | Additional conditional branch (else-if). |
-| `for` | `KeywordFor` | Iteration over sequences, ranges, or iterators. |
-| `if` | `KeywordIf` | Conditional branch. |
-| `match` | `KeywordMatch` | Pattern matching on values, types, or enum variants. |
-| `return` | `KeywordReturn` | Return a value from a function. |
-| `while` | `KeywordWhile` | Loop with a boolean condition. |
-| `yield` | `KeywordYield` | Produce a value from a generator function. |
+| Keyword | Purpose |
+|---|---|
+| `break` | Exit the innermost loop immediately. |
+| `case` | Individual branch within a `switch` statement. Not used with `match`. |
+| `continue` | Skip the rest of the current iteration and proceed to the next. |
+| `else` | Fallback branch in conditional chains when no `if` or `elif` condition matched. |
+| `elif` | Additional conditional branch in an if/elif/else chain (else-if). |
+| `for` | Iterate over sequences, ranges, or any type implementing the iterator protocol. |
+| `if` | Conditional branch — execute a block only when a boolean condition is `True`. |
+| `match` | Match expression. Inline pattern matching using `match <expr> in <arms>` syntax with `=>` arrows. |
+| `return` | Return a value from a function and transfer control to the caller. |
+| `switch` | Switch statement. Block-based branching using `case` arms with colon-delimited bodies. |
+| `while` | Loop that repeats as long as a boolean condition remains `True`. |
+| `yield` | Produce a value from a generator function without terminating it. |
 
 ### Declarations
 
 Keywords that introduce named entities — types, functions, modules, and bindings.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `class` | `KeywordClass` | Declare a class type. |
-| `const` | `KeywordConstant` | Declare a compile-time constant. |
-| `enum` | `KeywordEnum` | Declare an enumeration type. |
-| `extern` | `KeywordExtern` | Declare an external (foreign) function or symbol. |
-| `from` | `KeywordFrom` | Specify the module in an import statement. |
-| `function` | `KeywordFunction` | Declare a function. |
-| `implements` | `KeywordImplements` | Declare that a class implements an interface. |
-| `import` | `KeywordImport` | Import entities from a module. |
-| `interface` | `KeywordInterface` | Declare an interface (abstract contract). |
-| `mut` | `KeywordMutable` | Mark a variable or parameter as mutable. |
-| `package` | `KeywordPackage` | Declare the package name for a source file. |
-| `static` | `KeywordStatic` | Declare a class-level (not instance-level) member. |
-| `struct` | `KeywordStruct` | Declare a value-type struct. |
-| `type` | `KeywordType` | Declare a type alias. |
+| Keyword | Purpose |
+|---|---|
+| `class` | Declare a class type with fields, methods, and constructors. |
+| `const` | Declare a compile-time constant value. |
+| `enum` | Declare an enumeration type with named variants. |
+| `extern` | Declare an external (foreign) function or symbol implemented outside Uranite. |
+| `from` | Specify the source module in an import statement (`from module import entity`). |
+| `function` | Declare a named function. |
+| `implements` | Declare that a class implements an interface contract. |
+| `import` | Import entities from another module into the current scope. |
+| `interface` | Declare an interface — an abstract contract that classes can implement. |
+| `package` | Declare the package identity of a source file. Must be the first statement. |
+| `static` | Declare a class-level member that belongs to the class itself, not instances. |
+| `struct` | Declare a value-type struct with public fields. |
+| `trait` | Reserved for future use (trait-based composition). |
+| `type` | Declare a type alias that gives an existing type a new name. |
 
 ### Access Modifiers
 
-Keywords that control visibility of declarations across module boundaries.
+Keywords that control visibility of declarations across module and class boundaries.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `private` | `KeywordPrivate` | Visible only within the declaring class. |
-| `protect` | `KeywordProtect` | Visible within the declaring class and subclasses. |
-| `public` | `KeywordPublic` | Visible to all modules that import the declaration. |
+| Keyword | Purpose |
+|---|---|
+| `private` | Visible only within the declaring class. Cannot be accessed from outside. |
+| `protect` | Visible within the declaring class and its subclasses. Hidden from external code. |
+| `public` | Visible to all modules that import the declaration. Required for cross-module access. |
+
+When no access modifier is specified, declarations default to package-private visibility — accessible within the same package but not importable by external modules.
 
 ### Object-Oriented Programming
 
-Keywords for class hierarchies, polymorphism, and instance semantics.
+Keywords for class hierarchies, polymorphism, construction, and instance semantics.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `abstract` | `KeywordAbstract` | Mark a class or method as abstract (no implementation). |
-| `delete` | `KeywordDelete` | Explicitly destroy an object. |
-| `extends` | `KeywordExtends` | Declare class inheritance. |
-| `final` | `KeywordFinal` | Prevent further subclassing or overriding. |
-| `native` | `KeywordNative` | Mark a method as implemented in native code (C/assembly). |
-| `new` | `KeywordNew` | Construct a new object instance. |
-| `override` | `KeywordOverride` | Mark a method as overriding a parent method. |
-| `parent` | `KeywordParent` | Reference the parent class (super). |
-| `property` | `KeywordProperty` | Declare a computed property with getter/setter semantics. |
-| `readonly` | `KeywordReadonly` | Mark a field as immutable after construction. Also accepted as "Readonly". |
-| `self` | `KeywordSelf` | Reference the current object instance. |
-| `virtual` | `KeywordVirtual` | Mark a method for dynamic dispatch via vtable. |
+| Keyword | Purpose |
+|---|---|
+| `abstract` | Mark a class as non-instantiable or a method as requiring override in subclasses. |
+| `delete` | Explicitly destroy an object and release its resources. |
+| `extends` | Declare that a class inherits from a parent class. |
+| `final` | Prevent a class from being subclassed or a method from being overridden. |
+| `native` | Mark a method as implemented in native code (C or assembly) rather than Uranite. |
+| `new` | Construct a new object instance by invoking a class constructor. |
+| `override` | Mark a method as intentionally overriding a parent class method. |
+| `parent` | Reference the parent class to call parent constructors or overridden methods. |
+| `property` | Declare a computed property with getter and/or setter semantics. |
+| `readonly` | Mark a field as immutable after construction. Also accepted as `Readonly`. |
+| `Readonly` | Alternate casing of `readonly`. Identical in meaning and behavior. |
+| `self` | Reference the current object instance within methods and constructors. |
+| `virtual` | Mark a method for dynamic dispatch, enabling polymorphic calls through parent references. |
 
 ### Memory and Safety
 
-Keywords governing ownership, borrowing, and unsafe operations.
+Keywords governing ownership, borrowing, raw memory access, and unsafe operations.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `addressof` | `KeywordAddressof` | Obtain the raw memory address of a variable. |
-| `move` | `KeywordMove` | Transfer ownership of a value to a new binding. |
-| `own` | `KeywordOwn` | Declare ownership semantics for a parameter or field. |
-| `reference` | `KeywordReference` | Pass by reference (borrow without ownership transfer). |
-| `unsafe` | `KeywordUnsafe` | Enter an unsafe block where borrow checker rules are relaxed. |
+| Keyword | Purpose |
+|---|---|
+| `addressof` | Obtain the raw memory address of a variable as a `U64` value. |
+| `move` | Transfer ownership of a value to a new binding. The original binding becomes invalid. |
+| `mut` | Mark a variable or parameter as mutable, allowing reassignment after initialization. |
+| `own` | Declare explicit ownership semantics for a parameter or field. |
+| `reference` | Pass a value by reference (borrow) without transferring ownership. |
+| `unsafe` | Enter an unsafe block where borrow checker rules are relaxed and raw memory operations are permitted. |
 
 ### Logical Operators
 
-Keywords that serve as boolean operators, replacing symbolic equivalents.
+Keywords that serve as boolean operators. Uranite uses word-form logical operators exclusively — the symbols `&&` and `||` are not valid in Uranite.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `and` | `KeywordAnd` | Logical AND. Replaces `&&`. |
-| `not` | `KeywordNot` | Logical NOT. Replaces `!` in boolean context. |
-| `or` | `KeywordOr` | Logical OR. Replaces `\|\|`. |
+| Keyword | Purpose |
+|---|---|
+| `and` | Logical AND with short-circuit evaluation. Evaluates the right operand only if the left is `True`. |
+| `not` | Logical NOT. Negates a boolean value. |
+| `or` | Logical OR with short-circuit evaluation. Evaluates the right operand only if the left is `False`. |
 
-Uranite uses word-form logical operators exclusively. The symbols `&&` and `||` are not valid tokens. The `!` character exists as the `Bang` token but is used only in the `!=` (not-equal) operator, never as a standalone logical negation.
+The `!` character is used only as part of the `!=` (not-equal) operator. It is never used as a standalone negation operator — use `not` instead.
 
 ### Literal Values
 
-Keywords representing built-in constant values.
+Keywords representing built-in constant values. These are capitalized to distinguish them visually from control-flow and declaration keywords.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `False` | `KeywordFalse` | Boolean false literal. |
-| `None` | `KeywordNone` | Null-equivalent — absence of a value. |
-| `True` | `KeywordTrue` | Boolean true literal. |
+| Keyword | Purpose |
+|---|---|
+| `False` | Boolean false literal. The only falsy boolean value. |
+| `None` | Null-equivalent — represents the absence of a value. Used with nullable types. |
+| `True` | Boolean true literal. The only truthy boolean value. |
 
-These three keywords are capitalized, following the convention that literal values are visually distinct from control-flow and declaration keywords.
+These three keywords are the only identifiers in Uranite that begin with an uppercase letter and are reserved. All other capitalized identifiers (like `I64`, `String`, `ArrayList`) are user-facing type names, not keywords.
 
 ### Error Handling
 
-Keywords for structured exception handling.
+Keywords for structured exception handling with try/except/finally blocks.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `except` | `KeywordExcept` | Catch an exception by type. |
-| `finally` | `KeywordFinally` | Execute cleanup code regardless of exception state. |
-| `raise` | `KeywordRaise` | Throw an exception. |
-| `raises` | `KeywordRaises` | Declare in a function signature that the function may throw. |
-| `try` | `KeywordTry` | Begin a protected block for exception handling. |
+| Keyword | Purpose |
+|---|---|
+| `except` | Catch an exception by type within a `try` block. |
+| `finally` | Execute cleanup code regardless of whether an exception occurred. Always runs. |
+| `raise` | Throw an exception. Takes a `Throwable` object as its operand. |
+| `raises` | Declare in a function signature that the function may raise a specific exception type. |
+| `try` | Begin a protected block for exception handling. Must be followed by `except` and/or `finally`. |
 
-Note the distinction between `raise` (imperative — throw now) and `raises` (declarative — this function may throw).
+Note the distinction between `raise` (imperative — raise an exception now) and `raises` (declarative — this function's signature declares that it may raise).
 
 ### General Purpose
 
-Keywords that do not fit neatly into a single category, spanning type casting, concurrency, pattern matching, metaprogramming, and miscellaneous language features.
+Keywords spanning type casting, concurrency, metaprogramming, inline assembly, and miscellaneous language features.
 
-| Keyword | Token Type | Purpose |
-|---|---|---|
-| `as` | `KeywordAs` | Type casting or import aliasing. |
-| `asm` | `KeywordAssembly` | Inline assembly block. |
-| `async` | `KeywordAsync` | Mark a function as asynchronous (returns `Future<T>`). |
-| `await` | `KeywordAwait` | Suspend until an async operation completes. |
-| `backed` | `KeywordBacked` | Specify a backing type for an enum. |
-| `case` | `KeywordCase` | Individual branch within a `match` expression. |
-| `defer` | `KeywordDefer` | Schedule a statement to execute when the current scope exits. |
-| `export` | `KeywordExport` | Make declarations available for import by other modules. |
-| `in` | `KeywordIn` | Membership test or iteration target in `for` loops. |
-| `instanceof` | `KeywordInstanceOf` | Runtime type check against a class or interface. |
-| `is` | `KeywordIs` | Identity comparison (reference equality or `None` check). |
-| `lambda` | `KeywordLambda` | Declare an anonymous function expression. |
-| `pass` | `KeywordPass` | No-op placeholder for empty blocks. |
-| `subclassof` | `KeywordSubclassOf` | Compile-time subclass relationship check. |
-| `switch` | `KeywordSwitch` | Reserved for future use (currently parsed but may alias `match`). |
-| `trait` | `KeywordTrait` | Reserved for future use (trait-based composition). |
-| `unit` | `KeywordUnit` | Declare enum variants. |
-| `use` | `KeywordUse` | Bring a module or type into scope (alternative import form). |
-| `volatile` | `KeywordVolatile` | Mark a variable as volatile (prevents compiler optimizations on reads/writes). |
-| `where` | `KeywordWhere` | Type constraint clause on generic declarations. |
+| Keyword | Purpose |
+|---|---|
+| `as` | Type casting (`value as TargetType`) or import aliasing (`import module as alias`). |
+| `asm` | Introduce an inline assembly block for direct hardware-level instructions. |
+| `async` | Mark a function as asynchronous. The function returns a `Future<T>` value. |
+| `await` | Suspend execution until an asynchronous operation completes and unwrap the `Future<T>`. |
+| `backed` | Specify a backing type for an enum (`enum Direction backed I32:`). |
+| `defer` | Schedule a statement to execute when the current scope exits, regardless of how it exits. |
+| `export` | Make declarations available for import by other modules via an export block. |
+| `in` | Membership test (`element in collection`) or iteration target in `for` loops (`for x in items`). |
+| `instanceof` | Runtime type check. Returns `True` if an object is an instance of a given class or interface. |
+| `is` | Identity comparison. Tests reference equality or checks whether a value `is None`. |
+| `lambda` | Declare an anonymous function expression with captured scope. |
+| `pass` | No-op placeholder for intentionally empty blocks. Required when a block has no statements. |
+| `subclassof` | Compile-time check of subclass relationships between types. |
+| `unit` | Declare individual variants within an enum type. |
+| `use` | Bring a module or type into scope (alternative import form). |
+| `volatile` | Mark a variable as volatile, preventing the compiler from optimizing away reads and writes. |
+| `where` | Type constraint clause on generic declarations (`function sort<T>( ... ) -> ... where T implements Comparable:`). |
 
 ---
 
-## Complete Keyword Reference Table
+## Complete Keyword Reference
 
-All 75 unique keywords sorted alphabetically with their exact casing, token type, and category.
+All 78 keywords sorted alphabetically. The "Casing" column shows the exact form that is reserved — only that exact casing is a keyword.
 
-| # | Keyword | Token Type | Category |
+| # | Keyword | Category | Casing |
 |---|---|---|---|
-| 1 | `abstract` | `KeywordAbstract` | OOP |
-| 2 | `addressof` | `KeywordAddressof` | Memory & Safety |
-| 3 | `and` | `KeywordAnd` | Logic |
-| 4 | `as` | `KeywordAs` | General |
-| 5 | `asm` | `KeywordAssembly` | General |
-| 6 | `async` | `KeywordAsync` | General |
-| 7 | `await` | `KeywordAwait` | General |
-| 8 | `backed` | `KeywordBacked` | General |
-| 9 | `break` | `KeywordBreak` | Control Flow |
-| 10 | `case` | `KeywordCase` | General |
-| 11 | `class` | `KeywordClass` | Declarations |
-| 12 | `const` | `KeywordConstant` | Declarations |
-| 13 | `continue` | `KeywordContinue` | Control Flow |
-| 14 | `defer` | `KeywordDefer` | General |
-| 15 | `delete` | `KeywordDelete` | OOP |
-| 16 | `elif` | `KeywordElif` | Control Flow |
-| 17 | `else` | `KeywordElse` | Control Flow |
-| 18 | `enum` | `KeywordEnum` | Declarations |
-| 19 | `except` | `KeywordExcept` | Error Handling |
-| 20 | `export` | `KeywordExport` | General |
-| 21 | `extends` | `KeywordExtends` | OOP |
-| 22 | `extern` | `KeywordExtern` | Declarations |
-| 23 | `False` | `KeywordFalse` | Literal Values |
-| 24 | `final` | `KeywordFinal` | OOP |
-| 25 | `finally` | `KeywordFinally` | Error Handling |
-| 26 | `for` | `KeywordFor` | Control Flow |
-| 27 | `from` | `KeywordFrom` | Declarations |
-| 28 | `function` | `KeywordFunction` | Declarations |
-| 29 | `if` | `KeywordIf` | Control Flow |
-| 30 | `implements` | `KeywordImplements` | Declarations |
-| 31 | `import` | `KeywordImport` | Declarations |
-| 32 | `in` | `KeywordIn` | General |
-| 33 | `instanceof` | `KeywordInstanceOf` | General |
-| 34 | `interface` | `KeywordInterface` | Declarations |
-| 35 | `is` | `KeywordIs` | General |
-| 36 | `lambda` | `KeywordLambda` | General |
-| 37 | `match` | `KeywordMatch` | Control Flow |
-| 38 | `move` | `KeywordMove` | Memory & Safety |
-| 39 | `mut` | `KeywordMutable` | Declarations |
-| 40 | `native` | `KeywordNative` | OOP |
-| 41 | `new` | `KeywordNew` | OOP |
-| 42 | `None` | `KeywordNone` | Literal Values |
-| 43 | `not` | `KeywordNot` | Logic |
-| 44 | `or` | `KeywordOr` | Logic |
-| 45 | `override` | `KeywordOverride` | OOP |
-| 46 | `own` | `KeywordOwn` | Memory & Safety |
-| 47 | `package` | `KeywordPackage` | Declarations |
-| 48 | `parent` | `KeywordParent` | OOP |
-| 49 | `pass` | `KeywordPass` | General |
-| 50 | `private` | `KeywordPrivate` | Access Modifiers |
-| 51 | `property` | `KeywordProperty` | OOP |
-| 52 | `protect` | `KeywordProtect` | Access Modifiers |
-| 53 | `public` | `KeywordPublic` | Access Modifiers |
-| 54 | `raise` | `KeywordRaise` | Error Handling |
-| 55 | `raises` | `KeywordRaises` | Error Handling |
-| 56 | `readonly` | `KeywordReadonly` | OOP |
-| 57 | `reference` | `KeywordReference` | Memory & Safety |
-| 58 | `return` | `KeywordReturn` | Control Flow |
-| 59 | `self` | `KeywordSelf` | OOP |
-| 60 | `static` | `KeywordStatic` | Declarations |
-| 61 | `struct` | `KeywordStruct` | Declarations |
-| 62 | `subclassof` | `KeywordSubclassOf` | General |
-| 63 | `switch` | `KeywordSwitch` | General |
-| 64 | `trait` | `KeywordTrait` | General |
-| 65 | `True` | `KeywordTrue` | Literal Values |
-| 66 | `try` | `KeywordTry` | Error Handling |
-| 67 | `type` | `KeywordType` | Declarations |
-| 68 | `unit` | `KeywordUnit` | General |
-| 69 | `unsafe` | `KeywordUnsafe` | Memory & Safety |
-| 70 | `use` | `KeywordUse` | General |
-| 71 | `virtual` | `KeywordVirtual` | OOP |
-| 72 | `volatile` | `KeywordVolatile` | General |
-| 73 | `where` | `KeywordWhere` | General |
-| 74 | `while` | `KeywordWhile` | Control Flow |
-| 75 | `yield` | `KeywordYield` | Control Flow |
+| 1 | `abstract` | OOP | all lowercase |
+| 2 | `addressof` | Memory | all lowercase |
+| 3 | `and` | Logic | all lowercase |
+| 4 | `as` | General | all lowercase |
+| 5 | `asm` | General | all lowercase |
+| 6 | `async` | General | all lowercase |
+| 7 | `await` | General | all lowercase |
+| 8 | `backed` | General | all lowercase |
+| 9 | `break` | Control Flow | all lowercase |
+| 10 | `case` | Control Flow | all lowercase |
+| 11 | `class` | Declarations | all lowercase |
+| 12 | `const` | Declarations | all lowercase |
+| 13 | `continue` | Control Flow | all lowercase |
+| 14 | `defer` | General | all lowercase |
+| 15 | `delete` | OOP | all lowercase |
+| 16 | `elif` | Control Flow | all lowercase |
+| 17 | `else` | Control Flow | all lowercase |
+| 18 | `enum` | Declarations | all lowercase |
+| 19 | `except` | Error Handling | all lowercase |
+| 20 | `export` | General | all lowercase |
+| 21 | `extends` | OOP | all lowercase |
+| 22 | `extern` | Declarations | all lowercase |
+| 23 | `False` | Literal Values | capital F |
+| 24 | `final` | OOP | all lowercase |
+| 25 | `finally` | Error Handling | all lowercase |
+| 26 | `for` | Control Flow | all lowercase |
+| 27 | `from` | Declarations | all lowercase |
+| 28 | `function` | Declarations | all lowercase |
+| 29 | `if` | Control Flow | all lowercase |
+| 30 | `implements` | Declarations | all lowercase |
+| 31 | `import` | Declarations | all lowercase |
+| 32 | `in` | General | all lowercase |
+| 33 | `instanceof` | General | all lowercase |
+| 34 | `interface` | Declarations | all lowercase |
+| 35 | `is` | General | all lowercase |
+| 36 | `lambda` | General | all lowercase |
+| 37 | `match` | Control Flow | all lowercase |
+| 38 | `move` | Memory | all lowercase |
+| 39 | `mut` | Memory | all lowercase |
+| 40 | `native` | OOP | all lowercase |
+| 41 | `new` | OOP | all lowercase |
+| 42 | `None` | Literal Values | capital N |
+| 43 | `not` | Logic | all lowercase |
+| 44 | `or` | Logic | all lowercase |
+| 45 | `override` | OOP | all lowercase |
+| 46 | `own` | Memory | all lowercase |
+| 47 | `package` | Declarations | all lowercase |
+| 48 | `parent` | OOP | all lowercase |
+| 49 | `pass` | General | all lowercase |
+| 50 | `private` | Access | all lowercase |
+| 51 | `property` | OOP | all lowercase |
+| 52 | `protect` | Access | all lowercase |
+| 53 | `public` | Access | all lowercase |
+| 54 | `raise` | Error Handling | all lowercase |
+| 55 | `raises` | Error Handling | all lowercase |
+| 56 | `readonly` | OOP | all lowercase |
+| 57 | `Readonly` | OOP | capital R |
+| 58 | `reference` | Memory | all lowercase |
+| 59 | `return` | Control Flow | all lowercase |
+| 60 | `self` | OOP | all lowercase |
+| 61 | `static` | Declarations | all lowercase |
+| 62 | `struct` | Declarations | all lowercase |
+| 63 | `subclassof` | General | all lowercase |
+| 64 | `switch` | Control Flow | all lowercase |
+| 65 | `trait` | Declarations | all lowercase |
+| 66 | `True` | Literal Values | capital T |
+| 67 | `try` | Error Handling | all lowercase |
+| 68 | `type` | Declarations | all lowercase |
+| 69 | `unit` | General | all lowercase |
+| 70 | `unsafe` | Memory | all lowercase |
+| 71 | `use` | General | all lowercase |
+| 72 | `virtual` | OOP | all lowercase |
+| 73 | `volatile` | General | all lowercase |
+| 74 | `where` | General | all lowercase |
+| 75 | `while` | Control Flow | all lowercase |
+| 76 | `yield` | Control Flow | all lowercase |
 
-Entry #56 also accepts the casing "Readonly" — both forms map to `KeywordReadonly`.
-
----
-
-## Builtin Identifiers
-
-### The builtinIdentifiers Registry
-
-Beyond the 75 reserved keywords, the compiler maintains a set of **builtin identifiers** in `qualnames.hpp`. These are type names, class names, and interface names that the compiler recognizes as part of the standard type system. They are registered via the `builtinIdentifiers()` function, which returns an `std::unordered_set<std::string>`.
-
-The builtin identifiers include:
-
-**Numeric types:** `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `Int`, `UInt`, `Float`, `Double`, `Byte`
-
-**Core types:** `String`, `Boolean`, `Bool`, `Char`, `Void`, `Object`
-
-**Memory types:** `Memory`, `Args`, `Kwargs`
-
-**Async types:** `Future`, `Generator`
-
-**Error hierarchy:** `Error`, `Exception`, `Warning`, `Throwable`, `Traceback`, `ArithmeticError`, `ZeroDivisionError`, `OverflowError`, `UnderflowError`
-
-### Distinction from Keywords
-
-Builtin identifiers are **not** lexer keywords. The lexer produces `Identifier("I64")`, not `KeywordI64` — there is no such token type. The distinction matters:
-
-1. **Keywords** are resolved at the lexer level. The `readIdentifierOrKeyword()` method checks the keymaps registry and emits a keyword token type. The parser receives `KeywordIf`, `KeywordClass`, etc., and dispatches on these types directly.
-
-2. **Builtin identifiers** are resolved at the semantic analysis level. The lexer produces a generic `Identifier` token. The semantic analyzer then looks up the identifier in the type registry, where builtin types are pre-registered during compiler initialization. The identifier "I64" resolves to the `uranite.language.i64.I64` class through the type registry, not through the keyword system.
-
-This means builtin identifiers can technically be shadowed by user-defined names — declaring a local variable named `I64` would shadow the type name within that scope. However, the linter flags such shadowing as a warning, and the practice is strongly discouraged because it creates confusing code where a type name refers to a variable.
-
-Keywords cannot be shadowed at all. The lexer always produces a keyword token for any string that matches a keymaps entry, regardless of scope or context.
-
-### The qualnames Registry
-
-The `qualnames.hpp` file centralizes all entity name strings used across the compiler into a nested namespace hierarchy under `uranite::semantic::qualname`. This includes:
-
-- **Qualified names** — Fully-qualified type paths like "uranite.language.i64.I64" used for type identity comparisons throughout the compiler.
-- **Short names** — Unqualified type names like "I64" used for user-facing display and lookup.
-- **Method names** — Standard method names like "toString", "hashCode", "equals" that the compiler recognizes for operator dispatch and protocol conformance.
-- **Operator mappings** — The `OperatorMapping` struct and `ArithmeticMappings`/`FullOperatorMappings` tables that map operator tokens to interface method calls.
-
-The qualnames registry does not affect lexing. It operates entirely at the semantic analysis and code generation levels, providing a single source of truth for all name comparisons that the compiler performs against user-defined and builtin entities.
+Entry #56 (`readonly`) and #57 (`Readonly`) are two accepted casings of the same keyword. Both compile identically. The total of 78 includes both forms plus the 76 other unique keywords.
 
 ---
 
-## Keyword Usage Examples
+## Builtin Type Names
+
+Beyond the 78 reserved keywords, Uranite has a set of **builtin type names** that the compiler recognizes as part of the standard type system. These are pre-registered during compiler initialization and resolve to their corresponding standard library implementations automatically.
+
+### How Builtin Types Differ from Keywords
+
+Keywords and builtin type names behave differently:
+
+**Keywords** are unconditionally reserved. The compiler always treats them as language constructs, never as user-defined identifiers. You cannot declare a variable named `class`, `if`, or `return` under any circumstances.
+
+**Builtin type names** are pre-registered identifiers, not reserved words. The compiler recognizes names like `I64`, `String`, and `Boolean` as type names during semantic analysis, but they are technically identifiers at the lexical level. This means:
+
+- A local variable named `I64` would shadow the type name within that scope
+- The code would compile, but the type name becomes inaccessible in that scope
+- The linter flags such shadowing as a warning
+
+While shadowing builtin type names is technically valid, it is strongly discouraged because it creates confusing code where a type name refers to a variable instead of its expected type.
+
+### Complete Builtin Type List
+
+**Integer types:**
+
+| Type | Description |
+|---|---|
+| `I8` | Signed 8-bit integer (-128 to 127) |
+| `I16` | Signed 16-bit integer (-32,768 to 32,767) |
+| `I32` | Signed 32-bit integer (-2,147,483,648 to 2,147,483,647) |
+| `I64` | Signed 64-bit integer (-9,223,372,036,854,775,808 to 9,223,372,036,854,775,807) |
+| `U8` | Unsigned 8-bit integer (0 to 255) |
+| `U16` | Unsigned 16-bit integer (0 to 65,535) |
+| `U32` | Unsigned 32-bit integer (0 to 4,294,967,295) |
+| `U64` | Unsigned 64-bit integer (0 to 18,446,744,073,709,551,615) |
+| `Int` | Platform-width signed integer (64-bit on supported systems). |
+| `UInt` | Platform-width unsigned integer (64-bit on supported systems). |
+| `Byte` | Unsigned 8-bit integer for raw byte data. |
+
+**Floating-point types:**
+
+| Type | Description |
+|---|---|
+| `Float` | 32-bit IEEE 754 single-precision floating-point number |
+| `Double` | 64-bit IEEE 754 double-precision floating-point number |
+
+**Core types:**
+
+| Type | Description |
+|---|---|
+| `Boolean` | Boolean type. Holds `True` or `False`. |
+| `Char` | 32-bit Unicode character. Holds a single code point. |
+| `String` | Immutable UTF-8 string. |
+| `Void` | Unit type representing no value. Used as return type for functions with no return value. |
+| `Object` | Root of the class hierarchy. Every class implicitly extends `Object`. |
+
+**Memory types:**
+
+| Type | Description |
+|---|---|
+| `Memory<T>` | Raw heap-allocated memory block for type `T`. Manual allocation and deallocation. |
+| `Args<T>` | Container for variadic positional arguments in functions using `T args{}` syntax. |
+| `Kwargs<K, V>` | Container for keyword arguments in functions using `V kwargs{}` syntax. |
+
+**Async types:**
+
+| Type | Description |
+|---|---|
+| `Future<T>` | Represents an asynchronous computation that will eventually produce a value of type `T`. |
+| `Generator<T>` | Represents a lazy sequence of values produced by `yield` statements. |
+
+**Error hierarchy:**
+
+| Type | Description |
+|---|---|
+| `Throwable` | Root of all throwable types. Parent of both `Error` and `Exception`. |
+| `Error` | Represents serious errors that typically should not be caught (e.g., out of memory). |
+| `Exception` | Represents recoverable errors intended to be caught with `try`/`except`. |
+| `Warning` | Represents non-fatal diagnostic conditions. |
+| `Traceback` | Represents a stack trace captured when an exception is raised. |
+| `ArithmeticError` | Raised for arithmetic failures. Parent of division and overflow errors. |
+| `ZeroDivisionError` | Raised when dividing or taking modulo by zero. |
+| `OverflowError` | Raised when an arithmetic operation exceeds the maximum value of its type. |
+| `UnderflowError` | Raised when an arithmetic operation falls below the minimum value of its type. |
+
+---
+
+## Usage Examples
 
 ### Control Flow Examples
+
+Conditional branching with `if`, `elif`, and `else`:
 
 ```uranite
 public function classify( I64 value ) -> String:
@@ -372,15 +417,19 @@ public function classify( I64 value ) -> String:
         return "zero"
 ```
 
+Iteration with `for`, `continue`, and `break`:
+
 ```uranite
-public function sum( ArrayList<I64> numbers ) -> I64:
+public function sumPositive( ArrayList<I64> numbers ) -> I64:
     I64 total = 0
     for I64 number in numbers:
-        if number == 0:
+        if number <= 0:
             continue
         total = total + number
     return total
 ```
+
+Loop with `while` and early exit with `break`:
 
 ```uranite
 public function findFirst( ArrayList<I64> values, I64 target ) -> I64:
@@ -391,6 +440,8 @@ public function findFirst( ArrayList<I64> values, I64 target ) -> I64:
         index = index + 1
     return index
 ```
+
+Generator function with `yield`:
 
 ```uranite
 public function fibonacci() -> Generator<I64>:
@@ -403,7 +454,41 @@ public function fibonacci() -> Generator<I64>:
         current = next
 ```
 
-### Declarations and Modules Examples
+Match expression (inline pattern matching with `in` and `=>`):
+
+```uranite
+public function describe( Shape shape ) -> String:
+    return match shape in \
+        Shape.Circle => "round", \
+        Shape.Rectangle => "four sides", \
+        Shape.Triangle => "three sides", \
+        * => "unknown"
+```
+
+Switch statement (block-based branching with `case`):
+
+```uranite
+public enum Shape:
+    unit Circle
+    unit Rectangle
+    unit Triangle
+
+public function describeSwitch( Shape shape ) -> String:
+    switch shape:
+        case Shape.Circle:
+            return "round"
+        case Shape.Rectangle:
+            return "four sides"
+        case Shape.Triangle:
+            return "three sides"
+        case *:
+            return "unknown"
+    return "unreachable"
+```
+
+### Declaration and Module Examples
+
+Package declaration, imports, constants, type aliases, enums, interfaces, structs, and classes:
 
 ```uranite
 package myapp.models
@@ -426,10 +511,11 @@ public interface Renderable:
     public function render( self ) -> String;
 
 public struct Point:
-    public I64 x
-    public I64 y
+    public I64 xCoordinate
+    public I64 yCoordinate
 
 public class Canvas implements Renderable:
+
     private ArrayList<Point> points
 
     public static function create() -> Canvas:
@@ -440,82 +526,60 @@ public class Canvas implements Renderable:
         return "Canvas"
 ```
 
-### Memory and Ownership Examples
+### Object-Oriented Examples
+
+Inheritance with `extends`, constructor delegation with `parent`, method overriding with `override` and `virtual`, and access modifiers:
 
 ```uranite
-from uranite.memory.memory import Memory
+public class Animal:
 
-public function transferOwnership() -> Void:
-    Memory<I64> buffer = new Memory<I64>( 256 )
-    Memory<I64> newOwner = move buffer
+    protect String species
 
-public function borrowValue( reference I64 value ) -> I64:
-    return value * 2
+    public function Animal( self, String species ) -> Void:
+        self.species = species
 
-public function rawAddress() -> Void:
-    I64 counter = 42
-    U64 address = addressof counter
+    public virtual function speak( self ) -> String:
+        return "..."
 
-public function dangerousOperation() -> Void:
-    unsafe:
-        Memory<U8> raw = new Memory<U8>( 4096 )
-        raw.set( 0, 0xFF )
-        raw.free()
+public class Dog extends Animal:
+
+    private String name
+
+    public function Dog( self, String name ) -> Void:
+        parent( "Canis familiaris" )
+        self.name = name
+
+    public override function speak( self ) -> String:
+        return "Woof!"
+
+public final class GuideDog extends Dog:
+
+    readonly String handler
+
+    public function GuideDog( self, String name, String handler ) -> Void:
+        parent( name )
+        self.handler = handler
 ```
 
-### Error Handling Examples
+The `final` keyword on `GuideDog` prevents further subclassing. The `readonly` keyword on `handler` ensures the field cannot be reassigned after construction.
+
+Abstract classes with `abstract`:
 
 ```uranite
-from uranite.math.errors import ZeroDivisionError
+public abstract class Shape:
 
-public function safeDivide( I64 numerator, I64 denominator ) -> I64 raises ZeroDivisionError:
-    if denominator == 0:
-        raise new ZeroDivisionError( "division by zero" )
-    return numerator / denominator
+    public abstract function area( self ) -> Double;
 
-public function compute() -> Void:
-    try:
-        I64 result = safeDivide( 100, 0 )
-    except ZeroDivisionError error:
-        console.puts( error.toString() )
-    finally:
-        console.puts( "computation complete" )
+    public function describe( self ) -> String:
+        return "Shape with area " + self.area().toString()
 ```
 
-### Async and Concurrency Examples
+Abstract classes cannot be instantiated directly. Subclasses must override all abstract methods.
+
+Type checking with `instanceof`, `is`, and `as`:
 
 ```uranite
-from uranite.io.file import readFile
-
-public async function loadConfig( String path ) -> String:
-    String content = await readFile( path )
-    return content
-
-public async function loadAll() -> Void:
-    String config = await loadConfig( "config.yaml" )
-    String data = await loadConfig( "data.yaml" )
-```
-
-### Pattern Matching and Enums Examples
-
-```uranite
-public enum Shape:
-    unit Circle
-    unit Rectangle
-    unit Triangle
-
-public function area( Shape shape, F64 dimension ) -> F64:
-    match shape:
-        case Shape.Circle:
-            return 3.14159 * dimension * dimension
-        case Shape.Rectangle:
-            return dimension * dimension
-        case Shape.Triangle:
-            return 0.5 * dimension * dimension
-```
-
-```uranite
-public function describeValue( Object value ) -> String:
+public function process( Object value ) -> String:
     if value is None:
         return "nothing"
     if value instanceof String:
@@ -524,12 +588,286 @@ public function describeValue( Object value ) -> String:
     return value.toString()
 ```
 
+The `is` keyword tests identity (reference equality or `None` comparison). The `instanceof` keyword tests type membership at runtime. The `as` keyword performs type casting.
+
+### Memory and Ownership Examples
+
+Ownership transfer with `move`:
+
+```uranite
+from uranite.memory.memory import Memory
+
+public function transferOwnership() -> Void:
+    Memory<I64> buffer = new Memory<I64>( 256 )
+    Memory<I64> newOwner = move buffer
+```
+
+After `move buffer`, the `buffer` binding becomes invalid. Any attempt to use `buffer` after the move produces a compilation error from the borrow checker.
+
+Borrowing with `reference`:
+
+```uranite
+public function doubleValue( reference I64 value ) -> I64:
+    return value * 2
+```
+
+The `reference` keyword passes `value` by reference without transferring ownership. The caller retains ownership, and the function borrows the value for the duration of the call.
+
+Raw address access with `addressof`:
+
+```uranite
+public function getAddress() -> Void:
+    I64 counter = 42
+    U64 address = addressof counter
+```
+
+The `addressof` keyword extracts the raw memory address of a variable. This is a low-level operation typically used only in unsafe code or for interop with native libraries.
+
+Unsafe blocks with `unsafe`:
+
+```uranite
+public function rawMemoryOperation() -> Void:
+    unsafe:
+        Memory<U8> raw = new Memory<U8>( 4096 )
+        raw.set( 0, 0xFF )
+        raw.free()
+```
+
+Inside an `unsafe` block, borrow checker rules are relaxed. Manual memory management, raw pointer arithmetic, and unchecked operations are permitted. Code inside `unsafe` blocks is the programmer's responsibility to keep correct.
+
+Mutable parameters with `mut`:
+
+```uranite
+public function increment( mut I64 counter ) -> I64:
+    counter = counter + 1
+    return counter
+```
+
+The `mut` keyword marks the parameter as mutable, allowing reassignment within the function body. Without `mut`, parameters are immutable by default.
+
+Deferred cleanup with `defer`:
+
+```uranite
+public function readAndProcess( String path ) -> Void:
+    Memory<U8> buffer = new Memory<U8>( 4096 )
+    defer buffer.free()
+    processData( buffer )
+```
+
+The `defer` statement schedules `buffer.free()` to execute when the enclosing scope exits, regardless of whether the function returns normally or an exception is raised. This guarantees resource cleanup without wrapping the entire function in try/finally.
+
+### Error Handling Examples
+
+Declaring throwable functions with `raises`, throwing with `raise`, and catching with `except`:
+
+```uranite
+public function safeDivide( I64 numerator, I64 denominator ) -> I64 raises ZeroDivisionError:
+    if denominator == 0:
+        raise new ZeroDivisionError( "division by zero" )
+    return numerator / denominator
+```
+
+The `raises` keyword in the function signature declares that this function may raise a `ZeroDivisionError`. Callers must handle this with `try`/`except` or propagate the exception by declaring `raises` in their own signature.
+
+Catching exceptions with `try`, `except`, and `finally`:
+
+```uranite
+from uranite.io.console import puts
+
+public function compute() -> Void:
+    try:
+        I64 result = safeDivide( 100, 0 )
+        puts( result.toString() )
+    except ZeroDivisionError error:
+        puts( error.toString() )
+    finally:
+        puts( "computation complete" )
+```
+
+The `try` block protects the code inside it. If a `ZeroDivisionError` is raised, control transfers to the `except` block. The `finally` block runs unconditionally — whether the `try` block completed normally, an exception was caught, or an exception propagated upward.
+
+Multiple `except` clauses can handle different exception types:
+
+```uranite
+public function riskyComputation( I64 value ) -> I64:
+    try:
+        I64 result = value * value * value
+        return result / ( value - 10 )
+    except ZeroDivisionError error:
+        return 0
+    except OverflowError error:
+        return -1
+```
+
+### Async and Concurrency Examples
+
+Asynchronous functions with `async` and `await`:
+
+```uranite
+from uranite.io.file import readFile
+
+public async function loadConfig( String path ) -> String:
+    String content = await readFile( path )
+    return content
+```
+
+The `async` keyword marks the function as asynchronous. It returns a `Future<String>` rather than a plain `String`. The `await` keyword suspends execution until the asynchronous operation completes, then unwraps the `Future<T>` to get the inner value.
+
+The `await` keyword can only appear inside `async` functions. Using `await` in a non-async function produces a compilation error.
+
+Calling multiple async operations:
+
+```uranite
+public async function loadAll() -> Void:
+    String config = await loadConfig( "config.yaml" )
+    String data = await loadConfig( "data.yaml" )
+    puts( config )
+    puts( data )
+```
+
+### Pattern Matching and Enum Examples
+
+Enum declarations with `unit` and optional backing types with `backed`:
+
+```uranite
+public enum Color:
+    unit Red
+    unit Green
+    unit Blue
+
+public enum HttpStatus backed I32:
+    unit Ok 200
+    unit NotFound 404
+    unit InternalError 500
+```
+
+The `unit` keyword declares individual variants within an enum. Without `backed`, variants have no associated integer value. With `backed`, each variant maps to a specific value of the backing type.
+
+Match expression with `match ... in` and `=>`:
+
+```uranite
+public function statusMessage( HttpStatus status ) -> String:
+    return match status in \
+        HttpStatus.Ok => "Success", \
+        HttpStatus.NotFound => "Not Found", \
+        HttpStatus.InternalError => "Internal Server Error", \
+        * => "Unknown Status"
+```
+
+Switch statement with `case` arms:
+
+```uranite
+public function statusDescription( HttpStatus status ) -> String:
+    switch status:
+        case HttpStatus.Ok:
+            return "Request succeeded"
+        case HttpStatus.NotFound:
+            return "Resource not found"
+        case HttpStatus.InternalError:
+            return "Server encountered an error"
+        case *:
+            return "Unknown status code"
+    return "unreachable"
+```
+
+Type-based matching with `instanceof` and `subclassof`:
+
+```uranite
+public function handleInput( Object input ) -> Void:
+    if input instanceof String:
+        processText( input as String )
+    elif input instanceof I64:
+        processNumber( input as I64 )
+    else:
+        processGeneric( input )
+```
+
+The `instanceof` keyword performs a runtime type check. The `subclassof` keyword performs a compile-time check of subclass relationships, useful in generic constraints.
+
+Empty blocks with `pass`:
+
+```uranite
+public interface Serializable:
+    public function serialize( self ) -> String;
+
+public class Placeholder implements Serializable:
+
+    public function serialize( self ) -> String:
+        pass
+```
+
+The `pass` keyword is required when a block must exist syntactically but has no statements. Without `pass`, an empty block produces a syntax error because the compiler expects at least one indented line after a colon.
+
+Inline assembly with `asm`:
+
+```uranite
+public function atomicIncrement( reference I64 value ) -> Void:
+    unsafe:
+        asm:
+            "lock incq ($0)" : "+m"( value )
+```
+
+The `asm` keyword introduces an inline assembly block for direct hardware-level instructions. This is an advanced feature used for atomic operations, SIMD instructions, and system calls that cannot be expressed in Uranite.
+
+Volatile variables with `volatile`:
+
+```uranite
+public function spinWait( volatile reference Boolean flag ) -> Void:
+    while flag == False:
+        pass
+```
+
+The `volatile` keyword prevents the compiler from optimizing away reads to `flag`. Without `volatile`, the compiler might cache the value of `flag` in a register and never re-read it from memory, causing the loop to spin indefinitely even after another thread sets `flag` to `True`.
+
+Export blocks with `export`:
+
+```uranite
+export:
+    public class Logger
+    public function createLogger
+```
+
+The `export` keyword makes declarations available for import by other modules. Declarations inside an `export` block are treated as part of the module's public API.
+
+Generic constraints with `where`:
+
+```uranite
+public function maximum<T>( T first, T second ) -> T where T implements Comparable:
+    if first.greaterThan( second ):
+        return first
+    return second
+```
+
+The `where` clause constrains the generic type parameter `T` to types that implement the `Comparable` interface. This allows the function to call `greaterThan` on values of type `T`, which is guaranteed to exist because `Comparable` requires it.
+
+Lambda expressions with `lambda`:
+
+```uranite
+public function applyTransform( ArrayList<I64> values ) -> ArrayList<I64>:
+    return values.map( lambda ( I64 element ) -> I64: element * 2 )
+```
+
+The `lambda` keyword introduces an anonymous function expression. The lambda captures variables from its enclosing scope and can be passed as a value to higher-order functions.
+
 ---
 
-## What Cannot Be a Keyword
+## Common Errors with Keywords
 
-Identifiers that start with a digit are rejected by the lexer before `readIdentifierOrKeyword()` runs — digit-leading tokens are dispatched to `readNumber()` instead. This means tokens like "3d" or "2x" are never tested against the keyword registry; they are parsed as numeric literals (possibly with a suffix).
+**Using a keyword as a variable name:**
 
-Identifiers containing characters outside `[a-zA-Z0-9_]` cannot match any keyword, because `readIdentifierOrKeyword()` stops accumulating at the first non-alphanumeric, non-underscore character. A string like "class-name" produces two tokens: `KeywordClass` and then (after the `-` is processed as `Minus`) `Identifier("name")`.
+```
+error: unexpected keyword 'class'
+  --> source.urn:1:5
+  | expected identifier
+```
 
-The underscore character (`_`) is valid in identifiers but does not appear in any keyword. No keyword contains an underscore, a digit, or an uppercase letter (except `False`, `True`, `None`, and `Readonly`).
+No keyword can be used as a variable name, function name, parameter name, type name, or any other user-defined identifier. Choose a different name.
+
+**Using lowercase `true`, `false`, or `none`:**
+
+```uranite
+Boolean active = true
+```
+
+Lowercase `true` is not a keyword — it is parsed as an identifier. The compiler looks for a variable named `true` and reports "undeclared identifier" if none exists. Use `True`, `False`, and `None` with the required capitalization.
+
