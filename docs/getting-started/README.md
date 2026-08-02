@@ -6,48 +6,52 @@ This section walks through everything required to go from a fresh machine to a c
 
 ## Table of Contents
 
-- [Toolchain Overview](#toolchain-overview)
-- [Prerequisites](#prerequisites)
-  - [Required Dependencies](#required-dependencies)
-  - [Auto-Fetched Dependencies](#auto-fetched-dependencies)
-- [Platform Support](#platform-support)
-  - [Architectures](#architectures)
-  - [Operating Systems](#operating-systems)
-- [Installation](#installation)
-  - [Linux (Debian / Ubuntu / Parrot)](#linux-debian--ubuntu--parrot)
-  - [Linux (Arch / Manjaro)](#linux-arch--manjaro)
-  - [Linux (Fedora / RHEL)](#linux-fedora--rhel)
-  - [macOS](#macos)
-  - [Windows (WSL2)](#windows-wsl2)
-- [Building from Source](#building-from-source)
-  - [Clone and Build](#clone-and-build)
-  - [Build Artifacts](#build-artifacts)
-  - [C Runtime Libraries](#c-runtime-libraries)
-  - [System Installation](#system-installation)
-- [Verifying the Build](#verifying-the-build)
-- [Hello World](#hello-world)
-  - [Program Structure](#program-structure)
-  - [Compiling and Running](#compiling-and-running)
-  - [Diagnostic Inspection](#diagnostic-inspection)
-- [Project Layout](#project-layout)
-- [Editor Setup](#editor-setup)
-- [What Next](#what-next)
-- [Detailed Guides](#detailed-guides)
+- [Getting Started](#getting-started)
+  - [Table of Contents](#table-of-contents)
+  - [Toolchain Overview](#toolchain-overview)
+  - [Prerequisites](#prerequisites)
+    - [Required Dependencies](#required-dependencies)
+    - [Auto-Fetched Dependencies](#auto-fetched-dependencies)
+  - [Platform Support](#platform-support)
+    - [Architectures](#architectures)
+    - [Operating Systems](#operating-systems)
+  - [Installation](#installation)
+    - [Linux (Debian / Ubuntu / Parrot)](#linux-debian--ubuntu--parrot)
+    - [Linux (Arch / Manjaro)](#linux-arch--manjaro)
+    - [Linux (Fedora / RHEL)](#linux-fedora--rhel)
+    - [macOS](#macos)
+    - [Windows (WSL2)](#windows-wsl2)
+  - [Building from Source](#building-from-source)
+    - [Clone and Build](#clone-and-build)
+    - [Build Artifacts](#build-artifacts)
+    - [System Installation](#system-installation)
+  - [Verifying the Build](#verifying-the-build)
+  - [Hello World](#hello-world)
+    - [Program Structure](#program-structure)
+    - [Compiling and Running](#compiling-and-running)
+    - [Diagnostic Inspection](#diagnostic-inspection)
+  - [Project Layout](#project-layout)
+  - [Editor Setup](#editor-setup)
+    - [General Settings](#general-settings)
+    - [VS Code](#vs-code)
+    - [Vim / Neovim](#vim--neovim)
+    - [JetBrains (IntelliJ / CLion)](#jetbrains-intellij--clion)
+    - [Formatting Integration](#formatting-integration)
+  - [What Next](#what-next)
+  - [Detailed Guides](#detailed-guides)
 
 ---
 
 ## Toolchain Overview
 
-Uranite ships as a unified toolchain of four binaries, all built from a single repository and sharing the same compiler frontend (lexer, parser, semantic analyzer). They are designed to work together out of the box with zero configuration.
+Uranite ships as a unified toolchain of four binaries, all built from a single repository and designed to work together out of the box with zero configuration.
 
 | Binary | Purpose |
 |---|---|
-| `uranite` | Compiler. Transforms `.urn` source files into native executables, LLVM IR, or object files. Includes the REPL, diagnostic dumpers for every pipeline stage, cross-compilation support, and integrated GDB launching. |
-| `uranite-fmt` | Formatter and linter. Enforces canonical style on `.urn` files. Supports in-place formatting, dry-run checking for CI pipelines, and linter diagnostics for correctness and naming violations. |
+| `uranite` | Compiler. Transforms `.urn` source files into native executables or object files. Includes a REPL, diagnostic dumpers, cross-compilation support, and integrated GDB launching. |
+| `uranite-fmt` | Formatter and linter. Enforces canonical style on `.urn` files. Supports in-place formatting, dry-run checking for CI pipelines, and linter diagnostics for naming violations. |
 | `uranite-pkg` | Package manager. Scaffolds new projects with `uranite.yaml` manifests, resolves and downloads dependencies, orchestrates builds with automatic dependency ordering, and manages lockfiles. |
-| `uranite-doc` | Documentation generator. Extracts `"""..."""` doccomment blocks from source files and produces Markdown or HTML documentation. Validates doccomment structure (requires `Parameters:`, `Returns:`, and `Complexity:` sections on public declarations). |
-
-All four binaries link against LLVM 19 and share the same AST infrastructure. When you build the project, CMake produces all four in the `build/` directory alongside the unit test runner (`uranite-tests`).
+| `uranite-doc` | Documentation generator. Extracts `"""..."""` doccomment blocks from source files and produces Markdown or HTML documentation. Validates doccomment structure (requires "Parameters:", "Returns:", and "Complexity:" sections on public declarations). |
 
 The compiler is the only binary required for writing and running Uranite programs. The formatter, package manager, and documentation generator are development conveniences that become essential as projects grow beyond single-file scripts.
 
@@ -61,25 +65,22 @@ These must be installed on your system before building. CMake will fail at the c
 
 | Dependency | Minimum Version | Purpose |
 |---|---|---|
-| **LLVM** | 19 | Backend code generation, optimization passes, and linker invocation. The build system locates LLVM through `llvm-config` or `llvm-config-19`. |
-| **CMake** | 3.22 | Build system generator. Older versions lack the `FetchContent` features used for dependency management. |
-| **C++ Compiler** | GCC 12+ or Clang 15+ | Compiles the Uranite compiler itself. C++17 support is required (`CMAKE_CXX_STANDARD 17`). |
+| **LLVM** | 19 | Backend for native code generation and optimization. |
+| **CMake** | 3.22 | Build system generator. |
+| **C++ Compiler** | GCC 12+ or Clang 15+ | Compiles the Uranite toolchain from source. C++17 support is required. |
 | **GNU Make** | Any | Build executor. Ninja works as an alternative (`cmake -G Ninja`). |
-| **Git** | Any | Required for cloning the repository. Also used at build time to embed the commit hash into `--version-info` output. |
-| **pthread** | System | POSIX thread support. Linked by the thread runtime and the test runner. |
-| **rt** | System | POSIX real-time extensions. Linked by the IPC runtime for shared memory operations. |
-| **dl** | System | Dynamic linking. Linked by the FFI runtime for `dlopen`/`dlsym` calls. |
+| **Git** | Any | Required for cloning the repository. |
 
 ### Auto-Fetched Dependencies
 
-These libraries are resolved automatically by CMake via `FetchContent`. If a compatible version is already installed on your system (`find_package` succeeds), the system copy is used. Otherwise, CMake clones and builds them as part of the Uranite build.
+These libraries are resolved automatically by CMake. If a compatible version is already installed on your system, the system copy is used. Otherwise, CMake downloads and builds them as part of the Uranite build.
 
 | Library | Version | Purpose |
 |---|---|---|
-| **fmt** | 11.0.2 | Type-safe string formatting throughout compiler internals. Used instead of `std::format` for C++17 compatibility. |
-| **spdlog** | 1.14.1 | Structured logging with severity levels. Powers `--verbose` diagnostic output during compilation. |
-| **argparse** | 3.1 | Declarative CLI argument parsing. Generates `--help` output and validates flag combinations for all four toolchain binaries. |
-| **GoogleTest** | 1.15.2 | Unit test framework. Only linked into `uranite-tests`, not into the compiler or other tools. |
+| **fmt** | 11.0.2 | String formatting library used by the toolchain. |
+| **spdlog** | 1.14.1 | Logging library. Powers `--verbose` output during compilation. |
+| **argparse** | 3.1 | CLI argument parsing for all four toolchain binaries. |
+| **GoogleTest** | 1.15.2 | Unit test framework. Only used by the test runner, not the compiler. |
 
 You do not need to install these manually. If you prefer system packages for faster rebuilds, install `libfmt-dev`, `libspdlog-dev`, and `libgtest-dev` (Debian/Ubuntu names) before running CMake.
 
@@ -91,17 +92,15 @@ You do not need to install these manually. If you prefer system packages for fas
 
 | Architecture | Status | Notes |
 |---|---|---|
-| **x86_64** (AMD64) | Primary target | Fully supported and continuously tested. All development and CI runs on x86_64. |
+| **x86_64** (AMD64) | Primary target | Fully supported and continuously tested. |
 | **ARM64** (AArch64) | Cross-compilation | Supported via `--target aarch64-linux-gnu`. Requires appropriate cross-toolchain and sysroot. |
-
-The LLVM backend supports additional targets, but only x86_64 and ARM64 have been tested with Uranite's code generation and runtime libraries.
 
 ### Operating Systems
 
 | OS | Status | Notes |
 |---|---|---|
-| **Linux** | Fully supported | Primary development platform. Tested on Parrot Security OS (development machine), Ubuntu 22.04+, Debian 12+, Arch Linux, Fedora 38+. The async runtime uses raw Linux syscalls (`epoll`, `timerfd`, `eventfd`) and is Linux-specific. |
-| **macOS** | Supported | Requires LLVM 19 via Homebrew. Xcode Command Line Tools provide the system linker. The async runtime's Linux syscall layer does not function on macOS; async features require a compatibility shim or are unavailable. |
+| **Linux** | Fully supported | Primary development platform. Tested on Ubuntu 22.04+, Debian 12+, Arch Linux, Fedora 38+, and Parrot Security OS. The async runtime uses Linux-specific syscalls and is fully functional on Linux. |
+| **macOS** | Supported | Requires LLVM 19 via Homebrew. Xcode Command Line Tools provide the system linker. The async runtime's Linux syscall layer does not function on macOS; async features may be unavailable. |
 | **Windows** | Via WSL2 only | Native Windows is not supported. The compiler and standard library depend on POSIX APIs and Linux syscalls. Use WSL2 with any supported Linux distribution for full functionality. |
 
 ---
@@ -120,7 +119,7 @@ sudo ./llvm.sh 19
 sudo apt install -y llvm-19-dev
 ```
 
-Optional system packages to skip FetchContent downloads:
+Optional system packages to skip automatic downloads:
 
 ```bash
 sudo apt install -y libfmt-dev libspdlog-dev libgtest-dev
@@ -132,7 +131,7 @@ sudo apt install -y libfmt-dev libspdlog-dev libgtest-dev
 sudo pacman -S cmake gcc git make llvm
 ```
 
-Arch typically ships the latest LLVM release. Verify with `llvm-config --version` that it reports 19.x. If Arch has moved to LLVM 20+, install LLVM 19 from the AUR or use the `llvm19` package if available.
+Arch typically ships the latest LLVM release. Verify with `llvm-config --version` that it reports 19.x. If Arch has moved to LLVM 20+, install LLVM 19 from the AUR.
 
 ### Linux (Fedora / RHEL)
 
@@ -149,7 +148,7 @@ xcode-select --install
 brew install cmake llvm@19
 ```
 
-Homebrew installs LLVM into a keg-only prefix. Add it to your `PATH` so CMake can find `llvm-config-19`:
+Homebrew installs LLVM into a keg-only prefix. Add it to your `PATH` so CMake can find it:
 
 ```bash
 export PATH="/opt/homebrew/opt/llvm@19/bin:$PATH"
@@ -167,7 +166,7 @@ Add this line to `~/.zshrc` or `~/.bash_profile` to persist across terminal sess
 
 2. Open the Ubuntu terminal and follow the [Linux (Debian / Ubuntu / Parrot)](#linux-debian--ubuntu--parrot) instructions.
 
-WSL2 provides a full Linux kernel. All Uranite features, including the async runtime's raw syscall layer, function correctly under WSL2.
+WSL2 provides a full Linux kernel. All Uranite features, including the async runtime, function correctly under WSL2.
 
 ---
 
@@ -182,7 +181,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 make -C build -j$(nproc)
 ```
 
-The build takes 2-5 minutes depending on hardware. The first build is slower because CMake may fetch and compile `fmt`, `spdlog`, `argparse`, and `googletest` from source.
+The build takes 2-5 minutes depending on hardware. The first build is slower because CMake may fetch and compile dependencies from source.
 
 For debug builds with full symbol information and no optimization:
 
@@ -207,21 +206,8 @@ After a successful build, the `build/` directory contains:
 | `build/uranite-fmt` | Executable | Code formatter and linter |
 | `build/uranite-pkg` | Executable | Package manager |
 | `build/uranite-doc` | Executable | Documentation generator |
-| `build/uranite-tests` | Executable | GoogleTest unit test runner (152 tests across 12 suites) |
-| `build/runtime/` | Directory | Static C runtime libraries linked into compiled Uranite programs |
-
-### C Runtime Libraries
-
-The build produces six static C11 libraries in `build/runtime/`. These are linked automatically into every Uranite program during compilation. You never link them manually.
-
-| Library | Links | Purpose |
-|---|---|---|
-| `liburanite-exception-runtime.a` | — | Exception throwing, shadow stack unwinding, `try`/`except`/`finally` support |
-| `liburanite-async-runtime.a` | — | Bridge between compiled async code and the pure-Uranite scheduler |
-| `liburanite-thread-runtime.a` | pthread | POSIX thread creation, joining, and detaching |
-| `liburanite-subprocess-runtime.a` | — | Process spawning with pipe redirection |
-| `liburanite-ipc-runtime.a` | rt | POSIX shared memory and message queue operations |
-| `liburanite-ffi-runtime.a` | dl | Dynamic library loading (`dlopen`, `dlsym`, `dlclose`) |
+| `build/uranite-tests` | Executable | Unit test runner |
+| `build/runtime/` | Directory | Runtime libraries linked automatically into compiled programs |
 
 ### System Installation
 
@@ -243,26 +229,17 @@ For development, running directly from `build/` is recommended. The compiler aut
 
 ## Verifying the Build
 
-Run the compiler test suite:
+Run the test suite:
 
 ```bash
 ./build/uranite-tests
 ```
 
-Expected output:
-
-```
-[==========] 152 tests from 12 test suites ran.
-[  PASSED  ] 152 tests.
-```
-
-Check the compiler version and build metadata:
+Check the compiler version:
 
 ```bash
 ./build/uranite --version-info
 ```
-
-This displays the compiler version, language specification version, GCC/Clang version used to build the compiler, the embedded Git commit hash, the host triple, and the LLVM version.
 
 ---
 
@@ -288,7 +265,7 @@ Every Uranite program has three structural requirements:
 
 **Entry point.** The program must define a `public function main() -> I32` function. The `public` visibility is required because the linker resolves `main` as an external symbol. The return type must be `I32`, representing the process exit code. Return `0` for success and any non-zero value for failure.
 
-**Indentation-based blocks.** Function bodies, class bodies, control flow branches, and all other block constructs are delimited by a colon (`:`) followed by an indented body. Uranite uses consistent indentation (spaces or tabs, but not mixed within a file) to determine block boundaries. There are no braces and no explicit block-end markers. A `Dedent` token is emitted by the lexer when indentation decreases, closing the current block.
+**Indentation-based blocks.** Function bodies, class bodies, control flow branches, and all other block constructs are delimited by a colon (`:`) followed by an indented body. Uranite uses consistent indentation (spaces or tabs, but not mixed within a file) to determine block boundaries. There are no braces and no explicit block-end markers.
 
 ### Compiling and Running
 
@@ -315,7 +292,7 @@ The `-r` flag compiles to a temporary executable, runs it immediately, and delet
 
 ### Diagnostic Inspection
 
-Inspect any stage of the compilation pipeline:
+The compiler provides several inspection flags for debugging:
 
 ```bash
 ./build/uranite hello.urn --dump-tokens
@@ -324,7 +301,7 @@ Inspect any stage of the compilation pipeline:
 ./build/uranite hello.urn --dump-mir
 ```
 
-Emit LLVM IR for manual inspection:
+Emit generated IR for manual inspection:
 
 ```bash
 ./build/uranite hello.urn --emit-llvm -o hello.ll
@@ -386,8 +363,8 @@ Uranite source files use the `.urn` extension. Because the language uses indenta
 Configure your editor with these settings for `.urn` files:
 
 - **Indentation:** Spaces (4 per level) or tabs. Do not mix within a file.
-- **Trailing whitespace:** Strip on save. Trailing whitespace after a dedent can confuse the lexer's indentation tracker.
-- **Final newline:** Insert on save. The lexer expects source files to end with a newline.
+- **Trailing whitespace:** Strip on save.
+- **Final newline:** Insert on save.
 - **File encoding:** UTF-8.
 
 ### VS Code
@@ -449,9 +426,9 @@ This returns exit code `0` if all files are already formatted, and `1` if any fi
 This section has covered installation, building, and your first program. Explore deeper topics through the rest of the documentation:
 
 - **[Language Syntax](../syntax/README.md)** — Complete language reference: types, control flow, generics, pattern matching, async, ownership, and memory management.
-- **[Standard Library](../stdlib/README.md)** — Practical guides for collections, I/O, strings, concurrency, memory, testing, and error handling.
+- **[Standard Library Guide](../stdlib-guide/README.md)** — Practical guides for collections, I/O, strings, concurrency, memory, testing, and error handling.
 - **[Toolchains](../toolchains/README.md)** — Full flag references and usage guides for the compiler, formatter, package manager, and documentation generator.
-- **[Compiler Internals](../internals/README.md)** — Contributor guide to the twelve-stage compilation pipeline, the type registry, IR layers, and C++ coding conventions.
+- **[Compiler Internals](../internals/README.md)** — Contributor guide for developers working on the compiler itself.
 
 ---
 
@@ -461,8 +438,8 @@ Each topic in this section has a dedicated page with deeper coverage:
 
 | Guide | Description |
 |---|---|
-| [Installation](installation.md) | Step-by-step installation instructions with platform-specific troubleshooting, dependency version verification, and common build failure resolution. |
+| [Installation](installation.md) | Step-by-step installation instructions with platform-specific troubleshooting and common build failure resolution. |
 | [Platform Support](platform-support.md) | Detailed architecture and OS compatibility matrix, cross-compilation setup, and platform-specific limitations. |
-| [Hello World](hello-world.md) | Extended walkthrough of your first program with explanations of every language construct used, compilation flags, and output interpretation. |
+| [Hello World](hello-world.md) | Extended walkthrough of your first program with explanations of every language construct used. |
 | [Project Structure](project-structure.md) | Conventions for organizing single-file scripts, multi-module applications, and library packages. Package manifest format and module resolution rules. |
 | [Editor Setup](editor-setup.md) | Detailed configuration for VS Code, Vim/Neovim, JetBrains IDEs, Emacs, and Sublime Text. Formatter integration and CI pipeline setup. |
