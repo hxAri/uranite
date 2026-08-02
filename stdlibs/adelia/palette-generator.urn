@@ -67,10 +67,10 @@ public final class PaletteGenerator:
             Space: O(1)
         """
         
-        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        HSL hsl = ( new ColorConverter() ).hexToHsl( baseHex )
         ColorPalette palette = new ColorPalette( "Complementary" )
         palette.addColor( baseHex )
-        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 180.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ( new ColorConverter() ).hslToHex( self.rotateHue( hsl.hue, 180.0 ), hsl.saturation, hsl.lightness ) )
         return palette
     
     public function triadic( self, I32 baseHex ) -> ColorPalette:
@@ -94,11 +94,11 @@ public final class PaletteGenerator:
             Space: O(1)
         """
         
-        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        HSL hsl = ( new ColorConverter() ).hexToHsl( baseHex )
         ColorPalette palette = new ColorPalette( "Triadic" )
         palette.addColor( baseHex )
-        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 120.0 ), hsl.saturation, hsl.lightness ) )
-        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 240.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ( new ColorConverter() ).hslToHex( self.rotateHue( hsl.hue, 120.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ( new ColorConverter() ).hslToHex( self.rotateHue( hsl.hue, 240.0 ), hsl.saturation, hsl.lightness ) )
         return palette
     
     public function analogous( self, I32 baseHex ) -> ColorPalette:
@@ -122,11 +122,11 @@ public final class PaletteGenerator:
             Space: O(1)
         """
         
-        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        HSL hsl = ( new ColorConverter() ).hexToHsl( baseHex )
         ColorPalette palette = new ColorPalette( "Analogous" )
-        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, -30.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ( new ColorConverter() ).hslToHex( self.rotateHue( hsl.hue, -30.0 ), hsl.saturation, hsl.lightness ) )
         palette.addColor( baseHex )
-        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 30.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ( new ColorConverter() ).hslToHex( self.rotateHue( hsl.hue, 30.0 ), hsl.saturation, hsl.lightness ) )
         return palette
     
     public function splitComplementary( self, I32 baseHex ) -> ColorPalette:
@@ -151,11 +151,11 @@ public final class PaletteGenerator:
             Space: O(1)
         """
         
-        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        HSL hsl = ( new ColorConverter() ).hexToHsl( baseHex )
         ColorPalette palette = new ColorPalette( "Split Complementary" )
         palette.addColor( baseHex )
-        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 150.0 ), hsl.saturation, hsl.lightness ) )
-        palette.addColor( ColorConverter.hslToHex( self.rotateHue( hsl.hue, 210.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ( new ColorConverter() ).hslToHex( self.rotateHue( hsl.hue, 150.0 ), hsl.saturation, hsl.lightness ) )
+        palette.addColor( ( new ColorConverter() ).hslToHex( self.rotateHue( hsl.hue, 210.0 ), hsl.saturation, hsl.lightness ) )
         return palette
     
     public function tints( self, I32 baseHex, I64 count ) -> ColorPalette:
@@ -181,13 +181,13 @@ public final class PaletteGenerator:
             Space: O(count)
         """
         
-        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        HSL hsl = ( new ColorConverter() ).hexToHsl( baseHex )
         ColorPalette palette = new ColorPalette( "Tints" )
         palette.addColor( baseHex )
         F64 step = ( 1.0 - hsl.lightness ) / ( count + 1 )
         for I64 stepIndex=1; stepIndex<=count; stepIndex++:
             F64 newLightness = hsl.lightness + step * stepIndex
-            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, newLightness ) )
+            palette.addColor( ( new ColorConverter() ).hslToHex( hsl.hue, hsl.saturation, newLightness ) )
         return palette
 
     public function shades( self, I32 baseHex, I64 count ) -> ColorPalette:
@@ -213,13 +213,13 @@ public final class PaletteGenerator:
             Space: O(count)
         """
         
-        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        HSL hsl = ( new ColorConverter() ).hexToHsl( baseHex )
         ColorPalette palette = new ColorPalette( "Shades" )
         palette.addColor( baseHex )
         F64 step = hsl.lightness / ( count + 1 )
         for I64 stepIndex=1; stepIndex<=count; stepIndex++:
             F64 newLightness = hsl.lightness - step * stepIndex
-            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, newLightness ) )
+            palette.addColor( ( new ColorConverter() ).hslToHex( hsl.hue, hsl.saturation, newLightness ) )
         return palette
     
     public function monochromatic( self, I32 baseHex, I64 count ) -> ColorPalette:
@@ -244,19 +244,19 @@ public final class PaletteGenerator:
             Space: O(count)
         """
         
-        HSL hsl = ColorConverter.hexToHsl( baseHex )
+        HSL hsl = ( new ColorConverter() ).hexToHsl( baseHex )
         ColorPalette palette = new ColorPalette( "Monochromatic" )
         F64 shadeStep = hsl.lightness / ( count + 1 )
         F64 tintStep = ( 1.0 - hsl.lightness ) / ( count + 1 )
         I64 shadeIndex = count
         while shadeIndex >= 1:
             F64 shadeLightness = hsl.lightness - shadeStep * shadeIndex
-            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, shadeLightness ) )
+            palette.addColor( ( new ColorConverter() ).hslToHex( hsl.hue, hsl.saturation, shadeLightness ) )
             shadeIndex = shadeIndex - 1
         palette.addColor( baseHex )
         for I64 tintIndex=1; tintIndex<=count; tintIndex++:
             F64 tintLightness = hsl.lightness + tintStep * tintIndex
-            palette.addColor( ColorConverter.hslToHex( hsl.hue, hsl.saturation, tintLightness ) )
+            palette.addColor( ( new ColorConverter() ).hslToHex( hsl.hue, hsl.saturation, tintLightness ) )
         return palette
     
     private function rotateHue( self, F64 hue, F64 degrees ) -> F64:
