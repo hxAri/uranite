@@ -126,7 +126,7 @@ public class Color:
                 An RGB struct with red, green, and blue components.
         """
         
-        return ColorConverter.hexToRgb( self.hex )
+        return ( new ColorConverter() ).hexToRgb( self.hex )
     
     public property toHsl( self ) -> HSL:
         
@@ -139,7 +139,7 @@ public class Color:
                 The equivalent color in the HSL color space.
         """
         
-        return ColorConverter.hexToHsl( self.hex )
+        return ( new ColorConverter() ).hexToHsl( self.hex )
     
     public property toHsv( self ) -> HSV:
         
@@ -152,7 +152,7 @@ public class Color:
                 The equivalent color in the HSV color space.
         """
         
-        return ColorConverter.hexToHsv( self.hex )
+        return ( new ColorConverter() ).hexToHsv( self.hex )
     
     public property toCmyk( self ) -> CMYK:
         
@@ -165,7 +165,7 @@ public class Color:
                 The equivalent color in the CMYK color space.
         """
         
-        return ColorConverter.hexToCmyk( self.hex )
+        return ( new ColorConverter() ).hexToCmyk( self.hex )
     
     public property cssHex( self ) -> String:
         
@@ -178,7 +178,7 @@ public class Color:
                 A CSS hex color string such as "#004b49".
         """
         
-        return CssFormatter.hex( self.hex )
+        return ( new CssFormatter() ).hex( self.hex )
     
     public property cssRgb( self ) -> String:
         
@@ -191,7 +191,7 @@ public class Color:
                 A CSS rgb string such as "rgb(0, 75, 73)".
         """
         
-        return CssFormatter.rgb( self.red, self.green, self.blue )
+        return ( new CssFormatter() ).rgb( self.red, self.green, self.blue )
     
     public property cssHsl( self ) -> String:
         
@@ -205,7 +205,7 @@ public class Color:
         """
         
         HSL hsl = self.toHsl
-        return CssFormatter.hsl( hsl.hue, hsl.saturation, hsl.lightness )
+        return ( new CssFormatter() ).hsl( hsl.hue, hsl.saturation, hsl.lightness )
     
     public property ansiForeground( self ) -> String:
         
@@ -218,7 +218,7 @@ public class Color:
                 An ANSI escape sequence such as "\x1b[38;2;0;75;73m".
         """
         
-        return AnsiFormatter.foregroundHex( self.hex )
+        return ( new AnsiFormatter() ).foregroundHex( self.hex )
     
     public property ansiBackground( self ) -> String:
         
@@ -231,7 +231,7 @@ public class Color:
                 An ANSI escape sequence such as "\x1b[48;2;0;75;73m".
         """
         
-        return AnsiFormatter.backgroundHex( self.hex )
+        return ( new AnsiFormatter() ).backgroundHex( self.hex )
     
     public function ansiColorize( self, String text ) -> String:
         
@@ -249,7 +249,7 @@ public class Color:
                 The text wrapped with this color's foreground escape and reset.
         """
         
-        return AnsiFormatter.colorizeHex( text, self.hex )
+        return ( new AnsiFormatter() ).colorizeHex( text, self.hex )
     
     public property complementary( self ) -> Color:
         
@@ -272,7 +272,7 @@ public class Color:
         F64 newHue = hsl.hue + 180.0
         if newHue >= 360.0:
             newHue = newHue - 360.0
-        I32 newHex = ColorConverter.hslToHex( newHue, hsl.saturation, hsl.lightness )
+        I32 newHex = ( new ColorConverter() ).hslToHex( newHue, hsl.saturation, hsl.lightness )
         return new Color( newHex )
     
     public property webSafe( self ) -> Color:
@@ -291,7 +291,7 @@ public class Color:
             Space: O(1)
         """
         
-        return new Color( WebSafe.snapHex( self.hex ) )
+        return new Color( ( new WebSafe() ).snapHex( self.hex ) )
     
     public function distanceTo( self, Color other ) -> F64:
         
@@ -315,7 +315,7 @@ public class Color:
         
         RGB selfRgb = self.toRgb
         RGB otherRgb = other.toRgb
-        return ColorDistance.redmean( selfRgb, otherRgb )
+        return ( new ColorDistance() ).redmean( selfRgb, otherRgb )
     
     public function equals( self, Object other ) -> Boolean:
         
@@ -377,7 +377,7 @@ public class Color:
             Space: O(1)
         """
         
-        return new Color( ColorConverter.rgbToHex( red, green, blue ) )
+        return new Color( ( new ColorConverter() ).rgbToHex( red, green, blue ) )
     
     public function fromHsl( self, F64 hue, F64 saturation, F64 lightness ) -> Color:
         
@@ -402,7 +402,7 @@ public class Color:
             Space: O(1)
         """
         
-        return new Color( ColorConverter.hslToHex( hue, saturation, lightness ) )
+        return new Color( ( new ColorConverter()).hslToHex( hue, saturation, lightness ) )
     
     public function fromHsv( self, F64 hue, F64 saturation, F64 value ) -> Color:
         
@@ -427,7 +427,7 @@ public class Color:
             Space: O(1)
         """
         
-        return new Color( ColorConverter.hsvToHex( hue, saturation, value ) )
+        return new Color( ( new ColorConverter() ).hsvToHex( hue, saturation, value ) )
     
     public function fromCmyk( self, F64 cyan, F64 magenta, F64 yellow, F64 key ) -> Color:
         
@@ -454,7 +454,7 @@ public class Color:
             Space: O(1)
         """
         
-        return new Color( ColorConverter.cmykToHex( cyan, magenta, yellow, key ) )
+        return new Color( ( new ColorConverter() ).cmykToHex( cyan, magenta, yellow, key ) )
 
 export {
     Color
