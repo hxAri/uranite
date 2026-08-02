@@ -25,11 +25,11 @@ from uranite.threading.barrier import Barrier
 from uranite.threading.channel import ChannelInner, Receiver, Sender
 from uranite.threading.condvar import CondVar
 from uranite.threading.errors import {
-    CancellationError,
-    ChannelError,
-    PoisonError,
+    ThreadCancellationError,
+    ThreadChannelError,
+    ThreadPoisonError,
     ThreadError,
-    TimeoutError
+    ThreadTimeoutError
 }
 from uranite.threading.executor import {
     TaskSubmitter0,
@@ -52,8 +52,8 @@ export {
     AtomicBoolean,
     AtomicI64,
     Barrier,
-    CancellationError,
-    ChannelError,
+    ThreadCancellationError,
+    ThreadChannelError,
     ChannelInner,
     CondVar,
     Future,
@@ -63,7 +63,7 @@ export {
     Mutex,
     MutexGuard,
     Once,
-    PoisonError,
+    ThreadPoisonError,
     PoolHandle,
     PoolTask,
     ReadGuard,
@@ -82,6 +82,6 @@ export {
     ThreadPool,
     ThreadPoolExecutor,
     ThreadRuntime,
-    TimeoutError,
+    ThreadTimeoutError,
     WriteGuard
 }
