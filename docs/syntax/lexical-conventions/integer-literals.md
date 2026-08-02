@@ -1,54 +1,55 @@
 # Integer Literals
 
-Uranite supports integer literals in four number bases: decimal, hexadecimal, octal, and binary. All integer literals are stored as signed 64-bit values (`int64_t`) and typed as `I64` during semantic analysis. This document specifies the lexer scanning rules for each base, underscore separator handling, the parser's conversion pipeline, type inference behavior, and overflow semantics.
+Uranite supports integer literals in four number bases: decimal, hexadecimal, octal, and binary. All integer literals default to the `I64` type (signed 64-bit integer). This document specifies the syntax for each base, underscore separators, type assignment, narrowing conversions, overflow behavior, and the complete integer type system.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Decimal Literals](#decimal-literals)
-- [Hexadecimal Literals](#hexadecimal-literals)
-- [Octal Literals](#octal-literals)
-- [Binary Literals](#binary-literals)
-- [Underscore Separators](#underscore-separators)
-  - [Lexer Stripping Behavior](#lexer-stripping-behavior)
-  - [Placement Rules](#placement-rules)
-  - [Recommended Usage](#recommended-usage)
-- [Type Suffixes](#type-suffixes)
-- [The Parsing Pipeline](#the-parsing-pipeline)
-  - [Stage 1: Lexer Scanning](#stage-1-lexer-scanning)
-  - [Stage 2: Parser Conversion](#stage-2-parser-conversion)
-  - [Stage 3: Semantic Type Assignment](#stage-3-semantic-type-assignment)
-  - [Stage 4: MIR Code Generation](#stage-4-mir-code-generation)
-- [Default Type: I64](#default-type-i64)
-  - [OOP Wrapper Resolution](#oop-wrapper-resolution)
-  - [Contextual Typing](#contextual-typing)
-- [Overflow and Parsing Limits](#overflow-and-parsing-limits)
-  - [Lexer-Level Limits](#lexer-level-limits)
-  - [Parser-Level Overflow](#parser-level-overflow)
-  - [Semantic-Level Range Checks](#semantic-level-range-checks)
-  - [I64 Range](#i64-range)
-- [The IntegerType System](#the-integertype-system)
-- [Examples](#examples)
-  - [Valid Integer Literals](#valid-integer-literals)
-  - [Invalid Integer Literals](#invalid-integer-literals)
-  - [Practical Usage](#practical-usage)
+- [Integer Literals](#integer-literals)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Decimal Literals](#decimal-literals)
+  - [Hexadecimal Literals](#hexadecimal-literals)
+  - [Octal Literals](#octal-literals)
+  - [Binary Literals](#binary-literals)
+  - [Underscore Separators](#underscore-separators)
+    - [Placement Rules](#placement-rules)
+    - [Recommended Grouping](#recommended-grouping)
+  - [Negative Integers](#negative-integers)
+  - [Default Type: I64](#default-type-i64)
+    - [Method Access on Integers](#method-access-on-integers)
+    - [Type Narrowing Through Annotations](#type-narrowing-through-annotations)
+  - [The Integer Type System](#the-integer-type-system)
+    - [Signed Types](#signed-types)
+    - [Unsigned Types](#unsigned-types)
+    - [Alias Types](#alias-types)
+    - [Choosing an Integer Type](#choosing-an-integer-type)
+  - [Overflow and Range](#overflow-and-range)
+    - [I64 Range](#i64-range)
+    - [All Integer Ranges](#all-integer-ranges)
+    - [Narrowing Overflow](#narrowing-overflow)
+    - [Arithmetic Overflow](#arithmetic-overflow)
+  - [Leading Zero Is Decimal, Not Octal](#leading-zero-is-decimal-not-octal)
+  - [Examples](#examples)
+    - [Valid Integer Literals](#valid-integer-literals)
+    - [Invalid Integer Literals](#invalid-integer-literals)
+    - [Practical Usage](#practical-usage)
 
 ---
 
 ## Overview
 
-An integer literal is a sequence of digits optionally preceded by a base prefix (`0x`, `0o`, `0b`). The lexer scans the character sequence, strips underscore separators, and produces a `LiteralInteger` token containing the raw string. The parser then converts the raw string to a 64-bit signed integer (`int64_t`) using `std::stoll()` with the appropriate base. The semantic analyzer assigns the type `I64` to every integer literal expression.
+An integer literal is a sequence of digits optionally preceded by a base prefix (`0x`, `0o`, `0b`). Underscores may appear anywhere within the digit sequence as visual separators and are silently stripped before the value is computed.
 
-| Base | Prefix | Digits | Example |
+| Base | Prefix | Valid Digits | Example |
 |---|---|---|---|
 | Decimal | (none) | `0`-`9` | `42`, `1000`, `999_999` |
 | Hexadecimal | `0x` or `0X` | `0`-`9`, `a`-`f`, `A`-`F` | `0xFF`, `0x2A`, `0X1F4` |
 | Octal | `0o` or `0O` | `0`-`7` | `0o52`, `0O777`, `0o17` |
 | Binary | `0b` or `0B` | `0`, `1` | `0b101010`, `0B1111_0000` |
 
-All four bases produce the same token type (`LiteralInteger`) and the same AST node (`IntegerLiteralExpression`). The base distinction exists only in the source text and the raw string stored in the token — the parsed numeric value is always a single `int64_t`.
+Regardless of the base used in source code, the resulting value is always the same signed 64-bit integer. `42`, `0x2A`, `0o52`, and `0b101010` all produce the same value.
 
 ---
 
@@ -63,15 +64,13 @@ I64 million = 1_000_000
 I64 maxPort = 65535
 ```
 
-The lexer scans decimal literals by accumulating consecutive digit and underscore characters. It stops at the first character that is neither a digit nor an underscore. If the next character is `.` followed by a digit, the literal transitions to a float literal (covered in the float literals document). If the next character is `e` or `E`, it likewise transitions to scientific notation (float).
-
-If the character following the digit sequence is alphabetic, the lexer reads it as a type suffix appended to the numeric string. This suffix is included in the raw token value but is not currently used by the parser for type inference — all integer literals are typed as `I64` regardless of suffix.
+Decimal is the default base. Any numeric literal that does not start with `0x`, `0o`, or `0b` is interpreted as decimal. If a decimal digit sequence is followed by `.` and another digit, the literal transitions to a floating-point literal instead (covered in the [Float Literals](float-literals.md) document). Similarly, an `e` or `E` after digits begins scientific notation, which also produces a float.
 
 ---
 
 ## Hexadecimal Literals
 
-Hexadecimal literals begin with the prefix `0x` or `0X`, followed by one or more hexadecimal digits (`0`-`9`, `a`-`f`, `A`-`F`), optionally separated by underscores:
+Hexadecimal literals begin with the prefix `0x` or `0X`, followed by one or more hex digits (`0`-`9`, `a`-`f`, `A`-`F`), optionally separated by underscores:
 
 ```uranite
 I64 red = 0xFF0000
@@ -80,9 +79,15 @@ I64 mask = 0xFF_FF_FF_FF
 I64 address = 0xDEAD_BEEF
 ```
 
-The lexer detects the hexadecimal prefix by checking if the current character is `0` and the next character (via `peek()`) is `x` or `X`. It then advances past both prefix characters and accumulates hex digits and underscores using `std::isxdigit()`.
+Hexadecimal digits are case-insensitive. `0xFF`, `0XFF`, `0xff`, and `0Xff` all produce the same numeric value (255).
 
-Hexadecimal digits are case-insensitive. `0xFF`, `0XFF`, `0xff`, and `0Xff` all produce the same numeric value. The raw string preserves the original casing from the source.
+Hexadecimal is the natural choice for color values, memory addresses, bitmasks, and any context where values are conventionally expressed in base 16:
+
+```uranite
+I64 white = 0xFFFFFF
+I64 transparent = 0x00000000
+I64 channelMask = 0xFF
+```
 
 ---
 
@@ -96,9 +101,17 @@ I64 fullPerms = 0o777
 I64 readOnly = 0o444
 ```
 
-The lexer detects the octal prefix by checking for `0` followed by `o` or `O`. It then accumulates characters in the range `'0'` through `'7'` and underscores.
+Uranite uses the explicit `0o` prefix for octal, not the C-style leading-zero convention. A literal `0644` is a **decimal** number with value 644, not an octal number with value 420. This eliminates the common source of bugs in C where leading zeros silently change the numeric base. See [Leading Zero Is Decimal, Not Octal](#leading-zero-is-decimal-not-octal).
 
-Note that Uranite uses the explicit `0o` prefix for octal, not the C-style leading-zero convention. A literal `0644` is a decimal number `644`, not an octal number. This eliminates the common source of bugs in C where leading zeros silently change the numeric base.
+Octal is primarily used for Unix file permissions, where the three-digit grouping (owner/group/other) maps naturally to octal:
+
+| Octal | Binary | Meaning |
+|---|---|---|
+| `0o7` | `111` | Read + Write + Execute |
+| `0o6` | `110` | Read + Write |
+| `0o5` | `101` | Read + Execute |
+| `0o4` | `100` | Read only |
+| `0o0` | `000` | No permissions |
 
 ---
 
@@ -108,231 +121,238 @@ Binary literals begin with the prefix `0b` or `0B`, followed by one or more bina
 
 ```uranite
 I64 flags = 0b1010
-I64 byte = 0b1111_0000
-I64 mask = 0b0000_0000_0000_0001
+I64 byteMask = 0b1111_0000
+I64 singleBit = 0b0000_0000_0000_0001
 I64 pattern = 0B10101010
 ```
 
-The lexer detects the binary prefix by checking for `0` followed by `b` or `B`. It then accumulates only `'0'`, `'1'`, and `'_'` characters.
+Binary literals are particularly useful for bit flags, hardware register values, and bitmask operations where individual bit positions carry meaning:
 
-Binary literals are particularly useful for bit flags, hardware register values, and bitmask operations where the individual bit positions carry meaning.
+```uranite
+const I64 FLAG_READ = 0b0000_0100
+const I64 FLAG_WRITE = 0b0000_0010
+const I64 FLAG_EXEC = 0b0000_0001
+
+public function hasFlag( I64 mode, I64 flag ) -> Boolean:
+    return ( mode & flag ) != 0
+```
+
+The underscore separators in binary literals are especially valuable — `0b1111_0000_1010_0101` is far more readable than `0b1111000010100101`.
 
 ---
 
 ## Underscore Separators
 
-### Lexer Stripping Behavior
-
-Underscores within numeric literals serve as visual separators to improve readability. The lexer strips them during scanning — they are never included in the token value string that reaches the parser.
-
-The stripping logic is identical across all four bases. In each scanning loop, the lexer checks:
-
-```
-if current character is '_':
-    advance (skip the underscore)
-else:
-    append character to token value
-    advance
-```
-
-The underscore is consumed but not appended. The resulting token value contains only digits (and the base prefix, if applicable).
-
-For example, the source text `1_000_000` produces a token with value `"1000000"`. The source text `0xFF_FF` produces a token with value `"0xFFFF"`. The parser never sees underscore characters in integer token values.
+Underscores within numeric literals serve as visual separators to improve readability. They are silently stripped before the value is computed. The source text `1_000_000` and `1000000` produce exactly the same value.
 
 ### Placement Rules
 
-The lexer does not enforce strict placement rules for underscores. It accepts underscores anywhere within the digit sequence:
+Underscores can appear anywhere within the digit sequence after the base prefix:
 
-- Between digits: `1_000` (standard grouping)
-- Multiple consecutive underscores: `1__000` (accepted, unusual)
-- Leading underscore after prefix: `0x_FF` (accepted, not recommended)
-- Trailing underscore: `1000_` (the underscore is consumed; the next character determines what follows)
+| Literal | Value | Notes |
+|---|---|---|
+| `1_000` | 1000 | Standard grouping |
+| `1_000_000` | 1000000 | Multiple groups |
+| `0xFF_FF` | 65535 | Hex grouping |
+| `0b1111_0000` | 240 | Binary byte grouping |
+| `1__000` | 1000 | Multiple consecutive underscores (accepted, unusual) |
+| `0x_FF` | 255 | Leading underscore after prefix (accepted, not recommended) |
 
-However, an underscore cannot appear **before** the first digit of a literal. A bare `_` is an identifier start character, not a numeric start character. The lexer dispatches `_` to `readIdentifierOrKeyword()`, not `readNumber()`.
+An underscore cannot appear **before** the first digit of a literal. A bare `_` at the start of a token is interpreted as the beginning of an identifier, not a number. The tokens `_42` and `_0xFF` are identifiers, not integer literals.
 
-### Recommended Usage
+### Recommended Grouping
 
-Group digits in sets of three for decimal, four for hexadecimal and binary, and three for octal:
+Group digits in patterns that match each base's conventional formatting:
+
+- **Decimal:** Groups of three (`1_000_000_000`)
+- **Hexadecimal:** Groups of two or four (`0xFF_FF`, `0x0000_FFFF`)
+- **Binary:** Groups of four or eight (`0b1111_0000`, `0b10101010_11001100`)
+- **Octal:** Groups of three (`0o777_000`)
 
 ```uranite
 I64 population = 8_000_000_000
 I64 colorValue = 0xFF_00_FF
 I64 bitmask = 0b1111_0000_1010_0101
-I64 permissions = 0o755
+I64 largeOctal = 0o777_777
 ```
-
-These groupings mirror conventional numeric formatting and make large values immediately readable.
 
 ---
 
-## Type Suffixes
+## Negative Integers
 
-The lexer accepts an optional alphabetic suffix immediately following a decimal integer literal. After scanning the digit sequence, if the next character is alphabetic, the lexer reads consecutive alphanumeric characters and appends them to the token value:
-
-```
-Source:  42i32
-Token:   LiteralInteger, value = "42i32"
-```
-
-The suffix is included in the raw token string, but the parser does **not** currently use it for type inference. The parser's integer conversion logic extracts only digit characters (and the `-` sign) from the raw string before passing to `std::stoll()`. Any trailing alphabetic suffix is silently ignored during numeric conversion.
-
-All integer literals are typed as `I64` regardless of any suffix. Explicit type narrowing is performed through variable type annotations, not through literal suffixes:
+Negative integer values are expressed using the unary minus operator applied to a positive literal:
 
 ```uranite
-I32 small = 42
-I16 shorter = 100
-I8 tiny = 7
+I64 negative = -42
+I64 minByte = -128
+I64 temperature = -15
 ```
 
-The literal `42` is parsed as `int64_t(42)` and typed as `I64`. When assigned to an `I32` variable, the semantic analyzer handles the implicit narrowing conversion.
+The minus sign is not part of the literal itself — it is a separate unary operator. This means `-42` is parsed as the operator `-` applied to the literal `42`, not as a single negative literal token. In practice, this distinction is invisible to the programmer — the compiler evaluates the negation at compile time and produces the expected negative value.
 
----
+The minimum value of `I64` is -9,223,372,036,854,775,808. This value can be written directly:
 
-## The Parsing Pipeline
-
-### Stage 1: Lexer Scanning
-
-The `readNumber()` method in the lexer performs the initial character scan. It:
-
-1. Checks for base prefixes (`0b`, `0o`, `0x`) by examining the first two characters.
-2. For prefixed literals: advances past the prefix and scans valid digits for that base, stripping underscores.
-3. For decimal literals: scans digits and underscores, then checks for `.` (float transition) and `e`/`E` (scientific notation transition).
-4. Appends any trailing alphabetic suffix.
-5. Returns a `LiteralInteger` token with the accumulated raw string.
-
-The raw string preserved in the token includes the base prefix but excludes underscores:
-
-| Source Text | Token Value |
-|---|---|
-| `42` | `"42"` |
-| `1_000_000` | `"1000000"` |
-| `0xFF` | `"0xFF"` |
-| `0b1010` | `"0b1010"` |
-| `0o644` | `"0o644"` |
-| `0xFF_FF` | `"0xFFFF"` |
-
-### Stage 2: Parser Conversion
-
-When the parser encounters a `LiteralInteger` token, it converts the raw string to a 64-bit integer value. The conversion logic uses base-aware prefix detection:
-
-1. If the raw string has length > 2 and starts with `0x` or `0X`: call `std::stoll(raw.substr(2), nullptr, 16)` — hexadecimal conversion with prefix stripped.
-2. If the raw string has length > 2 and starts with `0b` or `0B`: call `std::stoll(raw.substr(2), nullptr, 2)` — binary conversion with prefix stripped.
-3. If the raw string has length > 2 and starts with `0o` or `0O`: call `std::stoll(raw.substr(2), nullptr, 8)` — octal conversion with prefix stripped.
-4. Otherwise: extract only digit and `-` characters into a clean numeric string, then call `std::stoll(numericString)` — decimal conversion with any trailing suffix stripped.
-
-The result is an `IntegerLiteralExpression` AST node containing both the original raw string and the parsed `int64_t` value.
-
-### Stage 3: Semantic Type Assignment
-
-The semantic analyzer processes `IntegerLiteral` expression nodes with a straightforward type assignment:
-
-1. Look up the `I64` class type via `typeRegistry.lookupType("I64")`.
-2. If found, use the class type (OOP wrapper `uranite.language.i64.I64`).
-3. If not found (fallback), use the primitive integer type `typeRegistry.getInteger64()` (primitive `uranite.builtin.i64`).
-
-Every integer literal receives the same type: `I64`. There is no literal-level distinction between `I8`, `I16`, `I32`, `I64`, or unsigned variants. Type narrowing happens at the assignment site through implicit conversion, not at the literal itself.
-
-### Stage 4: MIR Code Generation
-
-In MIR codegen, a `ConstantInteger` instruction maps directly to an LLVM `ConstantInt`:
-
+```uranite
+I64 minimum = -9_223_372_036_854_775_808
 ```
-llvm::ConstantInt::get(
-    llvm::Type::getInt64Ty(context),
-    instruction.integerConstantValue,
-    true    ← signed
-)
-```
-
-The LLVM type is always `i64` (signed 64-bit integer). The `true` parameter indicates signed representation. The resulting LLVM `Value*` is stored as the variable's runtime value.
 
 ---
 
 ## Default Type: I64
 
-### OOP Wrapper Resolution
+Every integer literal defaults to the `I64` type — a signed 64-bit integer. This is true regardless of the base used or the magnitude of the value. The literals `42`, `0x2A`, `0o52`, and `0b101010` all produce an `I64` value.
 
-Every integer literal in Uranite is typed as `I64` — the 64-bit signed integer OOP wrapper class. The semantic analyzer resolves this by first looking up the class name "I64" in the type registry. This resolves to `uranite.language.i64.I64`, the OOP wrapper class defined in `stdlibs/language/i64.urn`.
+### Method Access on Integers
 
-The OOP wrapper provides methods like `toString()`, `hashCode()`, `equals()`, and arithmetic operator implementations through interface dispatch (`Addable`, `Subtractable`, `Multipliable`, etc.). This means integer literals have method access:
+Because `I64` is an object type (not a raw primitive), integer values have method access. Every integer literal supports methods inherited from the `Object` class and the arithmetic interfaces:
 
 ```uranite
 I64 value = 42
 String text = value.toString()
 I64 hash = value.hashCode()
+Boolean same = value.equals( 42 )
 ```
 
-If the OOP wrapper class is not available (e.g., during bootstrapping or in minimal compilation modes), the semantic analyzer falls back to the primitive `uranite.builtin.i64` type, which is a raw 64-bit integer with no methods.
+The `toString()` method converts the integer to its decimal string representation. The `hashCode()` method returns a hash value suitable for use in hash-based collections. The `equals()` method performs value comparison.
 
-### Contextual Typing
+### Type Narrowing Through Annotations
 
-When an integer literal is assigned to a variable with a narrower type annotation, the semantic analyzer performs implicit narrowing:
+When an integer literal is assigned to a variable with a narrower type annotation, the compiler performs implicit narrowing conversion:
 
 ```uranite
-I32 small = 42
-I16 shorter = 100
+I64 full = 42
+I32 medium = 42
+I16 small = 100
 I8 tiny = 7
 U64 unsigned = 255
+U8 byte = 0xFF
 ```
 
-In each case, the literal `42`, `100`, `7`, or `255` is parsed as `int64_t` and initially typed as `I64`. The assignment to a narrower type triggers an implicit conversion in the type checker. The MIR codegen still emits the value as an `i64` LLVM constant — the LLVM backend handles truncation and sign extension as needed during instruction selection.
+In each case, the literal is initially an `I64` value. The variable's type annotation determines the final storage type. The compiler handles the conversion automatically — no explicit cast is required.
+
+If the literal value exceeds the range of the target type, the value is silently truncated. Writing `I8 overflow = 300` compiles without error, but the stored value wraps around within the `I8` range (-128 to 127). See [Narrowing Overflow](#narrowing-overflow).
 
 ---
 
-## Overflow and Parsing Limits
+## The Integer Type System
 
-### Lexer-Level Limits
+Uranite provides a complete set of fixed-width integer types in both signed and unsigned variants.
 
-The lexer imposes no length limit on integer literals. It accumulates digit characters into a `std::string` without bounds checking. A literal with thousands of digits is accepted at the lexer level and produces a valid `LiteralInteger` token.
+### Signed Types
 
-### Parser-Level Overflow
+Signed integers use two's complement representation. The most significant bit is the sign bit.
 
-The parser converts the raw string to `int64_t` using `std::stoll()`. This function throws `std::out_of_range` if the value exceeds the range of `long long` (which is at least 64 bits on all supported platforms). If the conversion overflows, the exception propagates as an unhandled error — the compiler does not currently catch `std::out_of_range` and produce a user-friendly diagnostic.
+| Type | Bits | Minimum | Maximum |
+|---|---|---|---|
+| `I8` | 8 | -128 | 127 |
+| `I16` | 16 | -32,768 | 32,767 |
+| `I32` | 32 | -2,147,483,648 | 2,147,483,647 |
+| `I64` | 64 | -9,223,372,036,854,775,808 | 9,223,372,036,854,775,807 |
 
-In practice, this means literals outside the `int64_t` range cause a hard crash rather than a descriptive error message. This is a known limitation.
+### Unsigned Types
 
-### Semantic-Level Range Checks
+Unsigned integers represent only non-negative values. All bits contribute to the magnitude.
 
-The semantic analyzer does not perform explicit range validation on integer literal values. It does not check whether the literal `300` fits in an `I8` variable (range: -128 to 127) or whether `100_000` fits in an `I16` variable (range: -32768 to 32767). Overflow from narrowing conversions is silent at the semantic level — the value is truncated at the LLVM instruction selection stage.
+| Type | Bits | Minimum | Maximum |
+|---|---|---|---|
+| `U8` | 8 | 0 | 255 |
+| `U16` | 16 | 0 | 65,535 |
+| `U32` | 32 | 0 | 4,294,967,295 |
+| `U64` | 64 | 0 | 18,446,744,073,709,551,615 |
+
+### Alias Types
+
+Three additional integer types provide platform-aware or semantic naming:
+
+| Type | Description |
+|---|---|
+| `Int` | Platform-width signed integer (64-bit on supported systems). |
+| `UInt` | Platform-width unsigned integer (64-bit on supported systems). |
+| `Byte` | Unsigned 8-bit integer for raw byte data. |
+
+### Choosing an Integer Type
+
+Use `I64` (or `Int`) as the default integer type for most purposes. Choose a specific width only when:
+
+- **Interfacing with external APIs** that require a specific width (e.g., `I32` for system call return values)
+- **Working with binary data** where field sizes are fixed (e.g., `U8` for individual bytes, `U16` for network port numbers)
+- **Memory-constrained collections** where millions of values benefit from smaller storage (e.g., `I8` for status codes in a large array)
+- **Bitwise operations** where the width affects mask behavior (e.g., `U32` for 32-bit hash values)
+
+```uranite
+I64 generalPurpose = 42
+I32 exitCode = 0
+U16 portNumber = 8080
+U8 singleByte = 0xFF
+I8 statusCode = -1
+```
+
+---
+
+## Overflow and Range
 
 ### I64 Range
 
-The `I64` type represents a signed 64-bit integer with the following bounds:
+The default `I64` type represents a signed 64-bit integer:
 
-| Bound | Value |
-|---|---|
-| Minimum | -9,223,372,036,854,775,808 (`-2^63`) |
-| Maximum | 9,223,372,036,854,775,807 (`2^63 - 1`) |
+| Bound | Value | Expression |
+|---|---|---|
+| Minimum | -9,223,372,036,854,775,808 | -2^63 |
+| Maximum | 9,223,372,036,854,775,807 | 2^63 - 1 |
 
-Any literal within this range is correctly represented. Literals outside this range cause `std::stoll()` to throw `std::out_of_range`.
+Any literal within this range is correctly represented. Literals outside this range cause a compilation error.
+
+### All Integer Ranges
+
+| Type | Minimum | Maximum |
+|---|---|---|
+| `I8` | -128 | 127 |
+| `I16` | -32,768 | 32,767 |
+| `I32` | -2,147,483,648 | 2,147,483,647 |
+| `I64` | -9,223,372,036,854,775,808 | 9,223,372,036,854,775,807 |
+| `U8` | 0 | 255 |
+| `U16` | 0 | 65,535 |
+| `U32` | 0 | 4,294,967,295 |
+| `U64` | 0 | 18,446,744,073,709,551,615 |
+
+### Narrowing Overflow
+
+When an integer literal is assigned to a type narrower than `I64`, the value must fit within the target type's range. If it does not, the value is silently truncated to the target width using two's complement wrapping:
+
+```uranite
+I8 wrapped = 200
+```
+
+The value 200 exceeds the `I8` range (-128 to 127). The stored value wraps to -56 (200 - 256). This compiles without error or warning. To avoid surprises, ensure that literal values fit within the declared type's range.
+
+### Arithmetic Overflow
+
+Uranite provides wrapping arithmetic for integer addition, subtraction, and multiplication. When an operation exceeds the type's range, the result wraps around using two's complement semantics rather than producing an error at runtime.
+
+Division and modulo operations include automatic zero-checks. Dividing by zero raises a `ZeroDivisionError` at runtime rather than producing undefined behavior:
+
+```uranite
+public function safeDivide( I64 numerator, I64 denominator ) -> I64:
+    return numerator / denominator
+```
+
+If `denominator` is zero, the compiler's auto-inserted zero-check raises `ZeroDivisionError` before the division executes.
 
 ---
 
-## The IntegerType System
+## Leading Zero Is Decimal, Not Octal
 
-The compiler's type system represents integer types through the `IntegerType` struct, which extends the base `Type` with two fields:
+Uranite does not follow the C convention where a leading zero makes a literal octal. A literal `0644` is decimal 644, not octal 420. Only the explicit `0o` prefix triggers octal interpretation:
 
-| Field | Type | Description |
+| Literal | Base | Value |
 |---|---|---|
-| `bitWidth` | `int` | Number of bits: 8, 16, 32, or 64. |
-| `isSigned` | `bool` | `true` for signed types (`I8`-`I64`), `false` for unsigned (`U8`-`U64`). |
+| `644` | Decimal | 644 |
+| `0644` | Decimal | 644 |
+| `0o644` | Octal | 420 |
 
-The type registry pre-creates all eight standard integer types during initialization:
+This design eliminates a notorious class of bugs from C, where code like `int perms = 0755;` silently becomes octal 493 instead of decimal 755. In Uranite, `I64 perms = 0755` is unambiguously decimal 755, and `I64 perms = 0o755` is explicitly octal 493.
 
-| Type Name | Primitive Qualified Name | Bit Width | Signed |
-|---|---|---|---|
-| `I8` | `uranite.builtin.i8` | 8 | Yes |
-| `I16` | `uranite.builtin.i16` | 16 | Yes |
-| `I32` | `uranite.builtin.i32` | 32 | Yes |
-| `I64` | `uranite.builtin.i64` | 64 | Yes |
-| `U8` | `uranite.builtin.u8` | 8 | No |
-| `U16` | `uranite.builtin.u16` | 16 | No |
-| `U32` | `uranite.builtin.u32` | 32 | No |
-| `U64` | `uranite.builtin.u64` | 64 | No |
-
-The `IntegerType` constructor auto-generates the type name from signedness and bit width: signed types get an "i" prefix (`i8`, `i16`, `i32`, `i64`), unsigned types get a "u" prefix (`u8`, `u16`, `u32`, `u64`).
-
-Each primitive integer type also has a corresponding OOP wrapper class in `stdlibs/language/` (e.g., `I64` class at `uranite.language.i64.I64`) that provides method access, operator dispatch, and interface conformance.
+The rule is simple: if there is no prefix, the literal is decimal. Always.
 
 ---
 
@@ -351,47 +371,71 @@ I64 hexUpper = 0XAB
 I64 hexGrouped = 0xFF_FF_FF_FF
 
 I64 octal = 0o755
-I64 octalLower = 0o644
+I64 octalGrouped = 0o777_000
 
 I64 binary = 0b1010
 I64 binaryGrouped = 0b1111_0000_1010_0101
 I64 binaryUpper = 0B1100_0011
 ```
 
+All of these compile without error. Each produces a valid `I64` value.
+
 ### Invalid Integer Literals
 
 The following are **not** valid integer literals:
 
-```
-0x          → prefix with no digits (lexer produces empty hex value)
-0b2         → '2' is not a binary digit (lexer stops at '2', token is "0b")
-0o8         → '8' is not an octal digit (lexer stops at '8', token is "0o")
-0789        → decimal literal, not octal (no 0o prefix; parsed as 789)
-_42         → underscore start dispatches to identifier, not number
-```
+| Literal | Problem |
+|---|---|
+| `0x` | Hex prefix with no digits. |
+| `0b2` | `2` is not a valid binary digit. Only `0` and `1` are accepted. |
+| `0o8` | `8` is not a valid octal digit. Only `0`-`7` are accepted. |
+| `_42` | Underscore at the start is an identifier character, not a number start. |
 
 Note that `0789` is a valid **decimal** literal with value 789. The leading `0` is part of the decimal digit sequence. Only the explicit `0o` prefix triggers octal parsing.
 
 ### Practical Usage
 
+A complete example demonstrating integer literals across all four bases in realistic contexts:
+
 ```uranite
 from uranite.io.console import puts
 
-public const I64 MAX_CONNECTIONS = 1024
-public const I64 DEFAULT_BUFFER_SIZE = 4_096
-public const I64 COLOR_MASK = 0x00FF_FFFF
-public const I64 READ_FLAG = 0b0000_0100
-public const I64 WRITE_FLAG = 0b0000_0010
-public const I64 EXEC_FLAG = 0b0000_0001
+const I64 MAX_CONNECTIONS = 1024
+const I64 DEFAULT_BUFFER = 4_096
+const I64 COLOR_MASK = 0x00FF_FFFF
+const I64 FLAG_READ = 0b0000_0100
+const I64 FLAG_WRITE = 0b0000_0010
+const I64 FLAG_EXEC = 0b0000_0001
 
 public function hasPermission( I64 mode, I64 flag ) -> Boolean:
     return ( mode & flag ) != 0
 
+public function extractRed( I64 color ) -> I64:
+    return ( color >> 16 ) & 0xFF
+
+public function extractGreen( I64 color ) -> I64:
+    return ( color >> 8 ) & 0xFF
+
+public function extractBlue( I64 color ) -> I64:
+    return color & 0xFF
+
 public function main() -> I32:
     I64 permissions = 0o755
-    if hasPermission( permissions, READ_FLAG ):
+    if hasPermission( permissions, FLAG_READ ):
         puts( "read access granted" )
+
+    I64 skyBlue = 0x87_CE_EB
+    I64 red = extractRed( skyBlue )
+    I64 green = extractGreen( skyBlue )
+    I64 blue = extractBlue( skyBlue )
+    puts( "Red: " + red.toString() )
+    puts( "Green: " + green.toString() )
+    puts( "Blue: " + blue.toString() )
+
+    I64 combined = FLAG_READ | FLAG_WRITE
+    puts( "Combined flags: " + combined.toString() )
+
     return 0
 ```
 
-This example demonstrates decimal constants with underscore grouping, hexadecimal color masks, binary bit flags, and an octal file permission value — each base used in its natural domain.
+This example demonstrates decimal constants with underscore grouping, hexadecimal color values with bit-shifting extraction, binary bit flags with bitwise OR combination, and octal file permissions — each base used in its natural domain.

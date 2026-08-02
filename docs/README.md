@@ -2,19 +2,43 @@
 
 **Accelerated Execution Through Quantum Precision**
 
-Uranite is a compiled, indentation-based, ownership-aware programming language backed by LLVM. It combines the ergonomics of Python-style syntax with the performance and memory safety guarantees of systems languages. Uranite compiles to native executables through LLVM IR, delivering zero-cost abstractions, deterministic memory management through move semantics and borrow checking, and a self-hosted standard library spanning collections, concurrency, networking, cryptography, and bare-metal kernel access.
-
-**Compiler v1.2.0 | Language v2026.8 | LLVM 19**
+Uranite is a compiled, indentation-based, ownership-aware programming language that combines the readability of Python-style syntax with the performance and memory safety of systems languages. It compiles to native executables, delivers deterministic memory management through move semantics and borrow checking, and ships with a comprehensive standard library spanning collections, concurrency, networking, cryptography, and bare-metal system access.
 
 ---
 
-## Core Philosophy
+## Table of Contents
+- [Uranite Programming Language](#uranite-programming-language)
+  - [Table of Contents](#table-of-contents)
+  - [Core Philosophy](#core-philosophy)
+    - [Readability is non-negotiable](#readability-is-non-negotiable)
+    - [Memory safety without garbage collection](#memory-safety-without-garbage-collection)
+    - [Native performance is the baseline](#native-performance-is-the-baseline)
+    - [The standard library is the platform](#the-standard-library-is-the-platform)
+  - [Key Features](#key-features)
+    - [Type System](#type-system)
+    - [Memory Model](#memory-model)
+    - [Concurrency](#concurrency)
+    - [Collections](#collections)
+    - [Error Handling](#error-handling)
+    - [Pattern Matching](#pattern-matching)
+    - [Inline Assembly and Unsafe Code](#inline-assembly-and-unsafe-code)
+    - [Interop](#interop)
+  - [Quick Start](#quick-start)
+  - [At a Glance](#at-a-glance)
+  - [Documentation Map](#documentation-map)
+    - [Getting Started](#getting-started)
+    - [Language Syntax](#language-syntax)
+    - [Standard Library Guide](#standard-library-guide)
+    - [Toolchains](#toolchains)
+    - [Compiler Internals](#compiler-internals)
+  - [Standard Library Modules](#standard-library-modules)
+  - [License](#license)
 
-Uranite is built on four principles that guide every design decision in the language, compiler, and standard library.
+## Core Philosophy
 
 ### Readability is non-negotiable
 
-Indentation-based blocks replace braces. Keyword-driven logic (`and`, `or`, `not`, `is`) replaces symbolic operators for boolean operations. Descriptive naming conventions are enforced by the formatter. The result is source code that reads as a description of its own intent:
+Indentation-based blocks replace braces. Keyword-driven logic (`and`, `or`, `not`, `is`) replaces symbolic operators for boolean operations. Descriptive naming conventions are enforced by the formatter. Source code reads as a description of its own intent:
 
 ```uranite
 public function processOrders( ArrayList<Order> orders ) -> I64:
@@ -25,26 +49,29 @@ public function processOrders( ArrayList<Order> orders ) -> I64:
     return totalValue
 ```
 
-No braces, no semicolons, no `&&` or `||`. Uranite syntax is designed so that reading the code aloud produces a correct English description of the logic.
+No braces, no semicolons, no `&&` or `||`.
 
 ### Memory safety without garbage collection
 
-Every value in Uranite has exactly one owner. Assignment transfers ownership by default. The compiler's two-pass borrow checker, operating at both the AST and MIR levels, verifies at compile time that no value is used after it has been moved, no mutable reference coexists with other references, and every allocation is freed exactly once.
+Every value in Uranite has exactly one owner. Assignment transfers ownership by default. The compiler verifies at compile time that no value is used after it has been moved, no mutable reference coexists with other references, and every allocation is freed exactly once.
 
 ```uranite
-ArrayList<String> original = [ "alpha", "beta", "gamma" ]
+ArrayList<String> original = new ArrayList<>()
+original.add( "alpha" )
+original.add( "beta" )
+
 ArrayList<String> transferred = original
 ```
 
-After the second line, `original` is invalidated. Any subsequent access to `original` produces a compile-time error. There is no garbage collector, no reference counting, and no runtime pause for memory reclamation.
+After the last line, `original` is invalidated. Any subsequent access to `original` produces a compile-time error. There is no garbage collector, no reference counting, and no runtime pause for memory reclamation.
 
 ### Native performance is the baseline
 
-Uranite compiles through LLVM with optimization levels from `-O0` (debug) through `-O3` and `-Ofast` (maximum throughput). The compiler inserts arithmetic overflow checks for integer operations, zero-division guards for division and modulo, and preserves IEEE 754 compliance for floating-point operations. These safety checks have measurable but minimal overhead; wrapping arithmetic is used for `+`, `-`, and `*` on integers, and the LLVM backend eliminates redundant checks during optimization.
+Uranite compiles to optimized native code with configurable optimization levels from debug builds through maximum throughput. The compiler inserts arithmetic overflow checks for integer operations and zero-division guards for division and modulo, while preserving IEEE 754 compliance for floating-point operations.
 
 ### The standard library is the platform
 
-Uranite ships 37 standard library modules covering everything from `ArrayList<E>` and `HashMap<K,V>` to raw Linux syscalls, epoll-based async I/O, POSIX threading, AES-256 encryption, HTTP clients, regular expressions, and process management. The async runtime is written entirely in pure Uranite using `asm volatile` inline assembly and raw syscalls, with zero dependency on the C runtime. Standard library modules are first-class Uranite code, not bindings to external C libraries.
+Uranite ships over 30 standard library modules covering everything from `ArrayList<E>` and `HashMap<K,V>` to raw Linux syscalls, epoll-based async I/O, POSIX threading, AES-256 encryption, HTTP clients, regular expressions, and process management. The async runtime is written entirely in pure Uranite with zero dependency on the C runtime. Standard library modules are first-class Uranite code, not bindings to external C libraries.
 
 ---
 
@@ -56,19 +83,19 @@ Static typing with full type inference at construction sites via diamond syntax 
 
 ### Memory Model
 
-Move-by-default ownership with compile-time borrow checking at two pipeline stages (AST-level and MIR-level). Intrinsic `Memory<T>` for raw heap allocation mapping directly to LLVM memory operations. `Arena` allocator for batch allocation with single-point deallocation. `Slab` allocator for fixed-size object pools. Explicit `delete` for manual deallocation. `Droper` interface for custom cleanup logic. `unsafe` blocks for bypassing borrow checker constraints when necessary.
+Move-by-default ownership with compile-time borrow checking. Intrinsic `Memory<T>` for raw heap allocation. `Arena` allocator for batch allocation with single-point deallocation. `Slab` allocator for fixed-size object pools. Explicit `delete` for manual deallocation. `Droper` interface for custom cleanup logic. `unsafe` blocks for bypassing borrow checker constraints when necessary.
 
 ### Concurrency
 
-`async`/`await` with `Future<T>` return types. Pure-Uranite async runtime built on Linux epoll with raw syscall access and zero C runtime dependency. Coroutines and fibers for lightweight cooperative scheduling. POSIX thread wrapper with `Mutex`, `RwLock`, `Barrier`, `Atomic`, `CondVar`, and `Channel` primitives. `ThreadPool` for managed worker pools. `ScopedThread` for RAII-bound thread lifetimes.
+`async`/`await` with `Future<T>` return types. Pure-Uranite async runtime built on Linux epoll with zero C runtime dependency. Coroutines and fibers for lightweight cooperative scheduling. POSIX thread wrappers with `Mutex`, `RwLock`, `Barrier`, `Atomic`, `CondVar`, and `Channel` primitives. `ThreadPool` for managed worker pools. `ScopedThread` for RAII-bound thread lifetimes.
 
 ### Collections
 
-`ArrayList<E>` (resizable contiguous array), `HashMap<K,V>` (open-addressing hash table), `HashSet<E>` (unique element set), `Tuple<E>` (fixed-size heterogeneous group), `Generator<E>` (lazy value production), `Pair<K,V>` (key-value pair). Collection literals: `[1, 2, 3]` for arrays, `{"key": "value"}` for maps, `{1, 2, 3}` for sets. List, map, and set comprehensions: `[x * 2 for I64 x in 0..10]`.
+`ArrayList<E>`, `HashMap<K,V>`, `HashSet<E>`, `Tuple<E>`, `Generator<E>`, `Pair<K,V>`. Collection literals: `[1, 2, 3]` for arrays, `{"key": "value"}` for maps, `{1, 2, 3}` for sets. Comprehensions: `[x * 2 for I64 x in 0..10]`.
 
 ### Error Handling
 
-Structured exception handling with `try`/`except`/`finally` blocks, typed `except` clauses for discriminating exception types, and `raise` for throwing. `defer` statements for guaranteed cleanup regardless of control flow. Exception specification via `raises` keyword on function signatures. Shadow stack runtime for efficient unwinding through nested call frames.
+Structured exception handling with `try`/`except`/`finally` blocks, typed `except` clauses for discriminating exception types, and `raise` for throwing. `defer` statements for guaranteed cleanup regardless of control flow. Exception specification via `raises` keyword on function signatures.
 
 ### Pattern Matching
 
@@ -76,44 +103,11 @@ Structured exception handling with `try`/`except`/`finally` blocks, typed `excep
 
 ### Inline Assembly and Unsafe Code
 
-`assembly` blocks for embedding platform-specific instructions with `asm volatile` semantics. `unsafe` blocks for operations that bypass the borrow checker. `addressof` operator for obtaining raw pointers. `volatile` qualifier for memory-mapped I/O access.
+`assembly` blocks for embedding platform-specific instructions. `unsafe` blocks for operations that bypass the borrow checker. `addressof` operator for obtaining raw pointers. `volatile` qualifier for memory-mapped I/O access.
 
 ### Interop
 
-FFI module for calling C functions from shared libraries. `-l` linker flag for native library linking. Cross-compilation via `--target` triple following LLVM target conventions. `extern` declarations for importing foreign function signatures.
-
----
-
-## Documentation Map
-
-This documentation is organized into five major sections. Each section is self-contained but cross-references related material throughout.
-
-### [Getting Started](getting-started/README.md)
-
-Installation from source on Linux, macOS, and Windows. Platform support matrix and architecture compatibility. Building the compiler and toolchain from a fresh checkout. Your first Uranite program from source file to native executable.
-
-### [Language Syntax](syntax/README.md)
-
-Complete language reference organized by topic. Covers lexical conventions, the type system, variables and constants, operators, expressions, control flow, functions, classes, structs, interfaces, traits, abstract classes, generics, enums, collections, memory and ownership, error handling, async and concurrency, modules and packages, inline assembly, and foreign function interop. Each topic includes formal grammar sketches, semantic rules, and working code examples drawn from the compiler's test suite and tutorial programs.
-
-### [Standard Library](stdlib/README.md)
-
-Practical usage guides for the core standard library modules. Collections, strings, memory management, console and file I/O, error handling patterns, async programming, threading, testing, math, date and time, cryptography, networking, encoding, regular expressions, OS primitives, and foreign function interface. Not an API reference (generate that with `uranite-doc`), but a guide to writing idiomatic Uranite.
-
-### [Toolchains](toolchains/README.md)
-
-Usage guides and flag references for the four official Uranite development tools:
-
-| Tool | Binary | Purpose |
-|---|---|---|
-| Compiler | `uranite` | Compile `.urn` source to native executables, LLVM IR, or object files |
-| Formatter | `uranite-fmt` | Format and lint Uranite source files to canonical style |
-| Package Manager | `uranite-pkg` | Project scaffolding, dependency resolution, and build orchestration |
-| Doc Generator | `uranite-doc` | Extract doccomments into Markdown or HTML documentation |
-
-### [Compiler Internals](internals/README.md)
-
-Contributor guide to the compiler architecture and development conventions. The full compilation pipeline from source text through lexing, parsing, two-pass semantic analysis, borrow checking, HIR lowering, HIR validation, MIR lowering, MIR liveness analysis, MIR borrow checking, MIR optimization, MIR codegen to LLVM IR, LLVM optimization, and linking. Covers the type registry, the qualnames centralization system, generic type erasure, virtual dispatch via itable generation, shadow stack emission, and the C++ coding conventions enforced across the codebase.
+FFI module for calling C functions from shared libraries. `-l` linker flag for native library linking. Cross-compilation via `--target` triple. `extern` declarations for importing foreign function signatures.
 
 ---
 
@@ -234,13 +228,44 @@ public function main() -> I32:
     return 0
 ```
 
-This single program demonstrates indentation-based blocks, classes with inheritance, interface implementation with `override`, `async` functions returning `Future<T>`, `match` expressions, `HashMap` iteration with key-value destructuring, `try`/`except`/`finally` error handling, and the `parent()` constructor delegation pattern.
+This program demonstrates indentation-based blocks, classes with inheritance, interface implementation with `override`, `async` functions returning `Future<T>`, `match` expressions, `HashMap` iteration with key-value destructuring, `try`/`except`/`finally` error handling, and the `parent()` constructor delegation pattern.
+
+---
+
+## Documentation Map
+
+### [Getting Started](getting-started/README.md)
+
+Installation on Linux, macOS, and Windows. Platform support and architecture compatibility. Building the compiler and toolchain. Your first Uranite program from source file to native executable.
+
+### [Language Syntax](syntax/README.md)
+
+Complete language reference organized by topic. Covers lexical conventions, the type system, variables and constants, operators, expressions, control flow, functions, classes, structs, interfaces, traits, abstract classes, generics, enums, collections, memory and ownership, error handling, async and concurrency, modules and packages, inline assembly, and foreign function interop. Each topic includes grammar rules, semantic behavior, and working code examples.
+
+### [Standard Library Guide](stdlib-guide/README.md)
+
+Practical usage guides for the core standard library modules. Collections, strings, memory management, console and file I/O, error handling patterns, async programming, threading, testing, math, date and time, cryptography, networking, encoding, regular expressions, OS primitives, and FFI. Not an API reference (generate that with `uranite-doc`), but a guide to writing idiomatic Uranite.
+
+### [Toolchains](toolchains/README.md)
+
+Usage guides and flag references for the official Uranite development tools:
+
+| Tool | Binary | Purpose |
+|---|---|---|
+| Compiler | `uranite` | Compile `.urn` source to native executables or object files |
+| Formatter | `uranite-fmt` | Format and lint Uranite source files to canonical style |
+| Package Manager | `uranite-pkg` | Project scaffolding, dependency resolution, and build orchestration |
+| Doc Generator | `uranite-doc` | Extract doccomments into Markdown or HTML documentation |
+
+### [Compiler Internals](internals/README.md)
+
+Contributor guide to the compiler architecture and development conventions. Intended for developers working on the compiler itself, not for end-users writing Uranite programs.
 
 ---
 
 ## Standard Library Modules
 
-Uranite ships 37 standard library modules under the `uranite.*` namespace:
+Uranite ships standard library modules under the `uranite.*` namespace:
 
 | Module | Description |
 |---|---|
@@ -279,56 +304,7 @@ Uranite ships 37 standard library modules under the `uranite.*` namespace:
 | `uranite.requests` | HTTP client for web requests |
 | `uranite.security` | Security primitives and access control |
 | `uranite.web` | Web server and request handling |
-| `uranite.adelia` | Application-level libraries (highest quality standard) |
-
----
-
-## Compilation Pipeline
-
-```
-Source (.urn)
-    |
-    v
-  Lexer                Token stream (keywords, operators, literals, indent/dedent)
-    |
-    v
-  Parser               AST (abstract syntax tree with 76 node kinds)
-    |
-    v
-  Semantic Analyzer    Type-annotated AST (two-pass: registration + validation)
-    |
-    v
-  Borrow Checker       Ownership verification on AST
-    |
-    v
-  HIR Lowering         HIR (high-level IR: preserves loops, match, classes)
-    |
-    v
-  HIR Validation       Structural correctness checks
-    |
-    v
-  MIR Lowering         MIR (mid-level IR: flattened CFG, linear instructions)
-    |
-    v
-  MIR Liveness         Variable liveness analysis
-    |
-    v
-  MIR Borrow Check     Ownership rules on linearized control flow
-    |
-    v
-  MIR Optimization     Dead code elimination, constant folding
-    |
-    v
-  MIR Codegen          LLVM IR generation (production path)
-    |
-    v
-  LLVM Backend         Object code (with -O0 through -Ofast optimization)
-    |
-    v
-  Linker               Native executable
-```
-
-The MIR path is the production pipeline. All source code passes through twelve compilation stages before producing an executable.
+| `uranite.adelia` | Application-level libraries |
 
 ---
 

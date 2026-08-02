@@ -1,6 +1,6 @@
 # Editor Setup
 
-Uranite is an indentation-sensitive language. Unlike brace-delimited languages where whitespace is cosmetic, Uranite's lexer interprets leading whitespace as structural tokens that define block boundaries. A misconfigured editor that mixes tabs and spaces, silently trims trailing whitespace mid-expression, or uses incorrect indentation width will produce lexer errors, phantom `Indent`/`Dedent` tokens, or silently corrupt program structure. Getting editor settings right is not a preference — it is a correctness requirement.
+Uranite is an indentation-sensitive language. Unlike brace-delimited languages where whitespace is cosmetic, Uranite interprets leading whitespace as structural block boundaries. A misconfigured editor that mixes tabs and spaces, silently trims indentation from blank lines, or uses the wrong indentation width will produce compilation errors or silently corrupt program structure. Getting editor settings right is not a preference — it is a correctness requirement.
 
 This guide covers configuration for VS Code, Vim/Neovim, JetBrains IDEs, Emacs, and Sublime Text, followed by integration with `uranite-fmt` for automated formatting and linting.
 
@@ -11,6 +11,7 @@ This guide covers configuration for VS Code, Vim/Neovim, JetBrains IDEs, Emacs, 
 - [Editor Setup](#editor-setup)
   - [Table of Contents](#table-of-contents)
   - [Why Whitespace Settings Matter](#why-whitespace-settings-matter)
+  - [EditorConfig](#editorconfig)
   - [Visual Studio Code](#visual-studio-code)
     - [Workspace Settings](#workspace-settings)
     - [Syntax Highlighting](#syntax-highlighting)
@@ -37,24 +38,43 @@ This guide covers configuration for VS Code, Vim/Neovim, JetBrains IDEs, Emacs, 
 
 ## Why Whitespace Settings Matter
 
-The Uranite lexer's `handleIndentation()` function processes every line's leading whitespace to produce `Indent` and `Dedent` tokens. The algorithm works as follows:
+Uranite uses indentation to define block structure. At each line, the compiler counts leading whitespace (spaces count as 1 unit, tabs count as 4 units) and compares the result against the current nesting level:
 
-1. At each line start, the lexer counts leading spaces (1 unit each) and tabs (4 units each).
-2. If the computed indentation level is greater than the current stack top, the lexer pushes the new level and emits an `Indent` token.
-3. If the computed indentation level is less than the current stack top, the lexer pops levels and emits a `Dedent` token for each popped level until the stack matches the current indentation.
-4. Mismatched indentation (a level that does not match any entry in the indentation stack) produces a fatal lexer error.
+- If indentation **increases** from the previous level, a new block opens. This is how function bodies, `if` branches, loop bodies, and class definitions begin.
+- If indentation **decreases**, one or more blocks close. The indentation must match an existing outer level exactly.
+- If indentation stays the **same**, the current block continues.
+- If indentation does not match **any** enclosing level, the compiler reports a fatal error: "inconsistent indentation — indentation does not match any outer level".
 
-Because tabs are normalized to 4 spaces, a tab character followed by 2 spaces produces an indentation level of 6. This means mixing tabs and spaces within the same file creates ambiguous indentation that varies depending on tab width interpretation. The only safe configuration is **spaces-only with a width of 4**.
+Because tabs are counted as 4 units internally, a tab character followed by 2 spaces produces an indentation level of 6. This means mixing tabs and spaces within a file creates ambiguous indentation that varies depending on the editor's tab display width. The only safe configuration is **spaces-only with a width of 4**.
 
 Three editor settings are critical:
 
 | Setting | Required Value | Why |
 |---|---|---|
-| Insert spaces (not tabs) | Enabled | Tabs are normalized to 4 spaces internally, but mixing tabs and spaces produces inconsistent indentation levels across editors. Spaces-only eliminates ambiguity. |
-| Tab size / indent width | 4 | The lexer treats one tab as 4 spaces. Using a different width causes indentation levels to disagree with visual alignment, producing cryptic errors. |
-| Trim trailing whitespace | Disabled or cautious | Aggressive trailing whitespace trimming can remove indentation from intentionally blank lines inside blocks, altering the indentation stack and producing unexpected `Dedent` tokens. |
+| Insert spaces (not tabs) | Enabled | Mixing tabs and spaces produces inconsistent indentation levels across editors. Spaces-only eliminates ambiguity. |
+| Tab size / indent width | 4 | Uranite counts one tab as 4 spaces. Using a different width causes indentation levels to disagree with visual alignment, producing cryptic errors. |
+| Trim trailing whitespace | Disabled or cautious | Aggressive trailing whitespace trimming can remove indentation from intentionally blank lines inside blocks, altering block structure and producing unexpected errors. |
 
-Additionally, ensure "insert final newline" is enabled. The lexer's end-of-file cleanup pops all remaining indent levels and emits `Dedent` tokens for each. A missing final newline can cause the last line's content to merge with the EOF cleanup in some editor configurations.
+Additionally, ensure "insert final newline" is enabled. A missing final newline can cause edge-case tokenization issues in some editor configurations.
+
+---
+
+## EditorConfig
+
+The simplest way to enforce correct settings across all editors is an `.editorconfig` file in the project root. Most editors and IDEs (VS Code, Vim with plugin, JetBrains, Sublime Text, Emacs) support EditorConfig natively or via a plugin:
+
+```ini
+[*.urn]
+indent_style = space
+indent_size = 4
+tab_width = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = false
+insert_final_newline = true
+```
+
+This file is committed to version control and ensures every contributor's editor uses the same whitespace settings regardless of their personal configuration. The editor-specific sections below provide finer-grained control, but this `.editorconfig` covers the essentials.
 
 ---
 
@@ -83,17 +103,19 @@ Create a `.vscode/settings.json` file in your project root with Uranite-specific
 
 Each setting serves a specific purpose:
 
-- **`editor.tabSize: 4`** — Matches the lexer's tab normalization constant. Visual indentation aligns with the lexer's internal counting.
+- **`editor.tabSize: 4`** — Matches Uranite's indentation unit. Visual indentation aligns with how the compiler counts whitespace.
 - **`editor.insertSpaces: true`** — Pressing Tab inserts 4 space characters, not a tab character.
-- **`editor.detectIndentation: false`** — Prevents VS Code from overriding the tab size based on existing file content. Without this, opening a file that happens to use 2-space indentation in a comment block could cause VS Code to silently switch to 2-space mode.
+- **`editor.detectIndentation: false`** — Prevents VS Code from overriding the tab size based on existing file content. Without this, opening a file that uses 2-space indentation in a comment block could cause VS Code to silently switch to 2-space mode.
 - **`editor.trimAutoWhitespace: false`** — Prevents VS Code from stripping whitespace from lines that become "empty" during editing. In an indentation-sensitive language, an indented blank line inside a function body is structurally meaningful.
-- **`editor.renderWhitespace: "boundary"`** — Renders whitespace characters at word boundaries, making mixed tabs/spaces visually obvious without cluttering the entire display.
-- **`editor.insertFinalNewline: true`** — Ensures the file ends with a newline, preventing EOF tokenization edge cases.
+- **`editor.renderWhitespace: "boundary"`** — Renders whitespace characters at word boundaries, making mixed tabs/spaces visually obvious without cluttering the display.
+- **`editor.insertFinalNewline: true`** — Ensures the file ends with a newline.
 - **`files.trimTrailingWhitespace: false`** — Disables the global trailing whitespace trimmer for `.urn` files.
 
 ### Syntax Highlighting
 
-Until a dedicated Uranite language extension is available, Python's syntax highlighting provides reasonable coverage because both languages share indentation-based blocks, similar keywords (`class`, `def`/`function`, `if`, `else`, `for`, `while`, `return`, `import`, `from`), and triple-quoted strings for doccomments. Map `.urn` files to Python mode in your settings:
+Until a dedicated Uranite language extension is available, Python's syntax highlighting provides reasonable coverage because both languages share indentation-based blocks and many keywords (`class`, `if`, `elif`, `else`, `for`, `while`, `return`, `import`, `from`, `try`, `except`, `finally`, `and`, `or`, `not`, `is`, `in`, `async`, `await`, `lambda`, `raise`, `break`, `continue`, `pass`, `True`, `False`, `None`).
+
+To use Python highlighting while keeping Uranite-specific settings, add the file association:
 
 ```json
 {
@@ -103,15 +125,11 @@ Until a dedicated Uranite language extension is available, Python's syntax highl
 }
 ```
 
-Python mode does not highlight Uranite-specific keywords like `match`, `unit`, `interface`, `implement`, `unsafe`, `defer`, `async`, `await`, or `Memory<T>`. It also does not understand Uranite's generic type syntax (`ArrayList<E>`) or ownership annotations. However, it correctly handles:
+Python mode correctly handles indentation-based block folding, string highlighting (including triple-quoted `"""..."""` doccomments), `#` line comments, and numeric literal formatting.
 
-- Indentation-based block folding
-- String and doccomment highlighting (triple-quoted `"""..."""`)
-- Keyword highlighting for shared terms (`class`, `if`, `for`, `while`, `return`, `import`, `from`, `and`, `or`, `not`, `is`, `in`, `try`, `except`)
-- Numeric literal formatting
-- Comment highlighting (`#` line comments)
+Python mode does not highlight Uranite-specific keywords like `match`, `unit`, `interface`, `implements`, `extends`, `override`, `trait`, `unsafe`, `defer`, `delete`, `extern`, `raises`, `backed`, `addressof`, `move`, `own`, `mut`, `volatile`, `parent`, `property`, `final`, `native`, `virtual`, `reference`, `instanceof`, `subclassof`, `asm`, `where`, `yield`, `switch`, `case`, `type`, `use`, or generic type syntax (`ArrayList<E>`). This is a pragmatic interim solution. When the Uranite VS Code extension is released, it will provide full semantic highlighting, diagnostics integration, and LSP support.
 
-This is a pragmatic interim solution. When the Uranite VS Code extension is released, it will provide full semantic highlighting, diagnostics integration, and LSP support.
+**Note on settings scope:** If you use `"*.urn": "python"`, the language ID for `.urn` files becomes `python`, which means the `[uranite]` settings block will not apply. In a Uranite-only project, this is harmless — the settings affect only Python files in the workspace. In a mixed Uranite/Python project, either keep `"*.urn": "uranite"` (losing syntax highlighting) or accept that `[python]` settings apply to both file types.
 
 ### Format on Save
 
@@ -181,7 +199,7 @@ Each option:
 
 - **`expandtab`** — Converts tab key presses into space characters.
 - **`shiftwidth=4`** — Sets the number of spaces used for each level of auto-indentation and the `>>` / `<<` shift commands.
-- **`softtabstop=4`** — Makes the Tab key insert 4 spaces and Backspace delete 4 spaces at indentation boundaries.
+- **`softtabstop=4`** — Makes Tab insert 4 spaces and Backspace delete 4 spaces at indentation boundaries.
 - **`tabstop=4`** — Sets the visual display width of any existing tab characters to 4 columns.
 - **`autoindent`** — Copies indentation from the current line when starting a new line.
 - **`smartindent`** — Increases indentation after lines ending with `:`, matching Uranite's block-opening syntax.
@@ -195,18 +213,14 @@ autocmd BufWritePre * if &filetype != 'uranite' | %s/\s\+$//e | endif
 
 ### Syntax Highlighting for Vim
 
-As an interim measure, Python syntax highlighting works for `.urn` files. Add to your filetype detection file:
-
-```vim
-autocmd BufNewFile,BufRead *.urn setfiletype python
-```
-
-Note that this overrides the custom `uranite` filetype. To use Python highlighting while keeping Uranite-specific indentation settings, set the filetype to `uranite` and the syntax to `python`:
+As an interim measure, Python syntax highlighting works for `.urn` files. To use Python highlighting while keeping Uranite-specific indentation settings, set the filetype to `uranite` and the syntax to `python`:
 
 ```vim
 autocmd BufNewFile,BufRead *.urn setfiletype uranite
 autocmd BufNewFile,BufRead *.urn setlocal syntax=python
 ```
+
+This preserves the `uranite` filetype (so the ftplugin settings apply) while borrowing Python's syntax highlighting rules.
 
 ### Format on Save for Vim
 
@@ -245,8 +259,8 @@ IntelliJ IDEA, CLion, and PyCharm support custom file type registration for synt
 4. In the **Syntax Highlighting** tab, configure:
    - **Line comment**: `#`
    - **Block comment start**: `"""` / **Block comment end**: `"""`
-   - **Keywords (Set 1)**: `function`, `class`, `interface`, `implement`, `enum`, `struct`, `import`, `from`, `package`, `return`, `if`, `else`, `for`, `while`, `match`, `case`, `try`, `catch`, `throw`, `break`, `continue`, `pass`, `defer`, `delete`, `unsafe`, `async`, `await`, `public`, `private`, `protect`, `abstract`, `readonly`, `static`, `const`, `export`, `extern`, `unit`, `new`, `is`, `in`, `as`, `and`, `or`, `not`
-   - **Keywords (Set 2)**: `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `Bool`, `Char`, `String`, `Void`, `None`, `true`, `false`, `self`, `super`
+   - **Keywords (Set 1 — Declarations and control flow)**: `abstract`, `as`, `async`, `await`, `backed`, `break`, `case`, `class`, `const`, `continue`, `defer`, `delete`, `elif`, `else`, `enum`, `except`, `export`, `extends`, `extern`, `final`, `finally`, `for`, `from`, `function`, `if`, `implements`, `import`, `in`, `instanceof`, `interface`, `is`, `lambda`, `match`, `move`, `mut`, `native`, `new`, `not`, `and`, `or`, `override`, `own`, `package`, `parent`, `pass`, `private`, `property`, `protect`, `public`, `raise`, `raises`, `readonly`, `reference`, `return`, `self`, `static`, `struct`, `subclassof`, `switch`, `trait`, `try`, `type`, `unit`, `unsafe`, `use`, `virtual`, `volatile`, `where`, `while`, `yield`, `addressof`, `asm`
+   - **Keywords (Set 2 — Types and values)**: `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `Boolean`, `Char`, `String`, `Void`, `None`, `True`, `False`
 5. In the **File Name Patterns** section, add `*.urn`.
 6. Click **Apply**.
 
@@ -258,18 +272,7 @@ Navigate to **Settings > Editor > Code Style** and create a scheme for Uranite f
 2. Enable **Use tab character**: No (unchecked).
 3. Set **Keep indents on empty lines**: Yes (checked). This prevents the IDE from stripping indentation from blank lines inside blocks.
 
-Alternatively, create an `.editorconfig` file in the project root that JetBrains IDEs (and most other editors) will respect:
-
-```ini
-[*.urn]
-indent_style = space
-indent_size = 4
-tab_width = 4
-end_of_line = lf
-charset = utf-8
-trim_trailing_whitespace = false
-insert_final_newline = true
-```
+Alternatively, use the `.editorconfig` file described in the [EditorConfig](#editorconfig) section. JetBrains IDEs support EditorConfig natively.
 
 ### External Tool Integration
 
@@ -314,7 +317,7 @@ Add Uranite file association and indentation settings to your Emacs configuratio
               (setq-local delete-trailing-lines nil))))
 ```
 
-This associates `.urn` files with `python-mode` for syntax highlighting while configuring Uranite-appropriate indentation settings. The `python-indent-offset` of 4 matches Uranite's indentation width, and `indent-tabs-mode nil` ensures spaces are used.
+This associates `.urn` files with `python-mode` for syntax highlighting while configuring Uranite-appropriate indentation settings. `python-indent-offset` of 4 matches Uranite's indentation width, and `indent-tabs-mode nil` ensures spaces are used.
 
 To integrate `uranite-fmt` as a format-on-save hook:
 
@@ -377,7 +380,7 @@ For automatic formatting, install the "SublimeOnSaveBuild" package via Package C
 
 ## The uranite-fmt Formatter
 
-`uranite-fmt` is the official Uranite source code formatter and linter. It is built as part of the standard toolchain and produces the `uranite-fmt` binary in the build directory. The formatter operates by parsing source files through the full compiler frontend (Lexer and Parser), constructing an AST, then pretty-printing the AST through a structural `Formatter` visitor engine. A separate `CommentExtractor` / `CommentReattacher` pipeline preserves comments across the reformat by extracting them before parsing and reattaching them to their logical positions in the formatted output.
+`uranite-fmt` is the official Uranite source code formatter and linter. It is built as part of the standard toolchain and produces the `uranite-fmt` binary in the build directory. The formatter parses source files, applies canonical style rules, and outputs the result. Comments are preserved across reformatting — their positions are adjusted to match the new layout.
 
 ### Formatter Invocation
 
@@ -392,35 +395,35 @@ For automatic formatting, install the "SublimeOnSaveBuild" package via Package C
 | `uranite-fmt --check src/` | Check all `.urn` files in a directory. Reports counts of formatted and unformatted files. |
 | `uranite-fmt --lint src/` | Lint all `.urn` files in a directory. |
 
-When operating on a directory, `uranite-fmt` recursively discovers all files with the `.urn` extension using a filesystem iterator, processes each file independently, and prints a summary:
+When operating on a directory, `uranite-fmt` recursively discovers all files with the `.urn` extension, processes each independently, and prints a summary:
 
 ```
 12 files checked: 10 formatted, 2 need formatting
 ```
 
-The `--write` and `--check` flags are mutually exclusive. The `--lint` flag activates the linter instead of the formatter.
+`--write` and `--check` are mutually exclusive. `--lint` activates the linter instead of the formatter.
 
 ### Formatting Rules
 
-The formatter applies a fixed set of layout rules defined in the `FormattingRules` struct:
+The formatter applies a fixed set of layout rules that encode canonical Uranite style:
 
 | Rule | Default | Effect |
 |---|---|---|
-| `indentationWidth` | 4 | Number of spaces per indentation level. |
-| `useSpacesInsideParentheses` | true | `fn( x, y )` instead of `fn(x, y)`. Matches Uranite's convention of spaces inside parentheses with arguments. |
-| `useSpacesInsideEmptyParens` | false | `fn()` instead of `fn( )`. Empty parentheses are compact. |
-| `blankLineAfterPackage` | true | Inserts a blank line after the `package` declaration. |
-| `blankLineBetweenImportGroups` | true | Inserts a blank line between groups of `import` statements. |
-| `blankLineBetweenTopLevelDeclarations` | true | Inserts a blank line between top-level classes, functions, and other declarations. |
-| `maximumLineLength` | 120 | Hard line-length limit. Lines exceeding this width trigger wrapping. |
-| `sortImportsByPackage` | false | When enabled, alphabetically sorts imports by their package path. |
-| `groupImportsByPackagePrefix` | false | When enabled, clusters imports sharing the same root package prefix into adjacent groups. |
+| Indentation width | 4 | Number of spaces per indentation level. |
+| Spaces inside parentheses | Yes | `foo( x, y )` instead of `foo(x, y)`. Applies when arguments are present. |
+| Spaces inside empty parentheses | No | `foo()` instead of `foo( )`. Empty parentheses are compact. |
+| Blank line after package | Yes | Inserts a blank line after the `package` declaration. |
+| Blank line between import groups | Yes | Inserts a blank line between groups of `import` statements. |
+| Blank line between top-level declarations | Yes | Inserts a blank line between top-level classes, functions, and other declarations. |
+| Maximum line length | 120 | Hard line-length limit. Lines exceeding this width trigger wrapping. |
+| Sort imports by package | No | When enabled, alphabetically sorts imports by package path. |
+| Group imports by package prefix | No | When enabled, clusters imports sharing the same root package prefix into adjacent groups. |
 
-These rules encode the canonical Uranite style as documented in the language specification. The parenthesization rule (`fn( x, y )` with internal spaces) is particularly important — it mirrors the C++ compiler source convention and is a distinguishing element of Uranite's visual identity.
+The parenthesization rule (`foo( x, y )` with internal spaces) is a distinguishing element of Uranite's visual identity. The formatter enforces it automatically, so you do not need to remember it while writing code — write with or without spaces, and the formatter normalizes on save.
 
 ### The Linter
 
-The linter is a separate static analysis pass that traverses the AST and enforces coding standards beyond formatting. While the formatter fixes layout, the linter reports semantic and structural issues that require human judgment to resolve.
+The linter is a separate static analysis pass that enforces coding standards beyond formatting. While the formatter fixes layout, the linter reports semantic and structural issues that require human judgment to resolve.
 
 Linter diagnostics use GNU-style error format:
 
@@ -430,11 +433,11 @@ src/services/auth.urn:15:1: warning [missing-doccomment] Public function "authen
 src/utils.urn:87:1: error [long-function] Function "processData" body is 215 lines (maximum 200)
 ```
 
-Each diagnostic includes the file path, line number, column number, severity ("warning" or "error"), rule identifier, and a message explaining the violation.
+Each diagnostic includes file path, line number, column number, severity ("warning" or "error"), rule identifier in brackets, and a message explaining the violation.
 
 ### Lint Rules
 
-The linter enforces these configurable rules:
+The linter enforces these rules:
 
 | Rule ID | Default | Severity | Description |
 |---|---|---|---|
@@ -445,14 +448,14 @@ The linter enforces these configurable rules:
 | `invalid-complexity-format` | Enabled | Warning | Validates that "Complexity:" values use valid Big-O notation (e.g., "O(n)", "O(n log n)", "O(1)"). |
 | `at-param-style` | Enabled | Warning | Flags doccomments that use `@param` tags instead of Uranite's "Parameters:" section format. |
 | `long-function` | Enabled, max 200 lines | Error | Flags functions whose body exceeds the configured maximum line count. |
-| `deep-nesting` | Enabled, max 6 levels | Warning | Flags control-flow blocks (if, for, while, match, try) nested deeper than the configured maximum. |
+| `deep-nesting` | Enabled, max 6 levels | Warning | Flags control-flow blocks (`if`, `for`, `while`, `match`, `try`) nested deeper than the configured maximum. |
 | `missing-return-type` | Enabled | Warning | Flags function declarations that lack an explicit return type annotation. |
 
-All rule thresholds are configurable through the `LintRuleConfig` struct. The linter maintains an allowlist of short names that bypass the cryptic-variable check (standard loop variables like "id").
+All rule thresholds are configurable. The linter maintains an allowlist of short names that bypass the cryptic-variable check (e.g., "id").
 
 ### CI Pipeline Integration
 
-Use the `--check` flag to enforce formatting in continuous integration pipelines. This mode compares the formatted output against the original source and exits with code 1 if any file differs:
+Use the `--check` flag to enforce formatting in continuous integration pipelines. This mode compares formatted output against the original source and exits with code 1 if any file differs:
 
 ```yaml
 steps:
@@ -469,7 +472,7 @@ steps:
       ./build/uranite-fmt --lint src/
 ```
 
-The `--check` flag prints "Would reformat: <filepath>" for each file that is not properly formatted, followed by a summary line:
+`--check` prints "Would reformat: <filepath>" for each file that is not properly formatted, followed by a summary line:
 
 ```
 Would reformat: src/models/user.urn
@@ -499,7 +502,7 @@ fi
 echo "All checks passed."
 ```
 
-The `--check` flag is a read-only operation. It never modifies files, making it safe for CI environments where the source tree should remain unmodified. The exit code convention (0 for pass, 1 for failure) integrates with standard CI tools that interpret non-zero exit codes as build failures.
+`--check` is a read-only operation. It never modifies files, making it safe for CI environments where the source tree should remain unmodified. Exit code convention (0 for pass, 1 for failure) integrates with standard CI tools.
 
 For pre-commit hooks, add a Git pre-commit script at `.git/hooks/pre-commit`:
 

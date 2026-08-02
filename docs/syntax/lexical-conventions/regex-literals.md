@@ -1,71 +1,73 @@
 # Regular Expression Literals
 
-Uranite supports native regular expression literals delimited by forward slashes (`/pattern/`). Regex literals are first-class syntax — the lexer recognizes them during tokenization, the parser wraps them into `RegexLiteralExpression` AST nodes, and the standard library provides the `RegExp` class for backtracking pattern matching. This document specifies the lexer disambiguation logic, scanning algorithm, escape handling, the `RegExp` engine, and integration with the compilation pipeline.
+- [Regular Expression Literals](#regular-expression-literals)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Regex Literal Syntax](#regex-literal-syntax)
+    - [Literal Form vs String Construction](#literal-form-vs-string-construction)
+    - [Escape Handling in Regex Literals](#escape-handling-in-regex-literals)
+    - [Restrictions](#restrictions)
+  - [Slash Disambiguation](#slash-disambiguation)
+    - [The Rule](#the-rule)
+    - [The Whitespace Guard](#the-whitespace-guard)
+    - [Disambiguation Summary](#disambiguation-summary)
+  - [Supported Pattern Syntax](#supported-pattern-syntax)
+    - [Literal Characters](#literal-characters)
+    - [Dot Wildcard](#dot-wildcard)
+    - [Quantifiers](#quantifiers)
+    - [Character Classes](#character-classes)
+    - [Escape Sequences](#escape-sequences)
+    - [Anchors](#anchors)
+    - [Alternation](#alternation)
+    - [Grouping](#grouping)
+  - [The RegExp Class](#the-regexp-class)
+    - [Importing](#importing)
+    - [Construction](#construction)
+    - [Methods](#methods)
+  - [The Match Class](#the-match-class)
+    - [Fields](#fields)
+    - [Match Methods](#match-methods)
+    - [The noMatch Factory Function](#the-nomatch-factory-function)
+  - [Error Types](#error-types)
+  - [Engine Behavior](#engine-behavior)
+    - [Greedy Matching](#greedy-matching)
+    - [Backtracking](#backtracking)
+    - [Alternation Resolution](#alternation-resolution)
+    - [Safety Limits](#safety-limits)
+    - [Performance Characteristics](#performance-characteristics)
+  - [Examples](#examples)
+    - [Basic Pattern Matching](#basic-pattern-matching)
+    - [Character Classes and Quantifiers](#character-classes-and-quantifiers)
+    - [Search and Replace](#search-and-replace)
+    - [String Splitting](#string-splitting)
+    - [Finding All Matches](#finding-all-matches)
+    - [Full-String Validation](#full-string-validation)
+    - [Practical Usage](#practical-usage)
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Regex Literal Syntax](#regex-literal-syntax)
-- [Slash Disambiguation](#slash-disambiguation)
-  - [The Previous-Token Rule](#the-previous-token-rule)
-  - [Whitespace Guard](#whitespace-guard)
-  - [Disambiguation Table](#disambiguation-table)
-- [Lexer Scanning Algorithm](#lexer-scanning-algorithm)
-  - [Escape Handling](#escape-handling)
-  - [Character Class Tracking](#character-class-tracking)
-  - [Newline Rejection](#newline-rejection)
-  - [Closing Slash](#closing-slash)
-- [Supported Pattern Syntax](#supported-pattern-syntax)
-  - [Literal Characters](#literal-characters)
-  - [Dot Wildcard](#dot-wildcard)
-  - [Quantifiers](#quantifiers)
-  - [Character Classes](#character-classes)
-  - [Escape Sequences](#escape-sequences)
-  - [Anchors](#anchors)
-  - [Alternation](#alternation)
-  - [Grouping](#grouping)
-- [The Parsing Pipeline](#the-parsing-pipeline)
-  - [Stage 1: Lexer Scanning](#stage-1-lexer-scanning)
-  - [Stage 2: Parser Construction](#stage-2-parser-construction)
-  - [Stage 3: Code Generation](#stage-3-code-generation)
-- [The RegExp Standard Library Class](#the-regexp-standard-library-class)
-  - [Construction](#construction)
-  - [Methods](#methods)
-  - [The Match Class](#the-match-class)
-  - [Error Types](#error-types)
-- [The Backtracking Engine](#the-backtracking-engine)
-  - [Matching Algorithm](#matching-algorithm)
-  - [Alternation Handling](#alternation-handling)
-  - [Performance Characteristics](#performance-characteristics)
-- [Examples](#examples)
-  - [Basic Pattern Matching](#basic-pattern-matching)
-  - [Character Classes and Quantifiers](#character-classes-and-quantifiers)
-  - [Search and Replace](#search-and-replace)
-  - [String Splitting](#string-splitting)
-  - [Practical Usage](#practical-usage)
+See above.
 
 ---
 
 ## Overview
 
+Uranite supports native regular expression literals delimited by forward slashes. Regex literals are first-class syntax — the compiler recognizes them directly, and the standard library provides the `RegExp` class for pattern matching, searching, replacing, and splitting strings.
+
 | Property | Value |
 |---|---|
-| Delimiter | Forward slashes (`/.../ `) |
-| Token type | `LiteralRegex` |
-| AST node | `RegexLiteralExpression` |
-| Stores | Pattern string (without delimiters) |
-| Runtime class | `RegExp` (`uranite.regexp.regexp.RegExp`) |
-| Engine type | Recursive backtracking |
-
-Regex literals provide syntactic sugar for constructing `RegExp` objects. The pattern between the slashes is stored as a raw string — the lexer preserves escape sequences verbatim (unlike string literals, where escapes are processed). The `RegExp` class interprets the pattern at runtime.
+| Delimiter | Forward slashes (`/pattern/`) |
+| Runtime type | `RegExp` |
+| Engine | Recursive backtracking |
+| Supported features | Literals, dot, quantifiers (`*`, `+`, `?`), character classes, escape sequences, anchors (`^`, `$`), alternation (`\|`), grouping (`()`) |
 
 ---
 
 ## Regex Literal Syntax
 
-A regex literal begins with a forward slash (`/`), contains the pattern, and ends with a closing forward slash:
+A regex literal begins with a forward slash, contains the pattern, and ends with a closing forward slash:
 
 ```uranite
 RegExp emailPattern = /[a-z]+@[a-z]+\.[a-z]+/
@@ -73,166 +75,172 @@ RegExp digits = /\d+/
 RegExp greeting = /^hello$/
 ```
 
-The content between slashes is the raw pattern string. Backslashes within the pattern are part of the regex syntax (e.g., `\d` for digit, `\.` for literal dot) and are preserved as-is in the token value.
+The content between the slashes is the raw pattern. Backslashes within the pattern are regex metacharacters (such as `\d` for digit or `\.` for literal dot) and are preserved exactly as written.
+
+### Literal Form vs String Construction
+
+Regex literals and string-constructed `RegExp` objects produce identical results. The literal form avoids double-escaping:
+
+```uranite
+RegExp literalForm = /\d+/
+RegExp stringForm = new RegExp( "\\d+" )
+```
+
+Both create a `RegExp` that matches one or more digits. In the string form, each backslash must be doubled because string literals process escape sequences at compile time. In the literal form, the backslash is preserved as-is — what you see in the pattern is exactly what the regex engine receives.
+
+For simple patterns, the literal form is more readable. For patterns constructed at runtime (from user input or concatenation), the string constructor is required.
+
+### Escape Handling in Regex Literals
+
+Inside a regex literal, backslash escapes work differently from string literals:
+
+- In a **string literal**, `\n` becomes a newline byte at compile time.
+- In a **regex literal**, `\n` remains the two characters `\` and `n` — the regex engine interprets them at runtime.
+
+This means regex escape sequences like `\d`, `\w`, `\s` work naturally without double-escaping. To include a literal forward slash inside a regex pattern, escape it with a backslash:
+
+```uranite
+RegExp pathPattern = /usr\/local\/bin/
+```
+
+To include a literal backslash in the pattern, use a double backslash:
+
+```uranite
+RegExp backslashPattern = /path\\to\\file/
+```
+
+### Restrictions
+
+Regex literals cannot span multiple lines. If a newline character appears before the closing slash, the literal ends at that point. Multi-line patterns must use the string constructor.
+
+Regex literals do not support flags (such as case-insensitive or multiline modifiers). All matching is case-sensitive and single-line by default.
 
 ---
 
 ## Slash Disambiguation
 
-The forward slash (`/`) serves double duty in Uranite: as the division operator and as the regex literal delimiter. The lexer must decide which interpretation to apply when it encounters a `/` character.
+The forward slash (`/`) serves two purposes in Uranite: as the division operator and as the regex literal delimiter. The compiler decides which interpretation to apply based on context.
 
-### The Previous-Token Rule
+### The Rule
 
-The lexer determines whether a `/` introduces a regex literal or a division operator by examining the type of the most recently emitted token. If the previous token is a value-producing token (something that could be the left operand of a division), the `/` is a division operator. Otherwise, it is the start of a regex literal.
+When the compiler encounters a `/`, it checks what came immediately before it. If the preceding element is something that produces a value — a variable, a number, a closing parenthesis, a closing bracket, `self`, `True`, `False`, or `None` — then `/` is the division operator. In every other context, `/` begins a regex literal.
 
-The following token types indicate that `/` is a **division operator** (previous token produces a value):
+| Preceding Element | `/` Interpreted As | Example |
+|---|---|---|
+| Variable name | Division | `x / 2` |
+| Integer | Division | `10 / 5` |
+| Float | Division | `3.14 / 2.0` |
+| Closing `)` | Division | `( x + y ) / z` |
+| Closing `]` | Division | `arr[0] / 2` |
+| `self` | Division | `self.value / 2` |
+| `True`, `False`, `None` | Division | (syntactically possible) |
+| Assignment `=` | Regex | `RegExp pattern = /\d+/` |
+| Opening `(` | Regex | `( /abc/ )` |
+| Keyword (`return`, `if`, etc.) | Regex | `return /\d+/` |
+| Comma | Regex | `call( /abc/, value )` |
+| Nothing (start of expression) | Regex | `/pattern/` |
 
-| Previous Token Type | Example Context |
-|---|---|
-| `Identifier` | `x / 2` |
-| `LiteralInteger` | `10 / 5` |
-| `LiteralFloat` | `3.14 / 2.0` |
-| `LiteralString` | (rare, but syntactically possible) |
-| `LiteralChar` | (rare, but syntactically possible) |
-| `RightParenthesis` | `(x + y) / z` |
-| `RightBracket` | `arr[0] / 2` |
-| `KeywordSelf` | `self.value / 2` |
-| `KeywordTrue` | (syntactically possible) |
-| `KeywordFalse` | (syntactically possible) |
-| `KeywordNone` | (syntactically possible) |
+### The Whitespace Guard
 
-If the previous token is **any other type** (an operator, a keyword like `return`, an opening parenthesis, or if there is no previous token), the `/` begins a regex literal.
+After determining that `/` should begin a regex, one additional check is applied: the character immediately after the `/` must not be a space or newline. If it is, the `/` is treated as division instead.
 
-If the token list is **empty** (the `/` is the first token in the source), it is always a regex literal.
+This prevents ambiguity in expressions where a space follows the slash. In practice, regex patterns always begin immediately after the opening slash with no whitespace.
 
-### Whitespace Guard
+### Disambiguation Summary
 
-After the previous-token check determines that the context is a regex, one additional guard is applied: the character immediately after the `/` must not be a space or newline. If the next character is `' '` or `'\n'`, the `/` is emitted as a `Slash` (division) token instead.
-
-This guard prevents false positives in expressions like `return / divisor` where a space follows the `/`. In practice, regex patterns immediately follow the opening slash with no whitespace.
-
-### Disambiguation Table
-
-| Context | Previous Token | Next Char | Result |
-|---|---|---|---|
-| `x / 2` | `Identifier` | `2` | Division (`Slash`) |
-| `return /\d+/` | `KeywordReturn` | `\` | Regex (`LiteralRegex`) |
-| `( /abc/ )` | `LeftParenthesis` | `a` | Regex (`LiteralRegex`) |
-| `= /pattern/` | `Assignment` | `p` | Regex (`LiteralRegex`) |
-| `/ 2` (first token) | (none) | ` ` | Division (`Slash`) — whitespace guard |
-| `/pattern/` (first token) | (none) | `p` | Regex (`LiteralRegex`) |
-
----
-
-## Lexer Scanning Algorithm
-
-When the lexer determines that a `/` starts a regex literal, it enters a scanning loop that reads characters until it finds the closing `/`.
-
-### Escape Handling
-
-A backslash (`\`) inside the regex pattern escapes the next character. The lexer tracks an `escaped` boolean flag:
-
-1. When `escaped` is `true`, the current character is appended to the pattern regardless of its value (including `/`, `[`, `]`, `\n`). The `escaped` flag is then reset to `false`.
-2. When the current character is `\` and `escaped` is `false`, the backslash is appended to the pattern and the `escaped` flag is set to `true`.
-
-This means `\/` inside a regex produces a literal forward slash in the pattern, and `\\` produces a literal backslash.
-
-### Character Class Tracking
-
-The lexer tracks whether it is inside a character class (`[...]`) using an `inCharClass` boolean flag:
-
-- `[` sets `inCharClass` to `true`.
-- `]` sets `inCharClass` to `false`.
-
-When `inCharClass` is `true`, a `/` character does **not** terminate the regex — it is treated as a literal character within the class. This allows patterns like `/[a/b]/` where the `/` inside the brackets is part of the character class.
-
-### Newline Rejection
-
-If the lexer encounters a newline (`\n`) while scanning the pattern (and not in an escaped state), it immediately stops scanning. The pattern accumulated so far becomes the token value. Regex patterns cannot span multiple lines.
-
-### Closing Slash
-
-When the lexer encounters a `/` character that is:
-- Not escaped (the `escaped` flag is `false`), and
-- Not inside a character class (`inCharClass` is `false`)
-
-...it advances past the closing slash and emits a `LiteralRegex` token. The token value contains the pattern text without the surrounding slashes.
+The logic is straightforward in practice: if the slash could be dividing a value, it is division. If it appears where an expression is expected (after `=`, `(`, `return`, `,`, or at the start), it begins a regex literal. The whitespace guard handles the remaining edge cases.
 
 ---
 
 ## Supported Pattern Syntax
 
-The `RegExp` engine (defined in `uranite.regexp.regexp`) supports the following pattern constructs:
-
 ### Literal Characters
 
-Any character that is not a metacharacter matches itself. The metacharacters are: `. * + ? [ ] ( ) | ^ $ \`.
+Any character that is not a metacharacter matches itself. The metacharacters are: `. * + ? [ ] ( ) | ^ $ \`
 
 ```uranite
 RegExp literal = /hello/
 ```
 
+This pattern matches the exact sequence "hello" anywhere in the subject string.
+
 ### Dot Wildcard
 
-The `.` metacharacter matches any single character (any byte):
+The `.` metacharacter matches any single byte:
 
 ```uranite
-RegExp anyThree = /h.t/
+RegExp anyMiddle = /h.t/
 ```
+
+This matches "hat", "hit", "hot", "h9t", and any other three-character sequence starting with "h" and ending with "t".
 
 ### Quantifiers
 
-Three quantifiers control repetition:
+Three quantifiers control how many times the preceding element can repeat:
 
 | Quantifier | Meaning | Example | Matches |
 |---|---|---|---|
-| `*` | Zero or more | `/ab*c/` | "ac", "abc", "abbc" |
+| `*` | Zero or more | `/ab*c/` | "ac", "abc", "abbc", "abbbc" |
 | `+` | One or more | `/ab+c/` | "abc", "abbc" (not "ac") |
 | `?` | Zero or one | `/colou?r/` | "color", "colour" |
 
-Quantifiers apply to the immediately preceding atom (literal character, dot, escape sequence, or character class). The engine uses greedy matching with backtracking — it tries to match as many characters as possible, then backtracks if the remainder of the pattern fails.
+Quantifiers apply to the immediately preceding atom — a literal character, a dot, an escape sequence, or a character class. The engine uses greedy matching by default, consuming as many characters as possible before backtracking if necessary.
 
 ### Character Classes
 
-Character classes match a single character from a set:
+Character classes match a single character from a defined set:
 
 | Syntax | Description | Example |
 |---|---|---|
-| `[abc]` | Match any of "a", "b", or "c" | `/[aeiou]/` |
-| `[a-z]` | Match any character in range | `/[a-zA-Z]/` |
-| `[^abc]` | Match any character NOT in set | `/[^0-9]/` |
-| `[^a-z]` | Match any character NOT in range | `/[^a-z]/` |
+| `[abc]` | Match any one of "a", "b", or "c" | `/[aeiou]/` |
+| `[a-z]` | Match any character in the range | `/[a-zA-Z]/` |
+| `[^abc]` | Match any character NOT in the set | `/[^0-9]/` |
+| `[^a-z]` | Match any character NOT in the range | `/[^a-z]/` |
 
-Ranges use the `-` character between two characters. The `^` at the start of a class negates it. Multiple ranges and literal characters can be combined: `[a-zA-Z0-9_]`.
+The `-` character between two characters defines a range based on byte values. The `^` at the start of a class negates it, matching any character not listed. Multiple ranges and literal characters can be combined freely: `[a-zA-Z0-9_]`.
+
+A forward slash inside a character class does not end the regex literal. The pattern `/[a/b]/` is valid — the `/` between the brackets is part of the character class.
 
 ### Escape Sequences
 
-Backslash escape sequences match character categories:
+Backslash escape sequences match predefined character categories:
 
-| Escape | Matches | Description |
+| Escape | Equivalent | Description |
 |---|---|---|
-| `\d` | `[0-9]` | Any ASCII digit. |
-| `\D` | `[^0-9]` | Any non-digit. |
-| `\w` | `[a-zA-Z0-9_]` | Any word character (alphanumeric or underscore). |
-| `\W` | `[^a-zA-Z0-9_]` | Any non-word character. |
-| `\s` | `[ \t\n\r\f\v]` | Any whitespace (space, tab, newline, CR, form feed, vertical tab). |
-| `\S` | `[^ \t\n\r\f\v]` | Any non-whitespace. |
-| `\.` | `.` | Literal dot (not wildcard). |
-| `\\` | `\` | Literal backslash. |
-| `\/` | `/` | Literal forward slash (used within regex literals). |
+| `\d` | `[0-9]` | Any ASCII digit |
+| `\D` | `[^0-9]` | Any non-digit |
+| `\w` | `[a-zA-Z0-9_]` | Any word character (alphanumeric or underscore) |
+| `\W` | `[^a-zA-Z0-9_]` | Any non-word character |
+| `\s` | `[ \t\n\r\f\v]` | Any whitespace (space, tab, newline, carriage return, form feed, vertical tab) |
+| `\S` | `[^ \t\n\r\f\v]` | Any non-whitespace |
+| `\.` | `.` | Literal dot (not wildcard) |
+| `\\` | `\` | Literal backslash |
+| `\/` | `/` | Literal forward slash |
 
-Any character preceded by `\` that is not a recognized escape identifier is matched literally (the backslash is consumed, the character matches itself).
+Any character preceded by `\` that is not a recognized escape is matched literally — the backslash is consumed and the character matches itself.
 
 ### Anchors
 
-Two anchors constrain where the pattern matches:
+Two anchors constrain where the pattern can match:
 
 | Anchor | Description |
 |---|---|
-| `^` | Match at the start of the string. The `RegExp` constructor detects a leading `^` and sets the `anchored` flag. |
-| `$` | Match at the end of the string. Checked during recursive matching. |
+| `^` | Match only at the start of the string |
+| `$` | Match only at the end of the string |
 
-When `anchored` is `True`, the engine only attempts matching at position 0 (the start of the subject). Without `^`, the engine tries matching at every position from 0 to the end of the subject string.
+When `^` is present at the beginning of a pattern, the engine only attempts matching at position zero. Without `^`, the engine tries matching at every position from the beginning to the end of the subject string.
+
+When `$` is present at the end of a pattern, the match succeeds only if the subject string is fully consumed at that point.
+
+Combining both anchors requires the entire string to match:
+
+```uranite
+RegExp exact = /^hello$/
+Boolean fullMatch = exact.test( "hello" )
+Boolean partialFail = exact.test( "hello world" )
+```
+
+The first test returns `True` because "hello" matches the entire anchored pattern. The second returns `False` because the subject continues past "hello".
 
 ### Alternation
 
@@ -242,164 +250,207 @@ The pipe character (`|`) separates alternative branches:
 RegExp color = /red|green|blue/
 ```
 
-The engine splits the pattern at top-level pipe characters (respecting group nesting) and tries each branch left to right. The first matching branch wins.
+The engine splits the pattern at top-level pipe characters (respecting group nesting) and tries each branch from left to right. The first matching branch wins. If no branch matches, the overall match fails.
 
 ### Grouping
 
-Parentheses `()` group sub-patterns:
+Parentheses group sub-patterns together, affecting quantifier scope and alternation boundaries:
 
 ```uranite
-RegExp grouped = /(abc|def)+/
+RegExp repeated = /(abc)+/
+RegExp choice = /(red|blue) car/
 ```
 
-Grouping affects quantifier scope and alternation boundaries. Parentheses inside the pattern are handled by the matching engine's recursive structure.
+In the first pattern, `+` applies to the entire group "abc", matching "abc", "abcabc", "abcabcabc", and so on. Without the parentheses, `+` would apply only to the character "c".
+
+In the second pattern, the alternation is confined within the group. The pattern matches "red car" or "blue car".
 
 ---
 
-## The Parsing Pipeline
+## The RegExp Class
 
-### Stage 1: Lexer Scanning
+### Importing
 
-The lexer produces a `LiteralRegex` token containing the raw pattern string (no delimiters):
+The `RegExp` class lives in the `uranite.regexp` package. Import it directly or through the package module:
 
-| Source Text | Token Value |
-|---|---|
-| `/\d+/` | `\d+` |
-| `/[a-z]+@[a-z]+/` | `[a-z]+@[a-z]+` |
-| `/^hello$/` | `^hello$` |
-| `/a\/b/` | `a\/b` |
-
-Escape sequences are preserved verbatim — the `\d` in the source becomes `\d` in the token, not a processed byte. This is different from string literals where `\n` is converted to a newline byte.
-
-### Stage 2: Parser Construction
-
-When the parser encounters a `LiteralRegex` token:
-
-1. Extract the pattern string from the token value.
-2. Advance past the token.
-3. Return `RegexLiteralExpression(pattern, source)`.
-
-The `RegexLiteralExpression` AST node stores a single `std::string pattern` field containing the raw pattern text.
-
-### Stage 3: Code Generation
-
-In the legacy AST codegen path, regex literals are emitted as global string pointers:
-
-```
-llvm::Value* value = this->builder.CreateGlobalStringPtr(
-    regexExpression.pattern, "regex.pattern"
-);
+```uranite
+from uranite.regexp.regexp import RegExp
 ```
 
-The pattern string is stored as a null-terminated global constant (identical to string literal emission). At runtime, this string pointer is passed to the `RegExp` constructor.
-
-The MIR production pipeline does not yet have dedicated regex literal handling. Regex literal support in the MIR path is planned as future work.
-
----
-
-## The RegExp Standard Library Class
-
-The `RegExp` class (`uranite.regexp.regexp.RegExp`) provides the runtime regex engine. It is a pure Uranite implementation — no C runtime dependency. All byte-level operations use raw syscalls (`readByteAt`, `stringToPtr`, `stringLen`).
+```uranite
+from uranite.regexp import RegExp
+```
 
 ### Construction
 
-The `RegExp` constructor takes a pattern string and prepares it for matching:
+Create a `RegExp` from a regex literal or a string:
 
 ```uranite
-RegExp pattern = new RegExp( "\\d+" )
+RegExp fromLiteral = /\d+/
+RegExp fromString = new RegExp( "\\d+" )
 ```
 
-Or using regex literal syntax:
-
-```uranite
-RegExp pattern = /\d+/
-```
-
-The constructor:
-
-1. Stores the original pattern string.
-2. Converts the pattern to a raw byte pointer via `stringToPtr()`.
-3. Records the pattern length via `stringLen()`.
-4. Detects the `^` anchor — if the first byte is `^` (ASCII 94), sets `anchored = True`.
+Both forms produce the same result. The constructor stores the pattern, detects whether it begins with the `^` anchor, and prepares it for matching.
 
 ### Methods
 
 | Method | Signature | Description |
 |---|---|---|
-| `test` | `(String input) -> Boolean` | Return `True` if the pattern matches anywhere in the input. |
-| `find` | `(String input) -> Match` | Find the first match in the input. Returns a `Match` object. |
-| `findFrom` | `(String input, I64 fromOffset) -> Match` | Find the first match starting at or after the given byte offset. |
-| `findAll` | `(String input) -> ArrayList<Match>` | Find all non-overlapping matches in the input. |
-| `matches` | `(String input) -> Boolean` | Return `True` if the pattern matches the entire input string (full match). |
-| `replaceFirst` | `(String input, String replacement) -> String` | Replace the first match with the replacement string. |
-| `replaceAll` | `(String input, String replacement) -> String` | Replace all non-overlapping matches with the replacement string. |
-| `split` | `(String input) -> ArrayList<String>` | Split the input at pattern matches, returning the segments between matches. |
+| `test` | `( String input ) -> Boolean` | Return `True` if the pattern matches anywhere in the input string. |
+| `find` | `( String input ) -> Match` | Find the first match in the input. Returns a `Match` object with `matched` set to `True` if found, or a no-match `Match` if not found. |
+| `findFrom` | `( String input, I64 fromOffset ) -> Match` | Find the first match starting at or after the given byte offset. |
+| `findAll` | `( String input ) -> ArrayList<Match>` | Find all non-overlapping matches in the input, scanning left to right. Returns an `ArrayList` of `Match` objects. |
+| `matches` | `( String input ) -> Boolean` | Return `True` if the pattern matches the **entire** input string from start to end. Unlike `test`, which succeeds on partial matches, `matches` requires the full string to conform. |
+| `replaceFirst` | `( String input, String replacement ) -> String` | Replace the first occurrence of the pattern with the replacement string. Returns the original string unchanged if no match is found. |
+| `replaceAll` | `( String input, String replacement ) -> String` | Replace all non-overlapping occurrences of the pattern with the replacement string. |
+| `split` | `( String input ) -> ArrayList<String>` | Split the input string at every occurrence of the pattern. Returns the segments between matches as an `ArrayList<String>`. If no match is found, returns a single-element list containing the entire input. |
 
-### The Match Class
+The distinction between `test` and `matches` is important. `test` checks whether the pattern occurs anywhere inside the input — it succeeds on partial matches. `matches` requires the entire input string to conform to the pattern from beginning to end:
 
-The `Match` class (`uranite.regexp.match.Match`) stores the result of a regex search:
+```uranite
+RegExp digits = /\d+/
+
+Boolean testResult = digits.test( "abc 123 xyz" )
+Boolean matchResult = digits.matches( "abc 123 xyz" )
+```
+
+Here `testResult` is `True` (the pattern finds "123" inside the string) but `matchResult` is `False` (the entire string is not composed of digits).
+
+---
+
+## The Match Class
+
+The `Match` class represents the result of a regex search operation. Import it from the same package:
+
+```uranite
+from uranite.regexp.match import Match
+```
+
+### Fields
 
 | Field | Type | Description |
 |---|---|---|
 | `text` | `String` | The original input string that was searched. |
 | `start` | `I64` | Byte offset where the match begins (inclusive). |
 | `end` | `I64` | Byte offset where the match ends (exclusive). |
-| `matched` | `Boolean` | `True` if a match was found. |
+| `matched` | `Boolean` | `True` if a match was found, `False` otherwise. |
+
+The `start` and `end` fields define a half-open range: `start` is the index of the first byte in the match, and `end` is the index of the first byte after the match.
+
+### Match Methods
 
 | Method | Signature | Description |
 |---|---|---|
-| `group` | `() -> String` | Extract the matched substring from the original text. |
+| `group` | `() -> String` | Extract and return the matched substring from the original text. |
 | `length` | `() -> I64` | Return the length of the matched region in bytes (`end - start`). |
 
-The `noMatch()` factory function creates a `Match` with `matched = False`, empty text, and zero positions.
+Always check `matched` before calling `group` or accessing position fields:
 
-### Error Types
+```uranite
+RegExp pattern = /\d+/
+Match result = pattern.find( "order 42 confirmed" )
+if result.matched:
+    String matchedText = result.group()
+    I64 startPosition = result.start
+    I64 endPosition = result.end
+    I64 matchLength = result.length()
+```
 
-Two error types are defined in `uranite.regexp.errors`:
+### The noMatch Factory Function
 
-| Error | Description |
-|---|---|
-| `RegexSyntaxError` | Raised when a pattern contains invalid syntax (unmatched brackets, trailing backslashes, malformed quantifiers). |
-| `RegexRuntimeError` | Raised when a regex operation fails at runtime (excessive backtracking, stack overflow, execution limits exceeded). |
+The `noMatch` function creates a `Match` representing a failed search — `matched` is `False`, `text` is empty, and both `start` and `end` are zero:
 
-Both extend `Error` and accept a message, numeric code, and optional cause.
+```uranite
+from uranite.regexp.match import noMatch
+
+Match failed = noMatch()
+```
+
+This is primarily used internally by `RegExp` methods when no match is found. In user code, you typically receive a no-match `Match` from `find` or `findFrom` and check the `matched` field.
 
 ---
 
-## The Backtracking Engine
+## Error Types
 
-### Matching Algorithm
+Two error types are defined for regex operations:
 
-The `RegExp` engine uses recursive backtracking. The core `matchAtom()` function processes one pattern element at a time:
+| Error | When Raised |
+|---|---|
+| `RegexSyntaxError` | The pattern contains invalid syntax — unmatched brackets, a trailing backslash, or malformed quantifiers. Raised during `RegExp` construction. |
+| `RegexRuntimeError` | A regex operation fails at runtime — excessive backtracking, stack overflow, or execution limits exceeded. |
 
-1. If the pattern is exhausted, return the current subject position (success).
-2. If the current pattern byte is `$` (end anchor), succeed only if the subject is also exhausted.
-3. If the subject is exhausted but pattern remains, check if remaining pattern can match zero characters (via `*` or `?` quantifiers).
-4. Match the current pattern atom against the current subject byte:
-   - `.` (dot): matches any byte.
-   - `\` (backslash): dispatch to escape handler (`\d`, `\D`, `\w`, `\W`, `\s`, `\S`, or literal).
-   - `[` (bracket): dispatch to character class matcher.
-   - Any other byte: match literally.
-5. If the atom is followed by a quantifier (`*`, `+`, `?`), apply quantifier logic with backtracking.
-6. If the atom matches, recurse on the remaining pattern and subject.
+Both extend `Error` and accept a message, numeric code, and optional cause:
 
-For dot wildcards with `*` quantifier, the engine uses greedy matching: it tries matching from the end of the subject backward to the current position. For `+`, it does the same but requires at least one character consumed. For `?`, it tries matching with the character consumed first, then without.
+```uranite
+from uranite.regexp.errors import RegexSyntaxError, RegexRuntimeError
 
-### Alternation Handling
+public function compilePattern( String raw ) -> RegExp raises RegexSyntaxError:
+    return new RegExp( raw )
+```
 
-The `handleAlternation()` function splits the pattern at top-level `|` characters. The `hasAlternation()` function checks whether the pattern contains any pipe characters outside of groups (tracking parenthesis depth). If alternation is detected, each branch is tried independently from left to right, and the first matching branch determines the result.
+Import them from `uranite.regexp.errors` or directly from `uranite.regexp`.
+
+---
+
+## Engine Behavior
+
+### Greedy Matching
+
+All three quantifiers (`*`, `+`, `?`) are greedy by default. The engine consumes as many characters as possible for the quantified element, then backtracks if the remainder of the pattern cannot match.
+
+For example, with pattern `/a.*b/` and input "aXXbYYb", the `.*` initially consumes "XXbYY" (everything up to the end), then backtracks character by character until it finds a position where `b` can match. The result is "aXXbYYb" — the longest possible match.
+
+There are no lazy (non-greedy) quantifiers. If you need shortest-match behavior, restructure the pattern using negated character classes:
+
+```uranite
+RegExp greedy = /a.*b/
+RegExp shortest = /a[^b]*b/
+```
+
+The first matches "aXXbYYb" (longest). The second matches "aXXb" (stops at the first "b") because `[^b]*` matches any character except "b".
+
+### Backtracking
+
+The engine uses recursive backtracking. When a quantifier consumes characters and the rest of the pattern fails, the engine "backs up" and tries consuming fewer characters. This process repeats until either a valid match is found or all possibilities are exhausted.
+
+Backtracking is invisible during normal use — the engine automatically finds the correct match. However, pathological patterns with nested quantifiers can cause exponential backtracking, where the engine explores an enormous number of possibilities before concluding that no match exists.
+
+Patterns to avoid for performance reasons:
+
+```uranite
+RegExp dangerous = /(a+)+$/
+RegExp alsoSlow = /(a|aa)+$/
+```
+
+These patterns cause the engine to explore exponentially many ways to partition the input among the nested quantifiers when the input almost-but-not-quite matches. Restructure such patterns to eliminate the ambiguity.
+
+### Alternation Resolution
+
+When a pattern contains the pipe character (`|`), the engine splits at top-level pipes (respecting parenthesis nesting) and tries each branch from left to right. The first branch that produces a match wins — remaining branches are not attempted.
+
+```uranite
+RegExp priority = /cat|catch/
+Match result = priority.find( "catch" )
+```
+
+This matches "cat" (the first branch succeeds at position 0), not "catch". If you need the longer match, place longer alternatives first: `/catch|cat/`.
+
+### Safety Limits
+
+The `replaceAll` and `findAll` methods enforce a safety limit of 10,000 iterations to prevent infinite loops. If a zero-length match is found (a pattern that matches the empty string), the search advances by one byte to ensure progress. After 10,000 iterations, the method returns whatever results have been accumulated so far.
 
 ### Performance Characteristics
 
-| Operation | Time Complexity | Description |
+| Operation | Typical Complexity | Notes |
 |---|---|---|
-| Simple literal match | O(n * m) | n = subject length, m = pattern length. |
-| Quantifier match | O(n * m) typical | Greedy with backtracking. |
-| Pathological pattern | O(2^n) worst case | Exponential backtracking on ambiguous quantifiers. |
+| Simple literal match | O(n * m) | n = subject length, m = pattern length |
+| Quantifier match | O(n * m) | Greedy with backtracking |
+| Pathological pattern | O(2^n) worst case | Exponential backtracking on ambiguous quantifiers |
 | `replaceAll` | O(n * k) | n = subject length, k = number of matches. Safety limit of 10,000 iterations. |
-| `findAll` | O(n * m) | Scans left to right, advancing past each match. |
+| `findAll` | O(n * m) | Scans left to right, advancing past each match. Safety limit of 10,000 iterations. |
+| `split` | O(n * m) | Same scan-and-advance as `findAll`. Safety limit of 10,000 iterations. |
 
-The `replaceAll` and `findAll` methods include safety limits (10,000 iterations) to prevent infinite loops on zero-length matches.
+For most real-world patterns, performance is linear or near-linear. Exponential behavior only occurs with pathological patterns containing nested quantifiers on overlapping character sets.
 
 ---
 
@@ -426,6 +477,8 @@ public function main() -> I32:
     Boolean partial = fullMatch.matches( "not exact" )
     return 0
 ```
+
+The `test` method returns `True` if the pattern matches anywhere in the input. The `^` anchor restricts matching to the beginning of the string. Combining `^` and `$` with `matches` requires the entire string to conform.
 
 ### Character Classes and Quantifiers
 
@@ -454,6 +507,8 @@ public function main() -> I32:
     return 0
 ```
 
+The `find` method returns a `Match` object. Calling `group()` on a successful match extracts the matched substring. The `?` quantifier makes the preceding character optional.
+
 ### Search and Replace
 
 ```uranite
@@ -474,6 +529,8 @@ public function main() -> I32:
     return 0
 ```
 
+`replaceFirst` replaces only the first occurrence. `replaceAll` replaces every non-overlapping occurrence. Both return a new string — the original is unchanged.
+
 ### String Splitting
 
 ```uranite
@@ -493,6 +550,51 @@ public function main() -> I32:
         puts( field )
     return 0
 ```
+
+The `split` method divides the input at each pattern match and returns the segments between matches. If no match is found, the entire input is returned as a single-element list.
+
+### Finding All Matches
+
+```uranite
+from uranite.regexp.regexp import RegExp
+from uranite.regexp.match import Match
+from uranite.collection.array-list import ArrayList
+from uranite.io.console import puts
+
+public function main() -> I32:
+    RegExp digits = /\d+/
+    ArrayList<Match> allNumbers = digits.findAll( "item 42, qty 7, total 100" )
+    for Match numberMatch in allNumbers:
+        puts( numberMatch.group() )
+    return 0
+```
+
+`findAll` returns every non-overlapping match as an `ArrayList<Match>`. After each match, the next search begins at the end of the previous match.
+
+### Full-String Validation
+
+```uranite
+from uranite.regexp.regexp import RegExp
+from uranite.io.console import puts
+
+public function main() -> I32:
+    RegExp integerPattern = /^\d+$/
+    RegExp hexPattern = /^0x[0-9a-fA-F]+$/
+
+    Boolean isInteger = integerPattern.matches( "12345" )
+    Boolean isHex = hexPattern.matches( "0xFF0A" )
+    Boolean notInteger = integerPattern.matches( "123abc" )
+
+    if isInteger:
+        puts( "valid integer" )
+    if isHex:
+        puts( "valid hex" )
+    if not notInteger:
+        puts( "not a valid integer" )
+    return 0
+```
+
+Use `matches` for full-string validation. It requires the entire input to conform to the pattern. Combine with `^` and `$` anchors for explicit start-to-end matching.
 
 ### Practical Usage
 
@@ -539,4 +641,4 @@ public function main() -> I32:
     return 0
 ```
 
-This example demonstrates regex-based email validation with `matches()` for full-string matching, number extraction with `findAll()` and `group()`, and HTML tag stripping with `replaceAll()` using negated character classes.
+This example demonstrates email validation using `matches` for full-string conformance, number extraction using `findAll` and `group`, and HTML tag stripping using `replaceAll` with a negated character class pattern.

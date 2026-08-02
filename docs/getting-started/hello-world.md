@@ -1,6 +1,6 @@
 # Hello World
 
-This guide walks through writing, understanding, compiling, and running your first Uranite program. Every syntactic and semantic element is explained in detail. A second, more advanced example demonstrates Uranite's type system, collections, pattern matching, and control flow in a single program.
+This guide walks through writing, understanding, compiling, and running your first Uranite program. Every syntactic element is explained in detail. A second, more advanced example demonstrates Uranite's type system, collections, pattern matching, and control flow in a single program.
 
 ---
 
@@ -19,9 +19,7 @@ This guide walks through writing, understanding, compiling, and running your fir
   - [Compiling and Running](#compiling-and-running)
     - [Two-Step: Compile Then Run](#two-step-compile-then-run)
     - [One-Step: Compile and Run](#one-step-compile-and-run)
-    - [Emitting LLVM IR](#emitting-llvm-ir)
-    - [Inspecting the Pipeline](#inspecting-the-pipeline)
-  - [What the Compiler Does](#what-the-compiler-does)
+    - [Inspecting the Output](#inspecting-the-output)
   - [A More Complete Example](#a-more-complete-example)
     - [The Program](#the-program)
     - [Walkthrough](#walkthrough)
@@ -44,7 +42,7 @@ public function main() -> I32:
     return 0
 ```
 
-This is the smallest valid Uranite program. It declares a package, imports a function, defines an entry point, prints a string, and returns an exit code. Every line is structurally required.
+Smallest valid Uranite program. Declares a package, imports a function, defines an entry point, prints a string, returns an exit code. Every line is structurally required.
 
 ---
 
@@ -56,29 +54,29 @@ This is the smallest valid Uranite program. It declares a package, imports a fun
 package hello
 ```
 
-The first non-comment line of every Uranite source file must be a `package` declaration. The package name establishes the module's namespace for the import system and determines how other modules reference this code.
+First non-comment line of every Uranite source file must be a `package` declaration. Package name establishes the module's namespace and determines how other modules reference this code.
 
-**Single-segment names** like `package hello` or `package myapp` are valid for standalone scripts and small programs. They create a flat namespace with no hierarchy.
+**Single-segment names** like `package hello` or `package myapp` are valid for standalone scripts and small programs.
 
-**Multi-segment names** use dot-separated identifiers to create a hierarchical namespace:
+**Multi-segment names** use dot-separated identifiers to create hierarchical namespaces:
 
 ```uranite
 package myorg.myproject.utils
 ```
 
-This declares that the current file belongs to the `myorg.myproject.utils` namespace. Other modules can import its public declarations with:
+Other modules can import public declarations with:
 
 ```uranite
 from myorg.myproject.utils import someFunction
 ```
 
-The package name does not need to match the file path, but following a convention where `package a.b.c` lives at `a/b/c.urn` (or `a/b/c/__mod__.urn` for directories) makes the project navigable.
+Package name does not need to match file path, but following a convention where `package a.b.c` lives at `a/b/c.urn` (or `a/b/c/__mod__.urn` for directories) makes projects navigable.
 
 **Naming rules:**
 
 - Each segment must be a valid identifier: starts with a letter or underscore, contains only letters, digits, underscores, and hyphens.
 - Segments are separated by dots.
-- The name `uranite` is reserved for the standard library. User packages must not start with `uranite.`.
+- Name `uranite` is reserved for standard library. User packages must not start with `uranite.`.
 
 ### Import Statements
 
@@ -86,9 +84,9 @@ The package name does not need to match the file path, but following a conventio
 from uranite.io.console import puts
 ```
 
-Import statements bring declarations from other modules into the current scope. The syntax follows the pattern `from <module.path> import <names>`.
+Import statements bring declarations from other modules into current scope. Syntax follows the pattern `from <module.path> import <names>`.
 
-**Module resolution.** The compiler resolves `uranite.io.console` by searching the standard library directory for `io/console.urn` (or `io/console/__mod__.urn`). User-defined modules are resolved relative to the current file's directory or from paths specified with the `-I` flag.
+**Module resolution.** Compiler resolves `uranite.io.console` by searching the standard library directory for `io/console.urn` (or `io/console/__mod__.urn`). User-defined modules are resolved relative to current file's directory or from paths specified with the `-I` flag.
 
 **Single import:**
 
@@ -111,9 +109,7 @@ from uranite.collection.array-list import {
 }
 ```
 
-**Visibility.** Only declarations marked `public` (or `protect`/default within an `export {}` block) are importable. Private declarations are invisible to the import system regardless of the module path.
-
-**Eager analysis.** When the compiler encounters an import, it fully analyzes the imported module (registration pass) before continuing with the current file. This means imported types and symbols are available immediately for type checking and semantic validation. Analyzed modules are cached so that multiple imports of the same module do not trigger re-analysis.
+**Visibility.** Only declarations marked `public` (or `protect`/default within an `export {}` block) are importable. Private declarations are invisible to the import system.
 
 ### The Entry Point
 
@@ -123,37 +119,67 @@ public function main() -> I32:
 
 This line declares the program's entry point. Every element of this signature is semantically significant.
 
-**`public`** — The visibility modifier. The `main` function must be `public` because the linker resolves it as an external symbol. During code generation, the compiler emits `main` as a globally visible LLVM function with external linkage. If `main` were `private` or `protect`, the linker would not find the entry point and would produce an "undefined reference to `main`" error.
+**`public`** — Visibility modifier. `main` must be `public` because the linker resolves it as an external symbol. If `main` were `private` or `protect`, linking would fail with "undefined reference to `main`".
 
-**`function`** — The function declaration keyword. Uranite uses `function` for all function declarations, whether free functions, methods, or static methods. There is no shorthand like `fn` or `def`.
+**`function`** — Function declaration keyword. Uranite uses `function` for all function declarations, whether free functions, methods, or static methods. No shorthand like `fn` or `def`.
 
-**`main`** — The function name. The compiler checks for a top-level function named "main" (referenced via the centralized qualnames registry as `semantic::qualname::functions::main::Name`) to serve as the program entry point. Class methods named "main" do not satisfy this requirement; the entry point must be a free function with no owner class.
+**`main`** — Function name. Program entry point must be a free function named "main" at top level. Class methods named "main" do not satisfy this requirement.
 
-**`()`** — Empty parameter list. The `main` function takes no parameters. Unlike C's `main(int argc, char** argv)`, Uranite's entry point does not receive command-line arguments directly. Access command-line arguments through the `uranite.sys` or `uranite.cli` standard library modules.
+**`()`** — Parameter list. Minimal `main` takes no parameters. However, `main` optionally accepts command-line arguments through two reserved parameter names:
 
-**`-> I32`** — The return type annotation. Every function in Uranite must declare its return type after the `->` arrow. `I32` is a 32-bit signed integer. The return value of `main` becomes the process exit code: `0` indicates success, and any non-zero value indicates failure. The operating system captures this value and makes it available to the parent process (e.g., `$?` in bash).
+```uranite
+public function main( I64 argc, ArrayList<String> argv ) -> I32:
+    puts( "Argument count:", argc )
+    for String arg in argv:
+        puts( arg )
+    return 0
+```
 
-**`:`** — The block opener. The colon at the end of the line signals the start of an indented block. The next line must have greater indentation than the current line. There are no braces, no `begin`/`end` markers, and no semicolons.
+Both parameters are optional. You can declare `argc` alone, `argv` alone, or both together:
+
+```uranite
+public function main( I64 argc ) -> I32:
+    puts( "Got", argc, "arguments" )
+    return 0
+```
+
+```uranite
+public function main( ArrayList<String> argv ) -> I32:
+    String programName = argv.get( 0 )
+    puts( "Program:", programName )
+    return 0
+```
+
+Parameter names must be exactly `argc` and `argv`. `argc` is an `I64` containing the number of command-line arguments. `argv` is an `ArrayList<String>` containing the arguments themselves (index 0 is the program name).
+
+Alternatively, you can access the same data from anywhere in your program through the `uranite.cli` module without declaring `main` parameters:
+
+```uranite
+from uranite.cli import argc, argv
+
+public function main() -> I32:
+    puts( "Argument count:", argc )
+    String programName = argv.get( 0 )
+    return 0
+```
+
+`uranite.cli.argc` and `uranite.cli.argv` are global constants populated automatically at program startup. Both approaches give identical access to command-line arguments.
+
+**`-> I32`** — Return type annotation. Every function in Uranite must declare its return type after the `->` arrow. `I32` is a 32-bit signed integer. Return value of `main` becomes the process exit code: `0` indicates success, any non-zero value indicates failure.
+
+**`:`** — Block opener. Colon signals start of an indented block. Next line must have greater indentation. No braces, no `begin`/`end` markers, no semicolons.
 
 ### Indentation-Based Blocks
 
-Uranite uses indentation to delimit blocks, similar to Python. This is not a cosmetic preference enforced by the formatter; it is a lexical rule enforced by the compiler's tokenizer.
-
-**How the lexer handles indentation.** The lexer maintains an indentation stack (a stack of integer column positions, initialized with `0` at the bottom). At the start of each line, the lexer's `handleIndentation()` method counts leading whitespace characters (spaces count as 1, tabs count as 4) and compares the total against the top of the stack:
-
-- If the new indentation is **greater** than the stack top, the lexer pushes the new level onto the stack and emits an `Indent` token. This opens a new block.
-- If the new indentation is **less** than the stack top, the lexer pops levels from the stack until it finds a matching level, emitting one `Dedent` token for each popped level. This closes one or more blocks.
-- If the new indentation **equals** the stack top, no indentation token is emitted. The line continues the current block.
-- If the new indentation does not match any level on the stack, the lexer emits a diagnostic error: "inconsistent indentation — indentation does not match any outer level".
-
-At the end of the source file, the lexer pops all remaining levels from the stack (except the base `0`), emitting `Dedent` tokens for each. This ensures all blocks are properly closed.
+Uranite uses indentation to delimit blocks, similar to Python. This is not a cosmetic preference enforced by the formatter; it is a fundamental rule of the language.
 
 **Practical rules:**
 
-- Use spaces or tabs consistently within a single file. Mixing spaces and tabs within a line produces unpredictable column counts.
-- The standard convention is 4 spaces per indentation level. The formatter enforces this.
+- Use spaces or tabs consistently within a single file. Mixing spaces and tabs within a line produces unpredictable behavior.
+- Standard convention is 4 spaces per indentation level. Formatter enforces this.
 - Every line after a colon (`:`) must be indented further than the line containing the colon.
-- Empty lines and lines containing only comments are skipped during indentation processing.
+- Decreasing indentation closes the current block and returns to the enclosing scope.
+- Empty lines and comment-only lines are skipped during indentation processing.
 
 **Example with two nesting levels:**
 
@@ -167,27 +193,9 @@ public function classify( I64 value ) -> String:
         return "non-positive"
 ```
 
-The lexer produces the following indentation token sequence for this code:
+Function body is indented by 4 spaces. `if`/`elif`/`else` branches open nested blocks at 8 spaces. When indentation returns to 4 spaces, branch block closes. When it returns to 0, function body closes.
 
-```
-function header       (column 0)
-    INDENT            (column 4, opens function body)
-    if header         (column 4)
-        INDENT        (column 8, opens if body)
-        return        (column 8)
-        DEDENT        (column 4, closes if body)
-    elif header       (column 4)
-        INDENT        (column 8, opens elif body)
-        return        (column 8)
-        DEDENT        (column 4, closes elif body)
-    else header       (column 4)
-        INDENT        (column 8, opens else body)
-        return        (column 8)
-        DEDENT        (column 4, closes else body)
-    DEDENT            (column 0, closes function body)
-```
-
-The parser consumes `Indent` and `Dedent` tokens to build the AST's block structure. A missing `Indent` after a colon, or a `Dedent` that does not align with any previous indentation level, is a syntax error.
+**Inconsistent indentation** that does not match any enclosing block level produces an error: "inconsistent indentation — indentation does not match any outer level".
 
 ### Function Calls and Argument Spacing
 
@@ -195,7 +203,7 @@ The parser consumes `Indent` and `Dedent` tokens to build the AST's block struct
     puts( "Hello, World!" )
 ```
 
-Uranite follows a consistent spacing convention for function calls: a space after the opening parenthesis and a space before the closing parenthesis when arguments are present. Empty argument lists use no spaces: `foo()`.
+Uranite follows a consistent spacing convention for function calls: space after opening parenthesis and space before closing parenthesis when arguments are present. Empty argument lists use no spaces: `foo()`.
 
 ```uranite
 puts( "one argument" )
@@ -203,7 +211,7 @@ add( firstValue, secondValue )
 empty()
 ```
 
-This is an enforced style convention. The formatter rewrites calls to match this pattern. The compiler accepts calls without spaces (`puts("Hello")`), but the canonical form includes them.
+This is an enforced style convention. Formatter rewrites calls to match this pattern.
 
 ### The Return Statement
 
@@ -211,9 +219,9 @@ This is an enforced style convention. The formatter rewrites calls to match this
     return 0
 ```
 
-The `return` statement exits the current function and provides the return value. In `main`, `return 0` sets the process exit code to 0 (success).
+`return` exits the current function and provides the return value. In `main`, `return 0` sets the process exit code to 0 (success).
 
-Every non-`Void` function must return a value on all code paths. The HIR validator checks that all branches of conditional logic terminate with either a `return` statement or an expression that produces a value.
+Every non-`Void` function must return a value on all code paths. If any branch of conditional logic does not end with a `return`, compiler emits an error.
 
 For `Void` functions, `return` with no value is optional. Control flow falls off the end of the function body implicitly.
 
@@ -234,7 +242,7 @@ Output:
 Hello, World!
 ```
 
-The compiler reads "hello.urn", runs it through all twelve pipeline stages (lexer through linker), and writes a native executable to "hello". The second command executes the binary directly.
+Compiler reads "hello.urn", compiles it to a native executable, writes result to "hello".
 
 ### One-Step: Compile and Run
 
@@ -242,79 +250,32 @@ The compiler reads "hello.urn", runs it through all twelve pipeline stages (lexe
 ./build/uranite -r hello.urn
 ```
 
-The `-r` flag compiles the source to a temporary executable, runs it, and deletes the temporary file after execution. This is the fastest development workflow for single-file programs.
+`-r` flag compiles source to a temporary executable, runs it, deletes the temporary file after execution. Fastest development workflow for single-file programs.
 
-### Emitting LLVM IR
+### Inspecting the Output
+
+Compiler provides diagnostic flags for inspecting intermediate representations:
+
+```bash
+./build/uranite hello.urn --dump-tokens
+./build/uranite hello.urn --dump-ast
+./build/uranite hello.urn --dump-hir
+./build/uranite hello.urn --dump-mir
+```
+
+Primarily useful for debugging or understanding how compiler interprets your code.
+
+Emit generated IR for manual inspection:
 
 ```bash
 ./build/uranite hello.urn --emit-llvm -o hello.ll
 ```
 
-This writes the LLVM IR representation to "hello.ll" instead of compiling to a native binary. Inspecting the IR is useful for understanding how Uranite constructs map to LLVM instructions.
-
-### Inspecting the Pipeline
-
-Dump the output of any compilation stage:
+Add `--verbose` for additional diagnostic output:
 
 ```bash
-./build/uranite hello.urn --dump-tokens
+./build/uranite hello.urn --verbose -o hello
 ```
-
-Shows the lexer's token stream, including `Indent`, `Dedent`, and `Newline` tokens that delimit blocks.
-
-```bash
-./build/uranite hello.urn --dump-ast
-```
-
-Shows the parsed abstract syntax tree with node types, positions, and resolved identifiers.
-
-```bash
-./build/uranite hello.urn --dump-hir
-```
-
-Shows the high-level IR after semantic analysis. Types are resolved and annotated.
-
-```bash
-./build/uranite hello.urn --dump-mir
-```
-
-Shows the mid-level IR with flattened control flow. Loops are desugared into basic blocks with explicit branch and terminator instructions.
-
-Combine any dump flag with `--verbose` for additional logging from each pipeline stage:
-
-```bash
-./build/uranite hello.urn --dump-mir --verbose
-```
-
----
-
-## What the Compiler Does
-
-When you run `./build/uranite hello.urn -o hello`, the compiler executes the following stages:
-
-1. **Lexing.** The lexer reads the source text character by character and produces a flat token stream. Keywords (`package`, `from`, `import`, `public`, `function`, `return`), identifiers (`hello`, `main`, `puts`), literals (`"Hello, World!"`, `0`), operators (`->`), punctuation (`(`, `)`, `,`, `:`), and indentation tokens (`Indent`, `Dedent`) are all emitted. The `0` on the indentation stack is the baseline; the function body pushes `4`.
-
-2. **Parsing.** The recursive descent parser consumes the token stream and builds an AST. The `package` declaration becomes a `PackageDeclaration` node. The import becomes an `ImportDeclaration` node. The function becomes a `FunctionDeclaration` node containing a `Block` statement with two children: a `CallExpression` (for `puts`) and a `ReturnStatement` (for `return 0`).
-
-3. **Semantic analysis (pass 1).** The registration pass scans the program's declarations and registers the `main` function's name and signature in the symbol table. If this file were imported by another module, its public declarations would become available at this stage.
-
-4. **Semantic analysis (pass 2).** The validation pass type-checks every expression. It resolves `puts` to the imported function from `uranite.io.console`, verifies that `"Hello, World!"` is a `String` (matching `puts`'s parameter type), and confirms that `0` is an `I32` (matching `main`'s return type).
-
-5. **Borrow checking.** The AST-level borrow checker verifies ownership rules. In this simple program, no ownership transfers or mutable borrows occur, so the checker passes trivially.
-
-6. **HIR lowering.** The AST is lowered to HIR nodes with resolved types. The function body becomes a sequence of HIR statements.
-
-7. **HIR validation.** Structural correctness checks confirm that the function body terminates with a return statement.
-
-8. **MIR lowering.** HIR is lowered to MIR instructions in basic blocks. The function body becomes a single basic block containing a `CallFunction` instruction (for `puts`) and a `Return` instruction (for `return 0`).
-
-9. **MIR liveness, borrow checking, and optimization.** Liveness analysis, MIR-level borrow checking, and dead code elimination run on the MIR. This program has no dead code or ownership issues.
-
-10. **MIR codegen.** The MIR is translated to LLVM IR. The `main` function is emitted as an LLVM function with `i32` return type. A call to `__uranite_push_frame` is inserted at entry, and `__uranite_pop_frame` is inserted before the return. The `puts` call is emitted as a call to the compiled `puts` function from the standard library.
-
-11. **LLVM optimization and code generation.** The LLVM `opt` tool runs optimization passes on the IR. Then `llc` lowers the optimized IR to a native object file for the host architecture.
-
-12. **Linking.** The system C compiler (`cc`) links the object file with the six C runtime libraries (`liburanite-exception-runtime.a`, `liburanite-async-runtime.a`, `liburanite-thread-runtime.a`, `liburanite-subprocess-runtime.a`, `liburanite-ipc-runtime.a`, `liburanite-ffi-runtime.a`) and the system C library to produce the final executable.
 
 ---
 
@@ -350,7 +311,7 @@ function processGuests( ArrayList<String> guests, Greeting style ) -> I64:
         String message = formatGreeting( guest, style )
         if style is not Greeting.Silent:
             puts( message )
-            greetedCount+= 1
+            greetedCount += 1
     return greetedCount
 
 public function main() -> I32:
@@ -382,23 +343,23 @@ public function main() -> I32:
 
 This program demonstrates nine language features in 45 lines.
 
-**Enums.** The `Greeting` enum declares three variants using the `unit` keyword. Enum variants are accessed via the enum name: `Greeting.Formal`, `Greeting.Casual`, `Greeting.Silent`. Enums are not integers; they are distinct types with identity semantics.
+**Enums.** `Greeting` enum declares three variants using the `unit` keyword. Enum variants are accessed via enum name: `Greeting.Formal`, `Greeting.Casual`, `Greeting.Silent`. Enums are not integers; they are distinct types with identity semantics.
 
-**Match expressions.** The `match style in ...` expression maps a `Greeting` value to a `String`. Each arm uses `=>` (fat arrow) to separate the pattern from the result. The `*` wildcard matches any value not covered by the preceding arms. The backslash (`\`) at the end of each line is the line continuation character, allowing a single expression to span multiple lines.
+**Match expressions.** `match style in ...` expression maps a `Greeting` value to a `String`. Each arm uses `=>` (fat arrow) to separate pattern from result. `*` wildcard matches any value not covered by preceding arms. Backslash (`\`) at end of each line is the line continuation character, allowing a single expression to span multiple lines.
 
-**String concatenation.** The `+` operator on strings performs concatenation: `prefix + name` produces a new string. Under the hood, this invokes the `String.Concat` codegen path, which computes the combined length, allocates a buffer, and copies both operands.
+**String concatenation.** `+` operator on strings performs concatenation: `prefix + name` produces a new string.
 
-**Generics.** `ArrayList<String>` is a generic collection parameterized with `String`. The diamond syntax `new ArrayList<>()` infers the type parameter from the variable's declared type. Generic containers store all elements as opaque pointers (`ptr` in LLVM IR) through type erasure; the semantic type is preserved in the variable descriptor table for type-safe operations.
+**Generics.** `ArrayList<String>` is a generic collection parameterized with `String`. Diamond syntax `new ArrayList<>()` infers type parameter from variable's declared type.
 
-**For-in loops.** `for String guest in guests` iterates over the `ArrayList` using the iterator protocol. The compiler desugars this into calls to `.iterator()`, `.has()`, and `.next()` on the collection. The loop variable `guest` is typed as `String` and is scoped to the loop body.
+**For-in loops.** `for String guest in guests` iterates over `ArrayList` using the iterator protocol (`.iterator()`, `.has()`, `.next()`). Loop variable `guest` is typed as `String` and scoped to loop body.
 
-**Identity comparison.** `style is not Greeting.Silent` uses the `is not` identity operator. Unlike `==` (which calls the `Equatable.equals()` interface method), `is` compares object identity directly. For enums, `is` checks whether two values are the same variant.
+**Identity comparison.** `style is not Greeting.Silent` uses `is not` identity operator. Unlike `==` (which compares values for equality), `is` compares identity directly. For enums, `is` checks whether two values are the same variant.
 
-**Variadic console output.** `puts( "Greeted:", formalCount + casualCount, "guests" )` passes mixed-type arguments to `puts`. The function accepts variadic arguments and converts each to its string representation before printing with space separation.
+**Variadic console output.** `puts( "Greeted:", formalCount + casualCount, "guests" )` passes mixed-type arguments to `puts`. Function accepts variadic arguments and converts each to its string representation before printing with space separation.
 
-**Exception handling.** The `try`/`except` block catches the `ZeroDivisionError` that occurs when dividing `formalCount` by `silentCount` (which is 0). The compiler auto-inserts a zero-division check before every integer division and modulo operation. When the check fails, it raises an exception through the shadow stack runtime. The `except Exception as error` clause catches the exception and binds it to `error`, providing access to `error.message`.
+**Exception handling.** `try`/`except` block catches the error when dividing `formalCount` by `silentCount` (which is 0). Compiler auto-inserts a zero-division check before every integer division and modulo operation. When check fails, an exception is raised. `except Exception as error` clause catches it and binds it to `error`, providing access to `error.message`.
 
-**Visibility.** Only `main` is marked `public`. The `formatGreeting` and `processGuests` functions are package-private (default visibility). They are callable within this file but not importable by other modules.
+**Visibility.** Only `main` is marked `public`. `formatGreeting` and `processGuests` are package-private (default visibility). They are callable within this file but not importable by other modules.
 
 ### Running It
 
@@ -426,16 +387,16 @@ Cannot compute ratio: division by zero
 
 ## Common Beginner Mistakes
 
-**Missing package declaration.** Every source file must begin with `package <name>`. Without it, the parser fails immediately with a syntax error on the first line.
+**Missing package declaration.** Every source file must begin with `package <name>`. Without it, compiler fails immediately with a syntax error on the first line.
 
-**Wrong main signature.** The entry point must be exactly `public function main() -> I32`. Common mistakes include forgetting `public` (linker error: "undefined reference to `main`"), using `Void` as the return type (type mismatch), or adding parameters (signature mismatch).
+**Wrong main signature.** Entry point must be `public function main() -> I32` (or with optional `argc`/`argv` parameters). Common mistakes include forgetting `public` (linker error: "undefined reference to `main`"), using `Void` as return type (type mismatch), or using parameter names other than `argc` and `argv`.
 
-**Inconsistent indentation.** Mixing spaces and tabs within a file, or using an indentation level that does not match any enclosing block, produces the error "inconsistent indentation — indentation does not match any outer level". Pick spaces or tabs and use them consistently. The standard is 4 spaces.
+**Inconsistent indentation.** Mixing spaces and tabs within a file, or using an indentation level that does not match any enclosing block, produces an error. Pick spaces or tabs and use them consistently. Standard is 4 spaces.
 
-**Missing colon before a block.** Every construct that opens a block (function declarations, class declarations, `if`, `elif`, `else`, `for`, `while`, `try`, `except`, `finally`, `match`) requires a trailing colon. Forgetting the colon produces a syntax error at the next line.
+**Missing colon before a block.** Every construct that opens a block (`function`, `class`, `if`, `elif`, `else`, `for`, `while`, `try`, `except`, `finally`, `match`) requires a trailing colon. Forgetting colon produces a syntax error.
 
-**Using braces instead of indentation.** Uranite has no `{` `}` block delimiters. Curly braces are used exclusively for `export {}` blocks, `import {}` grouping, map literals (`{"key": "value"}`), and set literals (`{1, 2, 3}`). Using them as block delimiters produces a syntax error.
+**Using braces instead of indentation.** Uranite has no `{` `}` block delimiters for code blocks. Curly braces are used exclusively for `export {}` blocks, `import {}` grouping, map literals (`{"key": "value"}`), and set literals (`{1, 2, 3}`).
 
-**Using `&&`, `||`, `!` instead of `and`, `or`, `not`.** Uranite uses keyword-based logical operators. The symbolic operators `&&`, `||`, and `!` are not part of the language. `&`, `|`, and `^` are bitwise operators with different semantics.
+**Using `&&`, `||`, `!` instead of `and`, `or`, `not`.** Uranite uses keyword-based logical operators. Symbolic operators `&&`, `||`, and `!` are not part of the language. `&`, `|`, and `^` are bitwise operators with different semantics.
 
-**Forgetting the return value in main.** `main` must return an `I32`. If the last code path does not include a `return` statement, the HIR validator emits an error about a missing return value.
+**Forgetting the return value in main.** `main` must return an `I32`. If any code path does not include a `return` statement, compiler emits an error about a missing return value.

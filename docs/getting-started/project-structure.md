@@ -1,37 +1,47 @@
 # Project Structure
 
-This guide covers the conventions for organizing Uranite projects, from single-file scripts to multi-module applications managed by the package manager. It details the `uranite.yaml` manifest format, the `uranite.lock` lockfile, the standard directory layout, and the compiler's module resolution algorithm that translates import statements into filesystem paths.
+This guide covers conventions for organizing Uranite projects, from single-file scripts to multi-module applications managed by the package manager. It details the `uranite.yaml` manifest format, the `uranite.lock` lockfile, the standard directory layout, and the module resolution algorithm that translates import statements into filesystem paths.
 
 ---
 
 ## Table of Contents
 
-- [Single-File Programs](#single-file-programs)
-- [Multi-Module Projects](#multi-module-projects)
-  - [Standard Directory Layout](#standard-directory-layout)
-  - [Scaffolding with uranite-pkg](#scaffolding-with-uranite-pkg)
-- [The Package Manifest (uranite.yaml)](#the-package-manifest-uraniteyaml)
-  - [Manifest Schema](#manifest-schema)
-  - [Package Identity](#package-identity)
-  - [Entry Point](#entry-point)
-  - [Package Type](#package-type)
-  - [Dependencies](#dependencies)
-  - [Development Dependencies](#development-dependencies)
-  - [Build Configuration](#build-configuration)
-  - [Complete Example](#complete-example)
-- [The Lockfile (uranite.lock)](#the-lockfile-uranitelock)
-  - [Lockfile Structure](#lockfile-structure)
-  - [Deterministic Resolution](#deterministic-resolution)
-- [Version Constraints](#version-constraints)
-- [Module Resolution Algorithm](#module-resolution-algorithm)
-  - [Standard Library Imports](#standard-library-imports)
-  - [User Module Imports](#user-module-imports)
-  - [Include Path Prefix Resolution](#include-path-prefix-resolution)
-  - [The Three Candidate Paths](#the-three-candidate-paths)
-  - [Resolution Order Summary](#resolution-order-summary)
-- [Standard Library Directory Discovery](#standard-library-directory-discovery)
-- [The __mod__.urn Convention](#the-modurn-convention)
-- [Building and Running with uranite-pkg](#building-and-running-with-uranite-pkg)
+- [Project Structure](#project-structure)
+  - [Table of Contents](#table-of-contents)
+  - [Single-File Programs](#single-file-programs)
+  - [Multi-Module Projects](#multi-module-projects)
+    - [Standard Directory Layout](#standard-directory-layout)
+    - [Scaffolding with uranite-pkg](#scaffolding-with-uranite-pkg)
+  - [The Package Manifest (uranite.yaml)](#the-package-manifest-uraniteyaml)
+    - [Manifest Schema](#manifest-schema)
+    - [Package Identity](#package-identity)
+    - [Entry Point](#entry-point)
+    - [Package Type](#package-type)
+    - [Dependencies](#dependencies)
+    - [Development Dependencies](#development-dependencies)
+    - [Build Configuration](#build-configuration)
+    - [Complete Example](#complete-example)
+  - [The Lockfile (uranite.lock)](#the-lockfile-uranitelock)
+    - [Lockfile Structure](#lockfile-structure)
+    - [Deterministic Resolution](#deterministic-resolution)
+  - [Version Constraints](#version-constraints)
+  - [Module Resolution](#module-resolution)
+    - [Standard Library Imports](#standard-library-imports)
+    - [User Module Imports](#user-module-imports)
+    - [Include Path Prefix Resolution](#include-path-prefix-resolution)
+    - [The Three Candidate Paths](#the-three-candidate-paths)
+    - [Resolution Order Summary](#resolution-order-summary)
+  - [Standard Library Directory Discovery](#standard-library-directory-discovery)
+  - [The __mod__.urn Convention](#the-modurn-convention)
+  - [Building and Running with uranite-pkg](#building-and-running-with-uranite-pkg)
+    - [Initialize a Project](#initialize-a-project)
+    - [Install Dependencies](#install-dependencies)
+    - [Build the Project](#build-the-project)
+    - [Build and Run](#build-and-run)
+    - [Update Dependencies](#update-dependencies)
+    - [Regenerate Lockfile](#regenerate-lockfile)
+    - [View Dependency Tree](#view-dependency-tree)
+    - [Clean Build Artifacts](#clean-build-artifacts)
 
 ---
 
@@ -113,7 +123,7 @@ This creates a `uranite.yaml` file in the current directory with default values.
 
 The `uranite.yaml` file is the project's central configuration. It declares the package identity, entry point, dependencies, and build settings. The package manager reads this file for every `build`, `run`, `install`, and `update` operation.
 
-The manifest uses YAML-like syntax parsed by the `ManifestParser` class. It supports string values, inline sequences (`[a, b, c]`), and inline mappings (`{key: value}`). Indentation-based nesting defines sections.
+The manifest uses YAML syntax. It supports string values, inline sequences (`[a, b, c]`), and inline mappings (`{key: value}`). Indentation-based nesting defines sections.
 
 ### Manifest Schema
 
@@ -142,7 +152,7 @@ license: MIT
 
 The `name` field is the package's unique identifier in the dependency system. It must be a valid Uranite identifier: starts with a letter or underscore, contains only letters, digits, underscores, and hyphens. Package names starting with "uranite" are reserved for the standard library and official tooling.
 
-The `version` field follows semantic versioning: `MAJOR.MINOR.PATCH` with an optional prerelease label (e.g., "2.0.0-beta.1"). The `SemanticVersion` struct in the resolver parses this into `majorVersion`, `minorVersion`, `patchVersion`, and `prereleaseLabel` components.
+The `version` field follows semantic versioning: `MAJOR.MINOR.PATCH` with an optional prerelease label (e.g., "2.0.0-beta.1").
 
 ### Entry Point
 
@@ -257,7 +267,7 @@ The `uranite.lock` file records the exact resolved versions and integrity hashes
 
 ### Lockfile Structure
 
-The lockfile uses a YAML-like format with one entry per resolved package:
+The lockfile uses a YAML format with one entry per resolved package:
 
 ```yaml
 lockfile-version: 1
@@ -282,13 +292,12 @@ packages:
     dependencies: []
 ```
 
-Each `LockfileEntry` records:
+Each entry records:
 
-- **`packageName`** — The dependency's package name.
-- **`resolvedVersionString`** — The exact version that was resolved (e.g., "1.4.3", not "^1.4.0").
-- **`sourceIntegrityHash`** — A cryptographic hash of the source archive for tamper detection.
-- **`sourceRepository`** — The URL from which the source was downloaded.
-- **`transitiveDependencyNames`** — The list of packages this dependency itself depends on.
+- **version** — The exact version that was resolved (e.g., "1.4.3", not "^1.4.0").
+- **integrity** — A cryptographic hash of the source archive for tamper detection.
+- **source** — The URL from which the source was downloaded.
+- **dependencies** — The list of packages this dependency itself depends on.
 
 ### Deterministic Resolution
 
@@ -306,7 +315,7 @@ The lockfile guarantees that every developer, CI pipeline, and deployment enviro
 
 ## Version Constraints
 
-The dependency resolver supports seven constraint operators, implemented in the `VersionParser` and `VersionConstraint` system:
+The dependency resolver supports seven constraint operators:
 
 | Operator | Syntax | Meaning |
 |---|---|---|
@@ -324,19 +333,17 @@ Multiple constraints can be combined with commas for intersection:
 json-parser: ">=1.5.0, <2.0.0"
 ```
 
-This accepts any version from 1.5.0 up to (but not including) 2.0.0.
-
-The resolver's `findHighestCompatible()` method selects the highest version from the available set that satisfies all constraints. If no version satisfies the constraints, the resolver reports an error and aborts.
+This accepts any version from 1.5.0 up to (but not including) 2.0.0. The resolver selects the highest version from the available set that satisfies all constraints. If no version satisfies the constraints, the resolver reports an error and aborts.
 
 ---
 
-## Module Resolution Algorithm
+## Module Resolution
 
-When the compiler encounters an import statement, it translates the dot-separated module path into a filesystem path and locates the corresponding `.urn` source file. The resolution algorithm is implemented in `Driver::resolveModulePath()` and differs between standard library imports and user module imports.
+When the compiler encounters an import statement, it translates the dot-separated module path into a filesystem path and locates the corresponding `.urn` source file. The resolution algorithm differs between standard library imports and user module imports.
 
 ### Standard Library Imports
 
-An import is classified as a standard library import when the first segment of the module path equals "uranite" (checked against `semantic::qualname::modules::Uranite`).
+An import is classified as a standard library import when the first segment of the module path is "uranite".
 
 For the import:
 
@@ -350,13 +357,13 @@ The compiler processes the path as follows:
 
 2. **Rewrite native segments.** Any occurrence of the "native" segment is replaced with the target architecture identifier (e.g., "x86-64" or "aarch64"). This step only affects imports that include `native` in their path.
 
-3. **Strip the "uranite" prefix.** The leading "uranite" segment is removed, leaving `["collection", "array-list"]`.
+3. **Strip the "uranite" prefix.** The leading "uranite" segment is removed, leaving `collection/array-list`.
 
 4. **Build the relative path.** Segments are joined with `/` to form `collection/array-list`.
 
-5. **Locate the modules directory.** The compiler calls `findModulesDirectory()` to determine the root of the standard library tree (see [Standard Library Directory Discovery](#standard-library-directory-discovery) below).
+5. **Locate the standard library directory.** The compiler determines the root of the standard library tree (see [Standard Library Directory Discovery](#standard-library-directory-discovery) below).
 
-6. **Try three candidate paths** against the modules directory (see [The Three Candidate Paths](#the-three-candidate-paths) below).
+6. **Try three candidate paths** against the standard library directory (see [The Three Candidate Paths](#the-three-candidate-paths) below).
 
 For this example, the first candidate `collection/array-list.urn` exists at `stdlibs/collection/array-list.urn`, so it is returned immediately.
 
@@ -380,17 +387,17 @@ The compiler searches in this order:
 
 ### Include Path Prefix Resolution
 
-The prefix resolution mechanism, implemented in `Driver::resolveIncludePathPrefixes()`, enables seamless importing of third-party packages installed by `uranite-pkg`:
+The prefix resolution mechanism enables seamless importing of third-party packages installed by `uranite-pkg`:
 
 1. For each `-I` include path, the compiler checks if `<include-path>/__mod__.urn` exists.
-2. If the file exists, the compiler opens it and reads the first `package` declaration line.
+2. If the file exists, the compiler reads the first `package` declaration line.
 3. The package name (e.g., "http-server") is extracted and associated with the include path.
 4. When resolving an import that starts with "http-server", the compiler:
    - Strips the "http-server" prefix from the import path.
    - Searches the remainder against the associated include path.
    - For example, `from http-server.client import HttpClient` becomes a search for `client.urn` (or `client/Client.urn` or `client/__mod__.urn`) inside the include path directory.
 
-This mechanism is cached after the first call. The `includePathPackagePrefix_` map stores the association between include paths and their root package names.
+This mapping is cached after the first resolution. Subsequent imports with the same package prefix reuse the cached association without re-reading `__mod__.urn` files.
 
 ### The Three Candidate Paths
 
@@ -402,7 +409,7 @@ For any module path that resolves to a relative path like `services/auth`, the c
 <base>/services/auth.urn
 ```
 
-The segments are joined with `/` and `.urn` is appended. This is the most common pattern and matches flat module files like `stdlibs/collection/array-list.urn`.
+Segments are joined with `/` and `.urn` is appended. This is the most common pattern and matches flat module files like `stdlibs/collection/array-list.urn`.
 
 **Candidate 2: Capitalized directory file.**
 
@@ -429,10 +436,10 @@ For a standard library import `from uranite.X.Y import Z`:
 ```
 1. Rewrite "native" segments to target architecture
 2. Strip "uranite" prefix
-3. Find modules directory (see discovery order below)
-4. Try: <modules-dir>/X/Y.urn
-5. Try: <modules-dir>/X/Y/Y.urn  (capitalized last segment)
-6. Try: <modules-dir>/X/Y/__mod__.urn
+3. Find standard library directory (see discovery order below)
+4. Try: <stdlibs-dir>/X/Y.urn
+5. Try: <stdlibs-dir>/X/Y/Y.urn  (capitalized last segment)
+6. Try: <stdlibs-dir>/X/Y/__mod__.urn
 ```
 
 For a user module import `from A.B.C import Z`:
@@ -455,20 +462,20 @@ For a user module import `from A.B.C import Z`:
 
 ## Standard Library Directory Discovery
 
-When the compiler needs to locate the standard library, it calls `findModulesDirectory()`, which searches the following locations in order. The first valid directory found is cached and used for all subsequent standard library imports in the same compilation.
+When the compiler needs to locate the standard library, it searches the following locations in order. The first valid directory found is cached and used for all subsequent standard library imports in the same compilation.
 
 | Priority | Source | Path | Notes |
 |---|---|---|---|
 | 1 | `-M` flag | User-specified path | `./build/uranite -M /opt/uranite/stdlibs source.urn` |
 | 2 | Environment variable | `$URANITE_MODULES_PATH` | Set in shell profile for system-wide override. |
 | 3 | Relative to executable | `<exe-dir>/../lib/uranite/stdlibs/` | For installed toolchains where binaries are in `bin/` and modules in `lib/`. |
-| 4 | Compile-time constant | `_URANITE_MODULES_DIR_` | Embedded at build time. Default: `<source-tree>/stdlibs`. |
+| 4 | Compile-time constant | Built-in default path | Embedded at build time. Default: `<source-tree>/stdlibs`. |
 | 5 | Current working directory | `./stdlibs/` | Fallback for running from the repository root. |
 | 6 | Parent traversal | `../stdlibs/`, `../../stdlibs/`, ... | Walks up to 5 parent directories looking for a `stdlibs/` directory. |
 
-A directory is considered valid if it exists and is a directory on the filesystem (`isValidModulesDirectory()`). If no valid directory is found after exhausting all six sources, standard library imports fail with a resolution error.
+A directory is considered valid if it exists on the filesystem. If no valid directory is found after exhausting all six sources, standard library imports fail with a resolution error.
 
-For development builds run from the repository root (`./build/uranite`), priority 4 (the compile-time constant pointing to `<source-tree>/stdlibs`) is typically the one that resolves. For installed toolchains, priority 3 (relative to the executable) is the expected resolution path.
+For development builds run from the repository root (`./build/uranite`), priority 4 (the built-in default pointing to `<source-tree>/stdlibs`) is typically the one that resolves. For installed toolchains, priority 3 (relative to the executable) is the expected resolution path.
 
 ---
 
