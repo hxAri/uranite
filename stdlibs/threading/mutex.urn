@@ -27,7 +27,7 @@ from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.sync.mutex import KernelMutex
 from uranite.os.task.task import BlockReason
 from uranite.threading.atomic import AtomicBoolean
-from uranite.threading.errors import PoisonError
+from uranite.threading.errors import ThreadPoisonError
 
 public class MutexGuard<T>:
     
@@ -102,7 +102,7 @@ public class Mutex<T>:
     Data-protecting mutual exclusion lock. Owns the protected data -- the
     value is only accessible through a MutexGuard obtained from lock() or
     tryLock(). Supports poison detection: if a thread panics while holding
-    the lock, subsequent lock attempts will raise a PoisonError.
+    the lock, subsequent lock attempts will raise a ThreadPoisonError.
     
     Built on KernelMutex from the OS sync module with cooperative blocking
     through the scheduler when contention occurs.
@@ -155,7 +155,7 @@ public class Mutex<T>:
                 A guard granting exclusive access to the protected data.
         
         Raises:
-            PoisonError:
+            ThreadPoisonError:
                 If the mutex was poisoned by a panicked lock holder.
 
         Complexity:
@@ -164,7 +164,7 @@ public class Mutex<T>:
         """
 
         if self.poisoned.load():
-            raise new PoisonError( "Mutex is poisoned", 1, None )
+            raise new ThreadPoisonError( "Mutex is poisoned", 1, None )
 
         I64 taskId = 0
         if self.scheduler.getCurrentTask() != None:
@@ -178,7 +178,7 @@ public class Mutex<T>:
         
         if self.poisoned.load():
             self.inner.release( taskId )
-            raise new PoisonError( "Mutex is poisoned", 1, None )
+            raise new ThreadPoisonError( "Mutex is poisoned", 1, None )
         
         return new MutexGuard<T>( self, taskId )
     
@@ -255,7 +255,7 @@ public class Mutex<T>:
         
         """
         Mark the mutex as poisoned. Subsequent lock attempts will raise a
-        PoisonError. Typically called when a thread panics while holding
+        ThreadPoisonError. Typically called when a thread panics while holding
         the lock.
         """
         
@@ -285,7 +285,7 @@ public class Mutex<T>:
                 A callback receiving the protected data value.
 
         Raises:
-            PoisonError:
+            ThreadPoisonError:
                 If the mutex is poisoned.
 
         Complexity:
