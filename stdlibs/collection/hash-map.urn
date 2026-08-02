@@ -90,18 +90,58 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
 
-    public function HashMap( self, Memory<K> keys, Memory<V> values, Int entryCount ) -> Void:
-        self.capacity = entryCount * 2
+    public function HashMap( self, Sequence<Pair<K, V>> pairs ) -> Void:
+
+        """
+        Create a map populated with all key-value pairs from the given sequence.
+
+        Parameters:
+            pairs (Sequence<Pair<K, V>>):
+                The sequence of pairs to insert into this map.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        Int pairCount = pairs.length
+        self.capacity = pairCount * 2
         if self.capacity < 16:
             self.capacity = 16
         self.keyData = new Memory<K>( self.capacity )
         self.valueData = new Memory<V>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
-        Int copyIndex = 0
-        while copyIndex < entryCount:
-            self.put( keys.get( copyIndex ), values.get( copyIndex ) )
-            copyIndex = copyIndex + 1
+        for Int copyIndex = 0; copyIndex < pairCount; copyIndex++:
+            Pair<K, V> entry = pairs.get( copyIndex )
+            self.put( entry.key, entry.value )
+
+    public function HashMap( self, Int initialCapacity, Sequence<Pair<K, V>> pairs ) -> Void:
+
+        """
+        Create a map with the specified capacity, populated from the given pairs.
+
+        Parameters:
+            initialCapacity (Int):
+                The number of buckets to pre-allocate.
+            pairs (Sequence<Pair<K, V>>):
+                The sequence of pairs to insert into this map.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        self.capacity = initialCapacity
+        if self.capacity < 16:
+            self.capacity = 16
+        self.keyData = new Memory<K>( self.capacity )
+        self.valueData = new Memory<V>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+        for Int copyIndex = 0; copyIndex < pairs.length; copyIndex++:
+            Pair<K, V> entry = pairs.get( copyIndex )
+            self.put( entry.key, entry.value )
 
     private function computeIndex( self, K key ) -> Int:
         
