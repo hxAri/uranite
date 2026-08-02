@@ -332,7 +332,8 @@ public class ColorDatabase:
             I32 eG = ( entry.hex >> 8 ) & 255
             I32 eB = entry.hex & 255
             RGB entryRgb = new RGB( eR, eG, eB )
-            F64 dist = ColorDistance.redmean( targetRgb, entryRgb )
+            ColorDistance colorDistance = new ColorDistance()
+            F64 dist = colorDistance.redmean( targetRgb, entryRgb )
             if dist < minDist:
                 minDist = dist
                 closest = entry
