@@ -19,11 +19,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.
+package uranite
 
 from uranite.adelia import Adelia
-
-
 
 export {
     Adelia
