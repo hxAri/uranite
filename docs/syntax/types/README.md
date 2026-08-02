@@ -1,53 +1,55 @@
 # Types
 
-Uranite is a statically typed language with strict compile-time type checking. Every variable, parameter, return value, and expression has a type determined during semantic analysis — no value exists at runtime without a known type. This section documents the complete type system: primitive types, composite types, user-defined types, generics, type inference, and the internal machinery that resolves, validates, and emits types through the compilation pipeline.
-
 ---
 
 ## Table of Contents
 
-### Fundamentals
+- [Types](#types)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Type System Philosophy](#type-system-philosophy)
+    - [Static Typing](#static-typing)
+    - [Explicit Type Annotations](#explicit-type-annotations)
+    - [Diamond Inference](#diamond-inference)
+    - [Ownership-Aware Types](#ownership-aware-types)
+    - [Zero-Cost Wrapper Types](#zero-cost-wrapper-types)
+  - [Type Categories](#type-categories)
+    - [Primitive Types](#primitive-types)
+    - [Composite Types](#composite-types)
+    - [User-Defined Types](#user-defined-types)
+    - [Function and Callable Types](#function-and-callable-types)
+    - [Generic Types](#generic-types)
+    - [Async Types](#async-types)
+    - [Memory Types](#memory-types)
+    - [Advanced Type Features](#advanced-type-features)
+  - [Type Compatibility](#type-compatibility)
+    - [Assignment Compatibility](#assignment-compatibility)
+    - [Numeric Widening](#numeric-widening)
+    - [None Assignment](#none-assignment)
+    - [Inheritance and Interface Conformance](#inheritance-and-interface-conformance)
+  - [Quick Reference](#quick-reference)
+  - [Examples](#examples)
+    - [Primitive Type Declarations](#primitive-type-declarations)
+    - [Composite Type Declarations](#composite-type-declarations)
+    - [Generic Type Usage](#generic-type-usage)
+    - [Type Casting](#type-casting)
+    - [Working with Optional Types](#working-with-optional-types)
 
-- [Primitive Types](primitive-types.md) — The built-in scalar types: integers (`I8`, `I16`, `I32`, `I64`), unsigned integers (`U8`, `U16`, `U32`, `U64`), floats (`F32`, `F64`), `Boolean`, `Char`, `String`, `Void`, and `None`.
-- [Integer Types](integer-types.md) — Signed and unsigned integer type hierarchy, bit widths, overflow behavior, wrapping arithmetic, and LLVM integer type emission.
-- [Floating-Point Types](floating-point-types.md) — `F32` and `F64` types, IEEE 754 semantics, precision, type aliases (`Float`, `Double`), and LLVM float/double emission.
-- [Boolean Type](boolean-type.md) — The `Boolean` type, `True`/`False` literals, logical operators (`and`, `or`, `not`), truthiness rules, and `i1` representation.
-- [Char Type](char-type.md) — The `Char` type, 32-bit Unicode scalar values, character classification, case conversion, and `i32` representation.
-- [String Type](string-type.md) — The `String` type, immutable byte sequences, null-terminated storage, concatenation codegen, and the `String` OOP wrapper class.
-- [Void and None Types](void-and-none-types.md) — The `Void` return type, the `None` absence-of-value literal, and the distinction between "no return value" and "no value present."
+---
 
-### Composite Types
+## Overview
 
-- [Array Types](array-types.md) — Raw `Memory<T>` arrays, static sizing, heap allocation, element access via `ComputeIndexAddress`, and the `ArrayType` representation.
-- [Tuple Types](tuple-types.md) — Heterogeneous fixed-size collections, the `TupleType` struct, element access, and tuple literal syntax `(a, b, c)`.
-- [Optional and Nullable Types](optional-and-nullable-types.md) — The `?T` syntax, `OptionalType` wrapper, `None` assignment, null-pointer representation, and None-comparison rules.
-- [Function Types](function-types.md) — The `FunctionType` and `CallableType` representations, first-class function references, parameter types, return types, variadic signatures, and LLVM function pointer emission.
-- [Collection Types](collection-types.md) — `ArrayList<E>`, `HashMap<K,V>`, `HashSet<E>`, and their relationship to generic type parameters and the standard library.
+Uranite is a statically typed language with strict compile-time type checking. Every variable, parameter, return value, and expression has a type determined at compile time. The compiler rejects programs with type mismatches before any code runs. There is no dynamic typing, no implicit type coercion (except numeric widening), and no runtime type guessing.
 
-### User-Defined Types
-
-- [Classes](classes.md) — Class declarations, fields, methods, constructors, visibility modifiers (`public`, `protect`, `private`), inheritance (`extends`), the `final` modifier, and `ClassType` representation.
-- [Structs](structs.md) — Value-type struct declarations, field layout, the `StructType` representation, and LLVM struct emission.
-- [Interfaces](interfaces.md) — Interface declarations, method signatures, multiple interface conformance (`implements`), transitive interface inheritance, the `InterfaceType` representation, and itable-based virtual dispatch.
-- [Traits](traits.md) — Trait declarations, default method implementations, the `TraitType` representation, and trait-based polymorphism.
-- [Enums](enums.md) — Enum declarations with `unit` variants, backed enums with explicit values, the `EnumType` representation, and `i32` LLVM emission.
-
-### Advanced Type Features
-
-- [Generics and Type Parameters](generics-and-type-parameters.md) — Generic type parameters (`<T>`), type constraints, monomorphization, the `GenericParameterType` representation, and type argument substitution.
-- [Type Inference and Diamond Syntax](type-inference-and-diamond-syntax.md) — Diamond syntax (`new ArrayList<>()`), type inference from context, explicit versus inferred typing, and the inference algorithm.
-- [Union Types](union-types.md) — The `UnionType` representation, multi-type alternatives, and union member containment checking.
-- [Pointer and Reference Types](pointer-and-reference-types.md) — Raw `PointerType`, `ReferenceType`, mutability flags, and their role in ownership-aware memory management.
-- [Future and Generator Types](future-and-generator-types.md) — `Future<T>` for async return values, `Generator<T>` for lazy yield sequences, and their type wrapping behavior.
-- [Meta Types](meta-types.md) — `Meta<T>` for treating types as values, type-level programming, and the `MetaType` representation.
+This section documents the complete type system: primitive types, composite types, user-defined types, generics, type inference, and the rules that govern how types interact.
 
 ---
 
 ## Type System Philosophy
 
-### Strict Compile-Time Checking
+### Static Typing
 
-Every expression in Uranite has a type determined at compile time. The semantic analyzer resolves all types during its two-pass analysis, and the compiler rejects programs with type mismatches before any code is generated. There is no dynamic typing, no runtime type coercion (except explicit `as` casts), and no implicit conversions between unrelated types.
+Every expression in Uranite has a type known at compile time. The compiler verifies all type assignments, function calls, operator applications, and return values. If a type mismatch exists anywhere in the program, compilation fails with a clear error message.
 
 ```uranite
 I64 count = 42
@@ -55,251 +57,245 @@ String name = "hello"
 Boolean active = True
 ```
 
-Each variable declaration specifies its type explicitly. The compiler verifies that the assigned value is compatible with the declared type.
+Each variable declaration specifies its type explicitly. The compiler verifies that the assigned value matches the declared type.
 
-### Explicit Typing with Diamond Inference
+### Explicit Type Annotations
 
-Uranite requires explicit type annotations on variable declarations, function parameters, and return types. The one exception is diamond syntax for constructor calls, where the type arguments can be inferred from context:
+Uranite requires explicit type annotations on variable declarations, function parameters, and return types. Every variable has a declared type — there is no `var` or `let` keyword that infers the type from the right-hand side.
+
+```uranite
+public function greet( String name, I64 times ) -> String:
+    String message = "Hello, " + name
+    return message
+```
+
+Both parameters and the return type are explicitly annotated. The local variable `message` is declared with its type `String`.
+
+### Diamond Inference
+
+The one exception to explicit typing is diamond syntax for constructor calls. When creating an instance of a generic type, the type arguments can be omitted if the compiler can infer them from the variable declaration:
 
 ```uranite
 ArrayList<String> names = new ArrayList<>()
 HashMap<String, I64> scores = new HashMap<>()
 ```
 
-The `<>` in `new ArrayList<>()` tells the compiler to infer the type parameters from the left-hand side of the assignment. This is syntactic sugar — the compiler resolves `ArrayList<>` to `ArrayList<String>` based on the declared variable type.
+The `<>` in `new ArrayList<>()` tells the compiler to infer the type parameters from the left-hand side of the assignment. The compiler resolves `ArrayList<>` to `ArrayList<String>` based on the declared variable type `ArrayList<String>`.
 
-### Zero-Cost Abstractions
+Diamond inference works only in assignment context — you cannot use `<>` in a return statement or function argument without a type annotation on the receiving side.
 
-OOP wrapper types (`Boolean`, `Char`, `String`, `Int`, `Float`, etc.) carry no runtime overhead. The `toLLVMType()` function in codegen recognizes OOP wrapper class names and maps them directly to their primitive LLVM types. A `Boolean` class value and a primitive `bool` generate identical LLVM IR — both become `i1`. There is no boxing, no heap allocation, and no indirection for primitive-backed wrapper types.
+### Ownership-Aware Types
 
-### Ownership-Aware Type System
+Types interact with Uranite's ownership model. Move semantics are the default — assigning a value of a non-primitive type to another variable transfers ownership. The borrow checker enforces that references do not outlive the values they reference, and the type system tracks mutability through pointer and reference types.
 
-Types interact with Uranite's ownership model. Move semantics are the default — assigning a value transfers ownership. The borrow checker enforces that references do not outlive the values they reference, and the type system tracks mutability through `PointerType` and `ReferenceType` mutability flags.
-
----
-
-## The Type Kind Hierarchy
-
-The `Type::Kind` enum defines 27 distinct type categories:
-
-| Kind | Description | LLVM Representation |
-|---|---|---|
-| `Array` | Fixed or dynamic arrays | Heap pointer (`ptr`) |
-| `Bool` | Boolean truth value | `i1` |
-| `Callable` | Higher-order function reference | `ptr` (function pointer) |
-| `Char` | Unicode scalar value | `i32` |
-| `Class` | User-defined class | `ptr` (struct pointer) or primitive for OOP wrappers |
-| `Enum` | Enumeration with variants | `i32` |
-| `Error` | Sentinel for error recovery | (internal only) |
-| `Float` | Floating-point number | `float` (32-bit) or `double` (64-bit) |
-| `Function` | Function signature | `ptr` (function pointer) |
-| `Future` | Async return wrapper | `i64` |
-| `Generator` | Lazy yield sequence | `ptr` |
-| `GenericParameter` | Unresolved type parameter | `ptr` (erased) |
-| `Integer` | Signed/unsigned integer | `i8`, `i16`, `i32`, or `i64` |
-| `Interface` | Interface contract | `ptr` |
-| `Meta` | Type-as-value | (compile-time only) |
-| `None` | Absence of value | `ptr null` |
-| `Optional` | Nullable wrapper (`?T`) | `ptr` |
-| `Pointer` | Raw pointer | `ptr` |
-| `Reference` | Borrowed reference | `ptr` |
-| `String` | Immutable byte sequence | `ptr` (null-terminated C string) |
-| `Struct` | Value-type struct | `ptr` (struct pointer) |
-| `Trait` | Trait with default methods | `ptr` |
-| `Tuple` | Heterogeneous fixed-size collection | (composite) |
-| `Union` | Multi-type alternative | (composite) |
-| `Unresolved` | Not yet resolved | (internal only) |
-| `Void` | No return value | `void` |
-
-Each type kind has a corresponding struct in `typeref.hpp` that extends the base `Type` struct with kind-specific fields.
-
----
-
-## The Type Registry
-
-The type registry (`semantic::Registry`) is the central authority for type creation, storage, and lookup. It maintains two maps and a set of pre-created primitive type instances.
-
-### Dual-Map Architecture
-
-| Map | Purpose | Lookup Priority |
-|---|---|---|
-| `userTypesType` | User-defined types (classes, interfaces, enums, structs, traits, monomorphized generics) | Checked first |
-| `primitivesTypes` | Built-in primitive types and OOP wrapper aliases | Checked second (fallback) |
-
-The `lookupType(name)` method searches `userTypesType` first. If no match is found, it falls back to `primitivesTypes`. This ordering ensures that user-defined types can shadow primitive names (though this is strongly discouraged).
-
-### Pre-Created Primitives
-
-The registry constructor initializes all built-in primitive types:
-
-| Field | Type Kind | Short Name | Qualified Name |
-|---|---|---|---|
-| `booleanType` | `Bool` | `bool` | `uranite.builtin.bool` |
-| `charType` | `Char` | `char` | `uranite.builtin.char` |
-| `stringType` | `String` | `str` | `uranite.builtin.str` |
-| `voidType` | `Void` | `void` | `uranite.builtin.void` |
-| `integer8Type` | `Integer` | `i8` | `uranite.builtin.i8` |
-| `integer16Type` | `Integer` | `i16` | `uranite.builtin.i16` |
-| `integer32Type` | `Integer` | `i32` | `uranite.builtin.i32` |
-| `integer64Type` | `Integer` | `i64` | `uranite.builtin.i64` |
-| `unsigned8Type` | `Integer` | `u8` | `uranite.builtin.u8` |
-| `unsigned16Type` | `Integer` | `u16` | `uranite.builtin.u16` |
-| `unsigned32Type` | `Integer` | `u32` | `uranite.builtin.u32` |
-| `unsigned64Type` | `Integer` | `u64` | `uranite.builtin.u64` |
-| `float32Type` | `Float` | `f32` | `uranite.builtin.f32` |
-| `float64Type` | `Float` | `f64` | `uranite.builtin.f64` |
-| `objectType` | `Class` | `Object` | `uranite.builtin.object` |
-| `errorType` | `Error` | `Error` | (internal sentinel) |
-
-The `None` type is a singleton created on first access via `getNone()`.
-
-### Factory Methods
-
-The registry provides factory methods for creating composite types:
-
-| Method | Creates |
-|---|---|
-| `makeArray(element, size)` | `ArrayType` with element type and optional static size |
-| `makeCallable(returnType, params)` | `CallableType` for higher-order function references |
-| `makeFunction(params, returnType, isVariadic)` | `FunctionType` for function signatures |
-| `makeFuture(inner)` | `FutureType` wrapping an async return value |
-| `makeGenerator(yieldType)` | `GeneratorType` wrapping a yield sequence |
-| `makeMeta(inner)` | `MetaType` for type-as-value |
-| `makeOptional(inner)` | `OptionalType` wrapping a nullable value |
-| `makePointer(inner, mutable)` | `PointerType` with mutability flag |
-| `makeReference(inner, mutable)` | `ReferenceType` with mutability flag |
-| `makeTuple(elements)` | `TupleType` with heterogeneous element types |
-| `makeUnion(types)` | `UnionType` with multiple alternative types |
-
-### Type Registration
-
-| Method | Description |
-|---|---|
-| `registerType(name, type)` | Add a user-defined type to `userTypesType`. |
-| `unregisterType(name)` | Remove a type from `userTypesType`. |
-| `registerAlias(shortName, qualifiedName)` | Create an alias mapping short name to qualified name. |
-
----
-
-## Type Resolution Pipeline
-
-Types flow through a multi-stage pipeline from source code to LLVM IR.
-
-### Stage 1: AST Type Nodes
-
-The parser creates `TypeNode` AST nodes for every type annotation in the source code. Seven type node kinds exist:
-
-| AST Node | Example Syntax | Description |
-|---|---|---|
-| `SimpleTypeNode` | `I64`, `String`, `Boolean` | Named type reference. |
-| `GenericTypeNode` | `ArrayList<String>`, `HashMap<K,V>` | Generic type with type arguments. |
-| `ArrayTypeNode` | `Memory<I64>` | Array type with element type. |
-| `OptionalTypeNode` | `?String`, `String?` | Optional type wrapper. |
-| `FunctionTypeNode` | `(I64, String) -> Boolean` | Function signature type. |
-| `TupleTypeNode` | `(I64, String, Boolean)` | Tuple type with element types. |
-| `CallableTypeNode` | `Callable<Boolean, I64, String>` | Higher-order callable type. |
-
-### Stage 2: Semantic Type Resolution
-
-The `Analyzer::resolveType()` method converts AST type nodes into semantic `Type` objects. The resolution logic dispatches on the node kind:
-
-**SimpleType**: Look up the name in the type registry via `lookupType()`. If not found, check if the name is "Self" inside a class context (resolves to the current class type). If still not found, emit an "unknown type" error. Single-letter uppercase names get a hint suggesting they may be generic type parameters.
-
-**GenericType**: Resolve the base type and all type arguments. Special cases: `Generator<T>` and `Future<T>` are handled directly via `makeGenerator()` and `makeFuture()`. For all other generics, construct a monomorphized type name (`ArrayList<String>`), check if it already exists in the registry, and if not, create a new monomorphized class by substituting type parameters.
-
-**ArrayType**: Resolve the element type, then call `makeArray()`.
-
-**OptionalType**: Resolve the inner type, then call `makeOptional()`.
-
-**FunctionType**: Resolve all parameter types and the return type, then call `makeFunction()`.
-
-**TupleType**: Resolve all element types, then call `makeTuple()`.
-
-### Stage 3: Generic Monomorphization
-
-When resolving a generic type like `HashMap<String, I64>`, the analyzer:
-
-1. Looks up the base type (`HashMap`).
-2. Resolves each type argument (`String`, `I64`).
-3. Builds a monomorphized name: `"HashMap<String,I64>"`.
-4. Checks if this monomorphized type already exists in the registry.
-5. If not, creates a new `ClassType` by cloning the base class and substituting all `GenericParameter` occurrences with the concrete type arguments.
-
-The substitution function recursively walks all type positions — fields, method parameters, return types, interface conformances — replacing `GenericParameter` types with their concrete substitutions. This handles nested generics (`ArrayList<HashMap<String, I64>>`), optional generics (`?T`), array generics, future/generator generics, and function type generics.
-
-### Stage 4: Type Assignment
-
-During expression analysis, the semantic analyzer assigns a resolved type to every expression node via `expression->semanticType = resolvedType`. This type flows into HIR and MIR lowering, where it guides instruction selection and variable allocation.
-
-### Stage 5: LLVM Type Emission
-
-The `MIRCodegen::toLLVMType()` method maps semantic types to LLVM types. The mapping is deterministic:
-
-| Semantic Kind | LLVM Type |
-|---|---|
-| `Bool` | `i1` |
-| `Char` | `i32` |
-| `Float(32)` | `float` |
-| `Float(64)` | `double` |
-| `Integer(8)` | `i8` |
-| `Integer(16)` | `i16` |
-| `Integer(32)` | `i32` |
-| `Integer(64)` | `i64` |
-| `String` | `ptr` (opaque pointer) |
-| `Void` | `void` |
-| `None` | `ptr` (null pointer) |
-| `Class` (OOP wrapper) | Mapped to underlying primitive (e.g., `Boolean` class becomes `i1`) |
-| `Class` (user-defined) | `ptr` to named LLVM `StructType`, or `ptr` if no struct exists |
-| `Interface` | `ptr` |
-| `Enum` | `i32` |
-| `Struct` | `ptr` to named LLVM `StructType` |
-| `Function` / `Callable` | `ptr` (function pointer) |
-| `Optional` | `ptr` |
-| `Future` | `i64` |
-| `Generator` | `ptr` |
-| `GenericParameter` | `ptr` (type-erased) |
-| `Pointer` / `Reference` | `ptr` |
-| Default (unrecognized) | `i64` |
-
-OOP wrapper classes receive special treatment. When `toLLVMType()` encounters a `Class` kind, it checks the qualified name against all known OOP wrapper types (`Int`, `I64`, `I32`, `I16`, `I8`, `Byte`, `UInt`, `U64`, `U32`, `U16`, `U8`, `Long`, `Integer`, `F32`, `F64`, `Float`, `Double`, `Char`, `Boolean`, `String`, `Void`, `Object`). If a match is found, the class is mapped to its primitive LLVM type — no pointer indirection. This is the mechanism behind zero-cost OOP wrappers.
-
----
-
-## Type Identity
-
-Type identity in Uranite is determined by **fully-qualified names**, not by short names. The `Type::equals()` method compares `qualified` fields when both are non-empty:
-
-```
-"uranite.language.string.String" == "uranite.language.string.String"    → True
-"String" compared by name only                                         → fallback for primitives
+```uranite
+String original = "hello"
+String moved = move original
 ```
 
-The `qualnames.hpp` header centralizes all qualified name constants. All type comparisons throughout the compiler must use `->qualified` (the fully-qualified name), never `->name` (the short name). This prevents collisions between types with the same short name in different packages.
+After the move, `original` is no longer valid. The ownership has been transferred to `moved`.
+
+### Zero-Cost Wrapper Types
+
+Primitive types have corresponding wrapper classes in the standard library (`Boolean`, `Int`, `Float`, `Char`, `String`, etc.). These wrapper types carry no runtime overhead — a `Boolean` value and a bare boolean produce identical machine code. There is no boxing, no heap allocation, and no indirection for wrapper types.
+
+This means you can call methods on primitive values without any performance penalty:
+
+```uranite
+I64 value = -42
+I64 absolute = value.abs()
+String text = value.toString()
+```
+
+---
+
+## Type Categories
+
+### Primitive Types
+
+The built-in scalar types that form the foundation of the type system.
+
+| Document | Description |
+|---|---|
+| [Primitive Types](primitive-types.md) | Overview of all built-in scalar types, their sizes, ranges, and relationships. |
+| [Integer Types](integer-types.md) | Signed integers (`I8`, `I16`, `I32`, `I64`), unsigned integers (`U8`, `U16`, `U32`, `U64`), and named types (`Int`, `UInt`, `Byte`). Overflow behavior, wrapping arithmetic, and integer operations. |
+| [Floating-Point Types](floating-point-types.md) | `F32` and `F64` types, IEEE 754 semantics, precision rules, and named types (`Float`, `Double`). |
+| [Boolean Type](boolean-type.md) | The `Boolean` type, `True` and `False` literals, logical operators (`and`, `or`, `not`), and truthiness rules. |
+| [Char Type](char-type.md) | The `Char` type for 32-bit Unicode scalar values, character classification methods, and case conversion. |
+| [String Type](string-type.md) | The `String` type for immutable UTF-8 text, string methods, concatenation, and the `format` method. |
+| [Void and None Types](void-and-none-types.md) | The `Void` return type for functions that produce no value, and the `None` literal representing the absence of a value. |
+
+### Composite Types
+
+Types that combine or wrap other types.
+
+| Document | Description |
+|---|---|
+| [Array Types](array-types.md) | Raw `Memory<T>` arrays with manual sizing, heap allocation, and element access. |
+| [Tuple Types](tuple-types.md) | Fixed-size heterogeneous collections using `(a, b, c)` literal syntax. |
+| [Optional Types](optional-types.md) | The `?T` syntax for values that may be `None`. Optional variable declarations, None checks, and safe access patterns. |
+| [Union Types](union-types.md) | Multi-type alternatives allowing a value to hold one of several possible types. |
+
+### User-Defined Types
+
+Types declared by the programmer.
+
+| Document | Description |
+|---|---|
+| [Class Types](class-types.md) | Class declarations with fields, methods, constructors, visibility modifiers (`public`, `protect`, `private`), inheritance (`extends`), and the `final` modifier. |
+| [Struct Types](struct-types.md) | Value-type struct declarations with field layout and value semantics. |
+| [Interface Types](interface-types.md) | Interface declarations defining method contracts, multiple interface implementation with `implements`, and interface inheritance. |
+| [Enum Types](enum-types.md) | Enum declarations with `unit` variants, backed enums with explicit integer values, and enum methods. |
+
+### Function and Callable Types
+
+Types representing functions and callable references.
+
+| Document | Description |
+|---|---|
+| [Function Types](function-types.md) | Function type signatures, parameter types, return types, and variadic function signatures. |
+| [Callable Types](callable-types.md) | Higher-order callable references for passing functions as values, storing them in variables, and invoking them dynamically. |
+
+### Generic Types
+
+Types parameterized by other types.
+
+| Document | Description |
+|---|---|
+| [Generic Types](generic-types.md) | Generic type parameters (`<T>`), type constraints with `where` clauses, generic classes and functions, and diamond inference. |
+
+### Async Types
+
+Types for asynchronous and lazy computation.
+
+| Document | Description |
+|---|---|
+| [Future and Generator Types](future-and-generator-types.md) | `Future<T>` for async function return values and `Generator<T>` for lazy sequences produced by `yield`. |
+
+### Memory Types
+
+Types for low-level memory operations and references.
+
+| Document | Description |
+|---|---|
+| [Pointer and Reference Types](pointer-and-reference-types.md) | Raw pointers, borrowed references, mutability tracking, and their role in ownership-aware memory management. |
+
+### Advanced Type Features
+
+Type system features for advanced use cases.
+
+| Document | Description |
+|---|---|
+| [Meta Types](meta-types.md) | `Meta<T>` for treating types as values, enabling type-level programming and reflection. |
+| [Type Aliases](type-aliases.md) | The `type` keyword for creating alternative names for existing types. |
+| [Type Casting](type-casting.md) | The `as` keyword for explicit type conversions between compatible types. |
+| [Type Compatibility](type-compatibility.md) | Rules governing which types can be assigned to which, including inheritance, interface conformance, and numeric widening. |
+| [Type Identity](type-identity.md) | How types are compared for equality and what makes two type references refer to the same type. |
+| [Type Inference](type-inference.md) | Diamond syntax, type inference from assignment context, and the boundaries of what the compiler can infer. |
 
 ---
 
 ## Type Compatibility
 
-The registry provides two key compatibility methods:
+### Assignment Compatibility
 
-### isAssignable(target, source)
+A value of one type can be assigned to a variable of another type when the types are compatible. The core rules are:
 
-Determines whether a value of type `source` can be assigned to a variable of type `target`. Handles:
+- **Exact match**: A `String` value is assignable to a `String` variable.
+- **Numeric widening**: A smaller integer type is assignable to a larger integer type. An integer is assignable to a float.
+- **None to optional**: `None` is assignable to any optional type (`?T`).
+- **Subclass to superclass**: A value of a subclass type is assignable to a variable of its superclass type.
+- **Implementation to interface**: A value of a class that implements an interface is assignable to a variable of that interface type.
+- **Any type to Object**: Every type is assignable to `Object`, the root of the class hierarchy.
 
-- Exact type match (qualified names equal).
-- Error recovery passthrough (error type is assignable to anything).
-- Void compatibility (primitive and OOP wrapper treated as equivalent).
-- `None` to nullable (`None` is assignable to any `Optional<T>`).
-- Numeric widening (smaller integer to larger integer, integer to float).
-- `Object` target (accepts any type).
-- Class inheritance chains (subclass assignable to superclass).
-- Interface conformance (class implementing interface assignable to interface variable).
-- Union member containment (any union member type assignable to the union).
-- Monomorphized generic class matching.
+### Numeric Widening
 
-### isComparable(x, y)
+Smaller numeric types can be implicitly widened to larger numeric types without an explicit cast:
 
-Determines whether two types can be compared using equality (`==`, `!=`) or relational (`<`, `>`, `<=`, `>=`) operators.
+```uranite
+I8 small = 42
+I64 large = small
+
+I64 integer = 100
+F64 floating = integer
+```
+
+The widening is always safe — no precision is lost when widening an integer, and integer-to-float conversion preserves the value for integers within the float's precision range.
+
+Narrowing (large type to small type) requires an explicit `as` cast and may lose data:
+
+```uranite
+I64 large = 300
+I8 small = large as I8
+```
+
+### None Assignment
+
+`None` is assignable to any optional type. It represents the absence of a value:
+
+```uranite
+?String maybeName = None
+?I64 maybeCount = None
+?ArrayList<String> maybeList = None
+```
+
+Assigning `None` to a non-optional type is a compile-time error:
+
+```uranite
+String name = None
+```
+
+This fails because `String` is not optional. Use `?String` to allow `None`.
+
+### Inheritance and Interface Conformance
+
+A subclass value is assignable to a superclass variable. A class that implements an interface is assignable to an interface variable:
+
+```uranite
+public class Animal:
+    public String species
+
+    public function Animal( self, String species ) -> Void:
+        self.species = species
+
+public class Dog extends Animal:
+    public function Dog( self ) -> Void:
+        parent( "Canis familiaris" )
+
+public function main() -> I32:
+    Animal pet = new Dog()
+    return 0
+```
+
+The `Dog` value is assigned to an `Animal` variable because `Dog` extends `Animal`. The same principle applies to interfaces — a class value is assignable to a variable of any interface it implements.
+
+---
+
+## Quick Reference
+
+| Type | Description | Example |
+|---|---|---|
+| `I8`, `I16`, `I32`, `I64` | Signed integers (8 to 64 bit) | `I64 count = 42` |
+| `U8`, `U16`, `U32`, `U64` | Unsigned integers (8 to 64 bit) | `U8 byte = 255` |
+| `Int` | Platform-width signed integer (64-bit) | `Int value = 100` |
+| `UInt` | Platform-width unsigned integer (64-bit) | `UInt size = 50` |
+| `Byte` | Unsigned 8-bit integer for raw byte data | `Byte raw = 0xFF` |
+| `F32` | 32-bit single-precision float | `F32 precise = 1.5` |
+| `F64` | 64-bit double-precision float | `F64 ratio = 3.14` |
+| `Float` | 64-bit floating-point type | `Float value = 2.718` |
+| `Double` | 64-bit double-precision floating-point type | `Double pi = 3.14159` |
+| `Boolean` | Boolean truth value (`True` or `False`) | `Boolean active = True` |
+| `Char` | 32-bit Unicode character | `Char letter = 'A'` |
+| `String` | Immutable UTF-8 string | `String name = "hello"` |
+| `Void` | No return value | `-> Void` |
+| `None` | Absence of value | `?String empty = None` |
+| `Memory<T>` | Raw heap-allocated array | `Memory<I64> buf = [1, 2, 3]` |
+| `?T` | Optional type (may be `None`) | `?String maybe = None` |
+| `ArrayList<E>` | Dynamic list | `ArrayList<I64> list = new ArrayList<>()` |
+| `HashMap<K, V>` | Key-value map | `HashMap<String, I64> map = new HashMap<>()` |
+| `HashSet<E>` | Unique element set | `HashSet<String> set = new HashSet<>()` |
+| `Future<T>` | Async return value | `async function fetch() -> Future<String>:` |
+| `Generator<T>` | Lazy yield sequence | Produced by functions using `yield` |
 
 ---
 
@@ -313,41 +309,70 @@ F64 ratio = 3.14
 Boolean active = True
 Char letter = 'A'
 String name = "hello"
-Void noReturn
 ```
+
+Every primitive type has a fixed size and well-defined behavior. Integer types have wrapping arithmetic by default. Float types follow IEEE 754 semantics. Boolean accepts only `True` or `False`.
 
 ### Composite Type Declarations
 
 ```uranite
+from uranite.collection.array-list import ArrayList
+from uranite.collection.hash-map import HashMap
+
 Memory<I64> numbers = [1, 2, 3]
 ?String maybeName = None
 ArrayList<String> names = new ArrayList<>()
 HashMap<String, I64> scores = new HashMap<>()
 ```
 
+`Memory<T>` provides raw heap-allocated arrays. The `?` prefix creates an optional type that can hold `None`. Generic collection types use diamond inference with `<>` to avoid repeating type arguments.
+
 ### Generic Type Usage
 
 ```uranite
-public function identity<T>( T value ) -> T:
-    return value
+public function firstElement<T>( ArrayList<T> list ) -> T:
+    return list.get( 0 )
 
-public function swap<A, B>( A first, B second ) -> (B, A):
-    return ( second, first )
+public function pairUp<A, B>( A first, B second ) -> Pair<A, B>:
+    return new Pair<>( first, second )
 ```
 
-### Type Checking in Practice
+Generic functions declare type parameters in angle brackets after the function name. The compiler infers concrete types at each call site based on the argument types.
+
+### Type Casting
 
 ```uranite
 I64 count = 42
 F64 widened = count as F64
 
-String name = "hello"
-?String optional = name
-?String absent = None
+F64 precise = 3.99
+I64 truncated = precise as I64
 
-ArrayList<I64> numbers = new ArrayList<>()
-numbers.add( 1 )
-numbers.add( 2 )
+I64 large = 300
+I8 narrow = large as I8
 ```
 
-The type system enforces that `count as F64` is a valid widening cast, that `name` is assignable to `?String` (wrapping in optional), that `None` is assignable to `?String`, and that `numbers.add()` accepts only `I64` arguments matching the type parameter.
+The `as` keyword performs explicit type conversion. Widening casts (small to large) are safe. Narrowing casts (large to small, float to int) may lose data — the value is truncated, not rounded.
+
+### Working with Optional Types
+
+```uranite
+from uranite.io.console import puts
+
+public function findUser( String name ) -> ?String:
+    if name == "admin":
+        return "Administrator"
+    return None
+
+public function main() -> I32:
+    ?String result = findUser( "admin" )
+    if result != None:
+        puts( result )
+
+    ?String missing = findUser( "nobody" )
+    if missing == None:
+        puts( "user not found" )
+    return 0
+```
+
+Functions returning `?T` can return either a value of type `T` or `None`. Callers must check for `None` before using the value. The `==` and `!=` operators work with `None` on either side of the comparison.
