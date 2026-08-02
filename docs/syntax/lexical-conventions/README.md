@@ -1,24 +1,35 @@
 # Lexical Conventions
 
-This section documents how the Uranite compiler transforms raw source text into a stream of tokens. Every syntactic construct in the language — from a simple integer literal to a multi-module import declaration — begins as a sequence of tokens produced by the lexer. Understanding lexical conventions is essential because Uranite treats whitespace as structural: indentation is not cosmetic but produces explicit `Indent` and `Dedent` tokens that the parser consumes as block delimiters.
+This section documents how Uranite transforms raw source text into a stream of tokens. Every syntactic construct in the language — from a simple integer literal to a multi-module import declaration — begins as a sequence of tokens. Understanding lexical conventions is essential because Uranite treats whitespace as structural: indentation is not cosmetic but produces explicit block-opening and block-closing boundaries that determine program structure.
 
-The lexer (`src/uranite/lexer/lexer.cpp`, ~745 lines) is a single-pass, character-by-character scanner. It maintains an indentation stack, a parenthesis depth counter, and a position tracker with line and column coordinates. It produces a flat `std::vector<token::Token>` — no tree structure exists at this stage.
+The lexer is a single-pass, character-by-character scanner. It processes the entire source file in one sweep, producing a flat sequence of tokens with no tree structure. The tokens are then consumed by the parser to build program structure.
 
 ---
 
 ## Table of Contents
 
-- [Lexical Pipeline Overview](#lexical-pipeline-overview)
-- [Token Categories](#token-categories)
-- [Indentation as Tokens](#indentation-as-tokens)
-- [Comments and Doccomments](#comments-and-doccomments)
-- [Identifier and Keyword Resolution](#identifier-and-keyword-resolution)
-- [Literal Scanning](#literal-scanning)
-- [Operator and Punctuation Tokens](#operator-and-punctuation-tokens)
-- [Parenthesis Depth and Implicit Line Joining](#parenthesis-depth-and-implicit-line-joining)
-- [Line Continuation](#line-continuation)
-- [End-of-File Cleanup](#end-of-file-cleanup)
-- [Subpage Index](#subpage-index)
+- [Lexical Conventions](#lexical-conventions)
+  - [Table of Contents](#table-of-contents)
+  - [Lexical Pipeline Overview](#lexical-pipeline-overview)
+  - [Token Categories](#token-categories)
+    - [Keywords](#keywords)
+    - [Literals](#literals)
+    - [Identifiers](#identifiers)
+    - [Operators and Punctuation](#operators-and-punctuation)
+    - [Structural Tokens](#structural-tokens)
+  - [Indentation as Block Boundaries](#indentation-as-block-boundaries)
+  - [Comments and Doccomments](#comments-and-doccomments)
+  - [Identifier and Keyword Resolution](#identifier-and-keyword-resolution)
+  - [Literal Scanning](#literal-scanning)
+    - [Numbers](#numbers)
+    - [Strings](#strings)
+    - [Characters](#characters)
+    - [Regex](#regex)
+  - [Operator and Punctuation Tokens](#operator-and-punctuation-tokens)
+  - [Parenthesis Depth and Implicit Line Joining](#parenthesis-depth-and-implicit-line-joining)
+  - [Line Continuation](#line-continuation)
+  - [End-of-File Cleanup](#end-of-file-cleanup)
+  - [Subpage Index](#subpage-index)
 
 ---
 
@@ -26,21 +37,21 @@ The lexer (`src/uranite/lexer/lexer.cpp`, ~745 lines) is a single-pass, characte
 
 The lexer processes source text in a single loop. At each iteration, it examines the current character and dispatches to the appropriate handler:
 
-1. **Line start processing.** If the `atLineStart` flag is set and the parenthesis depth is zero, `handleIndentation()` runs. It counts leading whitespace, compares the computed level against the indentation stack, and emits `Indent` or `Dedent` tokens as needed. If the parenthesis depth is nonzero (inside `(`, `[`, or `{`), indentation is consumed silently — no `Indent`/`Dedent` tokens are emitted.
+1. **Line start processing.** At the beginning of each line, the lexer counts leading whitespace and compares the computed level against the current nesting depth. If indentation increases, a block-open boundary is recorded. If indentation decreases, one or more block-close boundaries are recorded. Inside parenthesized contexts (`()`, `[]`, `{}`), indentation is consumed silently — no block boundaries are produced.
 
 2. **Whitespace skipping.** Spaces, tabs, and carriage returns outside of line-start context are consumed and discarded.
 
-3. **Newline handling.** A newline character emits a `Newline` token (unless the previous token was already a `Newline`, `Indent`, or `Dedent`, or the parenthesis depth is nonzero) and sets the `atLineStart` flag for the next iteration.
+3. **Newline handling.** A newline character marks a logical line boundary (unless the previous boundary was redundant, or the lexer is inside a parenthesized context) and triggers line-start processing for the next iteration.
 
-4. **Comment handling.** A `#` character triggers either a line comment (`#`) or a block comment (`#{...}#`). Triple-quoted strings (`"""..."""` or `'''...'''`) at the top level are also consumed as comments by the lexer.
+4. **Comment handling.** A `#` character triggers either a line comment (`#`) or a block comment (`#{...}#`). Triple-quoted strings (`"""..."""` or `'''...'''`) at the top level are also consumed as comments.
 
-5. **Literal scanning.** Double-quote characters dispatch to `readString()`. Single-quote characters dispatch to `readChar()`. Digit characters dispatch to `readNumber()`. A `/` character may dispatch to regex literal scanning depending on the preceding token.
+5. **Literal scanning.** Double-quote characters begin string scanning. Single-quote characters begin character literal scanning. Digit characters begin number scanning. A `/` character may begin regex literal scanning depending on the preceding token.
 
-6. **Identifier and keyword scanning.** Alphabetic characters and underscores dispatch to `readIdentifierOrKeyword()`, which accumulates characters and checks the result against the keyword registry.
+6. **Identifier and keyword scanning.** Alphabetic characters and underscores begin identifier accumulation. The accumulated text is checked against the keyword registry — if it matches a reserved keyword, the appropriate keyword token is produced; otherwise, a generic identifier token is produced.
 
-7. **Operator and punctuation scanning.** All remaining characters are handled by a switch statement that produces operator and punctuation tokens, using one-character lookahead for multi-character operators (`==`, `!=`, `->`, `**`, `..`, `...`, `::`, `=>`, `<<`, `>>`).
+7. **Operator and punctuation scanning.** All remaining characters produce operator and punctuation tokens. Multi-character operators (`==`, `!=`, `->`, `**`, `..`, `...`, `::`, `=>`, `<<`, `>>`) are resolved by lookahead, always matching the longest possible sequence.
 
-After the main loop completes, the lexer performs end-of-file cleanup: it pops all remaining indentation levels, emits the corresponding `Dedent` tokens, appends a final `Newline` if needed, and terminates with an `Eof` token.
+After the main loop completes, the lexer performs end-of-file cleanup: it closes all remaining open blocks, appends a final line boundary if needed, and terminates with an end-of-file marker.
 
 ---
 
@@ -48,33 +59,33 @@ After the main loop completes, the lexer performs end-of-file cleanup: it pops a
 
 The lexer produces tokens in six categories:
 
-### Keywords (74 unique)
+### Keywords
 
-Reserved words that the lexer distinguishes from identifiers by checking against a static `keymaps()` registry. Keywords are grouped by purpose:
+78 reserved words that the lexer distinguishes from identifiers. Keywords are grouped by purpose:
 
 | Category | Keywords |
 |---|---|
-| Control Flow | `break`, `continue`, `else`, `elif`, `for`, `if`, `match`, `return`, `while`, `yield` |
-| Declarations | `class`, `const`, `enum`, `extern`, `from`, `function`, `implements`, `import`, `interface`, `mut`, `package`, `static`, `struct`, `type` |
+| Control Flow | `break`, `case`, `continue`, `else`, `elif`, `for`, `if`, `match`, `return`, `switch`, `while`, `yield` |
+| Declarations | `class`, `const`, `enum`, `extern`, `from`, `function`, `implements`, `import`, `interface`, `package`, `static`, `struct`, `trait`, `type` |
 | Access Modifiers | `private`, `protect`, `public` |
-| OOP | `abstract`, `delete`, `extends`, `final`, `native`, `new`, `override`, `parent`, `property`, `readonly` / `Readonly`, `self`, `virtual` |
-| Memory and Safety | `addressof`, `move`, `own`, `reference`, `unsafe` |
+| OOP | `abstract`, `delete`, `extends`, `final`, `native`, `new`, `override`, `parent`, `property`, `readonly`, `Readonly`, `self`, `virtual` |
+| Memory and Safety | `addressof`, `move`, `mut`, `own`, `reference`, `unsafe` |
 | Logic | `and`, `not`, `or` |
 | Values | `False`, `None`, `True` |
 | Error Handling | `except`, `finally`, `raise`, `raises`, `try` |
-| Other | `as`, `asm`, `async`, `await`, `backed`, `case`, `defer`, `export`, `in`, `instanceof`, `is`, `lambda`, `pass`, `subclassof`, `switch`, `trait`, `unit`, `use`, `volatile`, `where` |
+| Other | `as`, `asm`, `async`, `await`, `backed`, `defer`, `export`, `in`, `instanceof`, `is`, `lambda`, `pass`, `subclassof`, `unit`, `use`, `volatile`, `where` |
 
 Note that `True`, `False`, `None`, and `Readonly` are case-sensitive — `true`, `false`, `none`, and `READONLY` are not keywords and would be parsed as identifiers.
 
 ### Literals
 
-| Token Type | Example | Scanner |
-|---|---|---|
-| `LiteralInteger` | `42`, `0xFF`, `0o77`, `0b1010` | `readNumber()` |
-| `LiteralFloat` | `3.14`, `1.5e10`, `2.0E-3` | `readNumber()` |
-| `LiteralString` | `"hello"` | `readString()` |
-| `LiteralChar` | `'A'`, `'\n'`, `'\x41'` | `readChar()` |
-| `LiteralRegex` | `/[a-z]+/` | Inline in operator switch |
+| Token Type | Example |
+|---|---|
+| Integer | `42`, `0xFF`, `0o77`, `0b1010` |
+| Float | `3.14`, `1.5e10`, `2.0E-3` |
+| String | `"hello"` |
+| Char | `'A'`, `'\n'`, `'\x41'` |
+| Regex | `/[a-z]+/` |
 
 ### Identifiers
 
@@ -88,8 +99,8 @@ Multi-character operators are resolved by lookahead. The lexer checks for the lo
 |---|---|
 | Arithmetic | `+`, `-`, `*`, `/`, `%`, `**` |
 | Comparison | `==`, `!=`, `<`, `>`, `<=`, `>=` |
-| Assignment | `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=` |
-| Bitwise | `&`, `|`, `^`, `~`, `<<`, `>>` |
+| Assignment | `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `\|=`, `^=`, `<<=`, `>>=` |
+| Bitwise | `&`, `\|`, `^`, `~`, `<<`, `>>` |
 | Navigation | `.`, `..`, `...`, `->`, `=>`, `::` |
 | Increment/Decrement | `++`, `--` |
 | Delimiters | `(`, `)`, `[`, `]`, `{`, `}` |
@@ -100,25 +111,25 @@ Multi-character operators are resolved by lookahead. The lexer checks for the lo
 
 | Token | Meaning |
 |---|---|
-| `Indent` | Indentation level increased. Emitted by `handleIndentation()`. |
-| `Dedent` | Indentation level decreased. One `Dedent` per popped level. |
-| `Newline` | Logical line boundary. Suppressed inside parenthesized contexts. |
-| `Eof` | End of file. Always the last token in the stream. |
+| Block open | Indentation level increased — a new block begins. |
+| Block close | Indentation level decreased — one block ends per decreased level. |
+| Newline | Logical line boundary. Suppressed inside parenthesized contexts. |
+| End of file | Always the last token in the stream. |
 
 ---
 
-## Indentation as Tokens
+## Indentation as Block Boundaries
 
-The defining lexical characteristic of Uranite is that indentation produces explicit tokens. The parser never examines whitespace — it consumes `Indent` and `Dedent` tokens the same way a C parser consumes `{` and `}`.
+The defining lexical characteristic of Uranite is that indentation produces explicit block boundaries. The parser never examines whitespace — it consumes block-open and block-close tokens the same way a C parser consumes `{` and `}`.
 
-The `handleIndentation()` algorithm:
+The indentation algorithm:
 
-1. At line start, count leading whitespace. Each space counts as 1. Each tab counts as 4.
-2. Skip blank lines (lines that contain only whitespace) and comment-only lines (lines starting with `#` after whitespace) — neither produces `Indent` or `Dedent` tokens.
-3. Compare the computed indentation level against the top of the indentation stack:
-   - **Greater than stack top**: Push the new level onto the stack. Emit one `Indent` token.
-   - **Equal to stack top**: No token emitted. The line continues at the same block level.
-   - **Less than stack top**: Pop levels from the stack until the stack top equals the current level. Emit one `Dedent` token per popped level. If the current level does not match any entry in the stack, emit a diagnostic error: "inconsistent indentation — indentation does not match any outer level".
+1. At line start, count leading whitespace. Each space counts as 1 unit. Each tab counts as 4 units.
+2. Skip blank lines (lines that contain only whitespace) and comment-only lines (lines starting with `#` after whitespace) — neither produces block boundary tokens.
+3. Compare the computed indentation level against the current nesting depth:
+   - **Greater than current level**: A new block opens. One block-open token is emitted.
+   - **Equal to current level**: No token emitted. The line continues at the same block level.
+   - **Less than current level**: One or more blocks close. One block-close token is emitted per level difference. If the decreased level does not match any enclosing level, the compiler reports an error: "inconsistent indentation — indentation does not match any outer level".
 
 Consider this source:
 
@@ -133,25 +144,25 @@ public function outer() -> Void:
     puts( "top" )
 ```
 
-The indentation token stream for this fragment (showing only structural tokens):
+The structural token stream for this fragment (showing only block boundaries):
 
 ```
-Indent                    # 0 -> 4 (entering outer body)
+Block open             (0 -> 4, entering outer body)
 Newline
 Newline
-Indent                    # 4 -> 8 (entering if body)
+Block open             (4 -> 8, entering if body)
 Newline
 Newline
-Indent                    # 8 -> 12 (entering nested if body)
+Block open             (8 -> 12, entering nested if body)
 Newline
-Dedent                    # 12 -> 8 (exiting nested if)
+Block close            (12 -> 8, exiting nested if)
 Newline
-Dedent                    # 8 -> 4 (exiting if)
+Block close            (8 -> 4, exiting if)
 Newline
-Dedent                    # 4 -> 0 (exiting outer body)
+Block close            (4 -> 0, exiting outer body)
 ```
 
-Each `Indent` opens exactly one block. Each `Dedent` closes exactly one block. Multiple blocks can close on a single line — if the code jumps from indentation level 12 back to level 0, three `Dedent` tokens are emitted in sequence.
+Each block-open token opens exactly one block. Each block-close token closes exactly one block. Multiple blocks can close on a single line — if the code jumps from indentation level 12 back to level 0, three block-close tokens are emitted in sequence.
 
 ---
 
@@ -159,14 +170,14 @@ Each `Indent` opens exactly one block. Each `Dedent` closes exactly one block. M
 
 Uranite has three comment forms:
 
-**Line comments** start with `#` and extend to the end of the line. The lexer's `skipLineComment()` advances the position to the newline character, consuming all characters in between. No token is emitted.
+**Line comments** start with `#` and extend to the end of the line. No token is emitted.
 
 ```uranite
 # This is a line comment
 I64 value = 42
 ```
 
-**Block comments** use `#{` to open and `}#` to close. They support nesting — the lexer tracks a `nestingDepth` counter, incrementing on `#{` and decrementing on `}#`. The block comment is closed when the nesting depth reaches zero. No token is emitted.
+**Block comments** use `#{` to open and `}#` to close. They support nesting — a `#{` inside a block comment opens a nested comment that must be closed with its own `}#`. No token is emitted.
 
 ```uranite
 #{
@@ -176,7 +187,7 @@ I64 value = 42
 }#
 ```
 
-**Triple-quoted strings** (`"""..."""` or `'''...'''`) at the top level are consumed as comments by the lexer via `skipTripleQuoteComment()`. When a triple-quoted string appears inside a function or class body — specifically, as the first statement after a declaration — it serves as a doccomment. The lexer still skips it during tokenization, but the formatter's `CommentExtractor` separately extracts these blocks and associates them with their parent declarations.
+**Triple-quoted strings** (`"""..."""` or `'''...'''`) at the top level are consumed as comments. When a triple-quoted string appears as the first statement after a declaration, it serves as a doccomment:
 
 ```uranite
 public function hash( I64 value ) -> I64:
@@ -206,7 +217,7 @@ Doccomments follow a structured format with "Parameters:", "Returns:", and "Comp
 
 ## Identifier and Keyword Resolution
 
-The `readIdentifierOrKeyword()` method accumulates characters matching `[a-zA-Z0-9_]` (starting with a letter or underscore), then checks the accumulated string against the keyword registry. If a match is found, the corresponding keyword token type is returned. Otherwise, a generic `Identifier` token is returned.
+When the lexer encounters an alphabetic character or underscore, it accumulates all following characters matching `[a-zA-Z0-9_]`, then checks the accumulated string against the keyword registry. If a match is found, the corresponding keyword token is produced. Otherwise, a generic identifier token is produced.
 
 ```uranite
 I64 slotIndex = 0
@@ -216,12 +227,12 @@ In this line, the lexer produces:
 
 | Position | Text | Token Type |
 |---|---|---|
-| 1 | `I64` | `Identifier` (not a keyword — type names are identifiers) |
-| 2 | `slotIndex` | `Identifier` |
-| 3 | `=` | `Assignment` |
-| 4 | `0` | `LiteralInteger` |
+| 1 | `I64` | Identifier (not a keyword — type names are identifiers) |
+| 2 | `slotIndex` | Identifier |
+| 3 | `=` | Assignment |
+| 4 | `0` | Integer literal |
 
-Note that `I64` is an identifier, not a keyword. Type names like `I64`, `String`, `Boolean`, `ArrayList`, and `HashMap` are all identifiers resolved by the semantic analyzer, not reserved words. Only language constructs like `function`, `class`, `if`, `return`, `and`, `or`, `not`, `True`, `False`, `None`, and `self` are keywords.
+Note that `I64` is an identifier, not a keyword. Type names like `I64`, `String`, `Boolean`, `ArrayList`, and `HashMap` are all identifiers resolved during semantic analysis, not reserved words. Only language constructs like `function`, `class`, `if`, `return`, `and`, `or`, `not`, `True`, `False`, `None`, and `self` are keywords.
 
 ---
 
@@ -229,7 +240,7 @@ Note that `I64` is an identifier, not a keyword. Type names like `I64`, `String`
 
 ### Numbers
 
-The `readNumber()` method handles four integer bases and floating-point numbers:
+The lexer handles four integer bases and floating-point numbers:
 
 - **Decimal**: `42`, `1_000_000` (underscores as digit separators, silently stripped)
 - **Binary**: `0b1010`, `0B1111_0000`
@@ -238,11 +249,11 @@ The `readNumber()` method handles four integer bases and floating-point numbers:
 
 Floating-point numbers are detected when a decimal point appears followed by a digit (`3.14`), or when an exponent suffix appears (`1e10`, `2.5E-3`). The exponent can include a sign (`+` or `-`).
 
-Number literals can include a trailing alphabetic suffix (e.g., `100u64`), which is captured as part of the token value for downstream processing.
+Number literals can include a trailing alphabetic suffix (e.g., `100u64`), which is captured as part of the token value for type inference.
 
 ### Strings
 
-The `readString()` method handles double-quoted strings with escape sequences:
+Double-quoted strings support the following escape sequences:
 
 | Escape | Character |
 |---|---|
@@ -259,7 +270,7 @@ String literals cannot span multiple lines. A newline character inside a string 
 
 ### Characters
 
-The `readChar()` method handles single-quoted character literals with the same escape sequence set as strings. Character literals must contain exactly one character (or one escape sequence). An unclosed quote produces an "unterminated character literal" error.
+Single-quoted character literals support the same escape sequence set as strings. Character literals must contain exactly one character (or one escape sequence). An unclosed quote produces an "unterminated character literal" error.
 
 ### Regex
 
@@ -285,18 +296,18 @@ The lexer resolves multi-character operators by greedy lookahead — it always m
 - `++` is matched before `+`
 - `--` is matched before `-`
 
-This is a standard maximal-munch strategy. The `match()` method performs one-character lookahead and advances the position if the expected character is found.
+This is a standard maximal-munch strategy. One-character lookahead determines whether a longer operator match exists.
 
 ---
 
 ## Parenthesis Depth and Implicit Line Joining
 
-The lexer maintains a `parenDepth` counter that increments on `(`, `[`, and `{`, and decrements on `)`, `]`, and `}`. When `parenDepth` is greater than zero:
+The lexer tracks a nesting depth counter that increments on `(`, `[`, and `{`, and decrements on `)`, `]`, and `}`. When the depth is greater than zero:
 
-- **Newlines are suppressed.** No `Newline` token is emitted. This allows expressions to span multiple lines inside parenthesized contexts without backslash continuation.
-- **Indentation is ignored.** The `handleIndentation()` call is skipped. Leading whitespace is consumed silently.
+- **Newlines are suppressed.** No newline token is emitted. This allows expressions to span multiple lines inside parenthesized contexts without backslash continuation.
+- **Indentation is ignored.** Leading whitespace is consumed silently without producing block boundary tokens.
 
-This means multi-line function calls, collection literals, and import blocks "just work":
+This means multi-line function calls, collection literals, and import blocks work naturally:
 
 ```uranite
 from uranite.collection import {
@@ -338,11 +349,11 @@ This is the explicit line-joining mechanism for contexts outside parenthesized e
 
 After the main scanning loop exhausts all source characters, the lexer performs three cleanup steps:
 
-1. **Pop remaining indentation levels.** While the indentation stack has more than one entry (the base level 0), the lexer pops a level and emits a `Dedent` token. This ensures every `Indent` token has a matching `Dedent`, even if the file ends mid-block.
+1. **Close remaining blocks.** While blocks remain open, the lexer emits block-close tokens for each level. This ensures every block-open has a matching block-close, even if the file ends mid-block.
 
-2. **Append trailing newline.** If the last token in the stream is not already a `Newline`, a `Newline` token is appended. This normalizes the token stream so the parser can always expect a `Newline` before `Eof`.
+2. **Append trailing newline.** If the last token in the stream is not already a line boundary, one is appended. This normalizes the token stream so the parser can always expect a line boundary before end-of-file.
 
-3. **Append EOF.** An `Eof` token is always the final token in the stream.
+3. **Append end-of-file marker.** An end-of-file token is always the final token in the stream.
 
 ---
 
@@ -354,12 +365,12 @@ Each lexical topic is covered in depth in its own document:
 |---|---|
 | [Source Files and Encoding](source-files-and-encoding.md) | File encoding requirements (UTF-8), the `.urn` extension, and source file structure rules. |
 | [Comments and Doccomments](comments-and-doccomments.md) | Line comments (`#`), block comments (`#{...}#`), and triple-quoted doccomments with the "Parameters:", "Returns:", "Complexity:" format. |
-| [Indentation and Blocks](indentation-and-blocks.md) | The `handleIndentation()` algorithm in detail: the indentation stack, `Indent`/`Dedent` emission, tab normalization (1 tab = 4 spaces), error handling for inconsistent indentation. |
-| [Reserved Keywords](reserved-keywords.md) | Complete enumeration of all 74 reserved keywords organized by category with descriptions and usage context. |
+| [Indentation and Blocks](indentation-and-blocks.md) | How indentation defines block boundaries: tab normalization (1 tab = 4 units), the 4-space convention, and common indentation errors. |
+| [Reserved Keywords](reserved-keywords.md) | Complete enumeration of all 78 reserved keywords organized by category with descriptions and usage context. |
 | [Identifiers and Naming](identifiers-and-naming.md) | Identifier character rules (`[a-zA-Z_][a-zA-Z0-9_]*`), case sensitivity, naming conventions, and linter enforcement of descriptive names. |
 | [Integer Literals](integer-literals.md) | Decimal, hexadecimal (`0x`), octal (`0o`), and binary (`0b`) formats. Underscore digit separators. Numeric suffixes. |
 | [Float Literals](float-literals.md) | Decimal floating-point syntax, scientific notation (`1.5e10`), and IEEE 754 representation. |
-| [String Literals](string-literals.md) | Double-quoted strings, escape sequences (`\n`, `\t`, `\xHH`, etc.), null-terminated UTF-8 representation, and unterminated string error handling. |
+| [String Literals](string-literals.md) | Double-quoted strings, escape sequences (`\n`, `\t`, `\xHH`, etc.), and UTF-8 encoding. |
 | [Char Literals](char-literals.md) | Single-quoted character literals, escape sequences, and the 32-bit `Char` type. |
 | [Boolean and None Literals](boolean-and-none-literals.md) | `True`, `False`, and `None` as keyword tokens — case-sensitive, not identifiers. |
 | [Regex Literals](regex-literals.md) | `/pattern/` syntax, context-sensitive disambiguation from division, escape handling, and character class support. |
