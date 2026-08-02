@@ -1,42 +1,48 @@
 # Identifiers and Naming
 
-Uranite enforces strict naming conventions at both the lexer and linter levels. Identifiers must follow specific character set rules, minimum length requirements, and casing conventions. This document specifies the exact lexical definition of identifiers, the naming rules enforced by the compiler and formatter, and how identifiers interact with the scope system.
+Uranite enforces strict naming conventions at both the compiler and linter levels. Identifiers must follow specific character set rules, casing conventions, and minimum length requirements. This document specifies the lexical definition of identifiers, the naming rules enforced by the compiler and formatter, how identifiers interact with the scope system, and every edge case related to naming.
 
 ---
 
 ## Table of Contents
 
-- [Lexical Definition](#lexical-definition)
-  - [Character Set Rules](#character-set-rules)
-  - [Start Characters](#start-characters)
-  - [Continuation Characters](#continuation-characters)
-  - [Maximum Length](#maximum-length)
-  - [Unicode and Non-ASCII Characters](#unicode-and-non-ascii-characters)
-- [The Underscore Policy](#the-underscore-policy)
-  - [Lexer Acceptance](#lexer-acceptance)
-  - [Linter and Style Rejection](#linter-and-style-rejection)
-  - [Why Underscores Are Forbidden](#why-underscores-are-forbidden)
-- [Enforced Naming Conventions](#enforced-naming-conventions)
-  - [camelCase: Variables, Functions, Methods, Parameters](#camelcase-variables-functions-methods-parameters)
-  - [PascalCase: Classes, Structs, Interfaces, Traits, Enums](#pascalcase-classes-structs-interfaces-traits-enums)
-  - [UPPER_SNAKE_CASE: Constants](#upper_snake_case-constants)
-  - [kebab-case: Packages, Files, Directories](#kebab-case-packages-files-directories)
-- [Minimum Name Length Enforcement](#minimum-name-length-enforcement)
-  - [The Cryptic Name Rule](#the-cryptic-name-rule)
-  - [Allowed Short Names](#allowed-short-names)
-  - [Configuration](#configuration)
-- [Identifier Resolution and Scoping](#identifier-resolution-and-scoping)
-  - [Scope Hierarchy](#scope-hierarchy)
-  - [Symbol Lookup](#symbol-lookup)
-  - [Redefinition Errors](#redefinition-errors)
-  - [Field Shadowing Warnings](#field-shadowing-warnings)
-  - [Function Overloading](#function-overloading)
-- [Builtin Identifier Shadowing](#builtin-identifier-shadowing)
-- [Keyword vs Identifier Boundary](#keyword-vs-identifier-boundary)
-- [Examples](#examples)
-  - [Valid Identifiers](#valid-identifiers)
-  - [Invalid Identifiers](#invalid-identifiers)
-  - [Naming Convention Violations](#naming-convention-violations)
+- [Identifiers and Naming](#identifiers-and-naming)
+  - [Table of Contents](#table-of-contents)
+  - [Lexical Definition](#lexical-definition)
+    - [Character Set Rules](#character-set-rules)
+    - [Start Characters](#start-characters)
+    - [Continuation Characters](#continuation-characters)
+    - [Maximum Length](#maximum-length)
+    - [Unicode and Non-ASCII Characters](#unicode-and-non-ascii-characters)
+  - [The Underscore Policy](#the-underscore-policy)
+    - [Compiler Acceptance](#compiler-acceptance)
+    - [Style Rejection](#style-rejection)
+    - [Why Underscores Are Forbidden](#why-underscores-are-forbidden)
+    - [The One Exception: Constants](#the-one-exception-constants)
+  - [Enforced Naming Conventions](#enforced-naming-conventions)
+    - [camelCase: Variables, Functions, Methods, Parameters](#camelcase-variables-functions-methods-parameters)
+    - [PascalCase: Classes, Structs, Interfaces, Traits, Enums](#pascalcase-classes-structs-interfaces-traits-enums)
+    - [Constants: Flexible Naming](#constants-flexible-naming)
+    - [kebab-case: Packages, Files, Directories](#kebab-case-packages-files-directories)
+    - [Convention Summary Table](#convention-summary-table)
+  - [Minimum Name Length Enforcement](#minimum-name-length-enforcement)
+    - [The Cryptic Name Rule](#the-cryptic-name-rule)
+    - [Allowed Short Names](#allowed-short-names)
+    - [Configuring the Minimum Length](#configuring-the-minimum-length)
+  - [Identifier Resolution and Scoping](#identifier-resolution-and-scoping)
+    - [Scope Hierarchy](#scope-hierarchy)
+    - [Name Lookup](#name-lookup)
+    - [Variable Shadowing](#variable-shadowing)
+    - [Redefinition Errors](#redefinition-errors)
+    - [Field Shadowing Warnings](#field-shadowing-warnings)
+    - [Function Overloading](#function-overloading)
+  - [Builtin Type Name Shadowing](#builtin-type-name-shadowing)
+  - [Keywords vs Identifiers](#keywords-vs-identifiers)
+  - [Examples](#examples)
+    - [Valid Identifiers](#valid-identifiers)
+    - [Invalid Identifiers](#invalid-identifiers)
+    - [Naming Convention Violations](#naming-convention-violations)
+    - [Corrected Versions](#corrected-versions)
 
 ---
 
@@ -44,67 +50,91 @@ Uranite enforces strict naming conventions at both the lexer and linter levels. 
 
 ### Character Set Rules
 
-The lexer recognizes identifiers using two character classes: start characters and continuation characters.
+Identifiers in Uranite are composed of two character classes: start characters and continuation characters. These rules determine what the compiler accepts as a valid identifier token.
 
 ### Start Characters
 
-An identifier must begin with an ASCII letter (`a`-`z`, `A`-`Z`) or an underscore (`_`). The dispatch check in the main tokenization loop is:
-
-```
-if character is alphabetic or character is '_':
-    call readIdentifierOrKeyword()
-```
-
-Digits cannot start an identifier. A token beginning with a digit is dispatched to `readNumber()` instead, which parses numeric literals.
+An identifier must begin with an ASCII letter (`a`-`z`, `A`-`Z`) or an underscore (`_`). Tokens that begin with a digit are interpreted as numeric literals, not identifiers. This means `counter` is an identifier, but `2counter` is a number followed by the separate identifier `counter`.
 
 ### Continuation Characters
 
-After the start character, an identifier may contain any combination of ASCII letters, digits (`0`-`9`), and underscores. The `readIdentifierOrKeyword()` method accumulates characters using this rule:
+After the start character, an identifier may contain any combination of:
 
-```
-while not at end and (current is alphanumeric or current is '_'):
-    append current to identifierValue
-    advance()
-```
+- ASCII letters (`a`-`z`, `A`-`Z`)
+- Digits (`0`-`9`)
+- Underscores (`_`)
 
-The accumulation stops at the first character that is not alphanumeric and not an underscore. This means hyphens, dots, spaces, and all other non-alphanumeric characters are identifier terminators.
+The identifier ends at the first character that does not match this set. Hyphens, dots, spaces, and all other non-alphanumeric characters terminate the identifier:
+
+| Input | Identifier Produced | Remaining |
+|---|---|---|
+| `bufferSize` | `bufferSize` | (nothing) |
+| `count123` | `count123` | (nothing) |
+| `my-variable` | `my` | `-variable` (hyphen terminates) |
+| `hello world` | `hello` | ` world` (space terminates) |
+| `name.length` | `name` | `.length` (dot terminates) |
+| `data[0]` | `data` | `[0]` (bracket terminates) |
+
+This means hyphenated names like `my-variable` are never a single identifier. The compiler sees `my`, then a minus operator, then `variable` — three separate tokens.
 
 ### Maximum Length
 
-There is no explicit maximum length for identifiers. The lexer accumulates characters into a `std::string` with no bounds check. In practice, identifiers are limited by available memory, which is effectively unlimited for reasonable identifier lengths.
+There is no maximum length for identifiers. In practice, identifiers are limited only by available memory. Descriptive multi-word names like `calculateCompoundInterestOverMultiplePeriods` are valid (though excessively long names reduce readability rather than improve it).
 
 ### Unicode and Non-ASCII Characters
 
-Uranite does **not** support non-ASCII characters in identifiers. The lexer's start-character check uses `std::isalpha()`, which operates on single bytes and recognizes only the ASCII range. Multi-byte UTF-8 sequences (accented characters, CJK characters, emoji) fail the `std::isalpha()` test and are rejected as "unexpected character" errors.
+Uranite does **not** support non-ASCII characters in identifiers. Only the 26 Latin letters (upper and lower case), digits 0-9, and underscore are valid. Multi-byte UTF-8 characters — accented letters, CJK characters, Greek letters, emoji — are rejected as "unexpected character" errors when they appear in identifier positions:
 
-This means identifiers like `café`, `größe`, `変数`, and `π` are not valid. All identifiers must use the 26 Latin letters (upper and lower), digits 0-9, and underscore.
+```
+error: unexpected character "ü"
+  --> source.urn:1:5
+```
+
+Identifiers like `café`, `größe`, `変数`, and `π` are not valid. Non-ASCII characters are permitted inside string literals and comments, but never in identifiers.
 
 ---
 
 ## The Underscore Policy
 
-### Lexer Acceptance
+### Compiler Acceptance
 
-The lexer **accepts** underscores in identifiers. Both the start-character dispatch (`character == '_'`) and the continuation loop (`this->current() == '_'`) explicitly include underscore. The lexer will successfully tokenize `my_variable`, `_private`, and `__dunder__` as `Identifier` tokens without error.
+The compiler **accepts** underscores in identifiers at the syntactic level. Names like `my_variable`, `_private`, and `calculate_total` will compile without error. The underscore is a valid character in identifier positions.
 
-### Linter and Style Rejection
+### Style Rejection
 
-Despite lexer acceptance, Uranite's coding conventions **strictly forbid** underscores in identifiers. This prohibition is enforced at the style level by `uranite-fmt --lint` and by the language's design philosophy, not by the lexer itself.
+Despite compiler acceptance, Uranite's coding conventions **strictly forbid** underscores in runtime identifiers. This prohibition is enforced by the linter (`uranite-fmt --lint`) and by the language's design philosophy.
 
-The reasoning is simple: Uranite uses `camelCase` for all runtime identifiers and `PascalCase` for type names. Underscores belong to `snake_case`, which is not a valid naming convention in Uranite. The only exception is `UPPER_SNAKE_CASE` for top-level constants, where underscores separate words in all-caps identifiers.
+Uranite uses `camelCase` for all runtime identifiers (variables, functions, methods, parameters) and `PascalCase` for type names. Underscores belong to `snake_case`, which is not a valid naming convention in Uranite. Code that uses underscores in variable or function names will compile, but it violates naming standards and will be flagged by the linter.
 
-Code that uses underscores in variable or function names will compile, but it violates Uranite's naming standards and will be flagged during code review. The `uranite-fmt` formatter does not automatically rename identifiers (it formats structure, not names), but the linter's cryptic-name rules and the project's style guide enforce descriptive `camelCase` names.
+```uranite
+I64 myCounter = 0
+```
+
+This is correct. The variable name `myCounter` follows `camelCase`.
+
+```uranite
+I64 my_counter = 0
+```
+
+This compiles but violates the naming convention. The linter flags it, and the correct form is `myCounter`.
 
 ### Why Underscores Are Forbidden
 
-Uranite uses `kebab-case` for file names and package paths (`hash-map.urn`, `array-list.urn`). If identifiers also used underscores, there would be two competing word-separation conventions in the same codebase. By restricting runtime identifiers to `camelCase` and `PascalCase`, and reserving hyphens for filesystem paths, each naming convention occupies a distinct domain with no ambiguity:
+Uranite uses `kebab-case` for file names and package paths (`hash-map.urn`, `array-list.urn`). If identifiers also used underscores, there would be two competing word-separation conventions in the same codebase. By restricting runtime identifiers to `camelCase` and `PascalCase`, and reserving hyphens for filesystem paths, each naming convention occupies a distinct domain with zero ambiguity.
 
-| Domain | Convention | Example |
-|---|---|---|
-| Variables, functions, methods | `camelCase` | `bufferSize`, `computeHash` |
-| Types (classes, structs, interfaces) | `PascalCase` | `ArrayList`, `HashMap` |
-| Constants | `UPPER_SNAKE_CASE` | `MAX_CAPACITY`, `DEFAULT_PORT` |
-| Files, directories, packages | `kebab-case` | `hash-map.urn`, `array-list` |
+### The One Exception: Constants
+
+Top-level constants declared with `const` are the **only** context where underscores are permitted in Uranite identifiers. Constants are not restricted to a single naming convention — they can use `camelCase`, `PascalCase`, or `UPPER_SNAKE_CASE` depending on context:
+
+```uranite
+public const I64 MAX_BUFFER_SIZE = 65536
+public const I64 STATE_RUNNING = 1
+public const I64 SIGTERM = 15
+public const I64 argc = 0
+public const NativeScheduler scheduler = new NativeScheduler()
+```
+
+`UPPER_SNAKE_CASE` is the most common convention for numeric constants, flags, state codes, and syscall numbers. It creates immediate visual distinction, signaling that the value is immutable. However, constants that represent singleton objects, well-known conventional names (like `argc` and `argv`), or module-level bindings often use `camelCase` instead. Both styles are valid.
 
 ---
 
@@ -112,21 +142,30 @@ Uranite uses `kebab-case` for file names and package paths (`hash-map.urn`, `arr
 
 ### camelCase: Variables, Functions, Methods, Parameters
 
-All runtime identifiers — local variables, function names, method names, and parameter names — use `camelCase`. The first word is lowercase; subsequent words are capitalized with no separator:
+All runtime identifiers — local variables, function names, method names, and parameter names — use `camelCase`. The first word is entirely lowercase; subsequent words begin with an uppercase letter, with no separator between words:
 
 ```uranite
-public function calculateTotalPrice( I64 itemCount, F64 unitPrice ) -> F64:
-    F64 subtotal = unitPrice * itemCount
-    F64 taxRate = 0.08
-    F64 totalPrice = subtotal * ( 1.0 + taxRate )
+public function calculateTotalPrice( I64 itemCount, Double unitPrice ) -> Double:
+    Double subtotal = unitPrice * itemCount
+    Double taxRate = 0.08
+    Double totalPrice = subtotal * ( 1.0 + taxRate )
     return totalPrice
 ```
 
-Every identifier here follows `camelCase`: `calculateTotalPrice`, `itemCount`, `unitPrice`, `subtotal`, `taxRate`, `totalPrice`.
+Every identifier follows `camelCase`: `calculateTotalPrice`, `itemCount`, `unitPrice`, `subtotal`, `taxRate`, `totalPrice`. None use underscores, hyphens, or leading capitals.
+
+Acronyms in `camelCase` names follow a specific rule: treat the acronym as a regular word. Capitalize only the first letter when it appears after the start of the name:
+
+| Correct | Incorrect | Reason |
+|---|---|---|
+| `httpClient` | `hTTPClient` | Acronym treated as word |
+| `parseJson` | `parseJSON` | Acronym treated as word |
+| `xmlParser` | `XMLParser` | camelCase, not PascalCase |
+| `userId` | `userID` | Acronym treated as word |
 
 ### PascalCase: Classes, Structs, Interfaces, Traits, Enums
 
-Type declarations use `PascalCase`. Every word is capitalized, including the first:
+Type declarations use `PascalCase`. Every word begins with an uppercase letter, including the first word:
 
 ```uranite
 public class EventDispatcher:
@@ -148,18 +187,45 @@ public enum HttpMethod:
 
 Type names are always `PascalCase`: `EventDispatcher`, `Serializable`, `ConnectionConfig`, `HttpMethod`. Enum variants also use `PascalCase`: `Get`, `Post`, `Put`, `Delete`.
 
-### UPPER_SNAKE_CASE: Constants
+Acronyms in `PascalCase` follow the same rule — treat the acronym as a word:
 
-Top-level constants declared with `const` use `UPPER_SNAKE_CASE`. All letters are uppercase, and words are separated by underscores:
+| Correct | Incorrect | Reason |
+|---|---|---|
+| `HttpClient` | `HTTPClient` | Acronym treated as word |
+| `JsonParser` | `JSONParser` | Acronym treated as word |
+| `XmlDocument` | `XMLDocument` | Acronym treated as word |
+| `IoStream` | `IOStream` | Acronym treated as word |
+
+### Constants: Flexible Naming
+
+Constants declared with `const` can use any valid naming convention. The `const` keyword marks a binding as immutable — it does not enforce a particular casing style.
+
+**`UPPER_SNAKE_CASE`** is the most common convention for numeric constants, flags, state codes, signal numbers, and syscall identifiers:
 
 ```uranite
 public const I64 MAX_BUFFER_SIZE = 65536
-public const F64 PI = 3.14159265358979
-public const I32 DEFAULT_PORT = 8080
-public const String VERSION = "1.0.0"
+public const I64 DEFAULT_PORT = 8080
+public const I64 STATE_RUNNING = 1
+public const I64 SIGTERM = 15
+public const I64 PAGE_SIZE = 4096
 ```
 
-This is the **only** context where underscores appear in Uranite identifiers. Constants are visually distinct from all other identifiers, making it immediately clear that `MAX_BUFFER_SIZE` is an immutable compile-time value, not a variable.
+**`camelCase`** is used for singleton objects, module-level bindings, and well-known conventional names:
+
+```uranite
+public const I64 argc = 0
+public const ArrayList<String> argv = new ArrayList<String>()
+const NativeScheduler scheduler = new NativeScheduler()
+```
+
+**Single-word constants** can be either all uppercase or lowercase depending on context:
+
+```uranite
+public const Double PI = 3.14159265358979
+public const I64 EPSILON = 1
+```
+
+Constants are the only identifier category where underscores are permitted. The choice between `UPPER_SNAKE_CASE` and `camelCase` depends on the constant's purpose — numeric flags and configuration values favor uppercase, while object bindings and conventional names favor camelCase.
 
 ### kebab-case: Packages, Files, Directories
 
@@ -175,9 +241,12 @@ stdlibs/
     language/
         boolean.urn
         string.urn
+    io/
+        console.urn
+        file.urn
 ```
 
-Import statements reflect this convention:
+Import statements reflect this convention. The dot-separated module path corresponds directly to the filesystem structure:
 
 ```uranite
 from uranite.collection.array-list import ArrayList
@@ -185,7 +254,26 @@ from uranite.collection.hash-map import HashMap
 from uranite.io.console import puts
 ```
 
-Note that the dot-separated module path (`uranite.collection.array-list`) corresponds directly to the filesystem path (`stdlibs/collection/array-list.urn`). The kebab-case file name becomes the final segment of the module path.
+The module path `uranite.collection.array-list` maps to the file `stdlibs/collection/array-list.urn`. The kebab-case file name becomes the final segment of the module path.
+
+Single-word module names use plain lowercase with no hyphens:
+
+```uranite
+from uranite.io.console import puts
+from uranite.math.random import nextInt
+```
+
+### Convention Summary Table
+
+| Domain | Convention | Example | Underscores |
+|---|---|---|---|
+| Variables, functions, methods, parameters | `camelCase` | `bufferSize`, `computeHash` | Forbidden |
+| Classes, structs, interfaces, traits, enums | `PascalCase` | `ArrayList`, `HashMap` | Forbidden |
+| Enum variants | `PascalCase` | `North`, `HttpOk` | Forbidden |
+| Constants (numeric/flags) | `UPPER_SNAKE_CASE` | `MAX_CAPACITY`, `STATE_RUNNING` | Permitted (as word separator) |
+| Constants (objects/bindings) | `camelCase` | `scheduler`, `argc` | Forbidden |
+| Files, directories | `kebab-case` | `hash-map.urn`, `array-list/` | Forbidden |
+| Package paths | `kebab-case` (dots as separators) | `uranite.collection.hash-map` | Forbidden |
 
 ---
 
@@ -193,7 +281,7 @@ Note that the dot-separated module path (`uranite.collection.array-list`) corres
 
 ### The Cryptic Name Rule
 
-The linter enforces a minimum character length for variable and parameter identifiers. Names shorter than the configured threshold trigger a warning diagnostic:
+The linter enforces a minimum character length for variable and parameter names. Names shorter than the configured threshold (default: 3 characters) trigger a warning:
 
 ```
 warning: [naming/cryptic-variable] variable "x" has a cryptic name; use a descriptive identifier
@@ -205,14 +293,25 @@ warning: [naming/cryptic-parameter] parameter "n" has a cryptic name; use a desc
   --> source.urn:3:25
 ```
 
-Two distinct rule IDs govern this check:
+Two distinct linter rules govern this check:
 
-| Rule ID | Target | Default |
+| Rule ID | Target | Default State |
 |---|---|---|
 | `naming/cryptic-variable` | Local variable declarations | Enabled |
 | `naming/cryptic-parameter` | Function parameter names | Enabled |
 
-Both rules compare the identifier's character length against `minimumVariableNameLength` (default: 3). Any identifier shorter than 3 characters triggers the warning.
+Both rules compare the identifier's character count against the minimum length threshold. Any identifier shorter than 3 characters triggers the warning.
+
+The rationale: single-letter and two-letter names (`i`, `j`, `x`, `n`, `cb`, `fn`) communicate nothing about the value's purpose. Uranite prioritizes readability — every identifier should describe what the value represents:
+
+| Cryptic | Descriptive | What It Represents |
+|---|---|---|
+| `i` | `index` or `slotIndex` | Position in a sequence |
+| `n` | `count` or `elementCount` | Number of items |
+| `s` | `source` or `inputText` | Input string data |
+| `cb` | `callback` or `onComplete` | Function to call later |
+| `buf` | `buffer` or `readBuffer` | Temporary storage area |
+| `res` | `result` or `response` | Output of a computation |
 
 ### Allowed Short Names
 
@@ -220,26 +319,34 @@ Six identifiers are exempt from the minimum-length check, regardless of their ch
 
 | Name | Reason |
 |---|---|
-| `self` | Instance reference in methods. Always valid. |
+| `self` | Instance reference in methods. Always required in this exact form. |
 | `it` | Conventional lambda parameter for single-argument closures. |
 | `id` | Universally understood abbreviation for "identifier". |
 | `io` | Standard abbreviation for input/output operations. |
 | `ip` | Standard abbreviation for internet protocol address. |
-| `ok` | Conventional boolean result name. |
+| `ok` | Conventional boolean result name for success/failure. |
 
-These six names are stored in the `allowedShortNames_` set, which is checked before applying the length rule. If the identifier matches any entry in this set, the check is skipped entirely — no warning is emitted.
+These six names are checked before the length rule applies. If an identifier matches any entry in this list, no warning is emitted:
 
-### Configuration
+```uranite
+public function processUser( I64 id ) -> Boolean:
+    Boolean ok = validateId( id )
+    return ok
+```
 
-The minimum length threshold is configurable via the `LintRuleConfig` struct:
+Both `id` and `ok` are 2 characters but exempt from the cryptic-name warning because they are in the allowed list.
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `enableCrypticVariable` | `bool` | `true` | Enable/disable variable name length checking. |
-| `enableCrypticParameter` | `bool` | `true` | Enable/disable parameter name length checking. |
-| `minimumVariableNameLength` | `uint32_t` | `3` | Minimum character count before a name is flagged. |
+### Configuring the Minimum Length
 
-Setting `minimumVariableNameLength` to `1` effectively disables cryptic-name warnings (since all identifiers are at least 1 character). Setting it to `5` or higher enforces very descriptive naming.
+The minimum length threshold is configurable through the linter configuration:
+
+| Setting | Default | Description |
+|---|---|---|
+| `enableCrypticVariable` | `true` | Enable or disable variable name length checking. |
+| `enableCrypticParameter` | `true` | Enable or disable parameter name length checking. |
+| `minimumVariableNameLength` | `3` | Minimum character count before a name is flagged. |
+
+Setting `minimumVariableNameLength` to `1` effectively disables cryptic-name warnings (since all identifiers are at least 1 character long). Setting it to `5` or higher enforces very descriptive naming, requiring names like `index` instead of `idx`.
 
 ---
 
@@ -247,42 +354,46 @@ Setting `minimumVariableNameLength` to `1` effectively disables cryptic-name war
 
 ### Scope Hierarchy
 
-The semantic analyzer manages a tree of nested scopes. Each scope has a kind and an optional parent:
+Uranite uses lexical scoping with a hierarchy of nested scopes. Each scope corresponds to a syntactic construct that introduces a new naming context:
 
-| Scope Kind | Created By |
-|---|---|
-| `Global` | Top-level module scope. |
-| `Module` | Imported module boundary. |
-| `Class` | Class body. |
-| `Function` | Function body. |
-| `Block` | Generic nested block (e.g., `if` body). |
-| `Loop` | `for` or `while` body. |
-| `Switch` | `match`/`switch` body. |
-| `Unsafe` | `unsafe` block. |
+| Scope | Created By | Can Access Names From |
+|---|---|---|
+| Global | Top-level module | (root — no parent) |
+| Module | Imported module boundary | Global |
+| Class | Class body | Module, Global |
+| Function | Function body | Class (if method), Module, Global |
+| Block | `if`, `elif`, `else`, `try`, `except`, `finally` body | Function, Class, Module, Global |
+| Loop | `for`, `while` body | Function, Class, Module, Global |
+| Switch | `switch` body | Function, Class, Module, Global |
+| Unsafe | `unsafe` block | Function, Class, Module, Global |
 
-Scopes form a parent-child chain. When the analyzer enters a new block, it pushes a new scope with the current scope as parent. When the block ends, it pops back to the parent.
+Scopes form a parent-child chain. When the compiler enters a new block, it creates a new scope linked to the enclosing scope. When the block ends, the inner scope is discarded and the enclosing scope resumes. Every name lookup walks up the chain from the current scope toward the global scope.
 
-### Symbol Lookup
+### Name Lookup
 
-When the semantic analyzer encounters an identifier, it resolves it through the scope chain using `Scope::lookup()`:
+When the compiler encounters an identifier, it resolves the name by searching the scope chain:
 
-1. Search the current scope's symbol map for the name.
-2. If not found, recurse into the parent scope.
-3. Continue up the chain until the name is found or the root (Global) scope is reached.
-4. If no scope contains the name, resolution fails — the identifier is undeclared.
+1. Search the current (innermost) scope for the name.
+2. If not found, search the parent scope.
+3. Continue up the chain until the name is found or the global scope is exhausted.
+4. If no scope contains the name, the identifier is undeclared and the compiler reports an error.
 
-This parent-chain traversal means inner scopes can access names from any enclosing scope. A variable declared in a function body is visible in all nested blocks (loops, conditionals, unsafe blocks) within that function.
+This chain traversal means inner scopes can access names from any enclosing scope. A variable declared in a function body is visible in all nested blocks — loops, conditionals, unsafe blocks, and switch bodies — within that function:
 
-### Redefinition Errors
-
-The `Scope::define()` method prevents duplicate definitions of variables, fields, parameters, types, enum variants, and modules within the same scope. If a name already exists in the current scope for any of these symbol kinds, `define()` returns `false`, and the semantic analyzer emits an error:
-
+```uranite
+public function process( ArrayList<I64> values ) -> I64:
+    I64 total = 0
+    for I64 element in values:
+        if element > 0:
+            total = total + element
+    return total
 ```
-error: redefinition of variable "counter"
-  --> source.urn:6:5
-```
 
-This check is **scope-local** — it only prevents duplicates within the same scope. A variable in an inner scope may have the same name as a variable in an outer scope. The inner variable shadows the outer one:
+The variable `total` is declared in the function scope. The `for` loop body and the `if` body are nested scopes that can both access `total` because it exists in an enclosing scope.
+
+### Variable Shadowing
+
+A variable in an inner scope may have the same name as a variable in an outer scope. The inner variable **shadows** the outer one — within the inner scope, the name refers to the inner variable. After the inner scope ends, the outer variable is accessible again:
 
 ```uranite
 public function example() -> Void:
@@ -293,9 +404,13 @@ public function example() -> Void:
     puts( value.toString() )
 ```
 
-The inner `value` (20) shadows the outer `value` (10) within the `if` block. After the block ends, the outer `value` is accessible again. This is valid — it is not a redefinition because the two declarations are in different scopes.
+The first `puts` call prints "20" — the inner `value` shadows the outer one within the `if` block. The second `puts` call prints "10" — after the `if` block ends, the outer `value` is accessible again.
 
-However, declaring the same name twice within the same scope is an error:
+Shadowing is valid because the two declarations exist in different scopes. It is not a redefinition. However, shadowing can make code confusing and is best avoided when possible.
+
+### Redefinition Errors
+
+Declaring the same name twice within the **same** scope is an error:
 
 ```uranite
 public function broken() -> Void:
@@ -303,45 +418,71 @@ public function broken() -> Void:
     I64 counter = 1
 ```
 
-The second `I64 counter` triggers "redefinition of variable" because both declarations exist in the same function scope.
+```
+error: redefinition of variable "counter"
+  --> source.urn:3:5
+```
+
+Both declarations of `counter` exist in the same function scope, which is not allowed. This rule applies to variables, fields, parameters, types, enum variants, and modules — any two entities of these kinds cannot share a name within the same scope.
 
 ### Field Shadowing Warnings
 
-When a class declares a field with the same name as an inherited field from a parent class, the semantic analyzer emits a warning (not an error):
+When a class declares a field with the same name as an inherited field from a parent class, the compiler emits a warning (not an error):
 
 ```
 warning: field "name" in class "Employee" shadows inherited field
   --> source.urn:8:5
 ```
 
-This is a warning because field shadowing is technically valid — the subclass field takes precedence within the subclass — but it often indicates a design mistake where the developer intended to use the inherited field rather than declare a new one.
+```uranite
+public class Person:
+    protect String name
+
+    public function Person( self, String name ) -> Void:
+        self.name = name
+
+public class Employee extends Person:
+    private String name
+
+    public function Employee( self, String name ) -> Void:
+        parent( name )
+        self.name = name
+```
+
+The `name` field in `Employee` shadows the inherited `name` field from `Person`. This is technically valid — the subclass field takes precedence within `Employee` — but it often indicates a design mistake. The developer may have intended to use the inherited field rather than declare a new one.
 
 ### Function Overloading
 
-Functions are the exception to the single-definition rule. Multiple functions with the same name but different parameter type signatures can coexist in the same scope. The `define()` method detects this by comparing parameter counts and types:
+Functions are the exception to the single-definition rule. Multiple functions with the same name but different parameter type signatures can coexist in the same scope:
 
 ```uranite
 public function format( I64 value ) -> String:
     return value.toString()
 
-public function format( F64 value ) -> String:
+public function format( Double value ) -> String:
     return value.toString()
 
 public function format( String value ) -> String:
     return value
 ```
 
-All three `format` functions share the same name but have distinct parameter types. The scope stores them as a vector of symbols under the key "format", and the semantic analyzer resolves calls based on argument types.
+All three `format` functions share the same name but have distinct parameter types (`I64`, `Double`, `String`). The compiler resolves calls based on the types of the arguments provided at the call site:
 
-If two functions have the same name **and** the same parameter types, the second definition is rejected as a redefinition error.
+```uranite
+public function main() -> I32:
+    puts( format( 42 ) )
+    puts( format( 3.14 ) )
+    puts( format( "hello" ) )
+    return 0
+```
+
+Each call resolves to the matching overload based on argument type. If two functions have the same name **and** the same parameter types, the second definition is rejected as a redefinition error.
 
 ---
 
-## Builtin Identifier Shadowing
+## Builtin Type Name Shadowing
 
-The compiler pre-registers a set of builtin identifiers (type names like "I64", "String", "Boolean", "Object") in the type registry during initialization. These names are not keywords — the lexer produces `Identifier` tokens for them, and they are resolved by the semantic analyzer through the type registry.
-
-Because builtin identifiers are not keywords, they can technically be shadowed by user declarations:
+The compiler pre-registers a set of builtin type names (`I64`, `String`, `Boolean`, `Object`, `ArrayList`, etc.) during initialization. These names are identifiers, not keywords. This distinction means they can technically be shadowed by user declarations:
 
 ```uranite
 public function confusing() -> Void:
@@ -351,20 +492,35 @@ public function confusing() -> Void:
 
 This compiles. The local variable `String` (of type `I64`) shadows the builtin type name `String` within this function scope. After the function, the type name `String` resolves normally again.
 
-While the compiler permits this, it is strongly discouraged. Shadowing a type name with a variable creates code that is difficult to read and maintain. The linter does not currently enforce a rule against builtin shadowing, but project style guides universally prohibit it.
+While the compiler permits this, it is strongly discouraged. Shadowing a type name with a variable creates code that is difficult to read and maintain. The meaning of `String` shifts from "the string type" to "an integer variable" within the scope, which confuses both human readers and code analysis tools.
+
+The key difference from keywords: you **cannot** shadow a keyword. Writing `I64 class = 5` is always an error because `class` is a reserved keyword. But writing `I64 String = 5` is technically valid because `String` is a builtin identifier, not a keyword. See [Reserved Keywords](reserved-keywords.md) for the full list of reserved words.
 
 ---
 
-## Keyword vs Identifier Boundary
+## Keywords vs Identifiers
 
-The lexer determines whether a token is a keyword or an identifier through a single hash-map lookup in `readIdentifierOrKeyword()`. The boundary is absolute:
+The boundary between keywords and identifiers is absolute. When the compiler encounters a word:
 
-- If the accumulated string matches a `keymaps()` entry, the token is a keyword. No user-defined entity can have that name.
-- If the string does not match, the token is an `Identifier`. The semantic analyzer handles all further resolution.
+- If it exactly matches one of the 78 reserved keywords, the word is a keyword. No user-defined entity can have that name.
+- If it does not match any keyword, the word is an identifier. Further resolution happens during semantic analysis.
 
-This boundary creates a clean separation. Tokens like `function`, `class`, `return`, and `if` are always keywords and never identifiers. Tokens like `ArrayList`, `hashCode`, and `main` are always identifiers and never keywords — even though the compiler treats "main" specially as the program entry point.
+This boundary is based purely on string matching, not context. The word `function` is always a keyword, even in positions where an identifier might seem to make sense. The word `main` is always an identifier, even though the compiler treats a function named `main` specially as the program entry point.
 
-The special treatment of "main" happens in the semantic analyzer and code generator, not in the lexer. The lexer produces `Identifier("main")`, and downstream passes check for this specific identifier string when looking for the entry point function.
+```uranite
+I64 function = 5
+```
+
+This is an error. `function` is a keyword and cannot be used as a variable name.
+
+```uranite
+public function main() -> I32:
+    return 0
+```
+
+The name `main` is an identifier. The compiler recognizes it as the entry point because of a specific check during analysis — not because `main` is a keyword. You could declare a variable named `main` in a different scope without error (though it would shadow the entry point function if done carelessly).
+
+Type names like `I64`, `String`, `ArrayList`, `HashMap`, `Boolean`, and `Object` are all identifiers, not keywords. They are resolved during semantic analysis through the type registry. See [Builtin Type Name Shadowing](#builtin-type-name-shadowing) for how this affects naming.
 
 ---
 
@@ -372,12 +528,15 @@ The special treatment of "main" happens in the semantic analyzer and code genera
 
 ### Valid Identifiers
 
+A complete example demonstrating all naming conventions working together:
+
 ```uranite
 package myapp.services
 
 from uranite.collection.array-list import ArrayList
 
 public const I64 MAX_RETRIES = 3
+public const I64 TIMEOUT_MILLIS = 5000
 
 public class HttpClient:
 
@@ -391,64 +550,86 @@ public class HttpClient:
     public function sendRequest( self, String endpoint, String method ) -> String:
         String fullUrl = self.baseUrl + endpoint
         return fullUrl
+
+    public function retryRequest( self, String endpoint, I64 maxAttempts ) -> String:
+        I64 attempt = 0
+        while attempt < maxAttempts:
+            String result = self.sendRequest( endpoint, "GET" )
+            if result.length() > 0:
+                return result
+            attempt = attempt + 1
+        return ""
 ```
 
-Every identifier follows its domain's convention:
+Convention breakdown:
 
-- `camelCase`: `baseUrl`, `timeoutMillis`, `sendRequest`, `endpoint`, `method`, `fullUrl`
-- `PascalCase`: `HttpClient`, `String`, `ArrayList`
-- `UPPER_SNAKE_CASE`: `MAX_RETRIES`
+- `camelCase`: `baseUrl`, `timeoutMillis`, `sendRequest`, `endpoint`, `method`, `fullUrl`, `retryRequest`, `maxAttempts`, `attempt`, `result`
+- `PascalCase`: `HttpClient`, `String`, `ArrayList`, `I64`
+- `UPPER_SNAKE_CASE`: `MAX_RETRIES`, `TIMEOUT_MILLIS`
 - `kebab-case`: `myapp.services`, `array-list`
 
 ### Invalid Identifiers
 
-The following identifiers are **lexer-level invalid** — the tokenizer rejects them outright:
+The following are **rejected by the compiler** — they are not valid identifier tokens:
 
-```
-123abc       → starts with digit, dispatched to readNumber()
-my-variable  → hyphen terminates identifier at "my", "-" is Minus token
-hello world  → space terminates identifier at "hello"
-über         → non-ASCII, rejected as unexpected character
-```
+| Input | Problem |
+|---|---|
+| `123abc` | Starts with a digit. Parsed as a number, not an identifier. |
+| `my-variable` | Hyphen terminates at `my`. Parsed as identifier `my`, minus operator, identifier `variable`. |
+| `hello world` | Space terminates at `hello`. Parsed as two separate identifiers. |
+| `über` | Non-ASCII character. Rejected as "unexpected character". |
+| `café` | Non-ASCII character. Rejected as "unexpected character". |
 
 ### Naming Convention Violations
 
-The following identifiers are **lexer-valid** but violate naming conventions and will be flagged by the linter or rejected by code review:
+The following are **accepted by the compiler** but **flagged by the linter** or rejected by code review:
+
+Single-letter variable name (triggers `naming/cryptic-variable`):
 
 ```uranite
 I64 x = 10
 ```
 
-Triggers `naming/cryptic-variable`: "x" is 1 character, below the minimum of 3.
+The name `x` is 1 character, below the minimum of 3. Use a descriptive name like `counter`, `position`, or `offset`.
+
+Single-letter parameter name (triggers `naming/cryptic-parameter`):
 
 ```uranite
-public function calc( I64 n ) -> I64:
+public function calculate( I64 n ) -> I64:
     return n * 2
 ```
 
-Triggers `naming/cryptic-parameter`: "n" is 1 character.
+The name `n` is 1 character. Use a descriptive name like `factor`, `count`, or `multiplier`.
+
+Underscores in a variable name (violates `camelCase`):
 
 ```uranite
 I64 my_counter = 0
 ```
 
-Violates the `camelCase` convention. Should be `myCounter`.
+Should be `myCounter`.
+
+Lowercase class name (violates `PascalCase`):
 
 ```uranite
 public class event_handler:
     pass
 ```
 
-Violates the `PascalCase` convention. Should be `EventHandler`.
+Should be `EventHandler`.
+
+PascalCase function name (violates `camelCase`):
 
 ```uranite
 public function ComputeValue() -> I64:
     return 42
 ```
 
-Violates the `camelCase` convention for functions. `PascalCase` is reserved for type names. Should be `computeValue`.
+Function names use `camelCase`, not `PascalCase`. Should be `computeValue`.
 
-Correct versions of all the above:
+### Corrected Versions
+
+All naming convention violations from the previous section, corrected:
 
 ```uranite
 I64 counter = 10
