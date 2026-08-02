@@ -22,7 +22,7 @@
 package uranite.threading.scope
 
 from uranite.memory.memory import Memory
-from uranite.threading.errors import PoisonError, ThreadError
+from uranite.threading.errors import ThreadPoisonError, ThreadError
 from uranite.threading.join-handle import JoinHandle
 from uranite.threading.thread import DEFAULT_PRIORITY, DEFAULT_STACK_PAGES, Thread, ThreadRuntime
 
