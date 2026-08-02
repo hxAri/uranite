@@ -21,8 +21,6 @@
 
 package uranite.adelia.adelia
 
-
-
 public final Readonly class Adelia;
 
 export {
