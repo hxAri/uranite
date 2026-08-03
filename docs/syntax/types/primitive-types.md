@@ -1,513 +1,938 @@
 # Primitive Types
 
-Uranite's primitive types are the fundamental scalar types built into the compiler. They form the foundation of the type system — every composite type, collection, and user-defined class ultimately stores or operates on primitive values. Uranite provides 16 primitive types: 8 signed integers, 4 unsigned integers, 2 floating-point types, a boolean, and a character type. Additionally, `String`, `Void`, and `None` serve as built-in types with special semantics.
-
-This document covers the complete primitive type inventory, the "everything is an object" philosophy, the zero-cost abstraction mechanism that makes method calls on primitives free, and the type registry architecture that bridges primitive identifiers to OOP wrapper classes.
-
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Primitive Type Inventory](#primitive-type-inventory)
+- [Primitive Types](#primitive-types)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
   - [Signed Integer Types](#signed-integer-types)
+    - [I8](#i8)
+    - [I16](#i16)
+    - [I32](#i32)
+    - [I64](#i64)
+    - [Int](#int)
+    - [Integer](#integer)
+    - [Long](#long)
+    - [Default Integer Inference](#default-integer-inference)
   - [Unsigned Integer Types](#unsigned-integer-types)
+    - [U8](#u8)
+    - [U16](#u16)
+    - [U32](#u32)
+    - [U64](#u64)
+    - [UInt](#uint)
+    - [Byte](#byte)
   - [Floating-Point Types](#floating-point-types)
+    - [F32](#f32)
+    - [F64](#f64)
+    - [Float](#float)
+    - [Double](#double)
+    - [Default Float Inference](#default-float-inference)
+    - [Special Float Values](#special-float-values)
   - [Boolean Type](#boolean-type)
+    - [Boolean Values](#boolean-values)
+    - [Boolean in Conditions](#boolean-in-conditions)
+    - [Logical Operations](#logical-operations)
   - [Character Type](#character-type)
+    - [Character Literals](#character-literals)
+    - [Character Classification](#character-classification)
+    - [Case Conversion](#case-conversion)
   - [String Type](#string-type)
-  - [Void and None Types](#void-and-none-types)
-- [Type Aliases](#type-aliases)
-- [Everything is an Object](#everything-is-an-object)
-  - [The OOP Wrapper Architecture](#the-oop-wrapper-architecture)
-  - [The Wrapper Class Hierarchy](#the-wrapper-class-hierarchy)
-  - [Method Calls on Primitives](#method-calls-on-primitives)
-- [Zero-Cost Abstractions](#zero-cost-abstractions)
-  - [The toLLVMType Mechanism](#the-tollvmtype-mechanism)
-  - [OOP Wrapper Recognition](#oop-wrapper-recognition)
-  - [No Boxing, No Heap Allocation](#no-boxing-no-heap-allocation)
-- [The Type Registry](#the-type-registry)
-  - [Primitive Type Initialization](#primitive-type-initialization)
-  - [The primitivesTypes Map](#the-primitivestypes-map)
-  - [Lookup and Resolution](#lookup-and-resolution)
-  - [The isPrimitive Classification](#the-isprimitive-classification)
-- [The OOP Wrapper Set](#the-oop-wrapper-set)
-  - [The oopWrapperQualified Set](#the-oopwrapperqualified-set)
-  - [The integerOopQualified Set](#the-integeroopqualified-set)
-  - [The floatOopQualified Set](#the-floatoopqualified-set)
-  - [The isOopWrapper Function](#the-isoopwrapper-function)
-- [Builtin Identifiers](#builtin-identifiers)
-- [Examples](#examples)
-  - [Primitive Declarations](#primitive-declarations)
-  - [Method Calls on Primitives](#method-calls-on-primitives-examples)
+    - [String Literals](#string-literals)
+    - [String Methods](#string-methods)
+    - [String Immutability](#string-immutability)
+  - [Void and None](#void-and-none)
+    - [Void](#void)
+    - [None](#none)
+    - [Void vs None](#void-vs-none)
+  - [Everything is an Object](#everything-is-an-object)
+    - [Method Calls on Literals](#method-calls-on-literals)
+    - [Integer Methods](#integer-methods)
+    - [Float Methods](#float-methods)
+    - [Zero-Cost Object Model](#zero-cost-object-model)
   - [Type Conversions](#type-conversions)
-  - [Practical Usage](#practical-usage)
+    - [The as Keyword](#the-as-keyword)
+    - [Numeric Widening](#numeric-widening)
+    - [Numeric Narrowing](#numeric-narrowing)
+    - [Conversion Methods](#conversion-methods)
+  - [Type Compatibility](#type-compatibility)
+    - [Assignment Rules](#assignment-rules)
+    - [Arithmetic Mixing](#arithmetic-mixing)
+    - [Comparison Compatibility](#comparison-compatibility)
+  - [Practical Examples](#practical-examples)
+    - [Working with Integers](#working-with-integers)
+    - [Working with Floats](#working-with-floats)
+    - [Working with Characters](#working-with-characters)
+    - [Mixed-Type Program](#mixed-type-program)
 
 ---
 
 ## Overview
 
-| Category | Types | LLVM Width |
-|---|---|---|
-| Signed integers | `I8`, `I16`, `I32`, `I64` | 8, 16, 32, 64 bits |
-| Unsigned integers | `U8`, `U16`, `U32`, `U64` | 8, 16, 32, 64 bits |
-| Floating-point | `F32`, `F64` | 32, 64 bits |
-| Boolean | `Boolean` | 1 bit (`i1`) |
-| Character | `Char` | 32 bits (`i32`) |
-| String | `String` | pointer (`ptr`) |
-| Void | `Void` | `void` |
-| None | `None` | null pointer (`ptr null`) |
+Uranite provides a rich set of primitive types that form the foundation of every program. Primitive types are value types: they are copied when assigned, passed by value to functions, and occupy fixed storage on the stack.
 
-Every primitive type exists in two forms: a low-level primitive kind (`Type::Kind::Integer`, `Type::Kind::Bool`, etc.) and an OOP wrapper class in `stdlibs/language/`. Both forms produce identical LLVM IR — the OOP wrapper carries no runtime cost.
+| Category | Types | Bit Widths |
+|---|---|---|
+| Signed integers | `I8`, `I16`, `I32`, `I64`, `Int`, `Integer`, `Long` | 8, 16, 32, 64 |
+| Unsigned integers | `U8`, `U16`, `U32`, `U64`, `UInt`, `Byte` | 8, 16, 32, 64 |
+| Floating-point | `F32`, `F64`, `Float`, `Double` | 32, 64 |
+| Boolean | `Boolean` | 1 |
+| Character | `Char` | 32 |
+| String | `String` | variable |
+| Void | `Void` | n/a |
+| None | `None` | n/a |
+
+Despite being primitives, every type in Uranite is an object. You can call methods directly on any primitive value, including literals. This "everything is an object" design carries zero runtime overhead — primitive method calls compile to native machine instructions with no heap allocation, no boxing, and no virtual dispatch.
 
 ---
 
-## Primitive Type Inventory
+## Signed Integer Types
 
-### Signed Integer Types
+Signed integers store whole numbers that can be positive, negative, or zero. Uranite provides four fixed-width signed integer types at 8, 16, 32, and 64 bits, plus three named types that map to specific widths.
 
-| Type Name | Bit Width | Range | Qualified Name | LLVM Type |
-|---|---|---|---|---|
-| `I8` | 8 | -128 to 127 | `uranite.language.i8.I8` | `i8` |
-| `I16` | 16 | -32,768 to 32,767 | `uranite.language.i16.I16` | `i16` |
-| `I32` | 32 | -2,147,483,648 to 2,147,483,647 | `uranite.language.i32.I32` | `i32` |
-| `I64` | 64 | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 | `uranite.language.i64.I64` | `i64` |
+### I8
 
-All integer literals default to `I64`. Smaller integer types require explicit type annotation or casting.
+An 8-bit signed integer. Stores values from **-128** to **127**.
 
-**Aliases for signed integers:**
+```uranite
+I8 temperature = -40
+I8 exitCode = 0
+I8 maxByte = 127
+```
 
-| Alias | Resolves To | Description |
-|---|---|---|
-| `Int` | `I64` | Default signed integer. |
-| `Integer` | `I32` | 32-bit signed integer. |
-| `Long` | `I64` | Explicit 64-bit signed integer. |
+Use `I8` when memory is constrained and values fit within the 8-bit range, such as raw byte-level protocol fields or small counters.
 
-### Unsigned Integer Types
+### I16
 
-| Type Name | Bit Width | Range | Qualified Name | LLVM Type |
-|---|---|---|---|---|
-| `U8` | 8 | 0 to 255 | `uranite.language.u8.U8` | `i8` |
-| `U16` | 16 | 0 to 65,535 | `uranite.language.u16.U16` | `i16` |
-| `U32` | 32 | 0 to 4,294,967,295 | `uranite.language.u32.U32` | `i32` |
-| `U64` | 64 | 0 to 18,446,744,073,709,551,615 | `uranite.language.u64.U64` | `i64` |
+A 16-bit signed integer. Stores values from **-32,768** to **32,767**.
 
-**Aliases for unsigned integers:**
+```uranite
+I16 portOffset = -1024
+I16 elevation = 8848
+I16 signalStrength = -72
+```
 
-| Alias | Resolves To | Description |
-|---|---|---|
-| `UInt` | `U64` | Default unsigned integer. |
-| `Byte` | `U8` | Single byte (unsigned 8-bit). |
+Use `I16` for medium-range values like audio samples, sensor readings, or network protocol fields.
 
-### Floating-Point Types
+### I32
 
-| Type Name | Bit Width | Precision | Qualified Name | LLVM Type |
-|---|---|---|---|---|
-| `F32` | 32 | ~7 decimal digits | `uranite.language.f32.F32` | `float` |
-| `F64` | 64 | ~15 decimal digits | `uranite.language.f64.F64` | `double` |
+A 32-bit signed integer. Stores values from **-2,147,483,648** to **2,147,483,647**.
 
-All float literals default to `F64`. `F32` requires explicit type annotation.
+```uranite
+I32 population = 1400000000
+I32 fileDescriptor = 3
+I32 errorCode = -1
+```
 
-**Aliases for floating-point types:**
+`I32` is the standard choice for general-purpose integer work when 64-bit range is unnecessary. Functions returning exit codes or error codes typically use `I32`, including `main()`.
 
-| Alias | Resolves To | Description |
-|---|---|---|
-| `Float` | `F64` | Default floating-point type. |
-| `Double` | `F64` | Explicit 64-bit float. |
+### I64
 
-### Boolean Type
+A 64-bit signed integer. Stores values from **-9,223,372,036,854,775,808** to **9,223,372,036,854,775,807**.
 
-| Type Name | Bit Width | Values | Qualified Name | LLVM Type |
-|---|---|---|---|---|
-| `Boolean` | 1 | `True`, `False` | `uranite.language.boolean.Boolean` | `i1` |
+```uranite
+I64 worldPopulation = 8000000000
+I64 nanoseconds = 1625000000000000000
+I64 fileSize = 4294967296
+```
 
-The boolean primitive is `uranite.builtin.bool`. The OOP wrapper `Boolean` is a `final` class.
+`I64` is the default integer type in Uranite. When you write an untyped integer literal, the compiler infers `I64`. This makes `I64` the workhorse type for most integer work — counters, indices, sizes, timestamps, and general arithmetic.
 
-### Character Type
+### Int
 
-| Type Name | Bit Width | Range | Qualified Name | LLVM Type |
-|---|---|---|---|---|
-| `Char` | 32 | Unicode scalar values (U+0000 to U+10FFFF) | `uranite.language.char.Char` | `i32` |
+A 64-bit signed integer. `Int` is the natural name for the most commonly used integer type.
 
-The character primitive is `uranite.builtin.char`. The OOP wrapper `Char` is a `final` class with classification and case conversion methods.
+```uranite
+Int count = 42
+Int total = count + 10
+```
 
-### String Type
+`Int` and `I64` are the same type at every level — declaration, assignment, method calls, and storage. You can use them interchangeably in any context. Most Uranite code uses `Int` for readability unless a specific bit width is important.
 
-| Type Name | Representation | Qualified Name | LLVM Type |
-|---|---|---|---|
-| `String` | Null-terminated UTF-8 byte sequence | `uranite.language.string.String` | `ptr` |
+### Integer
 
-Strings are immutable. The `String` OOP wrapper provides methods like `length()`, `concat()`, `contains()`, `toUpper()`, `toLower()`, `trim()`, `replace()`, `split()`, and `format()`.
+A 32-bit signed integer. `Integer` provides an explicit, readable name for 32-bit integer values.
 
-### Void and None Types
+```uranite
+Integer statusCode = 200
+Integer retryCount = 3
+```
 
-| Type Name | Meaning | Qualified Name | LLVM Type |
-|---|---|---|---|
-| `Void` | No return value | `uranite.language.none.NoneType` / `uranite.builtin.void` | `void` |
-| `None` | Absence of value | (singleton, no package) | `ptr null` |
+`Integer` and `I32` are the same type. Use whichever name reads better in context.
 
-`Void` indicates a function returns nothing. `None` is a literal representing "no value present" — it is assignable to optional types (`?T`) and produces a null pointer in LLVM IR. They serve different roles: `Void` is a return type annotation, `None` is a runtime value.
+### Long
+
+A 64-bit signed integer. `Long` provides an explicit name emphasizing the 64-bit width.
+
+```uranite
+Long bigNumber = 9223372036854775807
+Long timestamp = 1625000000000
+```
+
+`Long` and `I64` are the same type. Some developers prefer `Long` when the 64-bit width is semantically important rather than incidental.
+
+### Default Integer Inference
+
+When you write a bare integer literal without a type annotation, Uranite infers `I64`:
+
+```uranite
+function example() -> Void:
+    I64 explicit = 42
+    Int alsoExplicit = 42
+```
+
+Both declarations produce the same result. The literal `42` is always `I64` unless assigned to a variable with a different integer type annotation, in which case the compiler checks that the value fits within the target type's range.
 
 ---
 
-## Type Aliases
+## Unsigned Integer Types
 
-The type registry maps multiple names to the same underlying type. This means `Int`, `I64`, and `Long` all refer to the exact same `IntegerType(64, signed)` instance:
+Unsigned integers store non-negative whole numbers only. They provide a larger positive range than their signed counterparts of the same bit width, at the cost of not representing negative values.
 
-| Alias Group | Resolved Type | Bit Width |
-|---|---|---|
-| `Int`, `I64`, `Long` | `IntegerType(64, signed=true)` | 64 |
-| `Integer`, `I32` | `IntegerType(32, signed=true)` | 32 |
-| `UInt`, `U64` | `IntegerType(64, signed=false)` | 64 |
-| `Byte`, `U8` | `IntegerType(8, signed=false)` | 8 |
-| `Float`, `F64`, `Double` | `FloatType(64)` | 64 |
-| `Void`, `NoneType` | `VoidType` | 0 |
+### U8
 
-These aliases are registered in `primitivesTypes` during registry construction, pointing different names to the same `TypeSharedPointer` instance.
+An 8-bit unsigned integer. Stores values from **0** to **255**.
+
+```uranite
+U8 redChannel = 255
+U8 asciiCode = 65
+U8 bitmask = 0xFF
+```
+
+`U8` is the natural type for raw byte data — pixel channels, ASCII values, binary protocol bytes, and byte-level I/O buffers.
+
+### U16
+
+A 16-bit unsigned integer. Stores values from **0** to **65,535**.
+
+```uranite
+U16 portNumber = 8080
+U16 unicodePoint = 0x2764
+U16 packetLength = 1500
+```
+
+### U32
+
+A 32-bit unsigned integer. Stores values from **0** to **4,294,967,295**.
+
+```uranite
+U32 ipAddress = 0xC0A80001
+U32 colorArgb = 0xFF00FF00
+U32 filePermissions = 0o755
+```
+
+### U64
+
+A 64-bit unsigned integer. Stores values from **0** to **18,446,744,073,709,551,615**.
+
+```uranite
+U64 hashValue = 0xDEADBEEFCAFEBABE
+U64 memoryAddress = 0x7FFE00000000
+U64 uniqueIdentifier = 18446744073709551615
+```
+
+### UInt
+
+A 64-bit unsigned integer. `UInt` provides a readable name for the default unsigned integer type.
+
+```uranite
+UInt counter = 0
+UInt bufferSize = 4096
+```
+
+`UInt` and `U64` are the same type. Use `UInt` for general-purpose unsigned values where the specific bit width is not the focus.
+
+### Byte
+
+An 8-bit unsigned integer. `Byte` provides a semantically clear name for byte-level data.
+
+```uranite
+Byte rawByte = 0xAB
+Byte nullTerminator = 0
+```
+
+`Byte` and `U8` are the same type. `Byte` is preferred when working with raw binary data, byte buffers, or I/O operations, because the name communicates intent more clearly than `U8`.
+
+---
+
+## Floating-Point Types
+
+Floating-point types store real numbers with fractional parts. Uranite provides two IEEE 754 floating-point types at 32-bit and 64-bit precision, plus two named types.
+
+### F32
+
+A 32-bit single-precision floating-point number. Provides approximately **7 decimal digits** of precision.
+
+```uranite
+F32 temperature = 98.6
+F32 latitude = 37.7749
+F32 probability = 0.95
+```
+
+Use `F32` when memory is constrained and 7-digit precision is sufficient, such as graphics coordinates, audio samples, or large arrays of measurements. `F32` requires an explicit type annotation — float literals default to `F64`.
+
+### F64
+
+A 64-bit double-precision floating-point number. Provides approximately **15 decimal digits** of precision.
+
+```uranite
+F64 pi = 3.141592653589793
+F64 avogadro = 6.02214076e23
+F64 planck = 6.62607015e-34
+```
+
+`F64` is the default floating-point type. When you write a bare float literal, the compiler infers `F64`. Use `F64` for scientific computing, financial calculations (with care), and any context where precision matters.
+
+### Float
+
+A 64-bit double-precision floating-point number. `Float` provides the natural, readable name for the default floating-point type.
+
+```uranite
+Float velocity = 299792458.0
+Float gravity = 9.80665
+```
+
+`Float` and `F64` are the same type. Most Uranite code uses `Float` for readability unless a specific precision level is important.
+
+### Double
+
+A 64-bit double-precision floating-point number. `Double` provides an alternative name emphasizing double-precision.
+
+```uranite
+Double preciseResult = 1.7976931348623157e308
+Double tinyValue = 2.2250738585072014e-308
+```
+
+`Double` and `F64` are the same type.
+
+### Default Float Inference
+
+When you write a bare float literal without a type annotation, Uranite infers `F64`:
+
+```uranite
+function example() -> Void:
+    F64 explicit = 3.14
+    Float alsoExplicit = 3.14
+```
+
+Both produce the same result. To store a value as `F32`, you must provide an explicit type annotation:
+
+```uranite
+F32 singlePrecision = 3.14
+```
+
+### Special Float Values
+
+Floating-point arithmetic can produce special values defined by the IEEE 754 standard. Uranite handles these transparently:
+
+**Not-a-Number (NaN)** results from undefined operations like dividing zero by zero. NaN is never equal to anything, including itself:
+
+```uranite
+F64 undefined = 0.0 / 0.0
+Boolean isUndefined = undefined.isNaN()
+```
+
+**Infinity** results from dividing a non-zero number by zero or from overflow:
+
+```uranite
+F64 positiveInf = 1.0 / 0.0
+F64 negativeInf = -1.0 / 0.0
+Boolean isInf = positiveInf.isInfinite()
+```
+
+The `isFinite()` method returns `True` for normal numbers and `False` for NaN or infinity:
+
+```uranite
+F64 normal = 42.0
+Boolean normalIsFinite = normal.isFinite()
+```
+
+---
+
+## Boolean Type
+
+### Boolean Values
+
+`Boolean` is the truth value type. It has exactly two values: `True` and `False`. Note the capital letters — `true` and `false` are not valid in Uranite.
+
+```uranite
+Boolean isActive = True
+Boolean isDeleted = False
+```
+
+`Boolean` is a `final` class, meaning it cannot be extended or subclassed.
+
+### Boolean in Conditions
+
+`Boolean` values drive all conditional logic — `if`, `elif`, `while`, and `match` guards:
+
+```uranite
+Boolean hasPermission = True
+if hasPermission:
+    processRequest()
+
+Boolean keepRunning = True
+while keepRunning:
+    keepRunning = pollForShutdown()
+```
+
+Only `Boolean` values can appear as conditions. Uranite does not perform implicit truthiness conversion — integers, strings, and other types cannot be used directly as conditions. You must write explicit comparisons:
+
+```uranite
+I64 count = 0
+if count > 0:
+    processItems( count )
+
+String name = ""
+Boolean nameEmpty = name.isEmpty()
+if nameEmpty == False:
+    greet( name )
+```
+
+### Logical Operations
+
+Uranite uses the keyword operators `and`, `or`, and `not` for Boolean logic. The symbolic operators `&&`, `||`, and `!` do not exist in Uranite.
+
+```uranite
+Boolean canAccess = isAuthenticated and hasPermission
+Boolean shouldRetry = isTimeout or isTransient
+Boolean isInvalid = not isValid
+```
+
+**Important:** `and` and `or` evaluate both sides unconditionally. Unlike some languages where logical operators short-circuit (skip the right side if the left side determines the result), Uranite always evaluates both operands. This matters when the right-hand side has side effects:
+
+```uranite
+Boolean result = checkFirst() and checkSecond()
+```
+
+In this example, `checkSecond()` is always called, even if `checkFirst()` returns `False`.
+
+The `Boolean` class also provides method-based logical operations:
+
+```uranite
+Boolean active = True
+Boolean inactive = active.negate()
+Boolean conjunction = active.logicalAnd( inactive )
+Boolean disjunction = active.logicalOr( inactive )
+```
+
+---
+
+## Character Type
+
+### Character Literals
+
+`Char` represents a single Unicode character, stored as a 32-bit value. Character literals use single quotes:
+
+```uranite
+Char letter = 'A'
+Char digit = '7'
+Char newline = '\n'
+Char tab = '\t'
+Char backslash = '\\'
+Char singleQuote = '\''
+```
+
+`Char` covers the full Unicode scalar value range from U+0000 to U+10FFFF, so it can represent characters from any writing system.
+
+`Char` is a `final` class and cannot be subclassed.
+
+### Character Classification
+
+The `Char` class provides methods for testing what category a character belongs to:
+
+```uranite
+Char letter = 'A'
+Boolean isLetter = letter.isAlpha()
+Boolean isNumber = letter.isDigit()
+Boolean isBoth = letter.isAlphanumeric()
+Boolean isSpace = letter.isWhitespace()
+```
+
+`isAlpha()` returns `True` for letters `a`-`z` and `A`-`Z`. `isDigit()` returns `True` for digits `0`-`9`. `isAlphanumeric()` returns `True` if either `isAlpha()` or `isDigit()` would return `True`. `isWhitespace()` returns `True` for space, tab (`\t`), newline (`\n`), and carriage return (`\r`).
+
+### Case Conversion
+
+```uranite
+Char lower = 'a'
+Char upper = lower.toUpper()
+
+Char upperZ = 'Z'
+Char lowerZ = upperZ.toLower()
+```
+
+`toUpper()` converts lowercase ASCII letters to uppercase. `toLower()` converts uppercase ASCII letters to lowercase. Non-letter characters are returned unchanged by both methods.
+
+---
+
+## String Type
+
+### String Literals
+
+`String` represents an immutable sequence of characters. String literals use double quotes:
+
+```uranite
+String greeting = "hello, world"
+String empty = ""
+String withEscapes = "line one\nline two"
+String withQuote = "she said \"hello\""
+```
+
+Multi-line strings use triple double quotes:
+
+```uranite
+String multiLine = """
+    This is a multi-line string.
+    Indentation is preserved relative to the closing quotes.
+    """
+```
+
+### String Methods
+
+The `String` class provides a comprehensive set of methods for querying and transforming string data:
+
+**Length and emptiness:**
+
+```uranite
+String greeting = "hello"
+I64 size = greeting.length()
+Boolean empty = "".isEmpty()
+```
+
+**Searching:**
+
+```uranite
+String text = "hello world"
+Boolean found = text.contains( "world" )
+I64 position = text.indexOf( "ll" )
+Boolean starts = text.startsWith( "hel" )
+Boolean ends = text.endsWith( "llo" )
+```
+
+**Extracting:**
+
+```uranite
+String text = "hello"
+Char fifth = text.charAt( 4 )
+I64 code = text.charCodeAt( 0 )
+String sub = "hello world".substring( 0, 5 )
+```
+
+**Transforming:**
+
+```uranite
+String upper = "hello".toUpper()
+String lower = "HELLO".toLower()
+String trimmed = "  hello  ".trim()
+String replaced = "hello world".replace( "world", "uranite" )
+```
+
+**Concatenation:**
+
+```uranite
+String full = "hello" + " " + "world"
+String combined = "hello".concat( " world" )
+```
+
+The `+` operator and `concat()` method both produce a new string by joining two strings together.
+
+**Formatting:**
+
+```uranite
+I64 count = 42
+String message = "found {} items".format( count )
+```
+
+The `format()` method uses bare `{}` placeholders. Each `{}` is replaced by the string representation of the corresponding argument, in order.
+
+**Equality:**
+
+```uranite
+String strA = "hello"
+String strB = "hello"
+Boolean same = strA.equals( strB )
+```
+
+### String Immutability
+
+Strings in Uranite are immutable. Every method that appears to modify a string actually returns a new string, leaving the original unchanged:
+
+```uranite
+String original = "hello"
+String modified = original.toUpper()
+```
+
+After this code, `original` still holds `"hello"` and `modified` holds `"HELLO"`.
+
+---
+
+## Void and None
+
+### Void
+
+`Void` is the return type annotation for functions that produce no value. It is not a value you can store in a variable — it exists purely as a type-level marker:
+
+```uranite
+public function greet( String name ) -> Void:
+    puts( "hello, " + name )
+```
+
+You cannot assign `Void` to a variable or pass it as an argument. A function declared with `-> Void` simply returns without producing a result.
+
+### None
+
+`None` is a literal value representing "no value present." It is used with optional types (`?T`) to indicate the absence of a value:
+
+```uranite
+?String maybeName = None
+?I64 maybeCount = None
+```
+
+You can check whether an optional value is `None` using the `is` keyword:
+
+```uranite
+?String result = findUser( "alice" )
+if result is None:
+    puts( "user not found" )
+```
+
+### Void vs None
+
+`Void` and `None` serve fundamentally different purposes:
+
+- **`Void`** is a type. It appears only in function return type annotations (`-> Void`) and means "this function returns nothing."
+- **`None`** is a value. It appears in expressions and means "no value is present." It can be assigned to any optional type (`?T`).
+
+```uranite
+public function doWork() -> Void:
+    ?I64 result = computeIfPossible()
+    if result is None:
+        return
+    processResult( result )
+```
+
+In this example, `Void` marks the function's return type, while `None` is a runtime value compared against the optional variable.
 
 ---
 
 ## Everything is an Object
 
-### The OOP Wrapper Architecture
+Every primitive type in Uranite is an object with methods. There is no distinction between "primitive operations" and "method calls" — both compile to the same native machine instructions.
 
-Uranite follows the "everything is an object" philosophy. Every primitive type has a corresponding OOP wrapper class in `stdlibs/language/`. When you write `I64`, the semantic analyzer resolves it to the `I64` class — not a raw integer. This class has methods, a constructor, and participates in the type hierarchy.
+### Method Calls on Literals
 
-| Primitive Kind | OOP Wrapper Class | Stdlib File |
-|---|---|---|
-| `Integer(64, signed)` | `I64 extends Int` | `stdlibs/language/i64.urn` |
-| `Integer(32, signed)` | `I32 extends Int` | `stdlibs/language/i32.urn` |
-| `Integer(16, signed)` | `I16 extends Int` | `stdlibs/language/i16.urn` |
-| `Integer(8, signed)` | `I8 extends Int` | `stdlibs/language/i8.urn` |
-| `Integer(64, unsigned)` | `U64` | `stdlibs/language/u64.urn` |
-| `Integer(32, unsigned)` | `U32` | `stdlibs/language/u32.urn` |
-| `Integer(16, unsigned)` | `U16` | `stdlibs/language/u16.urn` |
-| `Integer(8, unsigned)` | `U8` / `Byte` | `stdlibs/language/u8.urn` / `byte.urn` |
-| `Float(64)` | `F64 extends Float` | `stdlibs/language/f64.urn` |
-| `Float(32)` | `F32 extends Float` | `stdlibs/language/f32.urn` |
-| `Bool` | `Boolean` (final) | `stdlibs/language/boolean.urn` |
-| `Char` | `Char` (final) | `stdlibs/language/char.urn` |
-| `String` | `String` | `stdlibs/language/string.urn` |
-
-The total set spans 24 stdlib files under `stdlibs/language/`, including base classes (`int.urn`, `float.urn`), aliases (`double.urn`, `integer.urn`, `long.urn`, `uint.urn`), and special types (`void.urn`, `none.urn`, `callable.urn`).
-
-### The Wrapper Class Hierarchy
-
-Integer and float wrappers form class hierarchies:
-
-**Integer hierarchy:**
-
-```
-Int (base)
-├── I8 extends Int
-├── I16 extends Int
-├── I32 extends Int
-└── I64 extends Int
-```
-
-The `Int` base class stores a `protect I64 value` field and provides methods shared by all signed integer types: `getValue()`, `toString()`, `abs()`, `negate()`, `add()`, `subtract()`, `multiply()`, `divide()`, `modulo()`, `equals()`, `compareTo()`, `lessThan()`, `greaterThan()`, `bitwiseAnd()`, `bitwiseOr()`, `bitwiseXor()`, `shiftLeft()`, `shiftRight()`, `bitwiseNot()`, `isZero()`, `isPositive()`, `isNegative()`, `min()`, `max()`, `hashCode()`, and conversion methods (`toI64()`, `toI32()`, `toFloat()`, `toDouble()`).
-
-**Float hierarchy:**
-
-```
-Float (base)
-├── F32 extends Float
-├── F64 extends Float
-└── Double extends Float
-```
-
-The `Float` base class stores a `protect F64 value` field and provides: `getValue()`, `toString()`, `abs()`, `negate()`, `add()`, `subtract()`, `multiply()`, `divide()`, `modulo()`, `equals()`, `compareTo()`, `lessThan()`, `greaterThan()`, `isNaN()`, `isInfinite()`, `isFinite()`, `floor()`, `ceil()`, `round()`, `sqrt()`, `power()`, `isZero()`, `isPositive()`, `isNegative()`, `hashCode()`, and conversion methods (`toI64()`, `toInt()`, `toFloat()`, `toDouble()`).
-
-### Method Calls on Primitives
-
-Because all primitives are objects, method calls work directly on literal values:
+You can call methods directly on literal values without storing them in a variable first:
 
 ```uranite
 String text = 42.toString()
-I64 absolute = (-15).abs()
 Boolean zero = 0.isZero()
-F64 rounded = 3.14159.round()
-Boolean digit = '7'.isDigit()
-Boolean empty = "".isEmpty()
-```
-
-The semantic analyzer resolves `42.toString()` by finding the `I64` class (since `42` is an integer literal typed as `I64`), locating the `toString()` method in its class hierarchy (inherited from `Int`), and type-checking the call. The codegen then emits native LLVM instructions — no method dispatch overhead occurs.
-
----
-
-## Zero-Cost Abstractions
-
-### The toLLVMType Mechanism
-
-The key to zero-cost OOP wrappers is the `MIRCodegen::toLLVMType()` function. When mapping a semantic type to an LLVM type, this function recognizes all OOP wrapper class names and maps them directly to their native LLVM types — bypassing any struct or pointer indirection.
-
-For a `Class` type kind, `toLLVMType()` checks the qualified name against every known OOP wrapper:
-
-| Qualified Name Match | LLVM Type Emitted |
-|---|---|
-| `uranite.language.i64.I64`, `uranite.language.int.Int`, `uranite.language.long.Long` | `i64` |
-| `uranite.language.i32.I32`, `uranite.language.integer.Integer` | `i32` |
-| `uranite.language.i16.I16` | `i16` |
-| `uranite.language.i8.I8`, `uranite.language.byte.Byte` | `i8` |
-| `uranite.language.u64.U64`, `uranite.language.uint.UInt` | `i64` |
-| `uranite.language.u32.U32` | `i32` |
-| `uranite.language.u16.U16` | `i16` |
-| `uranite.language.u8.U8` | `i8` |
-| `uranite.language.f32.F32` | `float` |
-| `uranite.language.f64.F64`, `uranite.language.float.Float`, `uranite.language.double.Double` | `double` |
-| `uranite.language.char.Char` | `i32` |
-| `uranite.language.boolean.Boolean` | `i1` |
-| `uranite.language.string.String` | `ptr` |
-| `uranite.builtin.Object` | `ptr` |
-| `uranite.language.none.NoneType`, Void variants | `void` |
-
-For any user-defined class that is **not** an OOP wrapper, `toLLVMType()` looks up an LLVM `StructType` by name and returns a pointer to it. Only OOP wrappers get the native-type shortcut.
-
-### OOP Wrapper Recognition
-
-Three helper functions in `qualnames.hpp` classify qualified names:
-
-**`isOopWrapper(qualified)`**: Returns `true` if the qualified name is in the `oopWrapperQualified` set. This set contains 22 entries: all integer wrappers (signed and unsigned), all float wrappers, `Boolean`, `Byte`, `Char`, `Double`, `Float`, `NoneType`, `String`, and `Void`.
-
-**`isIntegerOop(qualified)`**: Returns `true` if the qualified name is an integer OOP wrapper. The set contains 13 entries: `Int`, `I8`, `I16`, `I32`, `I64`, `Integer`, `Long`, `Byte`, `UInt`, `U8`, `U16`, `U32`, `U64`.
-
-**`isFloatOop(qualified)`**: Returns `true` if the qualified name is a float OOP wrapper. The set contains 4 entries: `Float`, `F32`, `F64`, `Double`.
-
-These functions are used throughout the compiler — in the semantic analyzer for type compatibility checks, in codegen for emission decisions, and in the borrow checker for determining value semantics.
-
-### No Boxing, No Heap Allocation
-
-When you write:
-
-```uranite
-I64 count = 42
-String text = count.toString()
-```
-
-The compiler generates:
-
-1. `count` is an `i64` constant `42` — a native 64-bit integer, not a heap-allocated object.
-2. `count.toString()` is intercepted by the codegen as a method call on an OOP wrapper. The codegen emits the `snprintf` conversion directly — no virtual dispatch, no vtable lookup, no object allocation.
-
-The result is identical to what a C compiler would produce for formatting an integer as a string. The OOP wrapper abstraction exists only during semantic analysis — it is completely erased by the time LLVM IR is emitted.
-
----
-
-## The Type Registry
-
-### Primitive Type Initialization
-
-The `Registry` constructor creates all primitive type instances:
-
-| Variable | Constructor | Kind |
-|---|---|---|
-| `booleanType` | `Type(Kind::Bool, "bool", "uranite.builtin", "uranite.builtin.bool")` | Bool |
-| `charType` | `Type(Kind::Char, "char", "uranite.builtin", "uranite.builtin.char")` | Char |
-| `stringType` | `Type(Kind::String, "str", "uranite.builtin", "uranite.builtin.str")` | String |
-| `voidType` | `Type(Kind::Void, "void", "uranite.builtin", "uranite.builtin.void")` | Void |
-| `integer8Type` | `IntegerType(8, true)` | Integer |
-| `integer16Type` | `IntegerType(16, true)` | Integer |
-| `integer32Type` | `IntegerType(32, true)` | Integer |
-| `integer64Type` | `IntegerType(64, true)` | Integer |
-| `unsigned8Type` | `IntegerType(8, false)` | Integer |
-| `unsigned16Type` | `IntegerType(16, false)` | Integer |
-| `unsigned32Type` | `IntegerType(32, false)` | Integer |
-| `unsigned64Type` | `IntegerType(64, false)` | Integer |
-| `float32Type` | `FloatType(32)` | Float |
-| `float64Type` | `FloatType(64)` | Float |
-| `objectType` | `ClassType("Object")` | Class |
-| `errorType` | `Type(Kind::Error, "<error>", "uranite.builtin", ...)` | Error |
-
-Each `IntegerType` stores its `bitWidth` and `isSigned` flag. Each `FloatType` stores its `bitWidth`. All are assigned the `uranite.builtin` package and their qualified primitive names.
-
-### The primitivesTypes Map
-
-After creating the type instances, the constructor populates the `primitivesTypes` hash map with 22 entries. Each entry maps an OOP wrapper class name to the corresponding primitive type instance:
-
-| Key (Class Name) | Value (Points To) |
-|---|---|
-| `"Boolean"` | `booleanType` |
-| `"Byte"` | `unsigned8Type` |
-| `"Char"` | `charType` |
-| `"Double"` | `float64Type` |
-| `"F32"` | `float32Type` |
-| `"F64"` | `float64Type` |
-| `"Float"` | `float64Type` |
-| `"I8"` | `integer8Type` |
-| `"I16"` | `integer16Type` |
-| `"I32"` | `integer32Type` |
-| `"I64"` | `integer64Type` |
-| `"Int"` | `integer64Type` |
-| `"Integer"` | `integer32Type` |
-| `"Long"` | `integer64Type` |
-| `"NoneType"` | `voidType` |
-| `"String"` | `stringType` |
-| `"U8"` | `unsigned8Type` |
-| `"U16"` | `unsigned16Type` |
-| `"U32"` | `unsigned32Type` |
-| `"U64"` | `unsigned64Type` |
-| `"UInt"` | `unsigned64Type` |
-| `"Void"` | `voidType` |
-
-This is the bridge between OOP class names and primitive types. When the semantic analyzer encounters the type name "I64" in source code, `lookupType("I64")` finds the entry in `primitivesTypes` and returns the `integer64Type` instance.
-
-### Lookup and Resolution
-
-The `lookupType(name)` method implements the dual-map search:
-
-1. Search `userTypesType` for a user-defined type matching the name.
-2. If not found, search `primitivesTypes` for a built-in primitive.
-3. If not found in either map, return `nullptr`.
-
-This order means user-defined types take precedence over primitives. If a user defines a class named "I64" (strongly discouraged), it shadows the primitive.
-
-### The isPrimitive Classification
-
-The `Type::isPrimitive()` method returns `true` for six type kinds:
-
-- `Kind::Void`
-- `Kind::Bool`
-- `Kind::Integer`
-- `Kind::Float`
-- `Kind::Char`
-- `Kind::String`
-
-This classification is used by the compiler for fast decisions about value semantics, storage requirements, and codegen strategy. Primitive types have value semantics (they are copied, not moved), occupy fixed storage, and emit as native LLVM types.
-
----
-
-## The OOP Wrapper Set
-
-### The oopWrapperQualified Set
-
-A static set of 22 fully-qualified names identifies all OOP wrappers:
-
-```
-Boolean, Byte, Char, Double, F32, F64, Float,
-I8, I16, I32, I64, Int, Integer, Long,
-NoneType, String,
-U8, U16, U32, U64, UInt, Void
-```
-
-### The integerOopQualified Set
-
-A subset of 13 entries identifies integer OOP wrappers:
-
-```
-Int, I8, I16, I32, I64, Integer, Long, Byte,
-UInt, U8, U16, U32, U64
-```
-
-### The floatOopQualified Set
-
-A subset of 4 entries identifies float OOP wrappers:
-
-```
-Float, F32, F64, Double
-```
-
-### The isOopWrapper Function
-
-```
-isOopWrapper(qualified)  → checks oopWrapperQualified set
-isIntegerOop(qualified)  → checks integerOopQualified set
-isFloatOop(qualified)    → checks floatOopQualified set
-```
-
-These O(1) lookups are used throughout the compiler to decide whether a class type should be treated as a primitive for codegen purposes.
-
----
-
-## Builtin Identifiers
-
-The `builtinIdentifiers()` set lists all type names that the compiler treats as built-in. These names are pre-registered and cannot be redefined by user code without shadowing:
-
-```
-I64, I32, I16, I8, U64, U32, U16, U8,
-Int, UInt, Float, Double, String, Boolean, Char, Void,
-Object, Memory, Byte, Bool,
-Args, Kwargs, Future, Generator,
-Error, Exception, Warning, Throwable, Traceback,
-ArithmeticError, ZeroDivisionError, OverflowError, UnderflowError,
-None, True, False
-```
-
-This set is used by the semantic analyzer to distinguish built-in type names from user-defined identifiers.
-
----
-
-## Examples
-
-### Primitive Declarations
-
-```uranite
-I8 small = 127
-I16 medium = 32767
-I32 standard = 2147483647
-I64 large = 9223372036854775807
-
-U8 byte = 255
-U16 port = 65535
-U32 color = 16777215
-U64 bigUnsigned = 18446744073709551615
-
-F32 precise = 3.14
-F64 doublePrecise = 3.141592653589793
-
-Boolean active = True
-Char letter = 'A'
-String greeting = "hello, world"
-```
-
-### Method Calls on Primitives {#method-calls-on-primitives-examples}
-
-```uranite
-String intText = 42.toString()
-I64 absolute = (-100).abs()
-Boolean zero = 0.isZero()
-Boolean positive = 42.isPositive()
-Boolean negative = (-1).isNegative()
-
-F64 rounded = 3.14159.round()
-F64 floored = 3.7.floor()
-F64 ceiled = 3.2.ceil()
-F64 root = 16.0.sqrt()
-Boolean nan = (0.0 / 0.0).isNaN()
-
 Boolean alpha = 'A'.isAlpha()
-Boolean digit = '5'.isDigit()
-Char upper = 'a'.toUpper()
-Char lower = 'Z'.toLower()
-
 Boolean empty = "".isEmpty()
-I64 length = "hello".length()
-String upper = "hello".toUpper()
 ```
 
-### Type Conversions
+This works because every literal is an instance of its type's wrapper class. The integer `42` is an `I64` object, the character `'A'` is a `Char` object, and so on.
+
+Negative literals require parentheses for method calls, because the minus sign binds loosely:
+
+```uranite
+I64 absolute = (-15).abs()
+```
+
+Float literals also support direct method calls:
+
+```uranite
+F64 rounded = 3.14159.round()
+```
+
+### Integer Methods
+
+All signed integer types (`I8`, `I16`, `I32`, `I64`, `Int`, `Integer`, `Long`) share these methods, inherited from the `Int` base class:
+
+| Method | Return Type | Description |
+|---|---|---|
+| `getValue()` | `I64` | Returns the underlying numeric value |
+| `toString()` | `String` | Returns the string representation |
+| `abs()` | `Int` | Returns the absolute value |
+| `negate()` | `Int` | Returns the value with sign inverted |
+| `add( Int other )` | `Int` | Returns the sum |
+| `subtract( Int other )` | `Int` | Returns the difference |
+| `multiply( Int other )` | `Int` | Returns the product |
+| `divide( Int other )` | `Int` | Returns the integer quotient |
+| `modulo( Int other )` | `Int` | Returns the remainder |
+| `equals( Int other )` | `Boolean` | Returns `True` if values are equal |
+| `compareTo( Int other )` | `I32` | Returns -1, 0, or 1 |
+| `min( Int other )` | `Int` | Returns the smaller value |
+| `max( Int other )` | `Int` | Returns the larger value |
+| `isZero()` | `Boolean` | Returns `True` if value is zero |
+| `isPositive()` | `Boolean` | Returns `True` if value is positive |
+| `isNegative()` | `Boolean` | Returns `True` if value is negative |
+| `bitwiseAnd( Int other )` | `Int` | Bitwise AND |
+| `bitwiseOr( Int other )` | `Int` | Bitwise OR |
+| `bitwiseXor( Int other )` | `Int` | Bitwise XOR |
+| `shiftLeft( Int amount )` | `Int` | Left bit shift |
+| `shiftRight( Int amount )` | `Int` | Right bit shift |
+| `toFloat()` | `F64` | Converts to floating-point |
+| `toDouble()` | `F64` | Converts to `F64` |
+
+Example using integer methods:
+
+```uranite
+I64 value = -42
+I64 absolute = value.abs()
+puts( absolute.toString() )
+Boolean isNeg = value.isNegative()
+puts( isNeg.toString() )
+String asText = value.toString()
+puts( asText )
+I32 comparison = value.compareTo( 0 )
+puts( comparison.toString() )
+```
+
+Bitwise operations example:
+
+```uranite
+I64 value = 1
+I64 shifted = value.shiftLeft( 4 )
+puts( shifted.toString() )
+I64 masked = shifted.bitwiseAnd( 0x0F )
+puts( masked.toString() )
+I64 ored = value.bitwiseOr( 14 )
+puts( ored.toString() )
+```
+
+### Float Methods
+
+All floating-point types (`F32`, `F64`, `Float`, `Double`) share these methods, inherited from the `Float` base class:
+
+| Method | Return Type | Description |
+|---|---|---|
+| `getValue()` | `F64` | Returns the underlying numeric value |
+| `toString()` | `String` | Returns the string representation |
+| `abs()` | `Float` | Returns the absolute value |
+| `negate()` | `Float` | Returns the value with sign inverted |
+| `add( Float other )` | `Float` | Returns the sum |
+| `subtract( Float other )` | `Float` | Returns the difference |
+| `multiply( Float other )` | `Float` | Returns the product |
+| `divide( Float other )` | `Float` | Returns the quotient |
+| `equals( Float other )` | `Boolean` | Returns `True` if values are equal |
+| `compareTo( Float other )` | `I32` | Returns -1, 0, or 1 |
+| `isNaN()` | `Boolean` | Returns `True` if value is Not-a-Number |
+| `isInfinite()` | `Boolean` | Returns `True` if value is infinity |
+| `isFinite()` | `Boolean` | Returns `True` if value is a normal number |
+| `floor()` | `Float` | Rounds down to nearest integer value |
+| `ceil()` | `Float` | Rounds up to nearest integer value |
+| `round()` | `Float` | Rounds to nearest integer value |
+| `sqrt()` | `Float` | Returns the square root |
+| `power( Float exponent )` | `Float` | Returns self raised to a power |
+| `toInt()` | `I64` | Converts to integer by truncation |
+| `toFloat()` | `F64` | Returns the value as `F64` |
+| `toDouble()` | `F64` | Returns the value as `F64` |
+
+Example using float methods:
+
+```uranite
+F64 value = 3.14159
+F64 rounded = value.round()
+puts( rounded.toString() )
+F64 floored = value.floor()
+puts( floored.toString() )
+I64 truncated = value.toInt()
+puts( truncated.toString() )
+F64 squareRoot = 144.0.sqrt()
+puts( squareRoot.toString() )
+```
+
+Checking for special values:
+
+```uranite
+F64 nan = 0.0 / 0.0
+Boolean isNan = nan.isNaN()
+puts( isNan.toString() )
+F64 inf = 1.0 / 0.0
+Boolean isInf = inf.isInfinite()
+puts( isInf.toString() )
+F64 normal = 42.0
+Boolean isFin = normal.isFinite()
+puts( isFin.toString() )
+```
+
+### Zero-Cost Object Model
+
+When you call a method on a primitive, Uranite does not create an object on the heap. There is no boxing, no wrapper allocation, and no virtual dispatch. The compiler recognizes primitive wrapper types and emits native machine instructions directly.
+
+For example, `42.toString()` compiles to a direct integer-to-string formatting instruction — the same code a low-level systems language would produce. The object model exists at the language level for expressiveness and consistency, but it is completely erased at compile time.
+
+This means you never need to choose between "efficient primitives" and "convenient objects." In Uranite, they are the same thing.
+
+---
+
+## Type Conversions
+
+### The as Keyword
+
+Uranite uses the `as` keyword for explicit type conversions between primitive types:
 
 ```uranite
 I64 intValue = 42
 F64 floatValue = intValue as F64
-
-I32 narrowed = intValue as I32
-I8 truncated = intValue as I8
+puts( floatValue.toString() )
 
 F64 pi = 3.14
-I64 truncatedPi = pi as I64
+I64 truncated = pi as I64
+puts( truncated.toString() )
 
 Char letter = 'A'
 I32 codePoint = letter as I32
-Char fromCode = 66 as Char
+puts( codePoint.toString() )
 
-I64 fromFloat = 3.14.toI64()
-F64 fromInt = 42.toDouble()
+I32 code = 66
+Char fromCode = code as Char
+puts( fromCode.toString() )
 ```
 
-### Practical Usage
+The `as` keyword performs the conversion at compile time, emitting the appropriate machine instruction for the conversion (integer extend, float truncate, etc.).
+
+### Numeric Widening
+
+Widening conversions move a value to a larger type that can represent all values of the original type without loss:
+
+```uranite
+I8 small = 42
+I16 medium = small as I16
+I32 standard = medium as I32
+I64 large = standard as I64
+
+F32 singlePrecision = 3.14
+F64 doublePrecision = singlePrecision as F64
+```
+
+Integer-to-float widening is also supported:
+
+```uranite
+I64 intValue = 42
+F64 floatValue = intValue as F64
+```
+
+Widening conversions are always safe — no data is lost.
+
+### Numeric Narrowing
+
+Narrowing conversions move a value to a smaller type. These can lose data if the value exceeds the target type's range:
+
+```uranite
+I64 large = 300
+I8 small = large as I8
+```
+
+In this example, the value 300 exceeds the `I8` range of -128 to 127. The result is truncated to the lower 8 bits, which produces a different value. Uranite performs the conversion without error — it is the programmer's responsibility to ensure the value fits.
+
+Float-to-integer narrowing truncates the fractional part:
+
+```uranite
+F64 pi = 3.99999
+I64 truncated = pi as I64
+```
+
+The result is `3`, not `4` — the fractional part is discarded, not rounded.
+
+### Conversion Methods
+
+Primitive objects also provide named conversion methods:
+
+```uranite
+I64 intValue = 42
+F64 asFloat = intValue.toFloat()
+F64 asDouble = intValue.toDouble()
+
+F64 floatValue = 3.14
+I64 asInt = floatValue.toInt()
+```
+
+These methods behave identically to the `as` keyword conversions.
+
+---
+
+## Type Compatibility
+
+### Assignment Rules
+
+Uranite enforces strict type safety for assignments. You cannot assign a value of one type to a variable of a different type without an explicit conversion:
+
+```uranite
+I64 count = 42
+I32 smaller = count as I32
+
+F64 ratio = 0.5
+I64 truncated = ratio as I64
+```
+
+Without the `as` keyword, these assignments would produce a compilation error. This strictness prevents accidental data loss from implicit narrowing conversions.
+
+There is one exception: assigning `None` to an optional type is always valid:
+
+```uranite
+?String name = None
+?I64 count = None
+```
+
+### Arithmetic Mixing
+
+Arithmetic operators (`+`, `-`, `*`, `/`, `%`) require both operands to be the same type. You cannot mix integer and float types in a single expression without explicit conversion:
+
+```uranite
+I64 count = 10
+F64 rate = 1.5
+F64 numerator = count as F64
+F64 result = numerator * rate
+```
+
+Similarly, you cannot mix different integer widths directly:
+
+```uranite
+I32 small = 10
+I64 large = 20
+I64 widened = small as I64
+I64 sum = widened + large
+```
+
+This design eliminates an entire class of subtle bugs caused by implicit promotion rules in other languages.
+
+### Comparison Compatibility
+
+Comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) follow the same rules as arithmetic — both operands must be the same type:
+
+```uranite
+I64 count = 42
+I64 limit = 100
+Boolean withinLimit = count < limit
+
+F64 temperature = 98.6
+F64 threshold = 100.0
+Boolean isFever = temperature >= threshold
+```
+
+The `is` keyword is a separate operator used for identity checks, particularly for `None`:
+
+```uranite
+?String value = getOptionalValue()
+if value is None:
+    handleMissing()
+```
+
+---
+
+## Practical Examples
+
+### Working with Integers
 
 ```uranite
 from uranite.io.console import puts
+
+public function factorial( I64 number ) -> I64:
+    if number <= 1:
+        return 1
+    return number * factorial( number - 1 )
 
 public function fibonacci( I64 count ) -> I64:
     if count <= 1:
@@ -522,15 +947,64 @@ public function fibonacci( I64 count ) -> I64:
         index = index + 1
     return current
 
-public function formatTemperature( F64 celsius ) -> String:
-    F64 fahrenheit = celsius * 1.8 + 32.0
-    String celsiusStr = celsius.toString()
-    String fahrenheitStr = fahrenheit.round().toString()
-    return celsiusStr + "C = " + fahrenheitStr + "F"
+public function main() -> I32:
+    I64 fact10 = factorial( 10 )
+    puts( "10! = " + fact10.toString() )
+
+    I64 fib20 = fibonacci( 20 )
+    puts( "fib(20) = " + fib20.toString() )
+
+    I64 value = -42
+    I64 absolute = value.abs()
+    puts( "abs(-42) = " + absolute.toString() )
+    Boolean isNeg = value.isNegative()
+    puts( "isNegative = " + isNeg.toString() )
+
+    return 0
+```
+
+### Working with Floats
+
+```uranite
+from uranite.io.console import puts
+
+public function celsiusToFahrenheit( F64 celsius ) -> F64:
+    return celsius * 1.8 + 32.0
+
+public function main() -> I32:
+    F64 boiling = celsiusToFahrenheit( 100.0 )
+    puts( boiling.toString() + "F" )
+
+    F64 freezing = celsiusToFahrenheit( 0.0 )
+    puts( freezing.toString() + "F" )
+
+    F64 pi = 3.14159
+    F64 floored = pi.floor()
+    puts( "floor(pi) = " + floored.toString() )
+    F64 ceiled = pi.ceil()
+    puts( "ceil(pi) = " + ceiled.toString() )
+    F64 rounded = pi.round()
+    puts( "round(pi) = " + rounded.toString() )
+
+    F64 nan = 0.0 / 0.0
+    Boolean isNan = nan.isNaN()
+    puts( "isNaN = " + isNan.toString() )
+    Boolean isFin = nan.isFinite()
+    puts( "isFinite = " + isFin.toString() )
+
+    return 0
+```
+
+### Working with Characters
+
+```uranite
+from uranite.io.console import puts
 
 public function classifyCharacter( Char character ) -> String:
     if character.isAlpha():
-        if character.isAlpha() and character >= 'A' and character <= 'Z':
+        Char upper = character.toUpper()
+        Char original = character.getValue()
+        if upper.getValue() == original.getValue():
             return "uppercase letter"
         return "lowercase letter"
     if character.isDigit():
@@ -540,19 +1014,61 @@ public function classifyCharacter( Char character ) -> String:
     return "symbol"
 
 public function main() -> I32:
-    I64 fib10 = fibonacci( 10 )
-    puts( fib10.toString() )
+    Char testChar = 'Z'
+    String classification = classifyCharacter( testChar )
+    puts( testChar.toString() + " is a " + classification )
 
-    String temp = formatTemperature( 100.0 )
-    puts( temp )
-
-    String kind = classifyCharacter( 'Z' )
-    puts( kind )
-
-    Boolean isLarge = fib10.isPositive() and fib10 > 50
-    puts( isLarge.toString() )
+    Char lower = 'a'
+    Char upper = lower.toUpper()
+    puts( lower.toString() + " -> " + upper.toString() )
 
     return 0
 ```
 
-This example demonstrates integer method calls (`toString()`, `isPositive()`), float method calls (`round()`, `toString()`), character classification (`isAlpha()`, `isDigit()`, `isWhitespace()`), boolean method calls (`toString()`), and type conversions — all compiled to native LLVM instructions with zero overhead from the OOP wrapper layer.
+### Mixed-Type Program
+
+```uranite
+from uranite.io.console import puts
+
+public function formatPercentage( I64 numerator, I64 denominator ) -> String:
+    F64 numeratorFloat = numerator as F64
+    F64 denominatorFloat = denominator as F64
+    F64 ratio = numeratorFloat / denominatorFloat
+    F64 percentage = ratio * 100.0
+    F64 rounded = percentage.round()
+    String text = rounded.toString()
+    return text + "%"
+
+public function formatTemperature( F64 celsius ) -> String:
+    F64 fahrenheit = celsius * 1.8 + 32.0
+    F64 rounded = fahrenheit.round()
+    String celsiusText = celsius.toString()
+    String fahrenheitText = rounded.toString()
+    return celsiusText + "C = " + fahrenheitText + "F"
+
+public function countDigits( String text ) -> I64:
+    I64 digitCount = 0
+    I64 index = 0
+    while index < text.length():
+        Char character = text.charAt( index )
+        if character.isDigit():
+            digitCount = digitCount + 1
+        index = index + 1
+    return digitCount
+
+public function main() -> I32:
+    puts( formatPercentage( 42, 100 ) )
+    puts( formatPercentage( 1, 3 ) )
+
+    puts( formatTemperature( 0.0 ) )
+    puts( formatTemperature( 100.0 ) )
+    puts( formatTemperature( 37.0 ) )
+
+    String sample = "abc123def456"
+    I64 digits = countDigits( sample )
+    puts( "digits in '" + sample + "': " + digits.toString() )
+
+    return 0
+```
+
+This program demonstrates explicit type conversions with `as`, method calls on primitives (`toString()`, `round()`, `isDigit()`, `charAt()`), string operations (`length()`, concatenation), and mixing integer and float types safely through explicit conversion. Every function stores method call results in intermediate variables before further use — this is the recommended pattern in Uranite.
