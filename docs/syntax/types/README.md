@@ -288,9 +288,10 @@ The `Dog` value is assigned to an `Animal` variable because `Dog` extends `Anima
 | `Char` | 32-bit Unicode character | `Char letter = 'A'` |
 | `String` | Immutable UTF-8 string | `String name = "hello"` |
 | `Void` | No return value | `-> Void` |
-| `None` | Absence of value | `?String empty = None` |
+| `None` | Absence of value | `?String empty = None` or `Optional<String> empty = None` |
 | `Memory<T>` | Raw heap-allocated array | `Memory<I64> buf = [1, 2, 3]` |
 | `?T` | Optional type (may be `None`) | `?String maybe = None` |
+| `Optional<T>` | Optional type (may be `None`) | `Optional<String> maybe = None` |
 | `ArrayList<E>` | Dynamic list | `ArrayList<I64> list = new ArrayList<>()` |
 | `HashMap<K, V>` | Key-value map | `HashMap<String, I64> map = new HashMap<>()` |
 | `HashSet<E>` | Unique element set | `HashSet<String> set = new HashSet<>()` |

@@ -1,633 +1,907 @@
 # Floating-Point Types
 
-Uranite provides two floating-point types: `F32` (single-precision, 32-bit) and `F64` (double-precision, 64-bit). All floating-point literals default to `F64`. Floating-point arithmetic follows the IEEE 754 standard, with special values (`NaN`, `Infinity`, `-Infinity`) handled natively by the LLVM backend. Like all primitive types, floating-point values carry zero-cost OOP wrappers with builtin methods that compile to LLVM intrinsics — no function calls, no heap allocation, no virtual dispatch.
-
-This document covers the complete floating-point type inventory, LLVM representation, IEEE 754 compliance and special value semantics, arithmetic with compile-time constant folding, comparison predicates, casting between float widths and between float and integer, and the full set of builtin methods emitted as LLVM intrinsics.
-
 ---
 
 ## Table of Contents
 
-- [Floating-Point Type Inventory](#floating-point-type-inventory)
+- [Floating-Point Types](#floating-point-types)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
   - [F32](#f32)
   - [F64](#f64)
-  - [Aliases](#aliases)
-- [LLVM Representation](#llvm-representation)
-  - [Type Mapping](#type-mapping)
-  - [The FloatType Struct](#the-floattype-struct)
-  - [Memory Layout and Alignment](#memory-layout-and-alignment)
-- [IEEE 754 Compliance](#ieee-754-compliance)
-  - [Representation Format](#representation-format)
+  - [Float](#float)
+  - [Double](#double)
+  - [Default Float Inference](#default-float-inference)
+  - [Precision and Range](#precision-and-range)
+  - [Float Literals](#float-literals)
+    - [Decimal Notation](#decimal-notation)
+    - [Scientific Notation](#scientific-notation)
+    - [Negative Literals](#negative-literals)
+  - [Arithmetic Operations](#arithmetic-operations)
+    - [Basic Arithmetic](#basic-arithmetic)
+    - [Compound Assignment](#compound-assignment)
+    - [Unary Negation](#unary-negation)
+    - [Division by Zero](#division-by-zero)
   - [Special Values](#special-values)
-  - [NaN Semantics](#nan-semantics)
-  - [Infinity Semantics](#infinity-semantics)
-  - [Division by Zero](#division-by-zero)
-- [Arithmetic Semantics](#arithmetic-semantics)
-  - [Basic Arithmetic Operations](#basic-arithmetic-operations)
-  - [Compile-Time Constant Folding](#compile-time-constant-folding)
-  - [Mixed-Type Operand Coercion](#mixed-type-operand-coercion)
-  - [Negation](#negation)
-- [Comparison Semantics](#comparison-semantics)
-  - [Ordered Comparisons](#ordered-comparisons)
-  - [NaN in Comparisons](#nan-in-comparisons)
-  - [Mixed Float-Integer Comparisons](#mixed-float-integer-comparisons)
-- [Casting and Type Coercion](#casting-and-type-coercion)
-  - [Float Widening (F32 to F64)](#float-widening-f32-to-f64)
-  - [Float Narrowing (F64 to F32)](#float-narrowing-f64-to-f32)
-  - [Integer to Float](#integer-to-float)
-  - [Float to Integer](#float-to-integer)
-  - [Implicit Store Coercion](#implicit-store-coercion)
-- [Assignability Rules](#assignability-rules)
-  - [Float-to-Float Assignability](#float-to-float-assignability)
-  - [Integer-to-Float Assignability](#integer-to-float-assignability)
-  - [Float-to-Integer Assignability](#float-to-integer-assignability)
-  - [OOP Wrapper Assignability](#oop-wrapper-assignability)
-- [Builtin Methods](#builtin-methods)
-  - [Classification Methods](#classification-methods)
+    - [NaN (Not a Number)](#nan-not-a-number)
+    - [Infinity](#infinity)
+    - [Negative Zero](#negative-zero)
+    - [Detecting Special Values](#detecting-special-values)
+    - [NaN Propagation](#nan-propagation)
+    - [Infinity Arithmetic](#infinity-arithmetic)
+  - [Comparison Behavior](#comparison-behavior)
+    - [Standard Comparisons](#standard-comparisons)
+    - [NaN in Comparisons](#nan-in-comparisons)
+    - [Comparing with Equality Methods](#comparing-with-equality-methods)
   - [Rounding Methods](#rounding-methods)
+    - [Floor](#floor)
+    - [Ceil](#ceil)
+    - [Round](#round)
+    - [Rounding Negative Values](#rounding-negative-values)
   - [Mathematical Methods](#mathematical-methods)
-  - [Arithmetic Methods](#arithmetic-methods)
-  - [Comparison Methods](#comparison-methods)
-  - [Conversion Methods](#conversion-methods)
-- [The OOP Wrapper Hierarchy](#the-oop-wrapper-hierarchy)
-  - [Float Base Class](#float-base-class)
-  - [F32 Wrapper](#f32-wrapper)
-  - [F64 Wrapper](#f64-wrapper)
-  - [Double Wrapper](#double-wrapper)
-- [Examples](#examples)
-  - [Declarations and Literals](#declarations-and-literals)
-  - [Special Value Handling](#special-value-handling)
-  - [Rounding and Math](#rounding-and-math)
-  - [Casting Between Types](#casting-between-types)
-  - [Practical Usage](#practical-usage)
+    - [Absolute Value](#absolute-value)
+    - [Square Root](#square-root)
+    - [Exponentiation](#exponentiation)
+    - [Sign Inversion](#sign-inversion)
+  - [Type Casting](#type-casting)
+    - [F32 to F64 Widening](#f32-to-f64-widening)
+    - [F64 to F32 Narrowing](#f64-to-f32-narrowing)
+    - [Integer to Float](#integer-to-float)
+    - [Float to Integer](#float-to-integer)
+  - [Float Methods Reference](#float-methods-reference)
+    - [Classification Methods](#classification-methods)
+    - [Arithmetic Methods](#arithmetic-methods)
+    - [Comparison Methods](#comparison-methods)
+    - [Rounding and Math Methods](#rounding-and-math-methods)
+    - [Conversion Methods](#conversion-methods)
+    - [Calling Methods on Literals](#calling-methods-on-literals)
+  - [Practical Examples](#practical-examples)
+    - [Distance Calculation](#distance-calculation)
+    - [Temperature Conversion](#temperature-conversion)
+    - [Safe Division](#safe-division)
+    - [Statistical Average](#statistical-average)
 
 ---
 
-## Floating-Point Type Inventory
+## Overview
 
-### F32
+Uranite provides two floating-point types conforming to the IEEE 754 standard: `F32` (single-precision, 32-bit) and `F64` (double-precision, 64-bit). Two named types — `Float` and `Double` — provide readable alternatives for `F64`.
 
-32-bit single-precision floating-point. Approximately 7 decimal digits of precision. LLVM type: `float`. OOP wrapper class: `final class F32 extends Float` in `stdlibs/language/f32.urn`. Qualified name: `uranite.language.f32.F32`.
+| Type | Bit Width | Decimal Digits | Approximate Range |
+|---|---|---|---|
+| `F32` | 32 | ~7 | ±3.4 x 10^38 |
+| `F64` / `Float` / `Double` | 64 | ~15 | ±1.8 x 10^308 |
 
-The `F32` constructor widens its parameter to `F64` internally (`self.value = value as F64`) because the `Float` base class stores a `protect F64 value` field for uniform arithmetic.
+Floating-point types store real numbers with fractional parts. They are essential for scientific computing, geometry, physics simulations, financial calculations, signal processing, and any domain that works with continuous values.
 
-### F64
-
-64-bit double-precision floating-point. Approximately 15 decimal digits of precision. LLVM type: `double`. OOP wrapper class: `final class F64 extends Float` in `stdlibs/language/f64.urn`. Qualified name: `uranite.language.f64.F64`.
-
-This is the default floating-point type. All undecorated float literals (e.g., `3.14`, `2.718`) are typed as `F64`.
-
-### Aliases
-
-| Alias | Resolves To | Qualified Name |
-|---|---|---|
-| `Float` | `F64` (64-bit) | `uranite.language.float.Float` |
-| `Double` | `F64` (64-bit) | `uranite.language.double.Double` |
-
-Both `Float` and `Double` resolve to the same `FloatType(64)` instance in the type registry. `Float` is the base class in the OOP wrapper hierarchy, and `Double` is a `final class` extending `Float`.
+Like all primitive types in Uranite, floating-point values are objects with methods — you can call `floor()`, `sqrt()`, `isNaN()` and more on any float value, including literals. These method calls compile to native hardware instructions with zero runtime overhead.
 
 ---
 
-## LLVM Representation
+## F32
 
-### Type Mapping
+A 32-bit single-precision floating-point number. Provides approximately **7 decimal digits** of precision.
 
-| Uranite Type | LLVM IR Type | C Equivalent |
-|---|---|---|
-| `F32` | `float` | `float` |
-| `F64`, `Float`, `Double` | `double` | `double` |
-
-The `toLLVMType()` function in `MIRCodegen` maps `Type::Kind::Float` using the `bitWidth` field:
-
-```
-bitWidth 32  → llvm::Type::getFloatTy(context)
-bitWidth 64  → llvm::Type::getDoubleTy(context)
+```uranite
+F32 temperature = 98.6
+F32 latitude = 37.7749
+F32 probability = 0.95
 ```
 
-For OOP wrapper class types, `toLLVMType()` recognizes qualified names and maps directly:
+`F32` uses less memory than `F64` (4 bytes vs 8 bytes) but sacrifices precision. Use `F32` when memory is constrained and 7-digit precision is sufficient, such as graphics coordinates, audio samples, or large arrays of measurements.
 
-| Qualified Name | LLVM Type |
-|---|---|
-| `uranite.language.f32.F32` | `float` |
-| `uranite.language.f64.F64` | `double` |
-| `uranite.language.float.Float` | `double` |
-| `uranite.language.double.Double` | `double` |
+`F32` requires an explicit type annotation — float literals default to `F64`.
 
-### The FloatType Struct
-
-The compiler represents floating-point types internally using the `FloatType` struct, defined in `src/uranite/semantic/typeref.hpp`:
-
-```
-struct FloatType : Type
-    int bitWidth       — precision in bits (32 or 64)
-```
-
-The constructor auto-generates the type name: `"f"` followed by the bit count. `FloatType(32)` creates `"f32"`, and `FloatType(64)` creates `"f64"`. Unlike `IntegerType`, there is no signedness field — IEEE 754 floats are always signed.
-
-### Memory Layout and Alignment
-
-| Type | Storage Size | Typical Alignment (x86-64) |
-|---|---|---|
-| `F32` | 4 bytes | 4 bytes |
-| `F64` | 8 bytes | 8 bytes |
-
-`F32` uses the IEEE 754 binary32 format: 1 sign bit, 8 exponent bits, 23 mantissa bits. `F64` uses the IEEE 754 binary64 format: 1 sign bit, 11 exponent bits, 52 mantissa bits.
+`F32` is a `final` class and cannot be subclassed.
 
 ---
 
-## IEEE 754 Compliance
+## F64
 
-### Representation Format
+A 64-bit double-precision floating-point number. Provides approximately **15 decimal digits** of precision.
 
-Uranite's floating-point types directly use IEEE 754 representation through LLVM. No custom floating-point format is employed — all arithmetic, comparison, and special value behavior follows the IEEE 754 standard as implemented by the target hardware.
+```uranite
+F64 pi = 3.141592653589793
+F64 avogadro = 6.022e23
+F64 planck = 1.6e-19
+```
 
-| Property | F32 (binary32) | F64 (binary64) |
+`F64` is the default floating-point type. When you write a bare float literal without a type annotation, the compiler infers `F64`. Use `F64` for scientific computing and any context where precision matters.
+
+`F64` is a `final` class and cannot be subclassed.
+
+---
+
+## Float
+
+A 64-bit double-precision floating-point number. `Float` provides the natural, readable name for the default floating-point type.
+
+```uranite
+Float velocity = 299792458.0
+Float gravity = 9.80665
+```
+
+`Float` and `F64` are the same type at every level — declaration, assignment, method calls, and storage. Most Uranite code uses `Float` for readability unless a specific precision level is important.
+
+---
+
+## Double
+
+A 64-bit double-precision floating-point number. `Double` provides an alternative name emphasizing double-precision.
+
+```uranite
+Double preciseResult = 1.7976931e308
+Double tinyValue = 2.225e-308
+```
+
+`Double` and `F64` are the same type. `Double` is a `final` class.
+
+---
+
+## Default Float Inference
+
+When you write a bare float literal without a type annotation, Uranite always infers `F64`:
+
+```uranite
+function example() -> Void:
+    F64 explicit = 3.14
+    Float alsoExplicit = 3.14
+```
+
+Both produce identical results. To store a value as `F32`, you must provide an explicit type annotation:
+
+```uranite
+F32 singlePrecision = 3.14
+```
+
+---
+
+## Precision and Range
+
+Floating-point types represent real numbers using a sign bit, an exponent, and a mantissa (significand). This representation can express very large and very small values, but with limited precision.
+
+| Property | F32 | F64 |
 |---|---|---|
 | Sign bits | 1 | 1 |
 | Exponent bits | 8 | 11 |
 | Mantissa bits | 23 | 52 |
-| Exponent bias | 127 | 1023 |
 | Decimal digits of precision | ~7 | ~15 |
-| Maximum value | ~3.4028235 x 10^38 | ~1.7976931 x 10^308 |
-| Minimum positive normal | ~1.1754944 x 10^-38 | ~2.2250739 x 10^-308 |
-| Minimum positive subnormal | ~1.4 x 10^-45 | ~5.0 x 10^-324 |
+| Maximum value | ~3.4 x 10^38 | ~1.8 x 10^308 |
+| Minimum positive normal | ~1.2 x 10^-38 | ~2.2 x 10^-308 |
 
-### Special Values
+**Precision limits** mean that not all decimal values can be represented exactly. For example, `0.1` has no exact binary floating-point representation — it is stored as the closest representable value, which introduces a tiny rounding error. This is inherent to all IEEE 754 floating-point systems, not specific to Uranite.
 
-IEEE 754 defines three categories of special values, all fully supported by Uranite:
+When comparing floating-point values, be aware that accumulated rounding errors can cause seemingly identical calculations to produce slightly different results. For exact equality checks, consider comparing within a tolerance range rather than using `==` directly.
 
-**Positive and negative zero:** `+0.0` and `-0.0` are distinct bit patterns but compare as equal (`+0.0 == -0.0` is `True`).
+---
 
-**Infinity:** `+Infinity` and `-Infinity` result from overflow or division by zero. They propagate through arithmetic: `Infinity + 1.0` remains `Infinity`.
+## Float Literals
 
-**NaN (Not a Number):** Results from undefined operations like `0.0 / 0.0` or `sqrt(-1.0)`. NaN propagates through all arithmetic and poisons comparisons.
+### Decimal Notation
 
-### NaN Semantics
+Float literals require at least one digit on each side of the decimal point:
 
-NaN follows IEEE 754 rules:
+```uranite
+F64 pi = 3.14159
+F64 half = 0.5
+F64 whole = 42.0
+F64 tiny = 0.001
+```
 
-- NaN is not equal to anything, including itself: `NaN == NaN` is `False`.
-- NaN is not less than, greater than, or equal to any value.
-- Any arithmetic operation involving NaN produces NaN.
-- `isNaN()` detects NaN via the self-inequality property.
+The decimal point distinguishes float literals from integer literals. The literal `42` is an `I64`, while `42.0` is an `F64`.
 
-The codegen implements `isNaN()` using `CreateFCmpUNO(self, self)` — an **unordered** comparison that returns `true` when either operand is NaN. Since both operands are the same value, this returns `true` only when the value is NaN.
+### Scientific Notation
 
-### Infinity Semantics
+Scientific notation uses `e` or `E` to specify a power of ten:
 
-Infinity follows IEEE 754 rules:
+```uranite
+F64 avogadro = 6.022e23
+F64 electron = 1.6e-19
+F64 speed = 2.998e8
+```
 
-- `Infinity + Infinity` = `Infinity`
-- `Infinity - Infinity` = `NaN`
-- `Infinity * 0.0` = `NaN`
-- `Infinity / Infinity` = `NaN`
-- `1.0 / Infinity` = `0.0`
-- `-Infinity < Infinity` is `True`
+The notation `6.022e23` means 6.022 × 10^23. A negative exponent (`e-19`) produces very small values. Scientific notation is useful for very large or very small values that would be unwieldy in decimal form.
 
-The codegen implements `isInfinite()` by computing `fabs(self) == +Infinity`:
+Note that the compiler's `toString()` method may display large or small values in scientific notation:
 
-1. `CreateUnaryIntrinsic(llvm::Intrinsic::fabs, self)` — takes absolute value.
-2. `ConstantFP::getInfinity(primitiveType)` — creates the `+Infinity` constant.
-3. `CreateFCmpOEQ(absVal, inf)` — ordered comparison returns `true` for both `+Infinity` and `-Infinity`.
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 large = 299792458.0
+    puts( large.toString() )
+    return 0
+```
+
+This outputs `2.99792e+08` — the runtime chooses the most compact representation.
+
+### Negative Literals
+
+Negative float literals use the unary minus operator:
+
+```uranite
+F64 freezing = -273.15
+F64 depth = -10994.0
+```
+
+---
+
+## Arithmetic Operations
+
+### Basic Arithmetic
+
+Uranite provides four arithmetic operators for floating-point values:
+
+| Operator | Operation | Example |
+|---|---|---|
+| `+` | Addition | `10.5 + 3.2` produces `13.7` |
+| `-` | Subtraction | `10.5 - 3.2` produces `7.3` |
+| `*` | Multiplication | `10.5 * 3.2` produces `33.6` |
+| `/` | Division | `10.5 / 3.2` produces `3.28125` |
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 valueA = 10.5
+    F64 valueB = 3.2
+    F64 sum = valueA + valueB
+    puts( "sum: " + sum.toString() )
+    F64 difference = valueA - valueB
+    puts( "diff: " + difference.toString() )
+    F64 product = valueA * valueB
+    puts( "product: " + product.toString() )
+    F64 quotient = valueA / valueB
+    puts( "quotient: " + quotient.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+sum: 13.7
+diff: 7.3
+product: 33.6
+quotient: 3.28125
+```
+
+There is no modulo (`%`) operator for floating-point types. If you need the remainder of a float division, compute it manually: `remainder = dividend - (dividend / divisor).floor() * divisor`.
+
+Both operands must be the same floating-point type. To combine a float with an integer, use the `as` keyword to convert the integer to a float first (see [Integer to Float](#integer-to-float)).
+
+### Compound Assignment
+
+Compound assignment operators combine an arithmetic operation with assignment:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 value = 10.0
+    value += 5.5
+    puts( value.toString() )
+    value -= 3.0
+    puts( value.toString() )
+    value *= 2.0
+    puts( value.toString() )
+    value /= 4.0
+    puts( value.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+15.5
+12.5
+25
+6.25
+```
+
+### Unary Negation
+
+The unary minus operator `-` inverts the sign of a floating-point value:
+
+```uranite
+F64 positive = 42.5
+F64 negative = -positive
+```
+
+Negation handles all special values correctly: `-0.0` becomes `0.0`, negating infinity flips its sign, and negating NaN remains NaN.
 
 ### Division by Zero
 
-Floating-point division by zero does **not** trap or throw an exception. Following IEEE 754:
+Unlike integer division, floating-point division by zero is well-defined and does not crash the program:
 
-- `1.0 / 0.0` produces `+Infinity`.
-- `-1.0 / 0.0` produces `-Infinity`.
-- `0.0 / 0.0` produces `NaN`.
+```uranite
+from uranite.io.console import puts
 
-The codegen uses `CreateFDiv` for float division, which maps directly to the hardware `fdiv` instruction. The hardware handles the special cases per IEEE 754 — no guard code is inserted.
+public function main() -> I32:
+    F64 positiveInf = 1.0 / 0.0
+    Boolean isInf = positiveInf.isInfinite()
+    puts( "1.0 / 0.0 isInfinite: " + isInf.toString() )
+    F64 negativeInf = -1.0 / 0.0
+    Boolean isNegInf = negativeInf.isInfinite()
+    puts( "-1.0 / 0.0 isInfinite: " + isNegInf.toString() )
+    F64 nan = 0.0 / 0.0
+    Boolean isNan = nan.isNaN()
+    puts( "0.0 / 0.0 isNaN: " + isNan.toString() )
+    return 0
+```
 
-This contrasts with integer division, where dividing by zero causes undefined behavior (typically SIGFPE). Float division by zero is always well-defined.
+This outputs:
 
----
+```
+1.0 / 0.0 isInfinite: True
+-1.0 / 0.0 isInfinite: True
+0.0 / 0.0 isNaN: True
+```
 
-## Arithmetic Semantics
-
-### Basic Arithmetic Operations
-
-Floating-point arithmetic maps to dedicated MIR instruction kinds, which the codegen emits as LLVM IR instructions:
-
-| Uranite Operator | MIR Instruction | LLVM IR Instruction | Label |
-|---|---|---|---|
-| `+` | `AddFloat` | `CreateFAdd` | `"add.f"` |
-| `-` | `SubtractFloat` | `CreateFSub` | `"sub.f"` |
-| `*` | `MultiplyFloat` | `CreateFMul` | `"mul.f"` |
-| `/` | `DivideFloat` | `CreateFDiv` | `"div.f"` |
-
-All float arithmetic follows IEEE 754 rounding rules (round-to-nearest, ties-to-even by default). No fast-math flags are set — the compiler does not enable `-ffast-math` style optimizations that could change NaN or infinity behavior.
-
-### Compile-Time Constant Folding
-
-When both operands of a floating-point operation are compile-time constants, the codegen folds the operation at compile time using LLVM's `APFloat` arbitrary-precision floating-point type. This eliminates the runtime instruction entirely.
-
-For each arithmetic operation, the codegen checks if both operands are `ConstantFP`:
-
-**Addition folding:**
-1. Extract `APFloat` from both constants via `getValueAPF()`.
-2. Call `res.add(right, rmNearestTiesToEven)` — IEEE 754 round-to-nearest.
-3. Create a new `ConstantFP` from the result.
-
-**Subtraction folding:** Uses `res.subtract(right, rmNearestTiesToEven)`.
-
-**Multiplication folding:** Uses `res.multiply(right, rmNearestTiesToEven)`.
-
-**Division folding:** Uses `res.divide(right, rmNearestTiesToEven)`.
-
-If either operand is not a constant, the codegen falls through to the runtime `CreateFAdd`/`CreateFSub`/`CreateFMul`/`CreateFDiv` instruction.
-
-### Mixed-Type Operand Coercion
-
-When a floating-point operation has one integer and one float operand, the codegen coerces the integer operand to `double` before proceeding:
-
-1. Detect that either operand is floating-point.
-2. If the left operand is integer, convert via `CreateSIToFP(left, doubleTy)`.
-3. If the right operand is integer, convert via `CreateSIToFP(right, doubleTy)`.
-4. Proceed with the float arithmetic instruction.
-
-Pointer operands are first converted to `i64` via `CreatePtrToInt`, then promoted to `double` if the other operand is floating-point.
-
-### Negation
-
-Float negation uses `CreateFNeg`, which flips the sign bit. This handles all special values correctly:
-
-- `FNeg(+0.0)` = `-0.0`
-- `FNeg(-0.0)` = `+0.0`
-- `FNeg(NaN)` = `NaN` (with sign bit flipped)
-- `FNeg(+Infinity)` = `-Infinity`
+Dividing a positive number by zero produces positive infinity. Dividing a negative number by zero produces negative infinity. Dividing zero by zero produces NaN. These results follow the IEEE 754 standard.
 
 ---
 
-## Comparison Semantics
+## Special Values
 
-### Ordered Comparisons
+Floating-point arithmetic can produce three categories of special values. Understanding them is essential for writing robust numeric code.
 
-Float comparisons use LLVM's **ordered** comparison predicates. "Ordered" means the comparison returns `false` if either operand is NaN.
+### NaN (Not a Number)
 
-| Uranite Operator | LLVM Predicate | Instruction | Label |
-|---|---|---|---|
-| `==` | `OEQ` (ordered equal) | `CreateFCmpOEQ` | `"eq"` |
-| `!=` | `ONE` (ordered not equal) | `CreateFCmpONE` | `"ne"` |
-| `<` | `OLT` (ordered less than) | `CreateFCmpOLT` | `"lt"` |
-| `>` | `OGT` (ordered greater than) | `CreateFCmpOGT` | `"gt"` |
-| `<=` | `OLE` (ordered less or equal) | `CreateFCmpOLE` | `"le"` |
-| `>=` | `OGE` (ordered greater or equal) | `CreateFCmpOGE` | `"ge"` |
+NaN represents the result of an undefined or unrepresentable mathematical operation. It arises from:
+
+- Dividing zero by zero: `0.0 / 0.0`
+- Taking the square root of a negative number: `(-1.0).sqrt()`
+- Subtracting infinity from infinity: `inf - inf`
+- Multiplying infinity by zero: `inf * 0.0`
+
+NaN has a unique property: it is never equal to anything, including itself. This means `nan == nan` is always `False`.
+
+### Infinity
+
+Infinity represents a value that exceeds the representable range. Both positive infinity and negative infinity exist:
+
+- Dividing a positive number by zero produces positive infinity
+- Dividing a negative number by zero produces negative infinity
+- Arithmetic overflow can also produce infinity
+
+Infinity propagates through addition and multiplication, but combining infinities in certain ways produces NaN.
+
+### Negative Zero
+
+Floating-point arithmetic distinguishes between `+0.0` and `-0.0`. They compare as equal but behave differently when used as divisors:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 posZero = 0.0
+    F64 negZero = -0.0
+    Boolean eq = posZero == negZero
+    puts( "+0 == -0: " + eq.toString() )
+    F64 negResult = 1.0 / negZero
+    Boolean isNeg = negResult.isNegative()
+    puts( "1/-0 isNegative: " + isNeg.toString() )
+    return 0
+```
+
+This outputs:
+
+```
++0 == -0: True
+1/-0 isNegative: True
+```
+
+Positive and negative zero are equal under `==`, but `1.0 / -0.0` produces negative infinity while `1.0 / 0.0` produces positive infinity.
+
+### Detecting Special Values
+
+The `isNaN()`, `isInfinite()`, and `isFinite()` methods let you test for special values:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 nan = 0.0 / 0.0
+    Boolean isNan = nan.isNaN()
+    puts( "isNaN: " + isNan.toString() )
+    F64 inf = 1.0 / 0.0
+    Boolean isInf = inf.isInfinite()
+    puts( "isInfinite: " + isInf.toString() )
+    F64 normal = 42.0
+    Boolean isFin = normal.isFinite()
+    puts( "isFinite: " + isFin.toString() )
+    Boolean nanFin = nan.isFinite()
+    puts( "NaN isFinite: " + nanFin.toString() )
+    Boolean infFin = inf.isFinite()
+    puts( "Inf isFinite: " + infFin.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+isNaN: True
+isInfinite: True
+isFinite: True
+NaN isFinite: False
+Inf isFinite: False
+```
+
+`isFinite()` returns `True` only for normal numbers — it returns `False` for both NaN and infinity.
+
+### NaN Propagation
+
+Any arithmetic operation involving NaN produces NaN. Once NaN enters a computation, it "poisons" all subsequent results:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 nan = 0.0 / 0.0
+    F64 nanAdd = nan + 42.0
+    Boolean isStillNan = nanAdd.isNaN()
+    puts( "NaN + 42 isNaN: " + isStillNan.toString() )
+    return 0
+```
+
+This outputs `NaN + 42 isNaN: True`. The NaN value propagates through the addition, producing NaN regardless of the other operand.
+
+This propagation behavior makes NaN useful as a sentinel — if any step in a multi-step calculation fails, the final result will be NaN, which you can check with a single `isNaN()` call at the end.
+
+### Infinity Arithmetic
+
+Infinity follows specific rules when combined with other values:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 inf = 1.0 / 0.0
+    F64 infAdd = inf + 1.0
+    Boolean isStillInf = infAdd.isInfinite()
+    puts( "Inf + 1 isInfinite: " + isStillInf.toString() )
+    F64 infMinusInf = inf - inf
+    Boolean isNanResult = infMinusInf.isNaN()
+    puts( "Inf - Inf isNaN: " + isNanResult.toString() )
+    F64 infTimesZero = inf * 0.0
+    Boolean isNanResult2 = infTimesZero.isNaN()
+    puts( "Inf * 0 isNaN: " + isNanResult2.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+Inf + 1 isInfinite: True
+Inf - Inf isNaN: True
+Inf * 0 isNaN: True
+```
+
+Adding a finite value to infinity produces infinity. But subtracting infinity from infinity and multiplying infinity by zero are undefined operations that produce NaN.
+
+---
+
+## Comparison Behavior
+
+### Standard Comparisons
+
+Floating-point values support all six comparison operators:
+
+| Operator | Meaning |
+|---|---|
+| `==` | Equal |
+| `!=` | Not equal |
+| `<` | Less than |
+| `>` | Greater than |
+| `<=` | Less than or equal |
+| `>=` | Greater than or equal |
+
+```uranite
+F64 valueA = 3.14
+F64 valueB = 2.71
+Boolean less = valueA < valueB
+Boolean greater = valueA > valueB
+Boolean equal = valueA == 3.14
+```
 
 ### NaN in Comparisons
 
-Because Uranite uses ordered predicates, NaN comparisons follow IEEE 754:
-
-- `NaN == NaN` → `False` (OEQ: both must be non-NaN and equal)
-- `NaN != NaN` → `True` (ONE: at least one NaN or values differ)
-- `NaN < 1.0` → `False`
-- `NaN > 1.0` → `False`
-- `NaN <= 1.0` → `False`
-- `NaN >= 1.0` → `False`
-
-The only predicate that returns `true` for NaN is `UNO` (unordered), used internally by `isNaN()`. All user-facing comparison operators use ordered predicates.
-
-### Mixed Float-Integer Comparisons
-
-When comparing a float and an integer, the codegen promotes the integer to `double` via `CreateSIToFP` before performing the float comparison. The result uses float comparison predicates (OEQ, OLT, etc.), not integer comparison predicates.
-
----
-
-## Casting and Type Coercion
-
-### Float Widening (F32 to F64)
-
-Widening from `F32` to `F64` uses `CreateFPExt` (floating-point extension). This is a lossless conversion — every `F32` value is exactly representable as `F64`.
-
-```
-source: float 3.14
-target: double
-→ CreateFPExt → double 3.14 (exact)
-```
-
-For compile-time constants, the codegen extracts the value via `convertToDouble()` and creates a new `ConstantFP` directly.
-
-### Float Narrowing (F64 to F32)
-
-Narrowing from `F64` to `F32` uses `CreateFPTrunc` (floating-point truncation). This may lose precision — the value is rounded to the nearest representable `F32` value.
-
-```
-source: double 3.141592653589793
-target: float
-→ CreateFPTrunc → float 3.1415927 (rounded)
-```
-
-Narrowing requires the explicit `as` keyword. The compiler does not warn about precision loss — the cast is the programmer's explicit acknowledgment.
-
-### Integer to Float
-
-Converting an integer to a floating-point type uses `CreateSIToFP` (signed integer to floating point):
-
-```
-source: i64 42
-target: double
-→ CreateSIToFP → double 42.0
-```
-
-For compile-time constant integers, the conversion is folded: the codegen extracts the integer via `getSExtValue()`, casts to `double` in C++, and creates a `ConstantFP` directly.
-
-Large integers may lose precision when converted to float. For example, `I64` values larger than 2^53 cannot be exactly represented as `F64` — the value is rounded to the nearest representable float.
-
-### Float to Integer
-
-Converting a floating-point value to an integer uses `CreateFPToSI` (floating point to signed integer). The fractional part is **truncated toward zero** (not rounded).
-
-```
-source: double 3.99
-target: i64
-→ CreateFPToSI → i64 3 (truncated, not rounded)
-
-source: double -2.7
-target: i64
-→ CreateFPToSI → i64 -2 (truncated toward zero)
-```
-
-For compile-time constant floats, the conversion is folded via `convertToDouble()` and `static_cast<int64_t>`.
-
-**Undefined behavior:** Converting `NaN`, `+Infinity`, or `-Infinity` to an integer produces undefined behavior. Converting a float value outside the target integer's range also produces undefined behavior.
-
-### Implicit Store Coercion
-
-When storing a float value to a variable of different float width, the codegen auto-coerces via `CreateFPCast`:
-
-- Storing `float` to `double` variable → `CreateFPCast` (extends).
-- Storing `double` to `float` variable → `CreateFPCast` (truncates).
-
-Cross-domain coercion:
-
-- Storing integer to float variable → `CreateSIToFP`.
-- Storing float to integer variable → `CreateFPToSI`.
-
----
-
-## Assignability Rules
-
-### Float-to-Float Assignability
-
-All float types are mutually assignable. The `isAssignable()` method returns `true` when both types are floating-point:
-
-```
-if( target->isFloatingPoint() && source->isFloatingPoint() ) → true
-```
-
-Width mismatches are resolved at the codegen level via `CreateFPExt` or `CreateFPTrunc`.
-
-Additionally, for `Type::Kind::Float` specifically, the method checks:
-
-```
-if( targetFloatType->bitWidth >= sourceFloatType->bitWidth ) → true
-```
-
-### Integer-to-Float Assignability
-
-Integers are assignable to floating-point types:
-
-```
-if( target->isFloatingPoint() && source->isIntegral() ) → true
-if( target->kind == Type::Kind::Float && source->kind == Type::Kind::Integer ) → true
-```
-
-This allows implicit widening from any integer to any float.
-
-### Float-to-Integer Assignability
-
-Floats are assignable to integer types:
-
-```
-if( target->isIntegral() && source->isFloatingPoint() ) → true
-```
-
-This allows float-to-integer assignment, with truncation applied at the codegen level.
-
-### OOP Wrapper Assignability
-
-OOP wrapper classes for floats are cross-assignable:
-
-```
-if( targetIsFloatOop && sourceIsFloatOop ) → true
-```
-
-Integer OOP wrappers are assignable to float OOP wrappers:
-
-```
-if( targetIsFloatOop && sourceIsIntOop ) → true
-```
-
----
-
-## Builtin Methods
-
-All builtin methods on float OOP wrappers are intercepted by the codegen and emitted as inline LLVM instructions or intrinsics. No actual function call is generated.
-
-### Classification Methods
-
-| Method | LLVM Implementation | Description |
-|---|---|---|
-| `isNaN()` | `CreateFCmpUNO(self, self)` | Returns `True` if value is NaN |
-| `isInfinite()` | `fabs(self) == +Infinity` | Returns `True` if positive or negative infinity |
-| `isFinite()` | `NOT(isInfinite OR isNaN)` | Returns `True` if neither NaN nor infinity |
-| `isZero()` | `CreateFCmpOEQ(self, 0.0)` | Returns `True` if value equals zero |
-| `isPositive()` | `CreateFCmpOGT(self, 0.0)` | Returns `True` if strictly greater than zero |
-| `isNegative()` | `CreateFCmpOLT(self, 0.0)` | Returns `True` if strictly less than zero |
-
-**`isNaN()` implementation detail:** Uses `CreateFCmpUNO(self, self)`, the unordered comparison predicate. IEEE 754 mandates that NaN is not equal to itself, so `UNO(x, x)` returns `true` only when `x` is NaN.
-
-**`isInfinite()` implementation detail:** Computes `fabs(self)` via `llvm::Intrinsic::fabs`, creates `+Infinity` via `ConstantFP::getInfinity(primitiveType)`, then checks ordered equality. This catches both `+Infinity` and `-Infinity`.
-
-**`isFinite()` implementation detail:** Computes `isInfinite OR isNaN`, then inverts with `CreateNot`. A value is finite if it is neither infinity nor NaN.
-
-### Rounding Methods
-
-| Method | LLVM Intrinsic | Description |
-|---|---|---|
-| `floor()` | `llvm::Intrinsic::floor` | Round toward negative infinity |
-| `ceil()` | `llvm::Intrinsic::ceil` | Round toward positive infinity |
-| `round()` | `llvm::Intrinsic::round` | Round to nearest, ties away from zero |
-
-All three rounding methods emit `CreateUnaryIntrinsic` — a single LLVM intrinsic call that maps to a hardware instruction on modern architectures (e.g., `roundsd`/`roundss` on x86 with SSE4.1).
-
-### Mathematical Methods
-
-| Method | LLVM Intrinsic | Description |
-|---|---|---|
-| `sqrt()` | `llvm::Intrinsic::sqrt` | Square root |
-| `power(exponent)` | `llvm::Intrinsic::pow` | Raise to power |
-| `abs()` | `CreateFNeg` + `CreateSelect` | Absolute value |
-
-**`abs()` implementation detail:** Does not use `llvm::Intrinsic::fabs`. Instead:
-1. Compute `negValue = CreateFNeg(self)`.
-2. Compute `isNeg = CreateFCmpOLT(self, 0.0)`.
-3. `CreateSelect(isNeg, negValue, self)` — selects the negated value if negative.
-
-**`sqrt()` on negative values:** Returns `NaN`, following IEEE 754.
-
-**`power()` implementation detail:** Uses `CreateBinaryIntrinsic(llvm::Intrinsic::pow, self, exponent)`. Both operands must be floating-point.
-
-### Arithmetic Methods
-
-| Method | LLVM Implementation | Description |
-|---|---|---|
-| `add(other)` | `CreateFAdd(self, other)` | Addition |
-| `subtract(other)` | `CreateFSub(self, other)` | Subtraction |
-| `multiply(other)` | `CreateFMul(self, other)` | Multiplication |
-| `divide(other)` | `CreateFDiv(self, other)` | Division |
-| `negate()` | `CreateFNeg(self)` | Sign inversion |
-
-These method-based arithmetic operations emit the same LLVM instructions as the infix operators.
-
-### Comparison Methods
-
-| Method | LLVM Implementation | Description |
-|---|---|---|
-| `equals(other)` | `CreateFCmpOEQ(self, other)` | Ordered equality |
-| `compareTo(other)` | `gt - lt` via `FCmpOLT` + `FCmpOGT` | Returns -1, 0, or 1 |
-| `greaterThan(other)` | `CreateFCmpOGT(self, other)` | Ordered greater than |
-| `lessThan(other)` | `CreateFCmpOLT(self, other)` | Ordered less than |
-| `greaterOrEqual(other)` | `CreateFCmpOGE(self, other)` | Ordered greater or equal |
-| `lessOrEqual(other)` | `CreateFCmpOLE(self, other)` | Ordered less or equal |
-| `min(other)` | `CreateFCmpOLT` + `CreateSelect` | Smaller of two values |
-| `max(other)` | `CreateFCmpOGT` + `CreateSelect` | Larger of two values |
-
-**`compareTo()` implementation detail:** Computes two boolean flags `isLt = FCmpOLT(self, other)` and `isGt = FCmpOGT(self, other)`, zero-extends both to `i64`, then subtracts: `gt - lt`. This produces -1 (less), 0 (equal or NaN), or 1 (greater).
-
-### Conversion Methods
-
-| Method | LLVM Implementation | Description |
-|---|---|---|
-| `toString()` | `snprintf`-style conversion | String representation |
-| `toInt()` | `CreateFPToSI(self, i64)` | Truncate to 64-bit signed integer |
-| `toFloat()` | `CreateSIToFP(self, double)` | Convert to `F64` (from integer wrappers) |
-| `toDouble()` | `CreateSIToFP(self, double)` | Convert to `F64` (from integer wrappers) |
-| `toF32()` | `value as F32` | Narrow to 32-bit (on F32 wrapper) |
-| `toF64()` | identity return | Return underlying value (on F64 wrapper) |
-
----
-
-## The OOP Wrapper Hierarchy
-
-### Float Base Class
-
-The `Float` class in `stdlibs/language/float.urn` is the base class for all floating-point wrappers:
-
-```
-class Float
-    protect F64 value
-```
-
-It provides the full method set: `getValue()`, `toString()`, `abs()`, `negate()`, `add()`, `subtract()`, `multiply()`, `divide()`, `equals()`, `compareTo()`, `isNaN()`, `isInfinite()`, `floor()`, `ceil()`, `round()`, `toInt()`.
-
-**`isNaN()` in stdlib:** Detects NaN via self-inequality: `return self.value != self.value`. This mirrors the IEEE 754 property that NaN is the only value not equal to itself. The codegen intercepts this call and emits `CreateFCmpUNO(self, self)` instead.
-
-**`isInfinite()` in stdlib:** Uses the expression `self.value == self.value and (self.value - self.value) != 0.0`. If the value equals itself (not NaN) but subtracting it from itself does not produce zero (only infinity has this property), it is infinite. The codegen intercepts and emits the `fabs` + infinity comparison instead.
-
-### F32 Wrapper
-
-```
-final class F32 extends Float
-    constructor widens: self.value = value as F64
-    toF32(): return self.value as F32
-```
-
-`F32` stores its value as `F64` internally. Narrowing back requires explicit `toF32()` or `as F32`.
-
-### F64 Wrapper
-
-```
-final class F64 extends Float
-    constructor: self.value = value (no conversion)
-    toF64(): return self.value
-```
-
-### Double Wrapper
-
-```
-final class Double extends Float
-    constructor: self.value = value (takes F64 parameter)
-    toDouble(): return self.value
-```
-
-`Double` is functionally identical to `F64` — both are 64-bit and resolve to the same `FloatType(64)` in the type registry.
-
----
-
-## Examples
-
-### Declarations and Literals
+NaN makes every comparison return `False`, except `!=` which returns `True`:
 
 ```uranite
-F32 temperature = 98.6
-F64 pi = 3.141592653589793
-Float gravity = 9.80665
-Double lightSpeed = 299792458.0
+from uranite.io.console import puts
 
-F64 scientific = 6.022e23
-F64 small = 1.6e-19
-F64 negative = -273.15
+public function main() -> I32:
+    F64 nan = 0.0 / 0.0
+    Boolean eqSelf = nan == nan
+    puts( "NaN == NaN: " + eqSelf.toString() )
+    return 0
 ```
 
-### Special Value Handling
+This outputs `NaN == NaN: False`.
+
+This is a fundamental property of IEEE 754: NaN is not equal to anything, including itself. This property is what makes `isNaN()` work — internally, it checks whether a value is not equal to itself.
+
+All other comparisons involving NaN also return `False`:
+
+- `NaN < 1.0` is `False`
+- `NaN > 1.0` is `False`
+- `NaN <= 1.0` is `False`
+- `NaN >= 1.0` is `False`
+
+The only comparison that returns `True` with NaN is `!=`, because NaN is not equal to anything: `NaN != 1.0` is `True`, and `NaN != NaN` is also `True`.
+
+### Comparing with Equality Methods
+
+The `equals()` and `compareTo()` methods provide named alternatives to operators:
 
 ```uranite
-F64 positiveInfinity = 1.0 / 0.0
-F64 negativeInfinity = -1.0 / 0.0
-F64 notANumber = 0.0 / 0.0
+from uranite.io.console import puts
 
-Boolean checkNaN = notANumber.isNaN()
-Boolean checkInf = positiveInfinity.isInfinite()
-Boolean checkFinite = pi.isFinite()
-
-F64 nanPropagation = notANumber + 42.0
-Boolean nanComparison = notANumber == notANumber
-
-F64 infArithmetic = positiveInfinity + 1.0
-F64 infSubtract = positiveInfinity - positiveInfinity
-F64 infMultZero = positiveInfinity * 0.0
+public function main() -> I32:
+    F64 valueA = 3.14
+    F64 valueB = 2.71
+    Boolean eq = valueA.equals( 3.14 )
+    puts( "equals 3.14: " + eq.toString() )
+    I32 cmp = valueA.compareTo( valueB )
+    puts( "compareTo: " + cmp.toString() )
+    return 0
 ```
 
-### Rounding and Math
+This outputs:
+
+```
+equals 3.14: True
+compareTo: 1
+```
+
+`compareTo()` returns `-1` if self is less than the argument, `0` if equal, and `1` if greater.
+
+---
+
+## Rounding Methods
+
+All floating-point types provide three rounding methods. Each returns a floating-point value (not an integer) representing the rounded result.
+
+### Floor
+
+`floor()` rounds toward negative infinity — always down:
 
 ```uranite
 F64 value = 3.7
-
 F64 floored = value.floor()
-F64 ceiled = value.ceil()
-F64 rounded = value.round()
-
-F64 squareRoot = 144.0.sqrt()
-F64 cubed = 2.0.power( 3.0 )
-F64 absolute = (-42.5).abs()
-
-Boolean positive = value.isPositive()
-Boolean zero = 0.0.isZero()
-Boolean negative = (-1.0).isNegative()
 ```
 
-### Casting Between Types
+`floor(3.7)` produces `3`. `floor(3.0)` produces `3`. `floor(-3.2)` produces `-4`.
+
+### Ceil
+
+`ceil()` rounds toward positive infinity — always up:
 
 ```uranite
-F32 single = 3.14
-F64 promoted = single as F64
-
-F64 precise = 3.141592653589793
-F32 demoted = precise as F32
-
-I64 integer = 42
-F64 floated = integer as F64
-
-F64 piValue = 3.14159
-I64 truncated = piValue as I64
-
-I32 smallInt = 100
-F32 smallFloat = smallInt as F32
+F64 value = 3.2
+F64 ceiled = value.ceil()
 ```
 
-### Practical Usage
+`ceil(3.2)` produces `4`. `ceil(3.0)` produces `3`. `ceil(-3.7)` produces `-3`.
+
+### Round
+
+`round()` rounds to the nearest integer value, with ties rounding away from zero:
+
+```uranite
+F64 value = 3.7
+F64 rounded = value.round()
+```
+
+`round(3.7)` produces `4`. `round(3.2)` produces `3`. `round(2.5)` produces `3` (tie breaks away from zero).
+
+### Rounding Negative Values
+
+Rounding negative values follows the same directional rules:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 negVal = -3.7
+    F64 negFloored = negVal.floor()
+    puts( "floor(-3.7): " + negFloored.toString() )
+    F64 negCeiled = negVal.ceil()
+    puts( "ceil(-3.7): " + negCeiled.toString() )
+    F64 negRounded = negVal.round()
+    puts( "round(-3.7): " + negRounded.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+floor(-3.7): -4
+ceil(-3.7): -3
+round(-3.7): -4
+```
+
+`floor()` moves toward negative infinity (more negative), so `floor(-3.7)` is `-4`. `ceil()` moves toward positive infinity (less negative), so `ceil(-3.7)` is `-3`. `round()` rounds to nearest, so `round(-3.7)` is `-4`.
+
+---
+
+## Mathematical Methods
+
+### Absolute Value
+
+`abs()` returns the magnitude of a floating-point value, stripping the sign:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 value = -42.5
+    F64 absolute = value.abs()
+    puts( "abs(-42.5): " + absolute.toString() )
+    return 0
+```
+
+This outputs `abs(-42.5): 42.5`.
+
+### Square Root
+
+`sqrt()` returns the square root of a value:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 squareRoot = 144.0.sqrt()
+    puts( "sqrt(144): " + squareRoot.toString() )
+    F64 sqrtTwo = 2.0.power( 0.5 )
+    puts( "sqrt(2): " + sqrtTwo.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+sqrt(144): 12
+sqrt(2): 1.41421
+```
+
+Taking the square root of a negative number produces NaN:
+
+```uranite
+F64 sqrtNeg = (-1.0).sqrt()
+Boolean isNan = sqrtNeg.isNaN()
+```
+
+`isNan` is `True` because the square root of a negative number is undefined in real arithmetic.
+
+### Exponentiation
+
+`power()` raises a value to an exponent:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 cubed = 2.0.power( 3.0 )
+    puts( "2^3: " + cubed.toString() )
+    F64 thousand = 10.0.power( 3.0 )
+    puts( "10^3: " + thousand.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+2^3: 8
+10^3: 1000
+```
+
+Both the base and the exponent must be floating-point values. Use `power(0.5)` to compute square roots as an alternative to `sqrt()`.
+
+### Sign Inversion
+
+`negate()` returns the value with its sign inverted:
+
+```uranite
+F64 value = -42.5
+F64 negated = value.negate()
+```
+
+`negate(-42.5)` produces `42.5`. `negate(42.5)` produces `-42.5`. This is equivalent to the unary minus operator (`-value`).
+
+---
+
+## Type Casting
+
+### F32 to F64 Widening
+
+Widening from `F32` to `F64` preserves the value exactly — every `F32` value is representable as `F64`:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F32 single = 3.14
+    F64 promoted = single as F64
+    puts( "F32 to F64: " + promoted.toString() )
+    return 0
+```
+
+This outputs `F32 to F64: 3.14`.
+
+### F64 to F32 Narrowing
+
+Narrowing from `F64` to `F32` may lose precision — the value is rounded to the nearest representable `F32` value:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 precise = 3.141592653589793
+    F32 demoted = precise as F32
+    puts( "F64 to F32: " + demoted.toString() )
+    return 0
+```
+
+This outputs `F64 to F32: 3.14159`. The full 15-digit precision of `F64` is reduced to approximately 7 digits in `F32`.
+
+Narrowing requires the explicit `as` keyword. The conversion is the programmer's explicit acknowledgment that precision may be lost.
+
+### Integer to Float
+
+Converting an integer to a floating-point type produces the closest representable float value:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    I64 intValue = 42
+    F64 floated = intValue as F64
+    puts( "I64 to F64: " + floated.toString() )
+    return 0
+```
+
+This outputs `I64 to F64: 42`. For most integers, the conversion is exact. Very large integers (beyond 2^53 for `F64`) may lose precision because `F64` has only 52 mantissa bits.
+
+### Float to Integer
+
+Converting a float to an integer truncates the fractional part toward zero — no rounding occurs:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 positive = 3.99
+    I64 truncPos = positive as I64
+    puts( "3.99 to I64: " + truncPos.toString() )
+    F64 negative = -3.99
+    I64 truncNeg = negative as I64
+    puts( "-3.99 to I64: " + truncNeg.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+3.99 to I64: 3
+-3.99 to I64: -3
+```
+
+The fractional part is always discarded toward zero. `3.99` becomes `3` (not `4`), and `-3.99` becomes `-3` (not `-4`).
+
+If you want rounding instead of truncation, call `round()` before casting:
+
+```uranite
+F64 value = 3.7
+F64 rounded = value.round()
+I64 result = rounded as I64
+```
+
+This produces `4` instead of `3`.
+
+---
+
+## Float Methods Reference
+
+Every floating-point value in Uranite is an object with methods. These methods compile to native hardware instructions — no heap allocation, no boxing, no virtual dispatch.
+
+**Important:** When using the result of a method call in another method call, always store intermediate results in variables. Do not chain method calls — use a separate variable for each step.
+
+All floating-point types (`F32`, `F64`, `Float`, `Double`) share the following methods:
+
+### Classification Methods
+
+| Method | Return Type | Description |
+|---|---|---|
+| `isNaN()` | `Boolean` | Returns `True` if value is Not-a-Number |
+| `isInfinite()` | `Boolean` | Returns `True` if positive or negative infinity |
+| `isFinite()` | `Boolean` | Returns `True` if neither NaN nor infinity |
+| `isZero()` | `Boolean` | Returns `True` if value equals zero |
+| `isPositive()` | `Boolean` | Returns `True` if strictly greater than zero |
+| `isNegative()` | `Boolean` | Returns `True` if strictly less than zero |
+
+### Arithmetic Methods
+
+| Method | Return Type | Description |
+|---|---|---|
+| `add( Float other )` | `Float` | Returns the sum |
+| `subtract( Float other )` | `Float` | Returns the difference |
+| `multiply( Float other )` | `Float` | Returns the product |
+| `divide( Float other )` | `Float` | Returns the quotient |
+| `negate()` | `Float` | Returns the value with sign inverted |
+
+### Comparison Methods
+
+| Method | Return Type | Description |
+|---|---|---|
+| `equals( Float other )` | `Boolean` | Returns `True` if values are equal |
+| `compareTo( Float other )` | `I32` | Returns -1, 0, or 1 |
+
+### Rounding and Math Methods
+
+| Method | Return Type | Description |
+|---|---|---|
+| `floor()` | `Float` | Rounds toward negative infinity |
+| `ceil()` | `Float` | Rounds toward positive infinity |
+| `round()` | `Float` | Rounds to nearest, ties away from zero |
+| `abs()` | `Float` | Returns the absolute value |
+| `sqrt()` | `Float` | Returns the square root |
+| `power( Float exponent )` | `Float` | Returns self raised to a power |
+
+### Conversion Methods
+
+| Method | Return Type | Description |
+|---|---|---|
+| `getValue()` | `F64` | Returns the underlying numeric value |
+| `toString()` | `String` | Returns the string representation |
+| `toInt()` | `I64` | Converts to integer by truncation toward zero |
+| `toFloat()` | `F64` | Returns the value as `F64` |
+| `toDouble()` | `F64` | Returns the value as `F64` |
+| `hash()` | `I64` | Returns a hash code for the value |
+
+### Calling Methods on Literals
+
+You can call methods directly on float literals:
+
+```uranite
+from uranite.io.console import puts
+
+public function main() -> I32:
+    F64 squareRoot = 144.0.sqrt()
+    puts( squareRoot.toString() )
+    F64 rounded = 3.14159.round()
+    puts( rounded.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+12
+3
+```
+
+Negative float literals require parentheses for method calls:
+
+```uranite
+F64 absolute = (-42.5).abs()
+```
+
+**Note:** Calling methods on parenthesized compound expressions (such as `(3.0 * 3.0 + 4.0 * 4.0).sqrt()`) may fail. Always store intermediate computation results in a variable first, then call the method on that variable:
+
+```uranite
+F64 sumOfSquares = 3.0 * 3.0 + 4.0 * 4.0
+F64 hypotenuse = sumOfSquares.sqrt()
+```
+
+---
+
+## Practical Examples
+
+### Distance Calculation
+
+Calculate the Euclidean distance between two points using the Pythagorean theorem:
 
 ```uranite
 from uranite.io.console import puts
@@ -638,40 +912,135 @@ public function distanceBetween( F64 x1, F64 y1, F64 x2, F64 y2 ) -> F64:
     F64 sumOfSquares = deltaX * deltaX + deltaY * deltaY
     return sumOfSquares.sqrt()
 
+public function main() -> I32:
+    F64 distance = distanceBetween( 0.0, 0.0, 3.0, 4.0 )
+    puts( "distance: " + distance.toString() )
+    return 0
+```
+
+This outputs `distance: 5`. The classic 3-4-5 right triangle has a hypotenuse of 5.
+
+### Temperature Conversion
+
+Convert between Celsius and Fahrenheit using floating-point arithmetic:
+
+```uranite
+from uranite.io.console import puts
+
 public function celsiusToFahrenheit( F64 celsius ) -> F64:
     return celsius * 1.8 + 32.0
 
+public function fahrenheitToCelsius( F64 fahrenheit ) -> F64:
+    return (fahrenheit - 32.0) / 1.8
+
+public function main() -> I32:
+    F64 boiling = celsiusToFahrenheit( 100.0 )
+    puts( "100C = " + boiling.toString() + "F" )
+    F64 freezing = celsiusToFahrenheit( 0.0 )
+    puts( "0C = " + freezing.toString() + "F" )
+    F64 body = celsiusToFahrenheit( 37.0 )
+    puts( "37C = " + body.toString() + "F" )
+    F64 backToC = fahrenheitToCelsius( 212.0 )
+    puts( "212F = " + backToC.toString() + "C" )
+    return 0
+```
+
+This outputs:
+
+```
+100C = 212F
+0C = 32F
+37C = 98.6F
+212F = 100C
+```
+
+Unlike integer division, floating-point division preserves the fractional part, so the conversion is exact for these values.
+
+### Safe Division
+
+Guard against division by zero and invalid results using the classification methods:
+
+```uranite
+from uranite.io.console import puts
+
 public function safeDivide( F64 numerator, F64 denominator ) -> F64:
-    if denominator.isZero():
+    Boolean isZ = denominator.isZero()
+    if isZ:
         return 0.0
     F64 result = numerator / denominator
-    if result.isNaN() or result.isInfinite():
+    Boolean resultNan = result.isNaN()
+    Boolean resultInf = result.isInfinite()
+    if resultNan or resultInf:
         return 0.0
     return result
 
-public function roundToDecimalPlaces( F64 value, I64 places ) -> F64:
-    F64 factor = 10.0.power( places as F64 )
-    F64 shifted = value * factor
-    F64 rounded = shifted.round()
-    return rounded / factor
+public function main() -> I32:
+    F64 normal = safeDivide( 10.0, 3.0 )
+    puts( "10/3: " + normal.toString() )
+    F64 byZero = safeDivide( 10.0, 0.0 )
+    puts( "10/0: " + byZero.toString() )
+    F64 zeroByZero = safeDivide( 0.0, 0.0 )
+    puts( "0/0: " + zeroByZero.toString() )
+    return 0
+```
+
+This outputs:
+
+```
+10/3: 3.33333
+10/0: 0
+0/0: 0
+```
+
+The `safeDivide` function checks for zero denominator first, then validates the result is neither NaN nor infinity. This pattern prevents special values from propagating through a computation and producing unexpected results downstream.
+
+### Statistical Average
+
+Compute the average of a series of measurements, demonstrating accumulation and division:
+
+```uranite
+from uranite.io.console import puts
 
 public function main() -> I32:
-    F64 distance = distanceBetween( 0.0, 0.0, 3.0, 4.0 )
-    puts( distance.toString() )
+    F64 sum = 0.0
+    I64 count = 0
 
-    F64 tempF = celsiusToFahrenheit( 100.0 )
-    puts( tempF.toString() )
+    F64 measurement1 = 23.4
+    sum = sum + measurement1
+    count = count + 1
 
-    F64 safe = safeDivide( 10.0, 3.0 )
-    puts( safe.toString() )
+    F64 measurement2 = 25.1
+    sum = sum + measurement2
+    count = count + 1
 
-    F64 rounded = roundToDecimalPlaces( 3.14159, 2 )
-    puts( rounded.toString() )
+    F64 measurement3 = 22.8
+    sum = sum + measurement3
+    count = count + 1
 
-    F64 hypotenuse = (3.0 * 3.0 + 4.0 * 4.0).sqrt()
-    puts( hypotenuse.toString() )
+    F64 measurement4 = 24.6
+    sum = sum + measurement4
+    count = count + 1
+
+    F64 measurement5 = 23.9
+    sum = sum + measurement5
+    count = count + 1
+
+    F64 countAsFloat = count as F64
+    F64 average = sum / countAsFloat
+    puts( "sum: " + sum.toString() )
+    puts( "count: " + count.toString() )
+    puts( "average: " + average.toString() )
+
+    F64 floored = average.floor()
+    puts( "floor: " + floored.toString() )
+    F64 ceiled = average.ceil()
+    puts( "ceil: " + ceiled.toString() )
+    F64 rounded = average.round()
+    puts( "round: " + rounded.toString() )
+    I64 truncated = average.toInt()
+    puts( "toInt: " + truncated.toString() )
 
     return 0
 ```
 
-This example demonstrates distance calculation using `sqrt()`, temperature conversion with float arithmetic, safe division with `isZero()`/`isNaN()`/`isInfinite()` guards, rounding to decimal places via `round()` and `power()`, and compile-time constant folding for literal arithmetic — all compiled to native LLVM float instructions and intrinsics with zero OOP wrapper overhead.
+This program accumulates five measurements, computes their average, and demonstrates the different rounding behaviors applied to the result. The integer count must be explicitly converted to `F64` with `as F64` before division, because Uranite requires both operands to be the same type.
