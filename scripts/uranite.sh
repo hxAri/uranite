@@ -152,11 +152,8 @@ function main() {
 		local builded=$?
 		local command="$basepath/build/uranite $@"
 		if [[ $builded -eq 0 ]]; then
-			#listing
-			#subshell "$command"
-			#return $SUBSHELLSTATUS
 			echo -e ""
-			$basepath/build/uranite $@
+			$basepath/build/uranite "$@"
 			return $?
 		fi
 		return $builded
