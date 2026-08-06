@@ -90,11 +90,7 @@ function main() {
 				cd "$basepath" || continue
 				local binary="${filename%.urn}"
 				local totals=$((totals+1))
-				if [[ $mir -eq 1 ]]; then
-					timeout $timeout "$basepath/build/uranite" --use-mir -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
-				else
-					timeout $timeout "$basepath/build/uranite" -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
-				fi
+				timeout $timeout "$basepath/build/uranite" -O fast "$filename" -o "$binary" 2>&1 | tee "$temporary"
 				executed=${PIPESTATUS[0]}
 				if [[ "$(cat "$temporary")" =~ [Ww]arning\: ]]; then
 					warnings+=( "$filename" )
