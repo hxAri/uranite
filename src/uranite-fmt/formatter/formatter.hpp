@@ -177,8 +177,8 @@ namespace uranite::formatter {
 			/** @brief Pretty-prints a systems-level raw data layout structure component (`struct`). */
 			void visit( ast::nodes::StructDeclaration& node ) override;
 			
-			/** @brief Pretty-prints base derivation parent class accessor pointers (`super`). */
-			void visit( ast::nodes::SuperExpression& node ) override;
+			/** @brief Pretty-prints base derivation parent class accessor pointers (`parent`). */
+			void visit( ast::nodes::ParentExpression& node ) override;
 			
 			/** @brief Pretty-prints error emission stack control statements (`throw`). */
 			void visit( ast::nodes::ThrowStatement& node ) override;
