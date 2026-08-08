@@ -160,13 +160,15 @@ public interface Container<T>:
     
 public class SimpleBox<T> implements Container<T>:
     
-    public T stored
+    public ?T stored
     public Int count
     
     public function SimpleBox( self ) -> Void:
         self.count = 0
     
     public function get( self, Int index ) -> T:
+        if self.stored is None:
+            raise new Exception( "Box is empty" )
         return self.stored
     
     public function put( self, Int index, T value ) -> Void:
