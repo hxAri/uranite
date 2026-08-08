@@ -1090,7 +1090,7 @@ namespace uranite::compiler {
 			}
 			if( this->options.dumpAST ) {
 				visitors::ASTPrinter astPrinterInstance;
-				fmt::println( "{}", astPrinterInstance.print( *programRoot ) );
+				fmt::print( "{}\n", astPrinterInstance.print( *programRoot ) );
 				if( this->options.output.kind == Output::Kind::AST ) {
 					return 0;
 				}
@@ -1240,7 +1240,7 @@ namespace uranite::compiler {
 			if( this->options.dumpHIR ) {
 				ir::hir::HIRPrinter hirPrinter;
 				std::string hirOutput = hirPrinter.print( *hirModule );
-				fmt::println( "{}", hirOutput );
+				fmt::print( "{}\n", hirOutput );
 				return 0;
 			}
 			if( this->options.verbose ) {
@@ -1290,7 +1290,7 @@ namespace uranite::compiler {
 			if( this->options.dumpMIR ) {
 				ir::mir::MIRPrinter mirPrinter;
 				std::string mirOutput = mirPrinter.print( *mirModule );
-				fmt::println( "{}", mirOutput );
+				fmt::print( "{}\n", mirOutput );
 				return 0;
 			}
 			if( this->options.verbose ) {
