@@ -20,6 +20,7 @@
 #include <functional>
 
 #include "uranite/parser/parser.hpp"
+#include "uranite/semantic/qualnames.hpp"
 
 namespace uranite::parser {
 	
@@ -77,7 +78,7 @@ namespace uranite::parser {
 			this->pendingGreaterThans = 1;
 			return token::Token( token::Type::GreaterThan, tok.source, ">" );
 		}
-		this->diagnostic.error( this->current().source, fmt::format( "expected > but found '{}' ({})", this->current().value, token::toString( this->current().type ) ), message );
+		this->diagnostic.error( this->current().source, fmt::format( "expected \">\" but found \"{}\" ({})", this->current().value, token::toString( this->current().type ) ), message );
 		return token::Token( token::Type::Error, this->current().source, "" );
 	}
 	
@@ -518,13 +519,8 @@ namespace uranite::parser {
 				}
 			}
 			this->expect( token::Type::RightParenthesis, "expected ')'" );
-			ast::nodes::TypeNodeSharedPointer returnType;
-			if( this->match( token::Type::Arrow ) ) {
-				returnType = this->parseTypeNode();
-			}
-			else {
-				returnType = std::make_shared<ast::nodes::SimpleTypeNode>( "void", source );
-			}
+			this->expect( token::Type::Arrow, "expected '->' followed by return type in function type" );
+			ast::nodes::TypeNodeSharedPointer returnType = this->parseTypeNode();
 			return std::make_shared<ast::nodes::FunctionTypeNode>( std::move( parameterTypes ), returnType, source );
 		}
 		std::string name;
@@ -533,20 +529,20 @@ namespace uranite::parser {
 			this->advance();
 		}
 		else if( this->check( token::Type::KeywordSelf ) ) {
-			name = "Self";
+			name = semantic::qualname::identifier::SelfType;
 			this->advance();
 		}
 		else {
 			this->diagnostic.error( this->current().source, fmt::format( "expected type name but found \"{}\"", this->current().value ) );
 			return std::make_shared<ast::nodes::SimpleTypeNode>( "error", source );
 		}
-		if( name == "Meta" && this->check( token::Type::LessThan ) ) {
+		if( name == semantic::qualname::identifier::Meta && this->check( token::Type::LessThan ) ) {
 			this->advance();
 			ast::nodes::TypeNodeSharedPointer inner = this->parseTypeNode();
 			this->expect( token::Type::GreaterThan, "expected '>' after Meta type parameter" );
 			return std::make_shared<ast::nodes::MetaTypeNode>( inner, source );
 		}
-		if( name == "Callable" && this->check( token::Type::LessThan ) ) {
+		if( name == semantic::qualname::identifier::Callable && this->check( token::Type::LessThan ) ) {
 			this->advance();
 			ast::nodes::TypeNodeSharedPointer returnType = this->parseTypeNode();
 			this->expect( token::Type::Comma, "expected ',' after Callable return type" );
@@ -572,12 +568,6 @@ namespace uranite::parser {
 		if( result == nullptr ) {
 			result = std::make_shared<ast::nodes::SimpleTypeNode>( name, source );
 		}
-		// T[] array syntax sugar → [T]
-		// if( this->check( token::Type::LeftBracket ) && this->peek(1).type == token::Type::RightBracket ) {
-		// 	this->advance(); // consume [
-		// 	this->advance(); // consume ]
-		// 	result = std::make_shared<ast::nodes::ArrayTypeNode>( result, nullptr, source );
-		// }
 		return result;
 	}
 	
@@ -1071,7 +1061,7 @@ namespace uranite::parser {
 					break;
 				}
 				if( memberAbstract ) {
-					this->diagnostic.error( this->current().source, "enum methods cannot be abstract", "remove 'abstract' modifier" );
+					this->diagnostic.error( this->current().source, "enum methods cannot be abstract", "remove \"abstract\" modifier" );
 				}
 				if( this->check( token::Type::KeywordFunction ) || 
 					this->check( token::Type::KeywordProperty ) ) {
@@ -1145,7 +1135,7 @@ namespace uranite::parser {
 									break;
 								}
 								if( methodAbstract ) {
-									this->diagnostic.error( this->current().source, "enum variant methods cannot be abstract", "remove 'abstract' modifier" );
+									this->diagnostic.error( this->current().source, "enum variant methods cannot be abstract", "remove \"abstract\" modifier" );
 									methodAbstract = false;
 								}
 								if( this->check({ token::Type::KeywordFunction, token::Type::KeywordProperty }) ) {
@@ -1173,13 +1163,13 @@ namespace uranite::parser {
 					declaration->variants.push_back( variant );
 				}
 				else if( this->check( token::Type::Identifier ) ) {
-					std::string hintMessage( fmt::format( "use 'unit {}' to declare an enum variant", this->current().value ) );
-					this->diagnostic.error( this->current().source, "enum variants must be declared with 'unit' keyword", hintMessage );
+					std::string hintMessage( fmt::format( "use \"unit {}\" to declare an enum variant", this->current().value ) );
+					this->diagnostic.error( this->current().source, "enum variants must be declared with \"unit\" keyword", hintMessage );
 					this->advance();
 				}
 				else if( this->check( { token::Type::Dedent, token::Type::Eof, token::Type::Newline }, false ) ) {
-					std::string errorMessage( fmt::format( "unexpected token '{}' in enum body", this->current().value ) );
-					this->diagnostic.error( this->current().source, errorMessage, "expected 'unit', 'function', or 'property'" );
+					std::string errorMessage( fmt::format( "unexpected token \"{}\" in enum body", this->current().value ) );
+					this->diagnostic.error( this->current().source, errorMessage, "expected \"unit\", \"function\", or \"property\"" );
 					this->advance();
 				}
 				this->skipNewline();
@@ -1451,7 +1441,7 @@ namespace uranite::parser {
 		lookup::SourceSharedPointer source = this->current().source;
 		if( this->check( token::Type::KeywordSelf ) ) {
 			this->advance();
-			ast::nodes::FunctionParameterSharedPointer parameter = std::make_shared<ast::nodes::FunctionParameterNode>( "self", nullptr, source );
+			ast::nodes::FunctionParameterSharedPointer parameter = std::make_shared<ast::nodes::FunctionParameterNode>( semantic::qualname::identifier::Self, nullptr, source );
 			parameter->isSelf = true;
 			return parameter;
 		}
@@ -1459,7 +1449,7 @@ namespace uranite::parser {
 			this->peek().type == token::Type::KeywordSelf ) {
 			this->advance();
 			this->advance();
-			ast::nodes::FunctionParameterSharedPointer parameter = std::make_shared<ast::nodes::FunctionParameterNode>( "self", nullptr, source );
+			ast::nodes::FunctionParameterSharedPointer parameter = std::make_shared<ast::nodes::FunctionParameterNode>( semantic::qualname::identifier::Self, nullptr, source );
 			parameter->isSelf = true;
 			parameter->isReference = true;
 			return parameter;
@@ -1752,16 +1742,16 @@ namespace uranite::parser {
 		if( this->check( token::Type::KeywordExtends ) || 
 			this->check( token::Type::KeywordImplements ) ) {
 			this->advance();
-			declaration->superInterfaces.push_back( this->parseTypeNode() );
+			declaration->parentInterfaces.push_back( this->parseTypeNode() );
 			while( this->match( token::Type::Comma ) ) {
-				declaration->superInterfaces.push_back( this->parseTypeNode() );
+				declaration->parentInterfaces.push_back( this->parseTypeNode() );
 			}
 		}
 		if( this->match( token::Type::Colon ) ) {
 			if( this->check( { token::Type::Newline, token::Type::Eof }, false ) ) {
-				declaration->superInterfaces.push_back( this->parseTypeNode() );
+				declaration->parentInterfaces.push_back( this->parseTypeNode() );
 				while( this->match( token::Type::Comma ) ) {
-					declaration->superInterfaces.push_back( this->parseTypeNode() );
+					declaration->parentInterfaces.push_back( this->parseTypeNode() );
 				}
 				this->expect( token::Type::Colon, "expected ':' after interface declaration" );
 			}
@@ -2020,6 +2010,42 @@ namespace uranite::parser {
 				callExpr->keywordArguments = std::move( keywordArguments );
 				expression = std::shared_ptr<ast::nodes::CallExpression>( callExpr );
 			}
+			else if( this->check( token::Type::LessThan ) &&
+					 expression->kind == ast::Node::Kind::IdentifierExpression ) {
+				int genericDepth = 1;
+				int genericOffset = 1;
+				bool validGenericSpec = true;
+				while( genericDepth > 0 && validGenericSpec ) {
+					token::Type peekType = this->peek( genericOffset ).type;
+					if( peekType == token::Type::Eof || peekType == token::Type::Newline ) {
+						validGenericSpec = false;
+						break;
+					}
+					if( peekType == token::Type::LessThan ) {
+						genericDepth++;
+					}
+					else if( peekType == token::Type::GreaterThan ) {
+						genericDepth--;
+					}
+					else if( peekType == token::Type::ShiftRight ) {
+						genericDepth -= 2;
+					}
+					else if( peekType != token::Type::Identifier &&
+							 peekType != token::Type::Comma &&
+							 peekType != token::Type::Question &&
+							 peekType != token::Type::Dot ) {
+						validGenericSpec = false;
+					}
+					genericOffset++;
+				}
+				if( validGenericSpec && genericDepth == 0 && this->peek( genericOffset ).type == token::Type::Dot ) {
+					ast::nodes::IdentifierExpression& identExpr = static_cast<ast::nodes::IdentifierExpression&>( *expression );
+					identExpr.typeArguments = this->parseGenericArguments();
+				}
+				else {
+					break;
+				}
+			}
 			else if( this->check( token::Type::Dot ) ) {
 				lookup::SourceSharedPointer source = this->current().source;
 				this->advance();
@@ -2244,7 +2270,7 @@ namespace uranite::parser {
 			}
 			case token::Type::KeywordParent: {
 				this->advance();
-				return std::make_shared<ast::nodes::SuperExpression>( source );
+				return std::make_shared<ast::nodes::ParentExpression>( source );
 			}
 			case token::Type::KeywordSelf: {
 				this->advance();
@@ -2755,7 +2781,7 @@ namespace uranite::parser {
 				}
 				else {
 					std::string unexpectedValue = this->current().value;
-					std::string traitErrorMessage = fmt::format( "unexpected token '{}' in trait body", unexpectedValue );
+					std::string traitErrorMessage = fmt::format( "unexpected token \"{}\" in trait body", unexpectedValue );
 					this->diagnostic.error( this->current().source, traitErrorMessage );
 					this->advance();
 				}
@@ -2786,7 +2812,7 @@ namespace uranite::parser {
 				this->advance();
 				while( this->match( token::Type::Pipe ) ) {
 					if( this->check( token::Type::Identifier, false ) ) {
-						this->diagnostic.error( this->current().source, "expected exception type after '|'" );
+						this->diagnostic.error( this->current().source, "expected exception type after \"|\"" );
 						break;
 					}
 					exceptionClause.exceptionTypes.push_back( std::make_shared<ast::nodes::SimpleTypeNode>( this->current().value, this->current().source ) );
