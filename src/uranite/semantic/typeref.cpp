@@ -25,69 +25,69 @@
 namespace uranite::semantic {
 	
 	Registry::Registry() {
-		this->booleanType = std::make_shared<Type>( Type::Kind::Bool, "bool", "uranite.builtin", qname::PRIM_BOOL );
-		this->charType = std::make_shared<Type>( Type::Kind::Char, "char", "uranite.builtin", qname::PRIM_CHAR );
-		this->errorType = std::make_shared<Type>( Type::Kind::Error, "<error>", "uranite.builtin", qname::PRIM_ERROR );
+		this->booleanType = std::make_shared<Type>( Type::Kind::Bool, "bool", "uranite.builtin", qualname::PrimBool );
+		this->charType = std::make_shared<Type>( Type::Kind::Char, "char", "uranite.builtin", qualname::PrimChar );
+		this->errorType = std::make_shared<Type>( Type::Kind::Error, "<error>", "uranite.builtin", qualname::PrimError );
 		this->float32Type = std::make_shared<FloatType>( 32 );
-		this->float32Type->package = "uranite.builtin";
-		this->float32Type->qualified = "uranite.builtin.f32";
+		this->float32Type->package = qualname::primitives::Package;
+		this->float32Type->qualified = qualname::primitives::F32;
 		this->float64Type = std::make_shared<FloatType>( 64 );
-		this->float64Type->package = "uranite.builtin";
-		this->float64Type->qualified = "uranite.builtin.f64";
+		this->float64Type->package = qualname::primitives::Package;
+		this->float64Type->qualified = qualname::primitives::F64;
 		this->integer16Type = std::make_shared<IntegerType>( 16, true );
-		this->integer16Type->package = "uranite.builtin";
-		this->integer16Type->qualified = "uranite.builtin.i16";
+		this->integer16Type->package = qualname::primitives::Package;
+		this->integer16Type->qualified = qualname::primitives::I16;
 		this->integer32Type = std::make_shared<IntegerType>( 32, true );
-		this->integer32Type->package = "uranite.builtin";
-		this->integer32Type->qualified = "uranite.builtin.i32";
+		this->integer32Type->package = qualname::primitives::Package;
+		this->integer32Type->qualified = qualname::primitives::I32;
 		this->integer64Type = std::make_shared<IntegerType>( 64, true );
-		this->integer64Type->package = "uranite.builtin";
-		this->integer64Type->qualified = "uranite.builtin.i64";
+		this->integer64Type->package = qualname::primitives::Package;
+		this->integer64Type->qualified = qualname::primitives::I64;
 		this->integer8Type = std::make_shared<IntegerType>( 8, true );
-		this->integer8Type->package = "uranite.builtin";
-		this->integer8Type->qualified = "uranite.builtin.i8";
-		this->objectType = std::make_shared<ClassType>( "Object" );
-		this->objectType->package = "uranite.builtin";
-		this->objectType->qualified = qname::OBJECT;
-		this->stringType = std::make_shared<Type>( Type::Kind::String, "str", "uranite.builtin", qname::PRIM_STRING );
+		this->integer8Type->package = qualname::primitives::Package;
+		this->integer8Type->qualified = qualname::primitives::I8;
+		this->objectType = std::make_shared<ClassType>( qualname::classes::object::Name );
+		this->objectType->package = qualname::primitives::Package;
+		this->objectType->qualified = qualname::Object;
+		this->stringType = std::make_shared<Type>( Type::Kind::String, "str", "uranite.builtin", qualname::PrimString );
 		this->unsigned16Type = std::make_shared<IntegerType>( 16, false );
-		this->unsigned16Type->package = "uranite.builtin";
-		this->unsigned16Type->qualified = "uranite.builtin.u16";
+		this->unsigned16Type->package = qualname::primitives::Package;
+		this->unsigned16Type->qualified = qualname::primitives::U16;
 		this->unsigned32Type = std::make_shared<IntegerType>( 32, false );
-		this->unsigned32Type->package = "uranite.builtin";
-		this->unsigned32Type->qualified = "uranite.builtin.u32";
+		this->unsigned32Type->package = qualname::primitives::Package;
+		this->unsigned32Type->qualified = qualname::primitives::U32;
 		this->unsigned64Type = std::make_shared<IntegerType>( 64, false );
-		this->unsigned64Type->package = "uranite.builtin";
-		this->unsigned64Type->qualified = "uranite.builtin.u64";
+		this->unsigned64Type->package = qualname::primitives::Package;
+		this->unsigned64Type->qualified = qualname::primitives::U64;
 		this->unsigned8Type = std::make_shared<IntegerType>( 8, false );
-		this->unsigned8Type->package = "uranite.builtin";
-		this->unsigned8Type->qualified = "uranite.builtin.u8";
-		this->voidType = std::make_shared<Type>( Type::Kind::Void, "void", "uranite.builtin", qname::PRIM_VOID );
+		this->unsigned8Type->package = qualname::primitives::Package;
+		this->unsigned8Type->qualified = qualname::primitives::U8;
+		this->voidType = std::make_shared<Type>( Type::Kind::Void, "void", "uranite.builtin", qualname::PrimVoid );
 		this->primitivesTypes = {
-			{ "Boolean", this->booleanType },
-			{ "Byte", this->unsigned8Type },
-			{ "Char", this->charType },
-			{ "Double", this->float64Type },
-			{ "F32", this->float32Type },
-			{ "F64", this->float64Type },
-			{ "Float", this->float64Type },
-			{ "I16", this->integer16Type },
-			{ "I32", this->integer32Type },
-			{ "I64", this->integer64Type },
-			{ "I8", this->integer8Type },
-			{ "Int", this->integer64Type },
-			{ "Integer", this->integer32Type },
-			{ "Long", this->integer64Type },
-			{ "NoneType", this->voidType },
-			{ "String", this->stringType },
-			{ "U16", this->unsigned16Type },
-			{ "U32", this->unsigned32Type },
-			{ "U64", this->unsigned64Type },
-			{ "U8", this->unsigned8Type },
-			{ "UInt", this->unsigned64Type },
-			{ "Void", this->voidType }
+			{ qualname::classes::boolean::Name, this->booleanType },
+			{ qualname::classes::byte::Name, this->unsigned8Type },
+			{ qualname::classes::Char::Name, this->charType },
+			{ qualname::classes::Double::Name, this->float64Type },
+			{ qualname::classes::f32::Name, this->float32Type },
+			{ qualname::classes::f64::Name, this->float64Type },
+			{ qualname::classes::Float::Name, this->float64Type },
+			{ qualname::classes::i16::Name, this->integer16Type },
+			{ qualname::classes::i32::Name, this->integer32Type },
+			{ qualname::classes::i64::Name, this->integer64Type },
+			{ qualname::classes::i8::Name, this->integer8Type },
+			{ qualname::classes::Int::Name, this->integer64Type },
+			{ qualname::classes::integer::Name, this->integer32Type },
+			{ qualname::classes::Long::Name, this->integer64Type },
+			{ qualname::classes::nonetype::Name, this->voidType },
+			{ qualname::classes::string::Name, this->stringType },
+			{ qualname::classes::u16::Name, this->unsigned16Type },
+			{ qualname::classes::u32::Name, this->unsigned32Type },
+			{ qualname::classes::u64::Name, this->unsigned64Type },
+			{ qualname::classes::u8::Name, this->unsigned8Type },
+			{ qualname::classes::uint::Name, this->unsigned64Type },
+			{ qualname::classes::Void::Name, this->voidType }
 		};
-		this->userTypesType["Object"] = this->objectType;
+		this->userTypesType[qualname::classes::object::Name] = this->objectType;
 	}
 	
 	/**
@@ -122,33 +122,53 @@ namespace uranite::semantic {
 		}
 		if( target->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer classTargetType = std::static_pointer_cast<ClassType>( target );
-			if( classTargetType->qualified == qname::OBJECT || classTargetType->name == "Object" ) {
-				return true;
-			}
-		}
-		if( source->kind == Type::Kind::Class ) {
-			ClassTypeSharedPointer classSourceType = std::static_pointer_cast<ClassType>( source );
-			if( classSourceType->qualified == qname::OBJECT || classSourceType->name == "Object" ) {
+			if( classTargetType->qualified == qualname::Object || classTargetType->name == "Object" ) {
 				return true;
 			}
 		}
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
 			ClassTypeSharedPointer targetClassType = std::static_pointer_cast<ClassType>( target );
 			ClassTypeSharedPointer sourceClassType = std::static_pointer_cast<ClassType>( source );
+			auto checkGenericCompatibility = [&]( const ClassTypeSharedPointer& targetCls, const ClassTypeSharedPointer& sourceCls ) -> bool {
+				if( targetCls->genericParameters.empty() == false && sourceCls->genericParameters.empty() == false ) {
+					if( targetCls->genericParameters.size() != sourceCls->genericParameters.size() ) {
+						return false;
+					}
+					for( size_t genericIndex = 0; genericIndex < targetCls->genericParameters.size(); genericIndex++ ) {
+						if( this->isAssignable( targetCls->genericParameters[genericIndex], sourceCls->genericParameters[genericIndex] ) == false ) {
+							return false;
+						}
+					}
+					return true;
+				}
+				if( targetCls->typeSubstitutions.empty() == false && sourceCls->typeSubstitutions.empty() == false ) {
+					for( const std::pair<const std::string, TypeSharedPointer>& entry : targetCls->typeSubstitutions ) {
+						std::unordered_map<std::string, TypeSharedPointer>::const_iterator it = sourceCls->typeSubstitutions.find( entry.first );
+						if( it == sourceCls->typeSubstitutions.end() ) {
+							return false;
+						}
+						if( this->isAssignable( entry.second, it->second ) == false ) {
+							return false;
+						}
+					}
+					return true;
+				}
+				return true;
+			};
 			if( targetClassType->qualified.empty() == false && sourceClassType->qualified.empty() == false ) {
 				if( targetClassType->qualified == sourceClassType->qualified ) {
-					return true;
+					return checkGenericCompatibility( targetClassType, sourceClassType );
 				}
 			}
 			if( targetClassType->astDeclaration && sourceClassType->astDeclaration &&
 				targetClassType->astDeclaration->name == sourceClassType->astDeclaration->name ) {
-				return true;
+				return checkGenericCompatibility( targetClassType, sourceClassType );
 			}
 			if( targetClassType->astDeclaration && targetClassType->astDeclaration->name == sourceClassType->name ) {
-				return true;
+				return checkGenericCompatibility( targetClassType, sourceClassType );
 			}
 			if( sourceClassType->astDeclaration && sourceClassType->astDeclaration->name == targetClassType->name ) {
-				return true;
+				return checkGenericCompatibility( targetClassType, sourceClassType );
 			}
 		}
 		if( target->kind == Type::Kind::Interface && source->kind == Type::Kind::Class ) {
@@ -180,20 +200,20 @@ namespace uranite::semantic {
 					if( currentInterfaceType->astDeclaration && targetInterfaceType->astDeclaration && currentInterfaceType->astDeclaration == targetInterfaceType->astDeclaration ) {
 						return true;
 					}
-					for( TypeSharedPointer& parentInterfaceType : currentInterfaceType->superInterfaces ) {
+					for( TypeSharedPointer& parentInterfaceType : currentInterfaceType->parentInterfaces ) {
 						typesToCheck.push_back( parentInterfaceType );
 					}
-					if( currentInterfaceType->superInterfaces.empty() && currentInterfaceType->astDeclaration ) {
-						for( ast::nodes::TypeNodeSharedPointer& superNode : currentInterfaceType->astDeclaration->superInterfaces ) {
-							if( superNode->kind == ast::Node::Kind::SimpleType ) {
-								ast::nodes::SimpleTypeNode& simpleTypeNode = static_cast<ast::nodes::SimpleTypeNode&>( *superNode );
+					if( currentInterfaceType->parentInterfaces.empty() && currentInterfaceType->astDeclaration ) {
+						for( ast::nodes::TypeNodeSharedPointer& parentNode : currentInterfaceType->astDeclaration->parentInterfaces ) {
+							if( parentNode->kind == ast::Node::Kind::SimpleType ) {
+								ast::nodes::SimpleTypeNode& simpleTypeNode = static_cast<ast::nodes::SimpleTypeNode&>( *parentNode );
 								TypeSharedPointer simpleType = this->lookupType( simpleTypeNode.name );
 								if( simpleType ) {
 									typesToCheck.push_back( simpleType );
 								}
 							}
-							else if( superNode->kind == ast::Node::Kind::GenericType ) {
-								ast::nodes::GenericTypeNode& genericTypeNode = static_cast<ast::nodes::GenericTypeNode&>( *superNode );
+							else if( parentNode->kind == ast::Node::Kind::GenericType ) {
+								ast::nodes::GenericTypeNode& genericTypeNode = static_cast<ast::nodes::GenericTypeNode&>( *parentNode );
 								TypeSharedPointer genericType = this->lookupType( genericTypeNode.name );
 								if( genericType ) {
 									typesToCheck.push_back( genericType );
@@ -249,8 +269,73 @@ namespace uranite::semantic {
 					if( currentInterfaceType->astDeclaration && sourceInterfaceType->astDeclaration && currentInterfaceType->astDeclaration == sourceInterfaceType->astDeclaration ) {
 						return true;
 					}
-					for( TypeSharedPointer& parentInterfaceType : currentInterfaceType->superInterfaces ) {
+					for( TypeSharedPointer& parentInterfaceType : currentInterfaceType->parentInterfaces ) {
 						typesToCheck.push_back( parentInterfaceType );
+					}
+				}
+			}
+		}
+		if( target->kind == Type::Kind::Interface && source->kind == Type::Kind::Interface ) {
+			InterfaceTypeSharedPointer targetInterfaceType = std::static_pointer_cast<InterfaceType>( target );
+			InterfaceTypeSharedPointer sourceInterfaceType = std::static_pointer_cast<InterfaceType>( source );
+			if( sourceInterfaceType->astDeclaration && targetInterfaceType->astDeclaration && sourceInterfaceType->astDeclaration == targetInterfaceType->astDeclaration ) {
+				return true;
+			}
+			std::vector<TypeSharedPointer> typesToCheck = sourceInterfaceType->parentInterfaces;
+			if( typesToCheck.empty() && sourceInterfaceType->astDeclaration ) {
+				for( ast::nodes::TypeNodeSharedPointer& parentNode : sourceInterfaceType->astDeclaration->parentInterfaces ) {
+					if( parentNode->kind == ast::Node::Kind::SimpleType ) {
+						ast::nodes::SimpleTypeNode& simpleTypeNode = static_cast<ast::nodes::SimpleTypeNode&>( *parentNode );
+						TypeSharedPointer resolvedType = this->lookupType( simpleTypeNode.name );
+						if( resolvedType ) {
+							typesToCheck.push_back( resolvedType );
+						}
+					}
+					else if( parentNode->kind == ast::Node::Kind::GenericType ) {
+						ast::nodes::GenericTypeNode& genericTypeNode = static_cast<ast::nodes::GenericTypeNode&>( *parentNode );
+						TypeSharedPointer resolvedType = this->lookupType( genericTypeNode.name );
+						if( resolvedType ) {
+							typesToCheck.push_back( resolvedType );
+						}
+					}
+				}
+			}
+			std::vector<TypeSharedPointer> checkedTypes;
+			while( typesToCheck.empty() == false ) {
+				TypeSharedPointer currentType = typesToCheck.back();
+				typesToCheck.pop_back();
+				if( currentType == nullptr || std::find( checkedTypes.begin(), checkedTypes.end(), currentType ) != checkedTypes.end() ) {
+					continue;
+				}
+				checkedTypes.push_back( currentType );
+				if( typeIdentityMatch( currentType, target ) ) {
+					return true;
+				}
+				if( currentType->kind == Type::Kind::Interface ) {
+					InterfaceTypeSharedPointer currentInterfaceType = std::static_pointer_cast<InterfaceType>( currentType );
+					if( currentInterfaceType->astDeclaration && targetInterfaceType->astDeclaration && currentInterfaceType->astDeclaration == targetInterfaceType->astDeclaration ) {
+						return true;
+					}
+					for( TypeSharedPointer& parentInterfaceType : currentInterfaceType->parentInterfaces ) {
+						typesToCheck.push_back( parentInterfaceType );
+					}
+					if( currentInterfaceType->parentInterfaces.empty() && currentInterfaceType->astDeclaration ) {
+						for( ast::nodes::TypeNodeSharedPointer& parentNode : currentInterfaceType->astDeclaration->parentInterfaces ) {
+							if( parentNode->kind == ast::Node::Kind::SimpleType ) {
+								ast::nodes::SimpleTypeNode& simpleTypeNode = static_cast<ast::nodes::SimpleTypeNode&>( *parentNode );
+								TypeSharedPointer resolvedType = this->lookupType( simpleTypeNode.name );
+								if( resolvedType ) {
+									typesToCheck.push_back( resolvedType );
+								}
+							}
+							else if( parentNode->kind == ast::Node::Kind::GenericType ) {
+								ast::nodes::GenericTypeNode& genericTypeNode = static_cast<ast::nodes::GenericTypeNode&>( *parentNode );
+								TypeSharedPointer resolvedType = this->lookupType( genericTypeNode.name );
+								if( resolvedType ) {
+									typesToCheck.push_back( resolvedType );
+								}
+							}
+						}
 					}
 				}
 			}
@@ -274,10 +359,10 @@ namespace uranite::semantic {
 			return true;
 		}
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
-			bool targetIsIntOop = qname::isIntegerOop( target->qualified );
-			bool sourceIsIntOop = qname::isIntegerOop( source->qualified );
-			bool targetIsFloatOop = qname::isFloatOop( target->qualified );
-			bool sourceIsFloatOop = qname::isFloatOop( source->qualified );
+			bool targetIsIntOop = qualname::isIntegerOop( target->qualified );
+			bool sourceIsIntOop = qualname::isIntegerOop( source->qualified );
+			bool targetIsFloatOop = qualname::isFloatOop( target->qualified );
+			bool sourceIsFloatOop = qualname::isFloatOop( source->qualified );
 			if( ( targetIsIntOop && sourceIsIntOop ) ||
 				( targetIsFloatOop && sourceIsFloatOop ) ||
 				( targetIsFloatOop && sourceIsIntOop ) ) {
@@ -297,8 +382,8 @@ namespace uranite::semantic {
 			return true;
 		}
 		if( target->kind == Type::Kind::Class && source->kind == Type::Kind::Class ) {
-			bool targetIsIntOop = qname::isIntegerOop( target->qualified );
-			bool sourceIsFloatOop = qname::isFloatOop( source->qualified );
+			bool targetIsIntOop = qualname::isIntegerOop( target->qualified );
+			bool sourceIsFloatOop = qualname::isFloatOop( source->qualified );
 			if( targetIsIntOop && sourceIsFloatOop ) {
 				return true;
 			}
@@ -317,7 +402,7 @@ namespace uranite::semantic {
 			return true;
 		}
 		if( target->kind == Type::Kind::Optional ) {
-			if( source->isVoid() ) {
+			if( source->isVoid() || source->isNone() ) {
 				return true;
 			}
 			OptionalTypeSharedPointer targetOptionalType = std::static_pointer_cast<OptionalType>( target );
@@ -357,12 +442,12 @@ namespace uranite::semantic {
 		}
 		if( target->isPrimitive() && source->kind == Type::Kind::Class ) {
 			static const std::unordered_map<std::string,std::string> oopToPrimitiveMap = {
-				{"Boolean","bool"},{"String","str"},{"Char","char"},
-				{"Byte","u8"},{"Integer","i32"},{"Long","i64"},{"Double","f64"},
-				{"I8","i8"},{"I16","i16"},{"I32","i32"},{"I64","i64"},
-				{"U8","u8"},{"U16","u16"},{"U32","u32"},{"U64","u64"},
-				{"F32","f32"},{"F64","f64"},
-				{"Int","i64"},{"UInt","u64"},{"Float","f64"}
+				{qualname::classes::boolean::Name,"bool"},{qualname::classes::string::Name,"str"},{qualname::classes::Char::Name,"char"},
+				{qualname::classes::byte::Name,"u8"},{qualname::classes::integer::Name,"i32"},{qualname::classes::Long::Name,"i64"},{qualname::classes::Double::Name,"f64"},
+				{qualname::classes::i8::Name,"i8"},{qualname::classes::i16::Name,"i16"},{qualname::classes::i32::Name,"i32"},{qualname::classes::i64::Name,"i64"},
+				{qualname::classes::u8::Name,"u8"},{qualname::classes::u16::Name,"u16"},{qualname::classes::u32::Name,"u32"},{qualname::classes::u64::Name,"u64"},
+				{qualname::classes::f32::Name,"f32"},{qualname::classes::f64::Name,"f64"},
+				{qualname::classes::Int::Name,"i64"},{qualname::classes::uint::Name,"u64"},{qualname::classes::Float::Name,"f64"}
 			};
 			std::unordered_map<std::string,std::string>::const_iterator mapIterator = oopToPrimitiveMap.find( source->name );
 			if( mapIterator != oopToPrimitiveMap.end() && mapIterator->second == target->name ) {
@@ -371,31 +456,31 @@ namespace uranite::semantic {
 		}
 		if( source->isPrimitive() && target->kind == Type::Kind::Class ) {
 			static const std::unordered_map<std::string,std::string> primitiveToOopMap = {
-				{"bool","Boolean"},{"str","String"},{"char","Char"},
-				{"i8","I8"},{"i16","I16"},{"i32","I32"},{"i64","I64"},
-				{"u8","U8"},{"u16","U16"},{"u32","U32"},{"u64","U64"},
-				{"f32","F32"},{"f64","F64"}
+				{"bool",qualname::classes::boolean::Name},{"str",qualname::classes::string::Name},{"char",qualname::classes::Char::Name},
+				{"i8",qualname::classes::i8::Name},{"i16",qualname::classes::i16::Name},{"i32",qualname::classes::i32::Name},{"i64",qualname::classes::i64::Name},
+				{"u8",qualname::classes::u8::Name},{"u16",qualname::classes::u16::Name},{"u32",qualname::classes::u32::Name},{"u64",qualname::classes::u64::Name},
+				{"f32",qualname::classes::f32::Name},{"f64",qualname::classes::f64::Name}
 			};
 			std::unordered_map<std::string,std::string>::const_iterator mapIterator = primitiveToOopMap.find( source->name );
 			if( mapIterator != primitiveToOopMap.end() && mapIterator->second == target->name ) {
 				return true;
 			}
 			static const std::unordered_map<std::string,std::string> oopToPrimitiveReverseMap = {
-				{"Boolean","bool"},{"String","str"},{"Char","char"},
-				{"Byte","u8"},{"Integer","i32"},{"Long","i64"},{"Double","f64"},
-				{"I8","i8"},{"I16","i16"},{"I32","i32"},{"I64","i64"},
-				{"U8","u8"},{"U16","u16"},{"U32","u32"},{"U64","u64"},
-				{"F32","f32"},{"F64","f64"},
-				{"Int","i64"},{"UInt","u64"},{"Float","f64"}
+				{qualname::classes::boolean::Name,"bool"},{qualname::classes::string::Name,"str"},{qualname::classes::Char::Name,"char"},
+				{qualname::classes::byte::Name,"u8"},{qualname::classes::integer::Name,"i32"},{qualname::classes::Long::Name,"i64"},{qualname::classes::Double::Name,"f64"},
+				{qualname::classes::i8::Name,"i8"},{qualname::classes::i16::Name,"i16"},{qualname::classes::i32::Name,"i32"},{qualname::classes::i64::Name,"i64"},
+				{qualname::classes::u8::Name,"u8"},{qualname::classes::u16::Name,"u16"},{qualname::classes::u32::Name,"u32"},{qualname::classes::u64::Name,"u64"},
+				{qualname::classes::f32::Name,"f32"},{qualname::classes::f64::Name,"f64"},
+				{qualname::classes::Int::Name,"i64"},{qualname::classes::uint::Name,"u64"},{qualname::classes::Float::Name,"f64"}
 			};
 			std::unordered_map<std::string,std::string>::const_iterator reverseMapIterator = oopToPrimitiveReverseMap.find( target->name );
 			if( reverseMapIterator != oopToPrimitiveReverseMap.end() && reverseMapIterator->second == source->name ) {
 				return true;
 			}
-			if( source->kind == Type::Kind::Integer && qname::isIntegerOop( target->qualified ) ) {
+			if( source->kind == Type::Kind::Integer && qualname::isIntegerOop( target->qualified ) ) {
 				return true;
 			}
-			if( source->kind == Type::Kind::Float && qname::isFloatOop( target->qualified ) ) {
+			if( source->kind == Type::Kind::Float && qualname::isFloatOop( target->qualified ) ) {
 				return true;
 			}
 		}
@@ -491,10 +576,13 @@ namespace uranite::semantic {
 		if( x->equals( y ) ) {
 			return true;
 		}
-		if( x->kind == Type::Kind::Optional && y->isVoid() ) {
+		if( x->kind == Type::Kind::Optional && ( y->isVoid() || y->isNone() ) ) {
 			return true;
 		}
-		if( y->kind == Type::Kind::Optional && x->isVoid() ) {
+		if( y->kind == Type::Kind::Optional && ( x->isVoid() || x->isNone() ) ) {
+			return true;
+		}
+		if( x->isNone() || y->isNone() ) {
 			return true;
 		}
 		if( x->kind == Type::Kind::Optional ) {
@@ -589,6 +677,10 @@ namespace uranite::semantic {
 		}
 	}
 	
+	void Registry::unregisterType( const std::string& name ) {
+		this->userTypesType.erase( name );
+	}
+	
 	void Registry::registerAlias( const std::string& shortName, const std::string& qualifiedName ) {
 		this->typeAliases[shortName] = qualifiedName;
 	}
@@ -604,7 +696,7 @@ namespace uranite::semantic {
 	bool ClassType::implementsInterface( const std::string& qualifiedName ) const {
 		for( const TypeSharedPointer& iface : this->interfaces ) {
 			if( iface->qualified == qualifiedName ||
-				qname::startsWith( iface->qualified, qualifiedName ) ) {
+				qualname::startsWith( iface->qualified, qualifiedName ) ) {
 				return true;
 			}
 			if( iface->kind == Type::Kind::Interface ) {
@@ -618,7 +710,7 @@ namespace uranite::semantic {
 		}
 		return false;
 	}
-
+	
 	std::vector<std::string> Registry::typeNames() const {
 		std::vector<std::string> names;
 		for( std::pair<std::string,TypeSharedPointer> primitiveEntry : this->primitivesTypes ) {

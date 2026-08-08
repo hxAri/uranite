@@ -125,14 +125,6 @@ from uranite.io.writer import {
     writeRawFd
 }
 
-
-
-
-
-
-
-
-
 export {
     BinaryReader,
     BinaryWriter,

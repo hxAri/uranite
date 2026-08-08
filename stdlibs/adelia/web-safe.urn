@@ -39,7 +39,7 @@ public final class WebSafe:
     each channel independently to the nearest multiple of 51.
     """
     
-    public function snapComponent( self, I32 component ) -> I32:
+    public static function snapComponent( I32 component ) -> I32:
         
         """
         Snap a single RGB channel value (0-255) to the nearest web-safe value
@@ -59,7 +59,7 @@ public final class WebSafe:
         I32 snapped = ( component + 25 ) / 51
         return snapped * 51
     
-    public function snap( self, I32 red, I32 green, I32 blue ) -> RGB:
+    public static function snap( I32 red, I32 green, I32 blue ) -> RGB:
         
         """
         Snap all three RGB channels independently to the nearest web-safe values,
@@ -82,9 +82,9 @@ public final class WebSafe:
             Space: O(1)
         """
         
-        return new RGB( self.snapComponent( red ), self.snapComponent( green ), self.snapComponent( blue ) )
+        return new RGB( WebSafe.snapComponent( red ), WebSafe.snapComponent( green ), WebSafe.snapComponent( blue ) )
     
-    public function snapHex( self, I32 hex ) -> I32:
+    public static function snapHex( I32 hex ) -> I32:
         
         """
         Snap a packed 24-bit hex color to the nearest web-safe color and return
@@ -106,12 +106,12 @@ public final class WebSafe:
         I32 r = ( hex >> 16 ) & 255
         I32 g = ( hex >> 8 ) & 255
         I32 b = hex & 255
-        I32 sr = self.snapComponent( r )
-        I32 sg = self.snapComponent( g )
-        I32 sb = self.snapComponent( b )
+        I32 sr = WebSafe.snapComponent( r )
+        I32 sg = WebSafe.snapComponent( g )
+        I32 sb = WebSafe.snapComponent( b )
         return ( sr << 16 ) | ( sg << 8 ) | sb
     
-    public function isWebSafe( self, I32 red, I32 green, I32 blue ) -> Boolean:
+    public static function isWebSafe( I32 red, I32 green, I32 blue ) -> Boolean:
         
         """
         Check whether the given RGB color is already a web-safe color, meaning
@@ -130,9 +130,9 @@ public final class WebSafe:
                 True if all three channels are web-safe values.
         """
         
-        return self.isComponentWebSafe( red ) and self.isComponentWebSafe( green ) and self.isComponentWebSafe( blue )
+        return WebSafe.isComponentWebSafe( red ) and WebSafe.isComponentWebSafe( green ) and WebSafe.isComponentWebSafe( blue )
     
-    private function isComponentWebSafe( self, I32 component ) -> Boolean:
+    private static function isComponentWebSafe( I32 component ) -> Boolean:
         
         """
         Check whether a single channel value is a web-safe value by verifying

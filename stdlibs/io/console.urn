@@ -264,7 +264,7 @@ public function puts( Object args[], ?String separator=" ", ?String endline="\n"
             Reserved for buffered stream support.
     """
 
-    writeArgsToFd( STDOUT_FD, args, separator, endline, stream, flush )
+    writeArgsToFd( STDOUT_FD, args=args, separator=separator, endline=endline, stream=stream, flush=flush )
 
 public function putsln( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
 
@@ -285,7 +285,7 @@ public function putsln( Object args[], ?String separator=" ", ?String endline="\
             Reserved for buffered stream support.
     """
 
-    writeArgsToFd( STDOUT_FD, args, separator, endline, stream, flush )
+    writeArgsToFd( STDOUT_FD, args=args, separator=separator, endline=endline, stream=stream, flush=flush )
 
 public function putserr( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
 
@@ -306,7 +306,7 @@ public function putserr( Object args[], ?String separator=" ", ?String endline="
             Reserved for buffered stream support.
     """
 
-    writeArgsToFd( STDERR_FD, args, separator, endline, stream, flush )
+    writeArgsToFd( STDERR_FD, args=args, separator=separator, endline=endline, stream=stream, flush=flush )
 
 public function putserrln( Object args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
 
@@ -327,7 +327,7 @@ public function putserrln( Object args[], ?String separator=" ", ?String endline
             Reserved for buffered stream support.
     """
 
-    writeArgsToFd( STDERR_FD, args, separator, endline, stream, flush )
+    writeArgsToFd( STDERR_FD, args=args, separator=separator, endline=endline, stream=stream, flush=flush )
 
 public function putsI64( I64 args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
 
@@ -352,7 +352,7 @@ public function putsI64( I64 args[], ?String separator=" ", ?String endline="\n"
         Space: O(1)
     """
 
-    writeI64ArgsToFd( STDOUT_FD, args, separator, endline, stream, flush )
+    writeI64ArgsToFd( STDOUT_FD, args=args, separator=separator, endline=endline, stream=stream, flush=flush )
 
 export {
     STDERR_FD,

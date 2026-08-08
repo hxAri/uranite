@@ -56,6 +56,7 @@ namespace uranite::semantic {
 			Integer,
 			Interface,
 			Meta,       /**< Meta<T> — type-as-value */
+			None,       /**< None — absence of value, distinct from Void */
 			Optional,
 			Pointer,
 			Reference,
@@ -131,7 +132,7 @@ namespace uranite::semantic {
 		 * @return True if the kind is Bool.
 		 */
 		bool isBool() const {
-			return this->kind == Kind::Bool || this->qualified == qname::BOOLEAN;
+			return this->kind == Kind::Bool || this->qualified == qualname::Boolean;
 		}
 		
 		/**
@@ -147,7 +148,7 @@ namespace uranite::semantic {
 		 * @return True if the kind is Float.
 		 */
 		bool isFloatingPoint() const {
-			return this->kind == Kind::Float || qname::isFloatOop( this->qualified );
+			return this->kind == Kind::Float || qualname::isFloatOop( this->qualified );
 		}
 		
 		/**
@@ -155,7 +156,7 @@ namespace uranite::semantic {
 		 * @return True if the kind is Integer.
 		 */
 		bool isIntegral() const {
-			return this->kind == Kind::Integer || qname::isIntegerOop( this->qualified );
+			return this->kind == Kind::Integer || qualname::isIntegerOop( this->qualified );
 		}
 		
 		/**
@@ -180,7 +181,11 @@ namespace uranite::semantic {
 		 */
 		bool isVoid() const {
 			return this->kind == Kind::Void ||
-				this->qualified == qname::VOID || this->qualified == qname::PRIM_VOID;
+				this->qualified == qualname::Void || this->qualified == qualname::PrimVoid;
+		}
+		
+		bool isNone() const {
+			return this->kind == Kind::None;
 		}
 		
 		/**
@@ -352,6 +357,12 @@ namespace uranite::semantic {
 		/** @brief Types of keyword-only params (parallel to keywordOnlyParamNames). */
 		std::vector<TypeSharedPointer> keywordOnlyParamTypes;
 		
+		/** @brief Number of parameters that have no default value and must be supplied by the caller. */
+		size_t requiredParameterCount = 0;
+		
+		/** @brief Names of generic type parameters declared on this function. */
+		std::vector<std::string> genericParameterNames;
+		
 		/** @brief The names of the function's parameters, used for snippet generation. */
 		std::vector<std::string> parameterNames;
 		
@@ -375,6 +386,7 @@ namespace uranite::semantic {
 			isVariadic( isVariadic ),
 			parameterTypes( std::move( parameters ) ),
 			returnType( std::move( returnType ) ) {
+			this->requiredParameterCount = this->parameterTypes.size();
 		}
 		
 		/**
@@ -512,6 +524,9 @@ namespace uranite::semantic {
 		/** @brief The unique index position of the field within the type layout. */
 		int index;
 		
+		/** @brief Flag indicating if the field has been initialized. */
+		bool isInitialized = false;
+		
 		/** @brief Flag indicating if the field is immutable after initialization. */
 		bool isReadonly = false;
 		
@@ -647,13 +662,23 @@ namespace uranite::semantic {
 			}
 			return nullptr;
 		}
-
+		
+		std::vector<MethodInfo*> findAllMethods( const std::string& name ) {
+			std::vector<MethodInfo*> results;
+			for( MethodInfo& method : this->methods ) {
+				if( method.name == name ) {
+					results.push_back( &method );
+				}
+			}
+			return results;
+		}
+		
 		bool implementsInterface( const std::string& qualifiedName ) const;
-
+	
 	};
-
+	
 	using ClassTypeSharedPointer = std::shared_ptr<ClassType>;
-
+	
 	/**
 	 * @brief Represents a structd data type within the compiler's type system.
 	 * 
@@ -711,6 +736,16 @@ namespace uranite::semantic {
 				}
 			}
 			return nullptr;
+		}
+		
+		std::vector<MethodInfo*> findAllMethods( const std::string& name ) {
+			std::vector<MethodInfo*> results;
+			for( MethodInfo& method : this->methods ) {
+				if( method.name == name ) {
+					results.push_back( &method );
+				}
+			}
+			return results;
 		}
 	
 	};
@@ -800,11 +835,16 @@ namespace uranite::semantic {
 			return nullptr;
 		}
 		
-		/**
-		 * @brief Searches for a specific variant by its name.
-		 * @param name The name of the variant to find.
-		 * @return A pointer to the EnumVariantInfo if found, otherwise nullptr.
-		 */
+		std::vector<MethodInfo*> findAllMethods( const std::string& name ) {
+			std::vector<MethodInfo*> results;
+			for( MethodInfo& method : this->methods ) {
+				if( method.name == name ) {
+					results.push_back( &method );
+				}
+			}
+			return results;
+		}
+		
 		EnumVariantInfo* findVariant( const std::string& name ) {
 			for( EnumVariantInfo& variant : this->variants ) {
 				if( variant.name == name ) {
@@ -821,7 +861,7 @@ namespace uranite::semantic {
 	/**
 	 * @brief Represents an interface type within the Uranite type system.
 	 * 
-	 * This struct manages interface methods, inheritance from super-interfaces,
+	 * This struct manages interface methods, inheritance from parent-interfaces,
 	 * and generic parameter substitutions for monomorphization.
 	 */
 	struct InterfaceType : Type {
@@ -844,7 +884,7 @@ namespace uranite::semantic {
 		std::vector<std::string> methodOrder;
 		
 		/** @brief List of interfaces that this interface extends. */
-		std::vector<TypeSharedPointer> superInterfaces;
+		std::vector<TypeSharedPointer> parentInterfaces;
 		
 		/** @brief Mapping of generic parameter names to their specific type substitutions. */
 		std::unordered_map<std::string, TypeSharedPointer> typeSubstitutions;
@@ -869,24 +909,34 @@ namespace uranite::semantic {
 			}
 			return nullptr;
 		}
-
+		
+		std::vector<MethodInfo*> findAllMethods( const std::string& name ) {
+			std::vector<MethodInfo*> results;
+			for( MethodInfo& method : this->methods ) {
+				if( method.name == name ) {
+					results.push_back( &method );
+				}
+			}
+			return results;
+		}
+		
 		bool extendsInterface( const std::string& qualifiedName ) const {
-			for( const TypeSharedPointer& superIface : this->superInterfaces ) {
-				if( superIface->qualified == qualifiedName ||
-					qname::startsWith( superIface->qualified, qualifiedName ) ) {
+			for( const TypeSharedPointer& parentInterface : this->parentInterfaces ) {
+				if( parentInterface->qualified == qualifiedName ||
+					qualname::startsWith( parentInterface->qualified, qualifiedName ) ) {
 					return true;
 				}
-				if( superIface->kind == Type::Kind::Interface ) {
-					if( std::static_pointer_cast<InterfaceType>( superIface )->extendsInterface( qualifiedName ) ) {
+				if( parentInterface->kind == Type::Kind::Interface ) {
+					if( std::static_pointer_cast<InterfaceType>( parentInterface )->extendsInterface( qualifiedName ) ) {
 						return true;
 					}
 				}
 			}
 			return false;
 		}
-
+		
 	};
-
+	
 	using InterfaceTypeSharedPointer = std::shared_ptr<InterfaceType>;
 	
 	/**
@@ -930,6 +980,16 @@ namespace uranite::semantic {
 			return nullptr;
 		}
 		
+		std::vector<MethodInfo*> findAllMethods( const std::string& name ) {
+			std::vector<MethodInfo*> results;
+			for( MethodInfo& method : this->methods ) {
+				if( method.name == name ) {
+					results.push_back( &method );
+				}
+			}
+			return results;
+		}
+	
 	};
 	
 	using TraitTypeSharedPointer = std::shared_ptr<TraitType>;
@@ -1314,6 +1374,11 @@ namespace uranite::semantic {
 				return this->voidType;
 			}
 			
+			TypeSharedPointer getNone() const {
+				static TypeSharedPointer noneType = std::make_shared<Type>( Type::Kind::None, "None" );
+				return noneType;
+			}
+			
 			/**
 			 * @brief Checks if the source type can be assigned to the target type.
 			 *
@@ -1442,6 +1507,7 @@ namespace uranite::semantic {
 			 * @param type The type reference to associate with the name.
 			 */
 			void registerType( const std::string& name, TypeSharedPointer type );
+		void unregisterType( const std::string& name );
 			
 			void registerAlias( const std::string& shortName, const std::string& qualifiedName );
 			

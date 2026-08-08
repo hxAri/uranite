@@ -6,12 +6,18 @@ from uranite.os.memory.pmm import PhysicalMemoryManager
 from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.time.clock import SystemClock
 from uranite.testing.assertions import assertEqualI64, assertFalse, assertGreaterThan, assertTrue
-from uranite.threading.atomic import AtomicI64
-from uranite.threading.channel import ChannelInner
-from uranite.threading.executor import TaskSubmitter0, TaskSubmitter1, ThreadPoolExecutor
-from uranite.threading.future import FUTURE_FINISHED, FUTURE_PENDING
-from uranite.threading.future import FUTURE_FINISHED, FUTURE_PENDING
-from uranite.threading.thread import ThreadRuntime
+from uranite.threading import {
+    AtomicI64, 
+    ChannelInner, 
+    TaskSubmitter0, 
+    TaskSubmitter1, 
+    ThreadPoolExecutor, 
+    FUTURE_FINISHED, 
+    FUTURE_PENDING, 
+    FUTURE_FINISHED, 
+    FUTURE_PENDING, 
+    ThreadRuntime
+}
 
 function computeSquare( I64 x ) -> I64:
     return x * x

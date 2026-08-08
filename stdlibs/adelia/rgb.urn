@@ -125,7 +125,7 @@ public struct RGB:
         """
         
         if other instanceof RGB:
-            RGB otherRgb = other
+            RGB otherRgb = other as RGB
             return self.red == otherRgb.red and self.green == otherRgb.green and self.blue == otherRgb.blue
         return False
     

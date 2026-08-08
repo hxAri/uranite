@@ -6,7 +6,11 @@ from uranite.collection.pair import Pair
 from uranite.io.console import putsln
 from uranite.testing.assertions import assertEqualI64
 
-private function orchestrateTopology( String region, HashMap<String,T> args[], HashMap<String,T> kwargs{} ) -> HashMap<String,HashMap<String,ArrayList<T>>>:
+private function orchestrateTopology<T>( 
+    String region, 
+    HashMap<String,T> args[], 
+    HashMap<String,T> kwargs{} 
+) -> HashMap<String,HashMap<String,ArrayList<T>>>:
     
     """
     HashMap<String,T> args[] -> uranite.collection.args.Args<HashMap<String,T>>
@@ -53,7 +57,7 @@ public function main() -> I32:
     condA.put( "max_hops", 5 )
     rulesA.add( condA )
     polA.put( "strict", rulesA )
-    HashMap<String,HashMap<String,ArrayList<ArrayList<HashMap<String,I64>>>>> matrix = orchestrateTopology(
+    HashMap<String,HashMap<String,ArrayList<ArrayList<HashMap<String,I64>>>>> matrix = orchestrateTopology<ArrayList<HashMap<String,I64>>>(
         "global",
         nodeA, nodeB,
         firewall=polA

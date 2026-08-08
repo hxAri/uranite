@@ -2,7 +2,7 @@
 <!--
 @author hxAri (hxari)
 @create 2025-02-24 15:15
-@update 2026-07-24 21:00
+@update 2026-08-08 21:37
 @github https://github.com/uranite-lang/uranite
 
 Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -29,9 +29,7 @@ A low-level, high-productivity system programming language built on top of a C++
 - [Uranite](#uranite)
   - [Table of Contents](#table-of-contents)
   - [Language Overview \& Philosophy](#language-overview--philosophy)
-  - [Compiler Architecture \& Pipeline State](#compiler-architecture--pipeline-state)
-    - [Active Compilation Pipeline](#active-compilation-pipeline)
-    - [HIR and MIR Pipeline](#hir-and-mir-pipeline)
+  - [Compiler Architecture \& Pipeline](#compiler-architecture--pipeline)
   - [Repository Development Infrastructure](#repository-development-infrastructure)
     - [Building from Source](#building-from-source)
     - [CLI Usage](#cli-usage)
@@ -62,39 +60,46 @@ public function main() -> I32:
 ```
 
 ```bash
-./build/uranite --run --use-mir --verbose hello.urn
+./build/uranite -r hello.urn
 # Hello, Uranite!
 ```
 
-## Compiler Architecture & Pipeline State
+## Compiler Architecture & Pipeline
 
-### Active Compilation Pipeline
-
-The production pipeline compiles `.urn` source files through the following stages:
+The compiler pipeline processes `.urn` source files through a multi-stage IR architecture:
 
 ```
 Source (.urn)
     |
     v
-  Lexer ---- INDENT/DEDENT token emission (Python-style block structure)
+  Lexer --------- INDENT/DEDENT token emission (Python-style block structure)
     |
     v
-  Parser --- Recursive descent, builds AST
+  Parser -------- Recursive descent, builds AST
     |
     v
-  Semantic - Two-pass: register type declarations, then type-check bodies
+  Semantic ------ Two-pass: register type declarations, then type-check bodies
     |
     v
-  Borrow --- Ownership validation, move tracking, use-after-move detection
+  Borrow Check -- Ownership validation, move tracking, use-after-move detection
     |
     v
-  Optimizer  AST-level: constant folding, DCE, strength reduction, tail-call optimization
+  HIR Lowering -- AST → High-Level IR with resolved types
     |
     v
-  Codegen -- LLVM IR generation
+  HIR Validation  Structural correctness checks
     |
     v
-  Linker --- Links runtime libraries, produces native executable
+  MIR Lowering -- HIR → Control-Flow Graph of basic blocks
+    |
+    v
+  MIR Analysis -- Liveness analysis, borrow checking, optimization
+    |
+    v
+  MIR Codegen --- MIR → LLVM IR generation
+    |
+    v
+  Linker -------- Links runtime libraries, produces native executable
 ```
 
 The pipeline is orchestrated by `compiler::Driver` in `src/uranite/compiler/driver.cpp`. Six static C11 runtime libraries link automatically: exception handling (shadow call stack, unhandled exception reporting), async event loop (legacy, kept for backwards compatibility), thread spawning (pthread), subprocess management (fork/exec), IPC (shared memory), and FFI (dynamic library loading).
@@ -107,20 +112,10 @@ The pipeline is orchestrated by `compiler::Driver` in `src/uranite/compiler/driv
 | `uranite-doc` | Documentation generator from `"""..."""` doccomments |
 | `uranite-pkg` | Package manager with dependency resolution and semantic versioning |
 
-### HIR and MIR Pipeline
-
-A high-level IR pipeline is implemented with an experimental MIR→LLVM code generation path. HIR/MIR stages run when `--verbose`, `--dump-hir`, `--dump-mir`, or `--use-mir` flags are active. The `--use-mir` flag enables MIR-based code generation, bypassing the AST-direct codegen path entirely.
-
-```
-AST → HIR Lowering → HIR Validation → MIR Lowering (CFG)
-    → MIR Liveness Analysis → MIR Borrow Checker → MIR Optimization
-    → MIR → LLVM Codegen (--use-mir)
-```
-
-- **HIR** (High-Level IR) preserves high-level semantics (loops, match, classes) with resolved types. Desugars elif chains to nested conditionals and unifies all loop forms. 60 node types. Accessible via `--dump-hir`.
+- **HIR** (High-Level IR) preserves high-level semantics (loops, match, classes) with resolved types. Desugars elif chains to nested conditionals and unifies all loop forms. Lowers nested function closures with captured variable analysis. 64 node types. Accessible via `--dump-hir`.
 - **MIR** (Mid-Level IR) flattens the HIR tree into a control-flow graph of basic blocks with linear instruction sequences. Each block terminates with exactly one control flow instruction. Accessible via `--dump-mir`.
 - **MIR Analysis** provides backward dataflow liveness analysis (fixed-point iteration over def/use sets), forward dataflow ownership verification (use-after-move and double-free detection), and five optimization passes (dead store elimination, copy propagation, constant folding, block merging, unreachable block elimination).
-- **MIR Codegen** (`--use-mir`) generates LLVM IR from MIR. Runtime-verified for functions, recursion, loops, conditionals, boolean logic, bitwise ops, float arithmetic, extern calls, division/modulo, class constructors, method calls, field access, OOP wrapper classes (via shared descriptor registry), virtual dispatch via interface tables, exception handling with shadow call stack, defer statements, keyword arguments, variadic parameters, generics, enums, async/await, and inline assembly.
+- **MIR Codegen** generates LLVM IR from MIR. Runtime-verified for functions, recursion, loops, conditionals, boolean logic, bitwise ops, float arithmetic, extern calls, division/modulo, class constructors, method calls, field access, OOP wrapper classes (via shared descriptor registry), virtual dispatch via interface tables, exception handling with shadow call stack and exception chaining, defer statements (including defer-in-loop before break/continue), keyword arguments, variadic parameters with forwarding, generics with monomorphization, enums, collection literals, list/set/map comprehensions with filtering, generator functions with for-in iteration, nested function closure capture, `Memory<T>` and `Arena<T>` compiler intrinsics, async/await, and inline assembly.
 
 ## Repository Development Infrastructure
 
@@ -163,6 +158,12 @@ Produces `./build/uranite`, `./build/uranite-tests`, `./build/uranite-fmt`, `./b
 
 # Verbose compilation (shows each pipeline stage including MIR analysis)
 ./build/uranite source.urn --verbose -o program
+
+# Interactive REPL
+./build/uranite --repl
+
+# Run unit tests
+./build/uranite-tests
 ```
 
 ## Language Comparison Matrix

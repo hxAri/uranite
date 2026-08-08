@@ -1,5 +1,5 @@
 
-package main
+package uranite.examples.tutorials.inline-asm
 
 from uranite.io.console import puts
 

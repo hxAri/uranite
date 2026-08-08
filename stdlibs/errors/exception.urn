@@ -39,7 +39,7 @@ public Readonly class Exception implements Throwable:
     protect I64 line
     protect String message
     protect ?Throwable previous
-    protect ?Traceback traceback
+    protect ?Traceback traceback = None
     
     public function Exception( self, String message, I64 code, ?Throwable previous ) -> Void:
         

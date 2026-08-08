@@ -89,7 +89,7 @@ public struct HSV:
         """
         
         if other instanceof HSV:
-            HSV otherHsv = other
+            HSV otherHsv = other as HSV
             return self.hue == otherHsv.hue and self.saturation == otherHsv.saturation and self.value == otherHsv.value
         return False
     

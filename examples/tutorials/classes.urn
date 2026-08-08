@@ -2,7 +2,7 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:29
 # @github https://github.com/uranite-lang/uranite
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -20,7 +20,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package uranite.examples.testing.classes
+package uranite.examples.tutorials.classes
 
 from uranite.io.console import puts
 

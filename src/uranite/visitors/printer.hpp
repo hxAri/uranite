@@ -88,7 +88,7 @@ namespace uranite::visitors {
 			void visit( ast::nodes::SelfExpression& node ) override;
 			void visit( ast::nodes::StringLiteralExpression& node ) override;
 			void visit( ast::nodes::StructDeclaration& node ) override;
-			void visit( ast::nodes::SuperExpression& node ) override;
+			void visit( ast::nodes::ParentExpression& node ) override;
 			void visit( ast::nodes::ThrowStatement& node ) override;
 			void visit( ast::nodes::TryCatchStatement& node ) override;
 			void visit( ast::nodes::TupleExpression& node ) override;

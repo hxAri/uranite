@@ -1,7 +1,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:30
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/hash-map.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -19,7 +19,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.collection.hashmap
+package uranite.collection.hash-map
 
 from uranite.collection.array-list import ArrayList
 from uranite.collection.collection import Collection
@@ -89,6 +89,59 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         self.valueData = new Memory<V>( self.capacity )
         self.status = new Memory<Int>( self.capacity )
         self.count = 0
+
+    public function HashMap( self, Sequence<Pair<K, V>> pairs ) -> Void:
+
+        """
+        Create a map populated with all key-value pairs from the given sequence.
+
+        Parameters:
+            pairs (Sequence<Pair<K, V>>):
+                The sequence of pairs to insert into this map.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        Int pairCount = pairs.length
+        self.capacity = pairCount * 2
+        if self.capacity < 16:
+            self.capacity = 16
+        self.keyData = new Memory<K>( self.capacity )
+        self.valueData = new Memory<V>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+        for Int copyIndex = 0; copyIndex < pairCount; copyIndex++:
+            Pair<K, V> entry = pairs.get( copyIndex )
+            self.put( entry.key, entry.value )
+
+    public function HashMap( self, Int initialCapacity, Sequence<Pair<K, V>> pairs ) -> Void:
+
+        """
+        Create a map with the specified capacity, populated from the given pairs.
+
+        Parameters:
+            initialCapacity (Int):
+                The number of buckets to pre-allocate.
+            pairs (Sequence<Pair<K, V>>):
+                The sequence of pairs to insert into this map.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        self.capacity = initialCapacity
+        if self.capacity < 16:
+            self.capacity = 16
+        self.keyData = new Memory<K>( self.capacity )
+        self.valueData = new Memory<V>( self.capacity )
+        self.status = new Memory<Int>( self.capacity )
+        self.count = 0
+        for Int copyIndex = 0; copyIndex < pairs.length; copyIndex++:
+            Pair<K, V> entry = pairs.get( copyIndex )
+            self.put( entry.key, entry.value )
 
     private function computeIndex( self, K key ) -> Int:
         

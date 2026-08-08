@@ -1,14 +1,13 @@
-
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-21 01:44
-# @github https://github.com/uranite-lang/uranite/blob/prod/examples/
+# @update 2026-08-04 02:15
+# @github https://github.com/uranite-lang/uranite/blob/prod/examples/tutorials/testing.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
-# A comprehensive showcase of Uranite language syntax and features.
+# I'Am pusing!
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,344 +18,26 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package main
+package uranite.examples.tutorials.testing
 
-from uranite.errors.exception import Exception
-from uranite.io.console import puts
+from uranite.collection import Pair
+from uranite.functions.builtin import enumerate
+from uranite.io import getpass, input, puts
+from uranite.io.stream import Stream
 
-class TreeNode;
+private function writer( I64 targetFileDescriptor, String args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+    for Int i, String argument in enumerate<I64>( args, start=1 ):
+    # for Pair<Int,I64> pair in enumerate<I64>( args, start=1 ):
+        puts( "writter [{}] {}".format( i, argument ) )
 
-enum Direction:
-    
-    """ Represents the four cardinal directions """
-    
-    unit North
-    unit South
-    unit East
-    unit West
+private function called( String args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
+    for Int i, String argument in enumerate<I64>( args, start=1 ):
+    # for Pair<Int,I64> pair in enumerate<I64>( args, start=1 ):
+        puts( "called [{}] {}".format( i, argument ) )
+    writer( 0, args=args, separator=separator, endline=endline, stream=stream, flush=flush )
 
-interface Printable:
-    
-    """ An interface for objects that can be displayed to the console """
-    
-    public function display( self ) -> Void:
-        
-        """ Displays the object's information """
-
-class Box<T>:
-    
-    """ A simple generic container class """
-    
-    public T value
-    
-    public function Box( self, T value ) -> Void:
-        
-        """
-        Initializes a new Box with a value.
-        
-        Parameters:
-            value: The value to store in the box.
-        """
-        
-        self.value = value
-    
-    public function get( self ) -> T:
-        
-        """
-        Retrieves the value from the box.
-        
-        Returns:
-            The stored value.
-        """
-        
-        return self.value
-
-class Shape:
-    
-    """ Base class for geometric shapes """
-    
-    public String kind
-    
-    public function Shape( self, String kind ) -> Void:
-        
-        """
-        Initializes a new Shape.
-        
-        Parameters:
-            kind: The kind of shape.
-        """
-        
-        self.kind = kind
-    
-    public virtual function area( self ) -> I64:
-        
-        """
-        Calculates the area of the shape.
-        
-        Returns:
-            The area as an I64.
-        """
-        
-        return 0
-
-class Square extends Shape implements Printable:
-    
-    """ A class representing a square, extending Shape and implementing Printable """
-    
-    public I64 side
-    
-    public function Square( self, I64 side ) -> Void:
-        
-        """
-        Initializes a new Square instance.
-        
-        Parameters:
-            side: The length of one side of the square.
-        """
-        
-        self.kind = "Square"
-        self.side = side
-    
-    public override function area( self ) -> I64:
-        
-        """
-        Calculates the area of the square.
-        
-        Returns:
-            The calculated area.
-        """
-        
-        return self.side * self.side
-    
-    public function display( self ) -> Void:
-        
-        """ Displays the square's information to the console. """
-        
-        puts( "Square(", self.side, ") area=", self.area() )
-
-Readonly class Config:
-    
-    """ A readonly configuration class """
-    
-    public I64 port
-    public String host
-    
-    public function Config( self, I64 port, String host ) -> Void:
-        
-        """
-        Initializes a new Config instance.
-        
-        Parameters:
-            port: The port number.
-            host: The host address.
-        """
-        
-        self.port = port
-        self.host = host
-
-struct Vec2:
-    
-    """ A 2D vector struct with basic methods """
-    
-    public F64 x
-    public F64 y
-    
-    public function Vec2( self, F64 x, F64 y ) -> Void:
-        
-        """
-        Initializes a new Vec2 instance.
-        
-        Parameters:
-            x: The x coordinate.
-            y: The y coordinate.
-        """
-        
-        self.x = x
-        self.y = y
-    
-    public function length_sq( self ) -> F64:
-        
-        """
-        Calculates the squared length of the vector.
-        
-        Returns:
-            The squared length as an F64.
-        """
-        
-        return self.x * self.x + self.y * self.y
-
-class TreeNode:
-    
-    """ A class representing a node in a tree structure """
-    
-    public I64 value
-    
-    public function TreeNode( self, I64 v ) -> Void:
-        
-        """
-        Initializes a new TreeNode.
-        
-        Parameters:
-            v: The integer value for the node.
-        """
-        
-        self.value = v
-
-public function factorial( I64 n ) -> I64:
-    
-    """
-    Calculates the factorial of a number recursively.
-    
-    Parameters:
-        n: The number to calculate the factorial of.
-    
-    Returns:
-        The factorial of n.
-    """
-    
-    if n <= 1:
-        return 1
-    return n * factorial( n - 1 )
-
-public function fib( I64 n ) -> I64:
-    
-    """
-    Calculates the nth Fibonacci number recursively.
-    
-    Parameters:
-        n: The position in the Fibonacci sequence.
-    
-    Returns:
-        The nth Fibonacci number.
-    """
-    
-    if n <= 0:
-        return 0
-    if n == 1:
-        return 1
-    return fib( n - 1 ) + fib( n - 2 )
-
-public function direction_value( Direction d ) -> I32:
-    
-    """
-    Maps a Direction enum value to an integer.
-    
-    Parameters:
-        d: The Direction enum value.
-    
-    Returns:
-        An integer representing the direction.
-    """
-    
-    return match d in \
-        Direction.North => 0, \
-        Direction.South => 1, \
-        Direction.East => 2, \
-        Direction.West => 3, \
-        * => 0 - 1
-
-public function main() -> I32:
-    
-    """
-    The main entry point demonstrating various Uranite language features.
-    
-    Returns:
-        I32 exit code.
-    """
-    
-    puts( "Uranite Syntax Showcase" )
-    
-    I64 a = 10
-    I64 b = 20
-    I64 sum = a + b
-    I64 product = a * b
-    puts( "arithmetic: ", a, " + ", b, " = ", sum, ", ", a, " * ", b, " = ", product )
-    I64 x = 5
-    x += 10
-    x -= 3
-    x *= 2
-    puts( "compound: 5 +10 -3 *2 = ", x )
-    F64 pi = 3.14159
-    F64 radius = 5.0
-    F64 area = pi * radius * radius
-    puts( "circle area(r=5) = ", area )
-    I64 val = 42
-    if val > 100:
-        puts( "big" )
-    elif val > 0:
-        puts( "positive" )
-    else:
-        puts( "non-positive" )
-    I64 total = 0
-    I64 i = 1
-    while i <= 10:
-        total += i
-        i += 1
-    puts( "sum(1..10) = ", total )
-    puts( "c-for: " )
-    for I64 j = 0; j < 5; j++:
-        puts( j, " " )
-    puts()
-    puts( "range 0..5: " )
-    for I64 k in 0..5:
-        puts( k, " " )
-    puts()
-    puts( "range 1...5: " )
-    for I64 k in 1...5:
-        puts( k, " " )
-    puts()
-    puts( "chars: " )
-    for Char c in "Uranite":
-        puts( c, " " )
-    puts()
-    I64 found = 0
-    I64 idx = 0
-    while idx < 100:
-        idx += 1
-        if idx > 7:
-            found = idx
-            break
-    puts( "first > 7: ", found )
-    I64 odd_sum = 0
-    for I64 n in 1...10:
-        I64 rem = n - ( n / 2 ) * 2
-        if rem == 0:
-            continue
-        odd_sum += n
-    puts( "odd sum(1..10) = ", odd_sum )
-    puts( "factorial(5) = ", factorial( 5 ) )
-    puts( "fib(10) = ", fib( 10 ) )
-    function helper( I64 n ) -> I64:
-        return n * n + 1
-    puts( "helper(6) = ", helper( 6 ) )
-    defer puts( "deferred: last line" )
-    Square sq = new Square( 7 )
-    sq.display()
-    Box<I64> box = new Box<I64>( 99 )
-    puts( "Box<", "I64", "> = ", box.get() )
-    Config cfg = new Config( 8080, "localhost" )
-    puts( "Config: ", cfg.host, ":", cfg.port )
-    Vec2 v = new Vec2( 3.0, 4.0 )
-    puts( "Vec2(3,4) len^2 = ", v.length_sq() )
-    Direction north = Direction.North
-    Direction west = Direction.West
-    puts( "north = ", direction_value( north ), ", west = ", direction_value( west ) )
-    TreeNode node = new TreeNode( 42 )
-    puts( "TreeNode = ", node.value )
-    ?String maybe = None
-    if maybe == None:
-        puts( "nullable: is None" )
-    ?String present = "hello"
-    if present != None:
-        puts( "nullable: has value" )
-    try:
-        raise new Exception( "test error", 0, None )
-    except as e:
-        puts( "caught exception" )
-    finally:
-        puts( "finally block ran" )
-    TreeNode tmp = new TreeNode( 0 )
-    delete tmp
-    puts( "memory: allocated and freed" )
-    puts( "Done" )
-    return 0
+public function main( I64 argc, ArrayList<String> argv ) -> Void:
+    called( "AJG!" )
+    called( "X", "Y", "Z" )
+    for Int i, String argument in enumerate<String>( argv, 1 ):
+        puts( "argument [{}] {}".format( i, argument ) )

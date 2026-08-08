@@ -1,9 +1,8 @@
 package testing
 
-from uranite.adelia.color-distance import ColorDistance
-from uranite.adelia.rgb import RGB
-from uranite.io.console import putsln
-from uranite.testing.assertions import assertEqualF64, assertGreaterThan, assertTrue
+from uranite.adelia import ColorDistance, RGB
+from uranite.io import putsln
+from uranite.testing import assertEqualF64, assertGreaterThan, assertTrue
 
 public function main() -> I32:
     putsln( "Adelia ColorDistance Tests" )

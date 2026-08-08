@@ -39,7 +39,7 @@ public final class ColorDistance:
     greens and reds than in blues.
     """
     
-    public function euclidean( self, RGB first, RGB second ) -> F64:
+    public static function euclidean( RGB first, RGB second ) -> F64:
         
         """
         Compute the standard Euclidean distance between two colors in RGB space,
@@ -68,7 +68,7 @@ public final class ColorDistance:
         F64 db = first.blue - second.blue
         return sqrt( dr * dr + dg * dg + db * db )
     
-    public function redmean( self, RGB first, RGB second ) -> F64:
+    public static function redmean( RGB first, RGB second ) -> F64:
         
         """
         Compute a perceptually weighted color distance using the redmean algorithm.
@@ -104,7 +104,7 @@ public final class ColorDistance:
         F64 bWeight = 2.0 + ( 255.0 - rMean ) / 256.0
         return sqrt( rWeight * dr * dr + gWeight * dg * dg + bWeight * db * db )
     
-    public function similarity( self, RGB first, RGB second ) -> F64:
+    public static function similarity( RGB first, RGB second ) -> F64:
         
         """
         Compute a similarity percentage between two colors using the redmean
@@ -128,7 +128,7 @@ public final class ColorDistance:
             Space: O(1)
         """
         
-        F64 dist = self.redmean( first, second )
+        F64 dist = ColorDistance.redmean( first, second )
         F64 maxDist = sqrt( 2.5 * 255.0 * 255.0 + 4.0 * 255.0 * 255.0 + 2.5 * 255.0 * 255.0 )
         return dist / maxDist * 100.0
 

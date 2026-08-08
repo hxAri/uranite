@@ -166,6 +166,7 @@ namespace uranite::semantic {
 			 * @return The return type of the call.
 			 */
 			TypeSharedPointer analyzeCallExpression( ast::nodes::CallExpression& expression );
+			TypeSharedPointer substituteGenericParameters( TypeSharedPointer type, const std::unordered_map<std::string, TypeSharedPointer>& substitutionMap );
 			
 			/**
 			 * @brief Analyzes a class declaration and its members.
@@ -356,7 +357,7 @@ namespace uranite::semantic {
 			void populateClassMembers( ClassTypeSharedPointer classType );
 			
 			/**
-			 * @brief Populates an interface type's generic params, super interfaces, and method signatures.
+			 * @brief Populates an interface type's generic params, parent interfaces, and method signatures.
 			 * @param interfaceType The interface type to populate.
 			 */
 			void populateInterfaceMethods( InterfaceTypeSharedPointer interfaceType );
@@ -447,11 +448,12 @@ namespace uranite::semantic {
 			
 			/** @brief The registry containing all known primitive and user-defined types. */
 			Registry typeRegistry;
-
+			
 			std::string userSourceFile_;
 			std::unordered_set<std::string> userImportedIdentifiers_;
 			bool isInUserCode_ = false;
-
+			bool isAnalyzingAssignTarget_ = false;
+			
 	};
 	
 } // namespace uranite::semantic

@@ -1,9 +1,8 @@
 package testing
 
-from uranite.adelia.rgb import RGB
-from uranite.adelia.web-safe import WebSafe
-from uranite.io.console import putsln
-from uranite.testing.assertions import assertEqualI64, assertFalse, assertTrue
+from uranite.adelia import RGB, WebSafe
+from uranite.io import putsln
+from uranite.testing import assertEqualI64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "Adelia WebSafe Tests" )

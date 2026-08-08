@@ -97,6 +97,7 @@ namespace uranite::parser {
 			 */
 			bool match( token::Type type );
 			bool match( token::Type type, bool optional );
+			bool looksLikeGenericCall();
 			
 			/**
 			 * @brief Consume expected token or emit parser diagnostic.
@@ -451,6 +452,7 @@ namespace uranite::parser {
 			 * @return Parsed expression node.
 			 */
 			ast::nodes::ExpressionSharedPointer parseArrayExpression();
+		ast::nodes::ExpressionSharedPointer parseMapOrSetExpression();
 			
 			// --- Type Parsing ---
 			

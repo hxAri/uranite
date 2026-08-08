@@ -25,7 +25,7 @@ from uranite.os.scheduler.scheduler import Scheduler
 from uranite.os.sync.read-write-lock import ReadWriteLock
 from uranite.os.task.task import BlockReason
 from uranite.threading.atomic import AtomicBoolean
-from uranite.threading.errors import PoisonError
+from uranite.threading.errors import ThreadPoisonError
 
 public class ReadGuard<T>:
     
@@ -149,7 +149,7 @@ public class RwLock<T>:
     variants.
     
     Supports poison detection: if a thread panics while holding a write
-    lock, subsequent lock attempts will raise a PoisonError. Built on
+    lock, subsequent lock attempts will raise a ThreadPoisonError. Built on
     ReadWriteLock from the OS sync module with cooperative blocking through
     the scheduler when contention occurs.
     """
@@ -200,7 +200,7 @@ public class RwLock<T>:
                 A guard granting shared read access to the protected data.
         
         Raises:
-            PoisonError:
+            ThreadPoisonError:
                 If the lock was poisoned by a panicked writer.
         
         Complexity:
@@ -209,7 +209,7 @@ public class RwLock<T>:
         """
         
         if self.poisoned.load():
-            raise new PoisonError( "RwLock is poisoned", 1, None )
+            raise new ThreadPoisonError( "RwLock is poisoned", 1, None )
         
         Boolean acquired = self.inner.readLock()
         while acquired == False:
@@ -230,7 +230,7 @@ public class RwLock<T>:
                 A guard granting exclusive read-write access to the protected data.
         
         Raises:
-            PoisonError:
+            ThreadPoisonError:
                 If the lock was poisoned by a panicked writer.
         
         Complexity:
@@ -239,7 +239,7 @@ public class RwLock<T>:
         """
         
         if self.poisoned.load():
-            raise new PoisonError( "RwLock is poisoned", 1, None )
+            raise new ThreadPoisonError( "RwLock is poisoned", 1, None )
         
         Boolean acquired = self.inner.writeLock()
         while acquired == False:
@@ -345,7 +345,7 @@ public class RwLock<T>:
         
         """
         Mark the lock as poisoned. Subsequent lock attempts will raise a
-        PoisonError. Typically called when a thread panics while holding
+        ThreadPoisonError. Typically called when a thread panics while holding
         the write lock.
         """
         

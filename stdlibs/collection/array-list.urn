@@ -1,7 +1,7 @@
 #
 # @author hxAri (hxari)
 # @create 2026-05-09 05:00
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:30
 # @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/collection/array-list.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -19,7 +19,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package uranite.collection.arraylist
+package uranite.collection.array-list
 
 from uranite.collection.collection import Collection
 from uranite.collection.mutable-sequence import MutableSequence
@@ -81,6 +81,53 @@ public class ArrayList<E> implements MutableSequence<E>:
         self.data = new Memory<E>( self.capacity )
         self.count = 0
     
+    public function ArrayList( self, Sequence<E> elements ) -> Void:
+
+        """
+        Create a list populated with all elements from the given sequence.
+
+        Parameters:
+            elements (Sequence<E>):
+                The sequence of elements to copy into this list.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        Int elementCount = elements.length
+        self.capacity = elementCount * 2
+        if self.capacity < 16:
+            self.capacity = 16
+        self.data = new Memory<E>( self.capacity )
+        self.count = 0
+        for Int copyIndex = 0; copyIndex < elementCount; copyIndex++:
+            self.add( elements.get( copyIndex ) )
+
+    public function ArrayList( self, Int initialCapacity, Sequence<E> elements ) -> Void:
+
+        """
+        Create a list with the specified capacity, populated from the given sequence.
+
+        Parameters:
+            initialCapacity (Int):
+                The number of element slots to pre-allocate.
+            elements (Sequence<E>):
+                The sequence of elements to copy into this list.
+
+        Complexity:
+            Time: O(n)
+            Space: O(n)
+        """
+
+        self.capacity = initialCapacity
+        if self.capacity < 16:
+            self.capacity = 16
+        self.data = new Memory<E>( self.capacity )
+        self.count = 0
+        for Int copyIndex = 0; copyIndex < elements.length; copyIndex++:
+            self.add( elements.get( copyIndex ) )
+
     public function append( self, E element ) -> ArrayList<E>:
         
         """

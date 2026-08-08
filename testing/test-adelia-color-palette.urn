@@ -1,8 +1,8 @@
 package testing
 
-from uranite.adelia.color-palette import ColorPalette
-from uranite.io.console import putsln
-from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertTrue
+from uranite.adelia import ColorPalette
+from uranite.io import putsln
+from uranite.testing import assertEqualI64, assertEqualStr, assertTrue
 
 public function main() -> I32:
     putsln( "Adelia ColorPalette Tests" )
