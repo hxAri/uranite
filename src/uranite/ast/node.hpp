@@ -143,7 +143,7 @@ namespace uranite::ast {
 			SetLiteralExpression,
 			StringLiteral,
 			SubclassofExpression,
-			SuperExpression,
+			ParentExpression,
 			TupleExpression,
 			TypeReferenceExpression,
 			UnaryExpression,
@@ -326,8 +326,8 @@ namespace uranite::ast {
 					return "StructDeclaration";
 				case Kind::SubclassofExpression:
 					return "SubclassofExpression";
-				case Kind::SuperExpression:
-					return "SuperExpression";
+				case Kind::ParentExpression:
+					return "ParentExpression";
 				case Kind::SwitchCase:
 					return "SwitchCase";
 				case Kind::SwitchStatement:
@@ -1429,6 +1429,8 @@ namespace uranite::ast {
 			/** @brief The name of the identifier. */
 			std::string name;
 			
+			std::vector<TypeNodeSharedPointer> typeArguments;
+			
 			/**
 			 * @brief Constructs a new Identifier Expression object.
 			 * @param name The identifier string.
@@ -1797,15 +1799,15 @@ namespace uranite::ast {
 		};
 		
 		/**
-		 * @brief Represents the 'super' reference to a parent class.
+		 * @brief Represents the 'parent' reference to a parent class.
 		 */
-		struct SuperExpression : Expression {
+		struct ParentExpression : Expression {
 			
 			/**
-			 * @brief Constructs a SuperExpression.
+			 * @brief Constructs a ParentExpression.
 			 * @param source The source code location information.
 			 */
-			SuperExpression( const lookup::SourceSharedPointer& source ) : Expression( Node::Kind::SuperExpression, source ) {
+			ParentExpression( const lookup::SourceSharedPointer& source ) : Expression( Node::Kind::ParentExpression, source ) {
 			}
 			
 		};
@@ -2642,7 +2644,7 @@ namespace uranite::ast {
 			std::vector<DeclarationSharedPointer> nestedDeclarations;
 			
 			/** @brief List of interfaces that this interface inherits from. */
-			std::vector<TypeNodeSharedPointer> superInterfaces;
+			std::vector<TypeNodeSharedPointer> parentInterfaces;
 			
 			/**
 			 * @brief Constructs an InterfaceDeclaration.
