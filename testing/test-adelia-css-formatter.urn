@@ -1,8 +1,8 @@
 package testing
 
-from uranite.adelia.css-formatter import CssFormatter
-from uranite.io.console import putsln
-from uranite.testing.assertions import assertEqualStr, assertTrue
+from uranite.adelia import CssFormatter
+from uranite.io import putsln
+from uranite.testing import assertEqualStr, assertTrue
 
 public function main() -> I32:
     putsln( "Adelia CssFormatter Tests" )

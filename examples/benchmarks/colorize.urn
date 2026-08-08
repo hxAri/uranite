@@ -57,45 +57,45 @@ function benchmarkConversions( I64 iterations ) -> I64:
         I32 greenChannel = ( hexColor >> 8 ) & 255
         I32 blueChannel = hexColor & 255
         RGB rgbColor = new RGB( redChannel, greenChannel, blueChannel )
-        checksum = checksum + rgbColor.red + rgbColor.green + rgbColor.blue
+        checksum+= rgbColor.red + rgbColor.green + rgbColor.blue
         F64 redFraction = rgbColor.redPercent
         F64 greenFraction = rgbColor.greenPercent
         F64 blueFraction = rgbColor.bluePercent
         if redFraction >= 0.0 and greenFraction >= 0.0 and blueFraction >= 0.0:
-            checksum = checksum + 1
+            checksum++
         RGB duplicateRgb = new RGB( redChannel, greenChannel, blueChannel )
         if rgbColor.equals( duplicateRgb ):
-            checksum = checksum + 1
+            checksum++
         String rgbRepr = rgbColor.toString()
         I32 packedHex = ColorConverter.rgbToHex( redChannel, greenChannel, blueChannel )
         RGB unpackedRgb = ColorConverter.hexToRgb( packedHex )
-        checksum = checksum + unpackedRgb.red + unpackedRgb.green + unpackedRgb.blue
+        checksum+= unpackedRgb.red + unpackedRgb.green + unpackedRgb.blue
         HSL hslFromRgb = ColorConverter.rgbToHsl( redChannel, greenChannel, blueChannel )
         RGB hslRoundtrip = ColorConverter.hslToRgb( hslFromRgb.hue, hslFromRgb.saturation, hslFromRgb.lightness )
-        checksum = checksum + hslRoundtrip.red + hslRoundtrip.green
+        checksum+= hslRoundtrip.red + hslRoundtrip.green
         HSL constructedHsl = new HSL( hslFromRgb.hue, hslFromRgb.saturation, hslFromRgb.lightness )
         if constructedHsl.equals( hslFromRgb ):
-            checksum = checksum + 1
+            checksum++
         String hslRepr = constructedHsl.toString()
         HSV hsvFromRgb = ColorConverter.rgbToHsv( redChannel, greenChannel, blueChannel )
         RGB hsvRoundtrip = ColorConverter.hsvToRgb( hsvFromRgb.hue, hsvFromRgb.saturation, hsvFromRgb.value )
-        checksum = checksum + hsvRoundtrip.green + hsvRoundtrip.blue
+        checksum+= hsvRoundtrip.green + hsvRoundtrip.blue
         HSV constructedHsv = new HSV( hsvFromRgb.hue, hsvFromRgb.saturation, hsvFromRgb.value )
         String hsvRepr = constructedHsv.toString()
         CMYK cmykFromRgb = ColorConverter.rgbToCmyk( redChannel, greenChannel, blueChannel )
         RGB cmykRoundtrip = ColorConverter.cmykToRgb( cmykFromRgb.cyan, cmykFromRgb.magenta, cmykFromRgb.yellow, cmykFromRgb.key )
-        checksum = checksum + cmykRoundtrip.blue
+        checksum+= cmykRoundtrip.blue
         CMYK constructedCmyk = new CMYK( cmykFromRgb.cyan, cmykFromRgb.magenta, cmykFromRgb.yellow, cmykFromRgb.key )
         String cmykRepr = constructedCmyk.toString()
         HSL hexHslResult = ColorConverter.hexToHsl( hexColor )
         I32 hslHexResult = ColorConverter.hslToHex( hexHslResult.hue, hexHslResult.saturation, hexHslResult.lightness )
-        checksum = checksum + hslHexResult
+        checksum+= hslHexResult
         HSV hexHsvResult = ColorConverter.hexToHsv( hexColor )
         I32 hsvHexResult = ColorConverter.hsvToHex( hexHsvResult.hue, hexHsvResult.saturation, hexHsvResult.value )
-        checksum = checksum + hsvHexResult
+        checksum+= hsvHexResult
         CMYK hexCmykResult = ColorConverter.hexToCmyk( hexColor )
         I32 cmykHexResult = ColorConverter.cmykToHex( hexCmykResult.cyan, hexCmykResult.magenta, hexCmykResult.yellow, hexCmykResult.key )
-        checksum = checksum + cmykHexResult
+        checksum+= cmykHexResult
     return checksum
 
 function benchmarkColorApi( I64 iterations ) -> I64:
@@ -103,18 +103,18 @@ function benchmarkColorApi( I64 iterations ) -> I64:
     for I64 step = 0; step < iterations; step++:
         I32 hexColor = colorFromIndex( step )
         Color color = new Color( hexColor )
-        checksum = checksum + color.red + color.green + color.blue + color.hexValue
+        checksum+= color.red + color.green + color.blue + color.hexValue
         RGB colorRgb = color.toRgb
-        checksum = checksum + colorRgb.red + colorRgb.green + colorRgb.blue
+        checksum+= colorRgb.red + colorRgb.green + colorRgb.blue
         HSL colorHsl = color.toHsl
         if colorHsl.hue >= 0.0:
-            checksum = checksum + 1
+            checksum++
         HSV colorHsv = color.toHsv
         if colorHsv.value >= 0.0:
-            checksum = checksum + 1
+            checksum++
         CMYK colorCmyk = color.toCmyk
         if colorCmyk.key >= 0.0:
-            checksum = checksum + 1
+            checksum++
         String cssHexStr = color.cssHex
         String cssRgbStr = color.cssRgb
         String cssHslStr = color.cssHsl
@@ -122,25 +122,25 @@ function benchmarkColorApi( I64 iterations ) -> I64:
         String ansiBgStr = color.ansiBackground
         String colorizedText = color.ansiColorize( "benchmark" )
         Color complement = color.complementary
-        checksum = checksum + complement.hexValue
+        checksum+= complement.hexValue
         Color webSafeColor = color.webSafe
-        checksum = checksum + webSafeColor.hexValue
+        checksum+= webSafeColor.hexValue
         Color otherColor = new Color( colorFromIndex( step + 1000 ) )
         F64 perceptualDistance = color.distanceTo( otherColor )
         if perceptualDistance >= 0.0:
-            checksum = checksum + 1
+            checksum++
         Color sameColor = new Color( hexColor )
         if color.equals( sameColor ):
-            checksum = checksum + 1
+            checksum++
         String colorRepr = color.toString()
         Color fromRgbColor = Color.fromRgb( 200, 100, 50 )
-        checksum = checksum + fromRgbColor.red
+        checksum+= fromRgbColor.red
         Color fromHslColor = Color.fromHsl( 120.0, 0.8, 0.5 )
-        checksum = checksum + fromHslColor.green
+        checksum+= fromHslColor.green
         Color fromHsvColor = Color.fromHsv( 240.0, 0.9, 0.7 )
-        checksum = checksum + fromHsvColor.blue
+        checksum+= fromHsvColor.blue
         Color fromCmykColor = Color.fromCmyk( 0.5, 0.2, 0.8, 0.1 )
-        checksum = checksum + fromCmykColor.hexValue
+        checksum+= fromCmykColor.hexValue
     return checksum
 
 function benchmarkDistanceAndPalettes( I64 iterations ) -> I64:
@@ -160,41 +160,41 @@ function benchmarkDistanceAndPalettes( I64 iterations ) -> I64:
         F64 redmeanDist = ColorDistance.redmean( firstRgb, secondRgb )
         F64 similarityPct = ColorDistance.similarity( firstRgb, secondRgb )
         if euclideanDist >= 0.0 and redmeanDist >= 0.0 and similarityPct >= 0.0:
-            checksum = checksum + 1
+            checksum++
     for I64 step = 0; step < iterations; step++:
         I32 baseHex = colorFromIndex( step )
         ColorPalette compPalette = PaletteGenerator.complementary( baseHex )
-        checksum = checksum + compPalette.length + compPalette.get( 0 )
+        checksum+= compPalette.length + compPalette.get( 0 )
         ColorPalette triadicPalette = PaletteGenerator.triadic( baseHex )
-        checksum = checksum + triadicPalette.length
+        checksum+= triadicPalette.length
         for I64 colorIndex = 0; colorIndex < triadicPalette.length; colorIndex++:
-            checksum = checksum + triadicPalette.get( colorIndex )
+            checksum+= triadicPalette.get( colorIndex )
         ColorPalette analogousPalette = PaletteGenerator.analogous( baseHex )
-        checksum = checksum + analogousPalette.length
+        checksum+= analogousPalette.length
         for I64 analogIndex = 0; analogIndex < analogousPalette.length; analogIndex++:
-            checksum = checksum + analogousPalette.get( analogIndex )
+            checksum+= analogousPalette.get( analogIndex )
         ColorPalette splitPalette = PaletteGenerator.splitComplementary( baseHex )
-        checksum = checksum + splitPalette.length
+        checksum+= splitPalette.length
         for I64 splitIndex = 0; splitIndex < splitPalette.length; splitIndex++:
-            checksum = checksum + splitPalette.get( splitIndex )
+            checksum+= splitPalette.get( splitIndex )
         ColorPalette tintsPalette = PaletteGenerator.tints( baseHex, 4 )
-        checksum = checksum + tintsPalette.length
+        checksum+= tintsPalette.length
         for I64 tintIndex = 0; tintIndex < tintsPalette.length; tintIndex++:
-            checksum = checksum + tintsPalette.get( tintIndex )
+            checksum+= tintsPalette.get( tintIndex )
         ColorPalette shadesPalette = PaletteGenerator.shades( baseHex, 4 )
-        checksum = checksum + shadesPalette.length
+        checksum+= shadesPalette.length
         for I64 shadeIndex = 0; shadeIndex < shadesPalette.length; shadeIndex++:
-            checksum = checksum + shadesPalette.get( shadeIndex )
+            checksum+= shadesPalette.get( shadeIndex )
         ColorPalette monoPalette = PaletteGenerator.monochromatic( baseHex, 3 )
-        checksum = checksum + monoPalette.length
+        checksum+= monoPalette.length
         for I64 monoIndex = 0; monoIndex < monoPalette.length; monoIndex++:
-            checksum = checksum + monoPalette.get( monoIndex )
+            checksum+= monoPalette.get( monoIndex )
         String monoRepr = monoPalette.toString()
     ColorPalette customPalette = new ColorPalette( "Benchmark Gradient" )
     customPalette.addColor( 0xFF0000 ).addColor( 0xFF7F00 ).addColor( 0xFFFF00 ).addColor( 0x00FF00 ).addColor( 0x0000FF ).addColor( 0x8B00FF )
-    checksum = checksum + customPalette.length
+    checksum+= customPalette.length
     for I64 gradientIndex = 0; gradientIndex < customPalette.length; gradientIndex++:
-        checksum = checksum + customPalette.get( gradientIndex )
+        checksum+= customPalette.get( gradientIndex )
     String paletteName = customPalette.name
     String paletteRepr = customPalette.toString()
     return checksum
@@ -226,23 +226,23 @@ function benchmarkFormattingAndWebSafe( I64 iterations ) -> I64:
         I32 snappedRed = WebSafe.snapComponent( redChannel )
         I32 snappedGreen = WebSafe.snapComponent( greenChannel )
         I32 snappedBlue = WebSafe.snapComponent( blueChannel )
-        checksum = checksum + snappedRed + snappedGreen + snappedBlue
+        checksum+= snappedRed + snappedGreen + snappedBlue
         RGB snappedRgb = WebSafe.snap( redChannel, greenChannel, blueChannel )
-        checksum = checksum + snappedRgb.red + snappedRgb.green + snappedRgb.blue
+        checksum+= snappedRgb.red + snappedRgb.green + snappedRgb.blue
         I32 snappedHex = WebSafe.snapHex( hexColor )
-        checksum = checksum + snappedHex
+        checksum+= snappedHex
         if WebSafe.isWebSafe( snappedRed, snappedGreen, snappedBlue ):
-            checksum = checksum + 1
+            checksum++
     return checksum
 
 function benchmarkDatabase() -> I64:
     I64 checksum = 0
     ColorDatabase database = new ColorDatabase()
     I64 entryCount = database.count
-    checksum = checksum + entryCount
+    checksum+= entryCount
     puts( "  Database loaded: ", entryCount, " named colors" )
     ColorNameEntry customEntry = new ColorNameEntry( "Benchmark Magenta", 0xFF00FF )
-    checksum = checksum + customEntry.hex
+    checksum+= customEntry.hex
     String entryName = customEntry.name
     String entryRepr = customEntry.toString()
     String redName = database.nameForHex( 0xFF0000 )
@@ -254,12 +254,12 @@ function benchmarkDatabase() -> I64:
     I32 goldHex = database.hexForName( "Gold" )
     I32 crimsonHex = database.hexForName( "Crimson" )
     I32 indigoHex = database.hexForName( "Indigo" )
-    checksum = checksum + coralHex + tealHex + goldHex + crimsonHex + indigoHex
+    checksum+= coralHex + tealHex + goldHex + crimsonHex + indigoHex
     for I64 probeIndex = 0; probeIndex < 500; probeIndex++:
         I32 probeHex = colorFromIndex( probeIndex * 7 )
         String closestName = database.closestName( probeHex )
         ColorNameEntry closestEntry = database.closestEntry( probeHex )
-        checksum = checksum + closestEntry.hex
+        checksum+= closestEntry.hex
     puts( "  Closest-color search: 500 probes completed" )
     return checksum
 

@@ -42,7 +42,6 @@ public class StyledConsoleHandler:
 
     public LogFormatter formatter
     public LogLevel minLevel
-    public AnsiFormatter ansiFormatter
 
     public function StyledConsoleHandler( self ) -> Void:
 
@@ -56,7 +55,6 @@ public class StyledConsoleHandler:
 
         self.formatter = defaultFormatter()
         self.minLevel = LogLevel.Trace
-        self.ansiFormatter = new AnsiFormatter()
 
     public function StyledConsoleHandler( self, LogFormatter formatter, LogLevel minimumLevel ) -> Void:
 
@@ -76,7 +74,6 @@ public class StyledConsoleHandler:
 
         self.formatter = formatter
         self.minLevel = minimumLevel
-        self.ansiFormatter = new AnsiFormatter()
 
     public function handle( self, LogLevel level, String name, String message ) -> Void:
 
@@ -149,17 +146,17 @@ public class StyledConsoleHandler:
         """
 
         if level == LogLevel.Trace:
-            return self.ansiFormatter.colorize( text, 128, 128, 128 )
+            return AnsiFormatter.colorize( text, 128, 128, 128 )
         if level == LogLevel.Debug:
-            return self.ansiFormatter.colorize( text, 0, 188, 212 )
+            return AnsiFormatter.colorize( text, 0, 188, 212 )
         if level == LogLevel.Info:
-            return self.ansiFormatter.colorize( text, 76, 175, 80 )
+            return AnsiFormatter.colorize( text, 76, 175, 80 )
         if level == LogLevel.Warn:
-            return self.ansiFormatter.colorize( text, 255, 193, 7 )
+            return AnsiFormatter.colorize( text, 255, 193, 7 )
         if level == LogLevel.Error:
-            return self.ansiFormatter.colorize( text, 244, 67, 54 )
+            return AnsiFormatter.colorize( text, 244, 67, 54 )
         if level == LogLevel.Fatal:
-            return self.ansiFormatter.colorize( text, 255, 23, 68 )
+            return AnsiFormatter.colorize( text, 255, 23, 68 )
         return text
 
 export {

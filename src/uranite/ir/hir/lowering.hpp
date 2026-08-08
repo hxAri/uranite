@@ -68,9 +68,12 @@ namespace uranite::ir::hir {
 		/** @brief Resolves a TypeNode to its semantic Type using the Analyzer. */
 		semantic::TypeSharedPointer resolveTypeNode( const ast::nodes::TypeNodeSharedPointer& typeNode );
 		
+		semantic::TypeSharedPointer inferExpressionType( const ast::nodes::ExpressionSharedPointer& expression );
+		
 		semantic::Analyzer& semanticAnalyzer;
 		diagnostic::Engine& diagnosticEngine;
-	
+		std::string currentOwnerClassName;
+		
 	};
 
 } // namespace uranite::ir::hir

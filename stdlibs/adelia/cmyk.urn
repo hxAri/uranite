@@ -93,7 +93,7 @@ public struct CMYK:
         """
         
         if other instanceof CMYK:
-            CMYK otherCmyk = other
+            CMYK otherCmyk = other as CMYK
             return self.cyan == otherCmyk.cyan and self.magenta == otherCmyk.magenta and self.yellow == otherCmyk.yellow and self.key == otherCmyk.key
         return False
     
@@ -113,7 +113,7 @@ public struct CMYK:
             Space: O(1)
         """
         
-        return "CMYK(" + self.cyan + ", " + self.magenta + ", " + self.yellow + ", " + self.key + ")"
+        return "CMYK( {}, {}, {}, {} )".format( self.cyan, self.magenta, self.yellow, self.key )
 
 export {
     CMYK

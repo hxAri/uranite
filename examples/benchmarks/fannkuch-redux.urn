@@ -2,13 +2,14 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-21 01:44
+# @update 2026-08-04 00:58
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/fannkuch-redux.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
-# Extreme Fannkuch-redux benchmark using raw Memory access and efficient permutations.
+# Extreme Fannkuch-redux benchmark using raw Memory access, 
+# optimized block rotations, and efficient permutations.
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -50,20 +51,20 @@ function fannkuch( Int n ) -> Int:
                 Int temp = perm.get( i )
                 perm.set( i, perm.get( k - i ) )
                 perm.set( k - i, temp )
-            flipsCount = flipsCount + 1
+            flipsCount++
             k = perm.get( 0 )
         if flipsCount > maxFlipsCount:
             maxFlipsCount = flipsCount
         if ( nperm % 2 ) == 0:
-            checkSum = checkSum + flipsCount
+            checkSum += flipsCount
         else:
-            checkSum = checkSum - flipsCount
+            checkSum -= flipsCount
         while True:
             if r == n:
                 delete perm
                 delete perm1
                 delete count
-                puts( checkSum )
+                puts( "    checkSum: {}".format( checkSum ) )
                 return maxFlipsCount
             Int first = perm1.get( 0 )
             for Int i = 0; i < r; i++:
@@ -72,16 +73,23 @@ function fannkuch( Int n ) -> Int:
             count.set( r, count.get( r ) - 1 )
             if count.get( r ) > 0:
                 break
-            r = r + 1
-        nperm = nperm + 1
+            r++
+        nperm++
 
 public function main() -> I32:
-    Int n = 9
+    Int n = 11
     puts( "Uranite Extreme Fannkuch Redux Benchmark (n={})".format( n ) )
-    I64 start = clock()
+    puts( "-   initializing fannkuch routine" )
+    I64 totalStart = clock()
+    puts( "    executing fannkuch routine..." )
+    I64 funcStart = clock()
     Int result = fannkuch( n )
-    I64 end = clock()
-    Double elapsed = ( end - start ) / 1000000.0
-    puts( "Max flips: ", result )
-    puts( "Elapsed time: ", elapsed, " seconds" )
+    I64 funcEnd = clock()
+    Double funcElapsed = ( funcEnd - funcStart ) / 1000000.0
+    puts( "    elapsed time Fannkuch routine: {} seconds".format( funcElapsed ) )
+    I64 totalEnd = clock()
+    Double totalElapsed = ( totalEnd - totalStart ) / 1000000.0
+    puts( "-   execution finalized" )
+    puts( "    max flips: {}".format( result ) )
+    puts( "elapsed time: {} seconds".format( totalElapsed ) )
     return 0

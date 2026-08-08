@@ -38,7 +38,7 @@ public Readonly class Warning implements Throwable:
     protect I64 line
     protect String message
     protect ?Throwable previous
-    protect ?Traceback traceback
+    protect ?Traceback traceback = None
     
     public function Warning( self, String message, I64 code, ?Throwable previous ) -> Void:
         

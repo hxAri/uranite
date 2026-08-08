@@ -2,7 +2,7 @@
 #
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-21 01:44
+# @update 2026-08-04 00:51
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/binary-trees.urn
 #
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -60,17 +60,17 @@ function treeSize( Int depth ) -> Int:
 public function main() -> I32:
     Int maxDepth = 21
     Int minDepth = 4
-    puts( "Uranite Binary Trees Benchmark (max depth ", maxDepth, ")" )
-    puts( "Initializing stretch tree..." )
+    puts( "Uranite Binary Trees Benchmark (max depth {})".format( maxDepth) )
+    puts( "-   initializing stretch tree" )
     I64 start = clock()
     Int stretchDepth = maxDepth + 1
     Int stretchNodes = treeSize( stretchDepth )
     Arena<Node> stretchPool = new Arena<Node>( stretchNodes )
     Node stretchTree = bottomUpTree( stretchDepth, stretchPool )
-    puts( "stretch tree of depth ", stretchDepth, "\t check: ", stretchTree.check() )
+    puts( "    stretch tree of depth {}: \t\t\t check: {}".format( stretchDepth, stretchTree.check() ) )
     stretchPool.freeAll()
     stretchPool.destroy()
-    puts( "Initializing long lived tree..." )
+    puts( "-   initializing long lived tree" )
     Int longNodes = treeSize( maxDepth )
     Arena<Node> longPool = new Arena<Node>( longNodes )
     Node longLivedTree = bottomUpTree( maxDepth, longPool )
@@ -81,15 +81,15 @@ public function main() -> I32:
         for Int i = 0; i < iterations; i++:
             Arena<Node> pool = new Arena<Node>( nodesPerTree )
             Node temp = bottomUpTree( depth, pool )
-            totalCheck = totalCheck + temp.check()
+            totalCheck+= temp.check()
             pool.freeAll()
             pool.destroy()
-        puts( iterations, "\t trees of depth ", depth, "\t check: ", totalCheck )
-    puts( "long lived tree of depth ", maxDepth, "\t check: ", longLivedTree.check() )
+        puts( "    iterations: {}, trees of depth {}: \t check: {}".format( iterations, depth, totalCheck ) )
+    puts( "    long lived tree of depth {}: \t\t check: {}".format( maxDepth, longLivedTree.check() ) )
     longPool.freeAll()
     longPool.destroy()
     I64 end = clock()
     Double elapsed = ( end - start ) / 1000000.0
-    puts( "Total execution finalized." )
-    puts( "Elapsed time: ", elapsed, " seconds" )
+    puts( "-   execution finalized" )
+    puts( "Elapsed time: {} seconds".format( elapsed ) )
     return 0

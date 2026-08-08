@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fmt/color.h>
 #include <fmt/core.h>
+#include <fmt/format.h>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -32,8 +33,8 @@
 #include <llvm/TargetParser/Triple.h>
 #include <llvm/TargetParser/Host.h>
 
-#include "uranite/codegen/codegen.hpp"
 #include "uranite/compiler/driver.hpp"
+#include "uranite/semantic/qualnames.hpp"
 #include "uranite/ir/hir/lowering.hpp"
 #include "uranite/ir/hir/printer.hpp"
 #include "uranite/ir/hir/validator.hpp"
@@ -95,7 +96,7 @@ namespace uranite::compiler {
 				return result;
 			}
 			if( this->options.verbose ) {
-				spdlog::warn( "Specified modules path does not exist: {}", this->options.modulesPath );
+				spdlog::warn( "specified modules path does not exist: {}", this->options.modulesPath );
 			}
 		}
 		const char* envModulesPath = std::getenv( "URANITE_MODULES_PATH" );
@@ -177,7 +178,7 @@ namespace uranite::compiler {
 			moduleStream << moduleFile.rdbuf();
 			std::string moduleSource = moduleStream.str();
 			if( this->options.verbose ) {
-				spdlog::info( "Loading module: {}", filePath );
+				spdlog::info( "loading module: {}", filePath );
 			}
 			diagnostic::Engine moduleDiagnostic( this->options.maximumErrorCount, -1 );
 			lexer::Lexer moduleLexer( moduleSource, filePath, moduleDiagnostic );
@@ -335,6 +336,7 @@ namespace uranite::compiler {
 				existingDeclarationNames.insert( existingIdentifier );
 			}
 		}
+		std::set<std::string> foundImportedIdentifiers;
 		for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleProgram->declarations ) {
 			if( moduleDeclaration == nullptr ) {
 				continue;
@@ -364,6 +366,10 @@ namespace uranite::compiler {
 			else if( moduleDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
 				declarationIdentifier = static_cast<ast::nodes::ConstantDeclaration&>( *moduleDeclaration ).name;
 			}
+			if( isSelectiveImportOperation && declarationIdentifier.empty() == false &&
+				selectivelyImportedIdentifiers.count( declarationIdentifier ) > 0 ) {
+				foundImportedIdentifiers.insert( declarationIdentifier );
+			}
 			bool isVisibleIdentifier = moduleDeclaration->access == ast::AccessModifier::Public || exportedIdentifiers.count( declarationIdentifier );
 			if( isVisibleIdentifier == false && moduleDeclaration->access != ast::AccessModifier::Default ) {
 				continue;
@@ -390,6 +396,56 @@ namespace uranite::compiler {
 			}
 			targetProgram.declarations.push_back( moduleDeclaration );
 		}
+		if( isSelectiveImportOperation && importDeclaration != nullptr ) {
+			for( const ast::nodes::ImportItem& importItem : importDeclaration->importItems ) {
+				if( foundImportedIdentifiers.count( importItem.name ) == 0 ) {
+					if( exportedIdentifiers.count( importItem.name ) > 0 ) {
+						bool resolvedReExport = false;
+						for( ast::nodes::ImportDeclarationSharedPointer& moduleImportDeclaration : moduleProgram->imports ) {
+							if( moduleImportDeclaration == nullptr || moduleImportDeclaration->isFromImport == false ) {
+								continue;
+							}
+							bool foundInModuleImport = false;
+							for( const ast::nodes::ImportItem& moduleImportItem : moduleImportDeclaration->importItems ) {
+								if( moduleImportItem.name == importItem.name ) {
+									foundInModuleImport = true;
+									break;
+								}
+							}
+							if( foundInModuleImport == false ) {
+								continue;
+							}
+							std::string reExportModulePath = this->resolveModulePath( moduleImportDeclaration->path );
+							if( reExportModulePath.empty() == false ) {
+								ast::nodes::ImportDeclaration reExportImportDeclaration(
+									moduleImportDeclaration->path, importDeclaration->source
+								);
+								reExportImportDeclaration.isFromImport = true;
+								reExportImportDeclaration.importAll = false;
+								reExportImportDeclaration.importItems.push_back( importItem );
+								if( this->loadModule( reExportModulePath, targetProgram, &reExportImportDeclaration ) ) {
+									resolvedReExport = true;
+									foundImportedIdentifiers.insert( importItem.name );
+								}
+							}
+							break;
+						}
+						if( resolvedReExport ) {
+							continue;
+						}
+					}
+					std::string formattedModulePath;
+					for( size_t pathIndex = 0; pathIndex < importDeclaration->path.size(); pathIndex++ ) {
+						if( pathIndex > 0 ) {
+							formattedModulePath += ".";
+						}
+						formattedModulePath += importDeclaration->path[pathIndex];
+					}
+					std::string errorMessage = fmt::format( "cannot import name \"{}\" from \"{}\"", importItem.name, formattedModulePath );
+					this->diagnostic.error( importDeclaration->source, errorMessage );
+				}
+			}
+		}
 		return true;
 	}
 	
@@ -397,12 +453,12 @@ namespace uranite::compiler {
 		std::string modulesDirectoryPath = this->findModulesDirectory();
 		if( modulesDirectoryPath.empty() ) {
 			if( this->options.verbose ) {
-				spdlog::warn( "No modules directory found, skipping prelude loading" );
+				spdlog::warn( "no modules directory found, skipping prelude loading" );
 			}
 			return true;
 		}
 		if( this->options.verbose ) {
-			spdlog::info( "Loading prelude from: {}", modulesDirectoryPath );
+			spdlog::info( "loading prelude from: {}", modulesDirectoryPath );
 		}
 		std::vector<std::string> corePreludeModulePaths = {
 			"errors/error.urn",
@@ -417,7 +473,7 @@ namespace uranite::compiler {
 				size_t previousDeclarationCount = program.declarations.size();
 				if( this->loadModule( absoluteModulePath.string(), program ) == false ) {
 					if( this->options.verbose ) {
-						spdlog::warn( "Failed to load prelude module: {}", relativeModulePath );
+						spdlog::warn( "failed to load prelude module: {}", relativeModulePath );
 					}
 				}
 				for( size_t declarationIndex = previousDeclarationCount; declarationIndex < program.declarations.size(); declarationIndex++ ) {
@@ -440,7 +496,7 @@ namespace uranite::compiler {
 		sourceContentStream << sourceFile.rdbuf();
 		this->source = sourceContentStream.str();
 		if( this->options.verbose ) {
-			spdlog::info( "Read {} bytes from \"{}\"", this->source.size(), this->options.output.source );
+			spdlog::info( "read {} bytes from \"{}\"", this->source.size(), this->options.output.source );
 		}
 		return 0;
 	}
@@ -459,7 +515,7 @@ namespace uranite::compiler {
 					}
 					formattedPathIdentifier+= importDeclaration->path[pathIndex];
 				}
-				std::string errorMessage = fmt::format( "cannot resolve module \"{}\"", formattedPathIdentifier );
+				std::string errorMessage = fmt::format( "no module named \"{}\"", formattedPathIdentifier );
 				this->diagnostic.error( importDeclaration->source, errorMessage );
 				continue;
 			}
@@ -532,7 +588,7 @@ namespace uranite::compiler {
 			}
 			return "";
 		};
-		bool isStdlibImport = ( modulePath[0] == "uranite" );
+		bool isStdlibImport = ( modulePath[0] == semantic::qualname::modules::Uranite );
 		std::vector<std::string> effectivePathSegments = modulePath;
 		
 		// Rewrite the reserved "native" segment onto the active target architecture
@@ -542,7 +598,7 @@ namespace uranite::compiler {
 		if( isStdlibImport ) {
 			std::string archSegment = this->targetArchSegment();
 			for( std::string& pathSegment : effectivePathSegments ) {
-				if( pathSegment == "native" ) {
+				if( pathSegment == semantic::qualname::modules::Native ) {
 					pathSegment = archSegment;
 				}
 			}
@@ -572,6 +628,37 @@ namespace uranite::compiler {
 		if( effectivePathSegments.empty() == false ) {
 			moduleInitializerPath = fmt::format( "{}/__mod__.urn", relativePathBase );
 		}
+		else {
+			moduleInitializerPath = "__mod__.urn";
+		}
+		std::function<std::string( const std::filesystem::path&, const std::vector<std::string>& )> tryVariantsForSegments = [&checkPathExists]( const std::filesystem::path& baseSearchPath, const std::vector<std::string>& segments ) -> std::string {
+			if( segments.empty() ) {
+				return "";
+			}
+			std::string segmentRelativePath;
+			for( size_t segmentIndex = 0; segmentIndex < segments.size(); segmentIndex++ ) {
+				if( segmentIndex > 0 ) {
+					segmentRelativePath = fmt::format( "{}/{}", segmentRelativePath, segments[segmentIndex] );
+				}
+				else {
+					segmentRelativePath = segments[segmentIndex];
+				}
+			}
+			std::string resolvedPath = checkPathExists( baseSearchPath / fmt::format( "{}.urn", segmentRelativePath ) );
+			if( resolvedPath.empty() == false ) {
+				return resolvedPath;
+			}
+			std::string lastNameSegment = segments.back();
+			if( lastNameSegment.empty() == false ) {
+				lastNameSegment[0] = static_cast<char>( std::toupper( static_cast<unsigned char>( lastNameSegment[0] ) ) );
+			}
+			resolvedPath = checkPathExists( baseSearchPath / fmt::format( "{}/{}.urn", segmentRelativePath, lastNameSegment ) );
+			if( resolvedPath.empty() == false ) {
+				return resolvedPath;
+			}
+			resolvedPath = checkPathExists( baseSearchPath / fmt::format( "{}/__mod__.urn", segmentRelativePath ) );
+			return resolvedPath;
+		};
 		std::function<std::string( const std::filesystem::path& )> tryAllModuleVariants = [&]( const std::filesystem::path& baseSearchPath ) -> std::string {
 			std::string resolvedPath = checkPathExists( baseSearchPath / relativePathWithExtension );
 			if( resolvedPath.empty() == false ) {
@@ -606,6 +693,40 @@ namespace uranite::compiler {
 			finalResolvedResult = tryAllModuleVariants( mainSourceDirectory );
 			if( finalResolvedResult.empty() == false ) {
 				return finalResolvedResult;
+			}
+			if( modulePath.empty() == false ) {
+				if( this->selfPackagePrefixCached_ == false ) {
+					this->selfPackagePrefixCached_ = true;
+					std::filesystem::path selfModFilePath = mainSourceDirectory / "__mod__.urn";
+					if( std::filesystem::exists( selfModFilePath ) ) {
+						std::ifstream selfModFileStream( selfModFilePath.string() );
+						if( selfModFileStream.is_open() ) {
+							std::string currentLine;
+							while( std::getline( selfModFileStream, currentLine ) ) {
+								size_t packageKeywordPosition = currentLine.find( "package " );
+								if( packageKeywordPosition != std::string::npos ) {
+									std::string packageName = currentLine.substr( packageKeywordPosition + 8 );
+									while( packageName.empty() == false && ( packageName.back() == ' ' || packageName.back() == '\t' || packageName.back() == '\r' || packageName.back() == '\n' ) ) {
+										packageName.pop_back();
+									}
+									this->selfPackagePrefix_ = packageName;
+									break;
+								}
+							}
+						}
+					}
+				}
+				if( this->selfPackagePrefix_.empty() == false ) {
+					size_t dotPosition = this->selfPackagePrefix_.find( '.' );
+					std::string rootPackageName = ( dotPosition != std::string::npos ) ? this->selfPackagePrefix_.substr( 0, dotPosition ) : this->selfPackagePrefix_;
+					if( modulePath[0] == rootPackageName ) {
+						std::vector<std::string> strippedSegments( modulePath.begin() + 1, modulePath.end() );
+						finalResolvedResult = tryVariantsForSegments( mainSourceDirectory, strippedSegments );
+						if( finalResolvedResult.empty() == false ) {
+							return finalResolvedResult;
+						}
+					}
+				}
 			}
 			for( const std::string& currentIncludePath : this->options.includePaths ) {
 				finalResolvedResult = tryAllModuleVariants( std::filesystem::path( currentIncludePath ) );
@@ -700,7 +821,7 @@ namespace uranite::compiler {
 					llcCommand = fmt::format( _URANITE_LLC_ " -O2 -filetype=obj -o {} {}", outputFilePath, inputIrFile );
 				}
 				if( this->options.verbose ) {
-					spdlog::info( "Running: {}", llcCommand );
+					spdlog::info( "running: {}", llcCommand );
 				}
 				int returnCode = system( llcCommand.c_str() );
 				std::remove( inputIrFile.c_str() );
@@ -709,7 +830,7 @@ namespace uranite::compiler {
 					return 1;
 				}
 				if( this->options.verbose ) {
-					spdlog::info( "Object file written to \"{}\"", outputFilePath );
+					spdlog::info( "object file written to \"{}\"", outputFilePath );
 				}
 				return 0;
 			}
@@ -725,7 +846,7 @@ namespace uranite::compiler {
 				std::string tempObjFile = fmt::format( "{}.obj", inputIrFile );
 				std::string optCommand = fmt::format( _URANITE_OPT_ " -O2 -S -o {} {}", tempOptFile, inputIrFile );
 				if( this->options.verbose ) {
-					spdlog::info( "Running: {}", optCommand );
+					spdlog::info( "running: {}", optCommand );
 				}
 				int optReturnCode = system( optCommand.c_str() );
 				std::string llcInputFile = ( optReturnCode == 0 ) ? tempOptFile : inputIrFile;
@@ -737,7 +858,7 @@ namespace uranite::compiler {
 					llcCommand = fmt::format( _URANITE_LLC_ " -O2 -relocation-model=pic -filetype=obj -o {} {}", tempObjFile, llcInputFile );
 				}
 				if( this->options.verbose ) {
-					spdlog::info( "Running: {}", llcCommand );
+					spdlog::info( "running: {}", llcCommand );
 				}
 				int llcReturnCode = system( llcCommand.c_str() );
 				std::remove( inputIrFile.c_str() );
@@ -787,8 +908,8 @@ namespace uranite::compiler {
 				linkerCommand = fmt::format( "{} -lpthread -lrt -lm", linkerCommand );
 				bool needsFfi = false;
 				for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
-					if( moduleEntry.first.find( "/ffi/" ) != std::string::npos ||
-						moduleEntry.second.packageName.find( "uranite.ffi" ) == 0 ) {
+					if( moduleEntry.first.find( semantic::qualname::modules::FfiPathSegment ) != std::string::npos ||
+						moduleEntry.second.packageName.find( semantic::qualname::modules::FfiPackagePrefix ) == 0 ) {
 						needsFfi = true;
 						break;
 					}
@@ -800,7 +921,7 @@ namespace uranite::compiler {
 					linkerCommand = fmt::format( "{} -l{}", linkerCommand, additionalLibrary );
 				}
 				if( this->options.verbose ) {
-					spdlog::info( "Running: {}", linkerCommand );
+					spdlog::info( "running: {}", linkerCommand );
 				}
 				int linkReturnCode = system( linkerCommand.c_str() );
 				std::remove( tempObjFile.c_str() );
@@ -817,10 +938,21 @@ namespace uranite::compiler {
 					system( stripCommand.c_str() );
 				}
 				if( this->options.verbose ) {
-					spdlog::info( "Executable written to \"{}\"", outputFilePath );
+					spdlog::info( "executable written to \"{}\"", outputFilePath );
 				}
 				if( this->options.executeAfterCompilation && this->options.targetTriple.empty() ) {
-					std::string executionCommand = outputFilePath;
+					std::string executionCommand;
+					if( this->options.gdbFlags.has_value() ) {
+						if( this->options.gdbFlags->empty() ) {
+							executionCommand = fmt::format( "gdb --args {}", outputFilePath );
+						}
+						else {
+							executionCommand = fmt::format( "gdb {} --args {}", *this->options.gdbFlags, outputFilePath );
+						}
+					}
+					else {
+						executionCommand = outputFilePath;
+					}
 					for( std::string& executionArgument : this->options.arguments ) {
 						executionCommand = fmt::format( "{} {}", executionCommand, executionArgument );
 					}
@@ -845,19 +977,18 @@ namespace uranite::compiler {
 		try {
 			if( this->options.verbose ) {
 				if( this->options.targetTriple.empty() == false ) {
-					spdlog::info( "Target: {}", this->options.targetTriple );
+					spdlog::info( "target: {}", this->options.targetTriple );
 				}
-				spdlog::info( "Stage 1: Lexical Analysis" );
+				spdlog::info( "- lexical analysis" );
 			}
 			lexer::Lexer lexer( this->source, this->options.output.source, this->diagnostic );
 			std::vector<token::Token> tokenStream = lexer.tokenize();
 			this->diagnostic.setSourceLines( lexer.sourceLines() );
 			if( this->diagnostic.hasErrors() ) {
-				fmt::print( stderr, "Compilation failed with {} error(s) during lexing.\n", this->diagnostic.errorCount() );
+				fmt::print( stderr, "compilation failed with {} error(s) during lexing.\n", this->diagnostic.errorCount() );
 				return 1;
 			}
 			if( this->options.dumpTokens ) {
-				fmt::print( "=== Token Stream ===\n" );
 				for( const token::Token& currentToken : tokenStream ) {
 					fmt::print( "  [{:>4}:{:<3}] {:<15} \"{}\"\n", currentToken.source->location->line, currentToken.source->location->column, token::toString( currentToken.type ), currentToken.value );
 				}
@@ -866,22 +997,22 @@ namespace uranite::compiler {
 				}
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 2: Parsing / AST Generation" );
+				spdlog::info( "- parsing / ast generation" );
 			}
 			parser::Parser parser( tokenStream, this->diagnostic );
 			ast::nodes::ProgramSharedPointer programRoot = parser.parse();
 			if( this->diagnostic.hasErrors() ) {
-				fmt::print( stderr, "Compilation failed with {} error(s) during parsing.\n", this->diagnostic.errorCount() );
+				fmt::print( stderr, "compilation failed with {} error(s) during parsing.\n", this->diagnostic.errorCount() );
 				return 1;
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 2.5: Prelude + Module Resolution" );
+				spdlog::info( "stage 2.5: prelude + module resolution" );
 			}
 			size_t userDeclCount = programRoot->declarations.size();
 			this->loadPrelude( *programRoot );
 			if( this->resolveImports( *programRoot ) == false ) {
 				if( this->diagnostic.hasErrors() ) {
-					fmt::print( stderr, "Compilation failed with {} error(s) during module resolution.\n", this->diagnostic.errorCount() );
+					fmt::print( stderr, "compilation failed with {} error(s) during module resolution.\n", this->diagnostic.errorCount() );
 					return 1;
 				}
 			}
@@ -945,7 +1076,7 @@ namespace uranite::compiler {
 					if( std::filesystem::exists( asyncRuntimePath ) ) {
 						this->loadModule( asyncRuntimePath.string(), *programRoot );
 						if( this->options.verbose ) {
-							spdlog::info( "Auto-imported async runtime module" );
+							spdlog::info( "auto-imported async runtime module" );
 						}
 					}
 				}
@@ -953,20 +1084,19 @@ namespace uranite::compiler {
 				if( std::filesystem::exists( mathErrorsPath ) ) {
 					this->loadModule( mathErrorsPath.string(), *programRoot );
 					if( this->options.verbose ) {
-						spdlog::info( "Auto-imported math errors module" );
+						spdlog::info( "auto-imported math errors module" );
 					}
 				}
 			}
 			if( this->options.dumpAST ) {
 				visitors::ASTPrinter astPrinterInstance;
-				fmt::print( "=== Abstract Syntax Tree ===\n" );
 				fmt::print( "{}\n", astPrinterInstance.print( *programRoot ) );
 				if( this->options.output.kind == Output::Kind::AST ) {
 					return 0;
 				}
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 3: Semantic Analysis + Type System" );
+				spdlog::info( "- semantic analysis + type system" );
 			}
 			semantic::Analyzer semanticAnalyzer( this->diagnostic );
 			semanticAnalyzer.importModuleTypes( this->accumulatedModuleTypes_ );
@@ -1010,247 +1140,191 @@ namespace uranite::compiler {
 						userImportedIdentifiers.insert( static_cast<const ast::nodes::ExternDeclaration&>( *decl ).name );
 					}
 				}
-				std::vector<std::string> builtinNames = {
-					"I64", "I32", "I16", "I8", "U64", "U32", "U16", "U8",
-					"Int", "UInt", "Float", "Double", "String", "Boolean", "Char", "Void",
-					"Object", "Memory", "Byte", "Bool",
-					"Args", "Kwargs", "Future", "Generator",
-					"Error", "Exception", "Warning", "Throwable", "Traceback",
-					"ArithmeticError", "ZeroDivisionError", "OverflowError", "UnderflowError",
-					"None", "true", "false"
-				};
-				for( const std::string& builtinName : builtinNames ) {
+				for( const std::string& builtinName : semantic::qualname::builtinIdentifiers() ) {
 					userImportedIdentifiers.insert( builtinName );
 				}
 				semanticAnalyzer.setUserImportScope( this->options.output.source, userImportedIdentifiers );
 			}
 			if( semanticAnalyzer.analyze( *programRoot ) == false ) {
-				fmt::print( stderr, "Compilation failed with {} error(s) during semantic analysis.\n", this->diagnostic.errorCount() );
+				fmt::print( stderr, "compilation failed with {} error(s) during semantic analysis.\n", this->diagnostic.errorCount() );
 				return 1;
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Semantic analysis passed" );
+				spdlog::info( "semantic analysis passed" );
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 4: Borrow Checker / Ownership Analysis" );
+				spdlog::info( "- borrow checker / ownership analysis" );
 			}
 			semantic::BorrowChecker borrowCheckerInstance( this->diagnostic );
 			borrowCheckerInstance.check( *programRoot );
 			if( this->diagnostic.hasErrors() ) {
-				fmt::print( stderr, "Compilation failed with {} error(s) during borrow checking.\n", this->diagnostic.errorCount() );
+				fmt::print( stderr, "compilation failed with {} error(s) during borrow checking.\n", this->diagnostic.errorCount() );
 				return 1;
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Borrow check passed" );
+				spdlog::info( "borrow check passed" );
 			}
-			if( this->options.verbose || this->options.dumpHIR || this->options.dumpMIR || this->options.useMIR ) {
-				if( this->options.useMIR ) {
-					std::set<std::string> existingClassNames;
-					std::set<std::string> existingConstantNames;
-					std::set<std::string> existingEnumNames;
-					for( const ast::nodes::DeclarationSharedPointer& existingDeclaration : programRoot->declarations ) {
-						if( existingDeclaration == nullptr ) {
-							continue;
-						}
-						if( existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
-							existingClassNames.insert( static_cast<const ast::nodes::ClassDeclaration&>( *existingDeclaration ).name );
-						}
-						else if( existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
-							existingClassNames.insert( static_cast<const ast::nodes::StructDeclaration&>( *existingDeclaration ).name );
-						}
-						else if( existingDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
-							existingConstantNames.insert( static_cast<const ast::nodes::ConstantDeclaration&>( *existingDeclaration ).name );
-						}
-						else if( existingDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
-							existingEnumNames.insert( static_cast<const ast::nodes::EnumDeclaration&>( *existingDeclaration ).name );
-						}
-					}
-					for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
-						if( moduleEntry.second.program == nullptr ) {
-							continue;
-						}
-						for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleEntry.second.program->declarations ) {
-							if( moduleDeclaration == nullptr ) {
-								continue;
-							}
-							if( moduleDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
-								std::string className = static_cast<ast::nodes::ClassDeclaration&>( *moduleDeclaration ).name;
-								if( existingClassNames.count( className ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingClassNames.insert( className );
-								}
-							}
-							else if( moduleDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
-								std::string structName = static_cast<ast::nodes::StructDeclaration&>( *moduleDeclaration ).name;
-								if( existingClassNames.count( structName ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingClassNames.insert( structName );
-								}
-							}
-							else if( moduleDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
-								std::string constantName = static_cast<ast::nodes::ConstantDeclaration&>( *moduleDeclaration ).name;
-								if( existingConstantNames.count( constantName ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingConstantNames.insert( constantName );
-								}
-							}
-							else if( moduleDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
-								std::string enumName = static_cast<ast::nodes::EnumDeclaration&>( *moduleDeclaration ).name;
-								if( existingEnumNames.count( enumName ) == 0 ) {
-									programRoot->declarations.push_back( moduleDeclaration );
-									existingEnumNames.insert( enumName );
-								}
-							}
-						}
-					}
+			std::set<std::string> existingClassNames;
+			std::set<std::string> existingConstantNames;
+			std::set<std::string> existingEnumNames;
+			for( const ast::nodes::DeclarationSharedPointer& existingDeclaration : programRoot->declarations ) {
+				if( existingDeclaration == nullptr ) {
+					continue;
 				}
-				if( this->options.verbose ) {
-					spdlog::info( "Stage 4.5: HIR Lowering" );
+				if( existingDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+					existingClassNames.insert( static_cast<const ast::nodes::ClassDeclaration&>( *existingDeclaration ).name );
 				}
-				ir::hir::HIRLowering hirLoweringPass( semanticAnalyzer, this->diagnostic );
-				std::shared_ptr<ir::hir::HIRModule> hirModule = hirLoweringPass.lower( *programRoot );
-				ir::hir::HIRValidator hirValidatorPass( this->diagnostic );
-				bool hirIsValid = hirValidatorPass.validate( *hirModule );
-				if( this->options.verbose ) {
-					if( hirIsValid ) {
-						spdlog::info( "HIR validation passed" );
-					}
-					else {
-						spdlog::warn( "HIR validation found {} issue(s)", hirValidatorPass.validationErrors().size() );
-					}
+				else if( existingDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+					existingClassNames.insert( static_cast<const ast::nodes::StructDeclaration&>( *existingDeclaration ).name );
 				}
-				if( this->options.dumpHIR ) {
-					ir::hir::HIRPrinter hirPrinter;
-					std::string hirOutput = hirPrinter.print( *hirModule );
-					fmt::print( "=== HIR ===\n{}\n", hirOutput );
-					return 0;
+				else if( existingDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
+					existingConstantNames.insert( static_cast<const ast::nodes::ConstantDeclaration&>( *existingDeclaration ).name );
 				}
-				if( this->options.verbose || this->options.dumpMIR || this->options.useMIR ) {
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.6: MIR Lowering" );
+				else if( existingDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+					existingEnumNames.insert( static_cast<const ast::nodes::EnumDeclaration&>( *existingDeclaration ).name );
+				}
+			}
+			for( std::pair<const std::string, ModuleInfo>& moduleEntry : this->modules ) {
+				if( moduleEntry.second.program == nullptr ) {
+					continue;
+				}
+				for( ast::nodes::DeclarationSharedPointer& moduleDeclaration : moduleEntry.second.program->declarations ) {
+					if( moduleDeclaration == nullptr ) {
+						continue;
 					}
-					ir::mir::MIRLowering mirLoweringPass( this->diagnostic, &semanticAnalyzer.types() );
-					std::shared_ptr<ir::mir::MIRModuleDefinition> mirModule = mirLoweringPass.lower( *hirModule );
-					if( this->options.verbose ) {
-						size_t totalBlocks = 0;
-						for( const std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
-							totalBlocks+= mirFunction->controlFlowBlocks.size();
-						}
-						spdlog::info( "MIR: {} functions, {} basic blocks", mirModule->functionDefinitions.size(), totalBlocks );
-					}
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.7: MIR Liveness Analysis" );
-					}
-					ir::mir::MIRLivenessAnalyzer mirLivenessPass;
-					for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
-						if( mirFunction != nullptr ) {
-							mirLivenessPass.analyze( *mirFunction );
+					if( moduleDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+						std::string className = static_cast<ast::nodes::ClassDeclaration&>( *moduleDeclaration ).name;
+						if( existingClassNames.count( className ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingClassNames.insert( className );
 						}
 					}
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.8: MIR Borrow Checker" );
-					}
-					ir::mir::MIRBorrowChecker mirBorrowChecker( this->diagnostic );
-					for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
-						if( mirFunction != nullptr ) {
-							mirBorrowChecker.check( *mirFunction );
+					else if( moduleDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+						std::string structName = static_cast<ast::nodes::StructDeclaration&>( *moduleDeclaration ).name;
+						if( existingClassNames.count( structName ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingClassNames.insert( structName );
 						}
 					}
-					if( this->options.verbose ) {
-						spdlog::info( "MIR borrow check: {} violation(s)", mirBorrowChecker.violationCount() );
+					else if( moduleDeclaration->kind == ast::Node::Kind::ConstantDeclaration ) {
+						std::string constantName = static_cast<ast::nodes::ConstantDeclaration&>( *moduleDeclaration ).name;
+						if( existingConstantNames.count( constantName ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingConstantNames.insert( constantName );
+						}
 					}
-					if( this->options.verbose ) {
-						spdlog::info( "Stage 4.9: MIR Optimization" );
-					}
-					ir::mir::MIROptimizer mirOptimizer;
-					mirOptimizer.optimize( *mirModule );
-					if( this->options.verbose ) {
-						spdlog::info( "MIR optimizer: {} instructions removed, {} blocks removed",
-							mirOptimizer.removedInstructionCount(), mirOptimizer.removedBlockCount() );
-					}
-					if( this->options.dumpMIR ) {
-						ir::mir::MIRPrinter mirPrinter;
-						std::string mirOutput = mirPrinter.print( *mirModule );
-						fmt::print( "=== MIR ===\n{}\n", mirOutput );
-						return 0;
-					}
-					if( this->options.useMIR ) {
-						if( this->options.verbose ) {
-							spdlog::info( "Stage 5.0: MIR → LLVM IR Code Generation" );
+					else if( moduleDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+						std::string enumName = static_cast<ast::nodes::EnumDeclaration&>( *moduleDeclaration ).name;
+						if( existingEnumNames.count( enumName ) == 0 ) {
+							programRoot->declarations.push_back( moduleDeclaration );
+							existingEnumNames.insert( enumName );
 						}
-						ir::mir::MIRCodegen mirCodegenInstance( semanticAnalyzer, this->diagnostic );
-						if( this->options.targetTriple.empty() == false ) {
-							mirCodegenInstance.setTargetTriple( this->options.targetTriple );
-						}
-						if( mirCodegenInstance.generate( *mirModule ) == false ) {
-							fmt::print( stderr, "Compilation failed during MIR code generation.\n" );
-							return 1;
-						}
-						if( this->options.verbose ) {
-							spdlog::info( "MIR codegen: LLVM IR generated successfully" );
-						}
-						if( this->options.dumpIR ) {
-							fmt::print( "=== LLVM IR (MIR) ===\n" );
-							mirCodegenInstance.getModule()->print( llvm::errs(), nullptr );
-						}
-						if( this->options.output.kind == Output::Kind::LLVMIR ) {
-							std::string irOutputPath = this->options.output.target;
-							if( irOutputPath.empty() ) {
-								irOutputPath = fmt::format( "{}.ll", this->options.output.source );
-							}
-							if( mirCodegenInstance.writeIR( irOutputPath ) == false ) {
-								return 1;
-							}
-							return 0;
-						}
-						std::string mirTempIrFile = fmt::format( "/tmp/uranite-mir-{}.ll", getpid() );
-						mirCodegenInstance.writeIR( mirTempIrFile );
-						return this->linkFromIR( mirTempIrFile );
 					}
 				}
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 5: Optimization Passes" );
+				spdlog::info( "- hir lowering" );
 			}
-			optimizer::Optimizer codeOptimizer( this->diagnostic, this->options.optimization );
-			codeOptimizer.optimize( *programRoot );
+			ir::hir::HIRLowering hirLoweringPass( semanticAnalyzer, this->diagnostic );
+			std::shared_ptr<ir::hir::HIRModule> hirModule = hirLoweringPass.lower( *programRoot );
+			ir::hir::HIRValidator hirValidatorPass( this->diagnostic );
+			bool hirIsValid = hirValidatorPass.validate( *hirModule );
 			if( this->options.verbose ) {
-				const optimizer::Statistic& optimizationStatistics = codeOptimizer.stats();
-				spdlog::info( "Optimizations: {} TCO, {} constexpr, {} devirtualized, {} dead branches, {} unused vars, {} unused funcs, {} unreachable stmts", optimizationStatistics.tailCallsOptimized, optimizationStatistics.constantExpressionResionEvaluated, optimizationStatistics.functionsDevirtualized, optimizationStatistics.deadBranchesEliminated, optimizationStatistics.unusedVariablesEliminated, optimizationStatistics.unusedFunctionsEliminated, optimizationStatistics.unreachableStatementsEliminated );
+				if( hirIsValid ) {
+					spdlog::info( "hir validation passed" );
+				}
+				else {
+					spdlog::warn( "hir validation found {} issue(s)", hirValidatorPass.validationErrors().size() );
+				}
+			}
+			if( this->options.dumpHIR ) {
+				ir::hir::HIRPrinter hirPrinter;
+				std::string hirOutput = hirPrinter.print( *hirModule );
+				fmt::print( "{}\n", hirOutput );
+				return 0;
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "Stage 6: LLVM IR Code Generation" );
+				spdlog::info( "- mir lowering" );
 			}
-			codegen::LLVMCodegen llvmCodegenInstance( semanticAnalyzer, this->diagnostic );
+			ir::mir::MIRLowering mirLoweringPass( this->diagnostic, &semanticAnalyzer.types() );
+			std::shared_ptr<ir::mir::MIRModuleDefinition> mirModule = mirLoweringPass.lower( *hirModule );
+			if( this->options.verbose ) {
+				size_t totalBlocks = 0;
+				for( const std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
+					totalBlocks+= mirFunction->controlFlowBlocks.size();
+				}
+				spdlog::info( "mir: {} functions, {} basic blocks", mirModule->functionDefinitions.size(), totalBlocks );
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "- mir liveness analysis" );
+			}
+			ir::mir::MIRLivenessAnalyzer mirLivenessPass;
+			for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
+				if( mirFunction != nullptr ) {
+					mirLivenessPass.analyze( *mirFunction );
+				}
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "- mir borrow checker" );
+			}
+			ir::mir::MIRBorrowChecker mirBorrowChecker( this->diagnostic );
+			for( std::shared_ptr<ir::mir::MIRFunctionDefinition>& mirFunction : mirModule->functionDefinitions ) {
+				if( mirFunction != nullptr ) {
+					mirBorrowChecker.check( *mirFunction );
+				}
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "mir borrow check: {} violation(s)", mirBorrowChecker.violationCount() );
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "- mir optimization" );
+			}
+			ir::mir::MIROptimizer mirOptimizer;
+			mirOptimizer.optimize( *mirModule );
+			if( this->options.verbose ) {
+				spdlog::info( "mir optimizer: {} instructions removed, {} blocks removed",
+					mirOptimizer.removedInstructionCount(), 
+					mirOptimizer.removedBlockCount() 
+				);
+			}
+			if( this->options.dumpMIR ) {
+				ir::mir::MIRPrinter mirPrinter;
+				std::string mirOutput = mirPrinter.print( *mirModule );
+				fmt::print( "{}\n", mirOutput );
+				return 0;
+			}
+			if( this->options.verbose ) {
+				spdlog::info( "- llvm ir code generation" );
+			}
+			ir::mir::MIRCodegen mirCodegenInstance( semanticAnalyzer, this->diagnostic );
 			if( this->options.targetTriple.empty() == false ) {
-				llvmCodegenInstance.setTargetTriple( this->options.targetTriple );
+				mirCodegenInstance.setTargetTriple( this->options.targetTriple );
 			}
-			if( llvmCodegenInstance.generate( *programRoot ) == false ) {
-				fmt::print( stderr, "Compilation failed during code generation.\n" );
+			if( mirCodegenInstance.generate( *mirModule ) == false ) {
+				fmt::print( stderr, "compilation failed during code generation.\n" );
 				return 1;
 			}
 			if( this->options.verbose ) {
-				spdlog::info( "LLVM IR generated successfully" );
+				spdlog::info( "llvm ir generated successfully" );
 			}
 			if( this->options.dumpIR ) {
-				fmt::print( "=== LLVM IR ===\n" );
-				llvmCodegenInstance.dump();
+				mirCodegenInstance.getModule()->print( llvm::errs(), nullptr );
 			}
 			if( this->options.output.kind == Output::Kind::LLVMIR ) {
 				std::string irOutputPath = this->options.output.target;
 				if( irOutputPath.empty() ) {
 					irOutputPath = fmt::format( "{}.ll", this->options.output.source );
 				}
-				if( llvmCodegenInstance.writeIR( irOutputPath ) == false ) {
+				if( mirCodegenInstance.writeIR( irOutputPath ) == false ) {
 					return 1;
 				}
 				if( this->options.verbose ) {
-					spdlog::info( "LLVM IR written to \"{}\"", irOutputPath );
+					spdlog::info( "llvm ir written to \"{}\"", irOutputPath );
 				}
 				return 0;
 			}
 			std::string tempIrFile = fmt::format( "/tmp/uranite-{}.ll", getpid() );
-			llvmCodegenInstance.writeIR( tempIrFile );
+			mirCodegenInstance.writeIR( tempIrFile );
 			return this->linkFromIR( tempIrFile );
 		}
 		catch( const diagnostic::DiagnosticLimitReachedError& ) {
@@ -1258,7 +1332,7 @@ namespace uranite::compiler {
 			if( totalErrorCount == 0 ) {
 				totalErrorCount = 1;
 			}
-			fmt::print( stderr, "Compilation failed with {} error(s).\n", totalErrorCount );
+			fmt::print( stderr, "compilation failed with {} error(s).\n", totalErrorCount );
 			return 1;
 		}
 	}

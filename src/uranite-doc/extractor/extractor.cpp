@@ -228,8 +228,8 @@ namespace uranite::doc {
 		for( const ast::nodes::GenericParameterSharedPointer& genericParam : interfaceDecl.genericParameters ) {
 			entity.genericParameters.push_back( genericParam->name );
 		}
-		for( const ast::nodes::TypeNodeSharedPointer& superInterface : interfaceDecl.superInterfaces ) {
-			entity.implementedInterfaces.push_back( this->typeNodeToString( superInterface ) );
+		for( const ast::nodes::TypeNodeSharedPointer& parentInterface : interfaceDecl.parentInterfaces ) {
+			entity.implementedInterfaces.push_back( this->typeNodeToString( parentInterface ) );
 		}
 		entity.entityDoccomment = this->findDoccommentForLine( entity.declarationLine, extractedComments );
 		for( const ast::nodes::DeclarationSharedPointer& method : interfaceDecl.methods ) {

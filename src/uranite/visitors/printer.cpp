@@ -522,7 +522,7 @@ namespace uranite::visitors {
 		this->writeLine( ")" );
 	}
 	
-	void ASTPrinter::visit( ast::nodes::SuperExpression& node ) {
+	void ASTPrinter::visit( ast::nodes::ParentExpression& node ) {
 		this->writeLine( fmt::format( "({})", node.toString() ) );
 	}
 	

@@ -152,11 +152,8 @@ function main() {
 		local builded=$?
 		local command="$basepath/build/uranite $@"
 		if [[ $builded -eq 0 ]]; then
-			#listing
-			#subshell "$command"
-			#return $SUBSHELLSTATUS
 			echo -e ""
-			$basepath/build/uranite $@
+			$basepath/build/uranite "$@"
 			return $?
 		fi
 		return $builded
@@ -192,12 +189,10 @@ function main() {
 	
 	function testing() {
 		puts ""
-		puts "  <<- i > ${basepath}/build: cd"
 		compile
 		local builded=$?
 		if [[ $builded -eq 0 ]]; then
-			cd "${basepath}/build"
-			subshell "ctest -V -R $@"
+			subshell "${basepath}/build/uranite-tests -V -R $@"
 			return $SUBSHELLSTATUS
 		fi
 		return $builded

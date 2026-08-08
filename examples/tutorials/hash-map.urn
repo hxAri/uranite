@@ -9,7 +9,7 @@
 #
 # HashMap<K,V> compilation and runtime test.
 #
-package main
+package uranite.examples.tutorials.hash-map
 
 from uranite.collection.hash-map import HashMap
 from uranite.io.console import puts

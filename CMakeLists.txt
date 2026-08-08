@@ -22,7 +22,7 @@ cmake_minimum_required( VERSION 3.22 )
 # Enable Test Code
 enable_testing()
 
-project( Uranite DESCRIPTION "Accelerated Execution Through Quantum Precision" VERSION 2026.7 LANGUAGES C CXX )
+project( Uranite DESCRIPTION "Accelerated Execution Through Quantum Precision" VERSION 2026.8 LANGUAGES C CXX )
 
 # LLVM Configuration (core + support for JSON)
 find_program( LLVM_CONFIG NAMES llvm-config llvm-config-19 REQUIRED )
@@ -102,7 +102,7 @@ if( GIT_FOUND )
 endif()
 
 # Adding macro definition to C++
-add_definitions( -D_URANITE_COMPILER_VERSION_="1.1.0" )
+add_definitions( -D_URANITE_COMPILER_VERSION_="1.2.0" )
 add_definitions( -D_URANITE_LANGUAGE_DESCRIPTION_="${PROJECT_DESCRIPTION}" )
 add_definitions( -D_URANITE_LANGUAGE_VERSION_="${PROJECT_VERSION}" )
 add_definitions( -D_URANITE_GIT_HASH_="${_URANITE_GIT_HASH_}" )

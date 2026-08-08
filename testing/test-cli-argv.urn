@@ -1,20 +1,20 @@
 package testing
 
-from uranite.cli import argv
-from uranite.io.console import puts, putsln
+# from uranite.cli import argc, argv
+from uranite.collection import ArrayList, Generator, Pair
+from uranite.functions.builtin import enumerate
+from uranite.io.console import puts
 from uranite.testing.assertions import assertGreaterThan
 
-public function main() -> I32:
-    putsln( "CLI Argv Tests" )
+public function main( Int argc, ArrayList<String> argv ) -> I32:
+    puts( "CLI Argv Tests" )
     assertGreaterThan( argv.length, 0, "argv.length > 0" )
-    putsln( "argv.length {} OK".format( argv.length ) )
+    puts( "argv.length {} OK".format( argv.length ) )
     String programName = argv.get( 0 )
-    putsln( "argv.get(0) {} OK".format( programName ) )
-    I64 i = 0
-    while i < argv.length:
-        String arg = argv.get( i )
-        puts( "{}. {}".format( i, arg ) )
-        i = i + 1
-    putsln( "argv iteration OK" )
-    putsln( "All CLI argv tests passed" )
+    puts( "argv.get(0) {} OK".format( programName ) )
+    puts( "argv items {} OK".format( argv ) )
+    for Pair<Int,String> pair in enumerate<String>( argv, 1 ):
+        puts( "argv[{}] = {}".format( pair.key, pair.value ) )
+    puts( "argv iteration OK" )
+    puts( "All CLI argv tests passed" )
     return 0

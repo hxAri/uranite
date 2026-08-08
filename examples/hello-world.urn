@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package uranite.examples
+package uranite.examples.hello-world
 
 from uranite.io.console import puts
 

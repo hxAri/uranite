@@ -68,7 +68,8 @@ public struct Pair<K, V>:
         """
         
         if other instanceof Pair:
-            Pair<K, V> otherPair = other
+            # Pair<K,V> otherPair = ( Pair<K,V> ) other
+            Pair<K,V> otherPair = other as Pair<K,V>
             return self.key == otherPair.key and self.value == otherPair.value
         return False
     

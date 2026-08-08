@@ -91,7 +91,7 @@ namespace uranite::formatter::linter {
 			void visit( ast::nodes::ReturnStatement& node ) override {}
 			void visit( ast::nodes::SelfExpression& node ) override {}
 			void visit( ast::nodes::StringLiteralExpression& node ) override {}
-			void visit( ast::nodes::SuperExpression& node ) override {}
+			void visit( ast::nodes::ParentExpression& node ) override {}
 			void visit( ast::nodes::ThrowStatement& node ) override {}
 			void visit( ast::nodes::TupleExpression& node ) override {}
 			void visit( ast::nodes::TypeAliasDeclaration& node ) override {}

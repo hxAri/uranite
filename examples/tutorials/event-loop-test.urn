@@ -1,7 +1,7 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-04-27 17:05
-# @update 2026-06-21 01:44
+# @update 2026-07-29 17:29
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
-package main
+package uranite.examples.tutorials.event-loop-test
 
 from uranite.functions.runtime import uraniteSleep
 from uranite.io.console import puts

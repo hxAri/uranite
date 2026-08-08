@@ -355,7 +355,7 @@ namespace uranite::ir::hir {
 			case HIRNodeKind::NoneLiteral: return "NoneLiteral";
 			case HIRNodeKind::Identifier: return "Identifier";
 			case HIRNodeKind::SelfReference: return "SelfReference";
-			case HIRNodeKind::SuperReference: return "SuperReference";
+			case HIRNodeKind::ParentReference: return "ParentReference";
 			case HIRNodeKind::BinaryOperation: return "BinaryOperation";
 			case HIRNodeKind::UnaryOperation: return "UnaryOperation";
 			case HIRNodeKind::FunctionCall: return "FunctionCall";

@@ -158,7 +158,7 @@ TEST_F( SyntaxLexerTest, TokenizeKeywordMemorySafety ) {
 	ASSERT_EQ( tokens[2].type, uranite::token::Type::KeywordReference );
 	ASSERT_EQ( tokens[3].type, uranite::token::Type::KeywordUnsafe );
 }
-	
+
 TEST_F( SyntaxLexerTest, TokenizeKeywordLogic ) {
 	std::vector<uranite::token::Token> tokens( 
 		this->tokenize( 

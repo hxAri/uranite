@@ -40,7 +40,7 @@ public final class AnsiFormatter:
     and return formatted escape code strings.
     """
     
-    public function foreground( self, I32 red, I32 green, I32 blue ) -> String:
+    public static function foreground( I32 red, I32 green, I32 blue ) -> String:
         
         """
         Generate an ANSI escape sequence that sets the terminal foreground (text)
@@ -61,7 +61,7 @@ public final class AnsiFormatter:
         
         return "\x1b[38;2;" + red + ";" + green + ";" + blue + "m"
     
-    public function background( self, I32 red, I32 green, I32 blue ) -> String:
+    public static function background( I32 red, I32 green, I32 blue ) -> String:
         
         """
         Generate an ANSI escape sequence that sets the terminal background color
@@ -82,7 +82,7 @@ public final class AnsiFormatter:
         
         return "\x1b[48;2;" + red + ";" + green + ";" + blue + "m"
     
-    public function colorize( self, String text, I32 red, I32 green, I32 blue ) -> String:
+    public static function colorize( String text, I32 red, I32 green, I32 blue ) -> String:
         
         """
         Wrap the given text string with a foreground color escape sequence and
@@ -104,9 +104,9 @@ public final class AnsiFormatter:
                 The text wrapped with foreground color and reset escape sequences.
         """
         
-        return self.foreground( red, green, blue ) + text + self.reset()
+        return AnsiFormatter.foreground( red, green, blue ) + text + AnsiFormatter.reset()
     
-    public function highlight( self, String text, I32 red, I32 green, I32 blue ) -> String:
+    public static function highlight( String text, I32 red, I32 green, I32 blue ) -> String:
         
         """
         Wrap the given text string with a background color escape sequence and
@@ -128,9 +128,9 @@ public final class AnsiFormatter:
                 The text wrapped with background color and reset escape sequences.
         """
         
-        return self.background( red, green, blue ) + text + self.reset()
+        return AnsiFormatter.background( red, green, blue ) + text + AnsiFormatter.reset()
     
-    public function style( self, String text, I32 fgRed, I32 fgGreen, I32 fgBlue, I32 bgRed, I32 bgGreen, I32 bgBlue ) -> String:
+    public static function style( String text, I32 fgRed, I32 fgGreen, I32 fgBlue, I32 bgRed, I32 bgGreen, I32 bgBlue ) -> String:
         
         """
         Wrap the given text string with both a foreground and background color
@@ -158,9 +158,9 @@ public final class AnsiFormatter:
                 The text wrapped with both foreground and background color sequences.
         """
         
-        return self.foreground( fgRed, fgGreen, fgBlue ) + self.background( bgRed, bgGreen, bgBlue ) + text + self.reset()
+        return AnsiFormatter.foreground( fgRed, fgGreen, fgBlue ) + AnsiFormatter.background( bgRed, bgGreen, bgBlue ) + text + AnsiFormatter.reset()
     
-    public function reset( self ) -> String:
+    public static function reset() -> String:
         
         """
         Return the ANSI reset escape sequence that restores the terminal to its
@@ -173,7 +173,7 @@ public final class AnsiFormatter:
         
         return "\x1b[0m"
     
-    public function foregroundHex( self, I32 hex ) -> String:
+    public static function foregroundHex( I32 hex ) -> String:
         
         """
         Generate a foreground color escape sequence from a packed 24-bit hex value.
@@ -195,9 +195,9 @@ public final class AnsiFormatter:
         I32 g = ( hex >> 8 ) & 255
         I32 b = hex & 255
         
-        return self.foreground( r, g, b )
+        return AnsiFormatter.foreground( r, g, b )
     
-    public function backgroundHex( self, I32 hex ) -> String:
+    public static function backgroundHex( I32 hex ) -> String:
         
         """
         Generate a background color escape sequence from a packed 24-bit hex value.
@@ -219,9 +219,9 @@ public final class AnsiFormatter:
         I32 g = ( hex >> 8 ) & 255
         I32 b = hex & 255
         
-        return self.background( r, g, b )
+        return AnsiFormatter.background( r, g, b )
     
-    public function colorizeHex( self, String text, I32 hex ) -> String:
+    public static function colorizeHex( String text, I32 hex ) -> String:
         
         """
         Wrap text with a foreground color and reset using a packed 24-bit hex value.
@@ -245,7 +245,7 @@ public final class AnsiFormatter:
         I32 g = ( hex >> 8 ) & 255
         I32 b = hex & 255
         
-        return self.colorize( text, r, g, b )
+        return AnsiFormatter.colorize( text, r, g, b )
 
 export {
     AnsiFormatter

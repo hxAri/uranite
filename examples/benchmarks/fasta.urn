@@ -2,6 +2,7 @@
 # 
 # @author hxAri (hxari)
 # @create 2026-05-04 10:45
+# @update 2026-08-04 01:05
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/fasta.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -42,7 +43,7 @@ class Fasta:
     public function makeCumulative( self, Memory<Double> probs, Int count ) -> Void:
         Double cp = 0.0
         for Int i = 0; i < count; i++:
-            cp = cp + probs.get( i )
+            cp+= probs.get( i )
             probs.set( i, cp )
     
     public function selectSymbol( self, Memory<Double> probs, Memory<U8> symbols, Int count ) -> U8:
@@ -53,10 +54,11 @@ class Fasta:
         return symbols.get( count - 1 )
 
 public function main() -> I32:
-    Int n = 25000000
-    puts( "Uranite Extreme Fasta Benchmark (n=", n, ")" )
-    I64 start = clock()
-    Fasta f = new Fasta()
+    Int n = 250000000
+    puts( "Uranite Extreme Fasta Benchmark (n={})".format( n ) )
+    puts( "-   initializing fasta routine" )
+    I64 totalStart = clock()
+    Fasta fasta = new Fasta()
     Memory<U8> iubSymbols = new Memory<U8>( 15 )
     Memory<Double> iubProbs = new Memory<Double>( 15 )
     Memory<U8> homoSymbols = new Memory<U8>( 4 )
@@ -69,22 +71,34 @@ public function main() -> I32:
     homoProbs.set( 2, 0.1975473066391 )
     homoSymbols.set( 3, 't' as U8 )
     homoProbs.set( 3, 0.3015094502008 )
-    f.makeCumulative( homoProbs, 4 )
+    puts( "    executing make cumulative routine" )
+    I64 cumStart = clock()
+    fasta.makeCumulative( homoProbs, 4 )
+    I64 cumEnd = clock()
+    Double cumElapsed = ( cumEnd - cumStart ) / 1000000.0
+    puts( "    make cumulative routine elapsed time: {} seconds".format( cumElapsed ) )
     Int LINE_LENGTH = 60
     Memory<U8> buffer = new Memory<U8>( LINE_LENGTH + 1 )
     Int generated = 0
+    puts( "-   executing main generation sequence" )
+    I64 genStart = clock()
     while generated < n:
         Int toGenerate = LINE_LENGTH
         if n - generated < LINE_LENGTH:
             toGenerate = n - generated
         for Int i = 0; i < toGenerate; i++:
-            buffer.set( i, f.selectSymbol( homoProbs, homoSymbols, 4 ) )
+            buffer.set( i, fasta.selectSymbol( homoProbs, homoSymbols, 4 ) )
         buffer.set( toGenerate, '\n' as U8 )
-        generated = generated + toGenerate
-    I64 end = clock()
-    Double elapsed = ( end - start ) / 1000000.0
-    puts( "Generated ", n, " base pairs" )
-    puts( "Elapsed time: ", elapsed, " seconds" )
+        generated+= toGenerate
+    I64 genEnd = clock()
+    Double genElapsed = ( genEnd - genStart ) / 1000000.0
+    puts( "    main generation sequence elapsed time: {} seconds".format( genElapsed ) )
+    I64 totalEnd = clock()
+    Double totalElapsed = ( totalEnd - totalStart ) / 1000000.0
+    puts( "generated {} base pairs".format( n ) )
+    puts( "elapsed time: {} seconds".format( totalElapsed ) )
+    iubSymbols.free()
+    iubProbs.free()
     homoSymbols.free()
     homoProbs.free()
     buffer.free()

@@ -138,10 +138,10 @@ namespace uranite::ir::mir {
 		
 		// Inline assembly
 		InlineAssembly,
-
+		
 		// Generator
 		Yield,
-
+		
 		// No-op
 		NoOperation
 		
@@ -242,7 +242,7 @@ namespace uranite::ir::mir {
 		int ownershipScopeDepth = 0;
 	
 	};
-
+	
 	struct MIRModuleConstant {
 		enum ConstantKind { Integer, Float, Boolean, String, Null };
 		ConstantKind kind = Integer;
@@ -251,7 +251,7 @@ namespace uranite::ir::mir {
 		bool booleanValue = false;
 		std::string stringValue;
 	};
-
+	
 	/** @brief MIR representation of a single function/method with its CFG. */
 	struct MIRFunctionDefinition {
 		
@@ -270,6 +270,7 @@ namespace uranite::ir::mir {
 		int keywordParameterIndex = -1;
 		semantic::TypeSharedPointer keywordValueType;
 		std::unordered_map<int, MIRModuleConstant> parameterDefaultValues;
+		bool isStaticMethod = false;
 		bool isGeneratorFunction = false;
 		semantic::TypeSharedPointer generatorYieldType;
 		bool isAsyncFunction = false;
@@ -313,14 +314,14 @@ namespace uranite::ir::mir {
 		bool hasVirtualTable = false;
 		int virtualTableEntryCount = 0;
 	};
-
+	
 	struct MIRGlobalVariable {
 		std::string variableName;
 		semantic::TypeSharedPointer variableType;
 		MIRModuleConstant initialValue;
 		bool hasInitializer = false;
 	};
-
+	
 	struct MIRExternFunction {
 		std::string functionName;
 		std::string linkageName;
@@ -328,17 +329,17 @@ namespace uranite::ir::mir {
 		std::vector<semantic::TypeSharedPointer> parameterTypes;
 		bool isVariadic = false;
 	};
-
+	
 	/** @brief Top-level MIR container holding all functions and type layouts for a module. */
 	struct MIRModuleDefinition {
-
+		
 		std::string moduleName;
 		std::vector<std::shared_ptr<MIRFunctionDefinition>> functionDefinitions;
 		std::unordered_map<std::string, TypeLayoutDescriptor> typeLayoutTable;
 		std::unordered_map<std::string, MIRModuleConstant> moduleConstants;
 		std::unordered_map<std::string, MIRGlobalVariable> globalVariables;
 		std::vector<MIRExternFunction> externFunctions;
-
+	
 	};
 
 } // namespace uranite::ir::mir

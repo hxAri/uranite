@@ -20,6 +20,7 @@
 #ifndef _URANITE_COMPILER_OPTION_HPP_
 #define _URANITE_COMPILER_OPTION_HPP_
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -83,6 +84,9 @@ namespace uranite::compiler {
 		
 		/** @brief Flag to automatically execute the program after successful compilation. */
 		bool executeAfterCompilation = false;
+
+		/** @brief GDB flags when running under GDB with --run. nullopt means no GDB. */
+		std::optional<std::string> gdbFlags;
 		
 		/** @brief List of directory paths to search for header/include files. */
 		std::vector<std::string> includePaths;
@@ -114,9 +118,6 @@ namespace uranite::compiler {
 		/** @brief The target architecture triple for cross-compilation. */
 		std::string targetTriple;
 		
-		/** @brief Flag to use MIR-based LLVM codegen instead of AST-direct codegen. */
-		bool useMIR = false;
-
 		/** @brief Flag to enable verbose logging during the compilation process. */
 		bool verbose = false;
 		

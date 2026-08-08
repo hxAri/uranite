@@ -22,10 +22,20 @@
 package uranite.functions.builtin
 
 from uranite.collection.array-list import ArrayList
+from uranite.collection.generator import Generator
+from uranite.collection.pair import Pair
 from uranite.io.syscall import ptrToString, readByteAt, stringLen, stringToPtr, writeByteAt
+from uranite.iterators.iterable import Iterable
 from uranite.memory.allocator import alloc, dealloc
 from uranite.memory.memory import Memory
 from uranite.string.builder import StringBuilder
+
+public function enumerate<E>( Iterable<E> elements, Int start=0, Int stop=-1 ) -> Generator<Pair<Int,E>>:
+    Int position = start
+    for E element in elements:
+        if stop >= 0 and position >= stop:
+            break
+        yield new Pair<Int,E>( position++, element )
 
 public function length( String content ) -> I64:
     
@@ -728,6 +738,7 @@ export {
     concat,
     contains,
     endsWith,
+    enumerate,
     equals,
     indexOf,
     isAlpha,

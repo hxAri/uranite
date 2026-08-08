@@ -87,7 +87,7 @@ namespace uranite::ir::hir {
 		for( const HIRParameterDescriptor& parameter : functionDefinition.parameterDescriptors ) {
 			if( parameter.parameterName.empty() && parameter.isSelfParameter == false ) {
 				this->addError(
-					fmt::format( "parameter in function '{}' has empty name", functionDefinition.functionName ),
+					fmt::format( "parameter in function \"{}\" has empty name", functionDefinition.functionName ),
 					functionDefinition.sourceLocation
 				);
 			}
@@ -109,7 +109,7 @@ namespace uranite::ir::hir {
 		for( const HIRFieldDescriptor& field : classDefinition.fieldDescriptors ) {
 			if( field.fieldName.empty() ) {
 				this->addError(
-					fmt::format( "field in class '{}' has empty name", classDefinition.className ),
+					fmt::format( "field in class \"{}\" has empty name", classDefinition.className ),
 					classDefinition.sourceLocation
 				);
 			}
@@ -117,7 +117,7 @@ namespace uranite::ir::hir {
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : classDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
-					fmt::format( "null method in class '{}'", classDefinition.className ),
+					fmt::format( "null method in class \"{}\"", classDefinition.className ),
 					classDefinition.sourceLocation
 				);
 				continue;
@@ -133,7 +133,7 @@ namespace uranite::ir::hir {
 		for( const HIRFieldDescriptor& field : structDefinition.fieldDescriptors ) {
 			if( field.fieldName.empty() ) {
 				this->addError(
-					fmt::format( "field in struct '{}' has empty name", structDefinition.structName ),
+					fmt::format( "field in struct \"{}\" has empty name", structDefinition.structName ),
 					structDefinition.sourceLocation
 				);
 			}
@@ -141,7 +141,7 @@ namespace uranite::ir::hir {
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : structDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
-					fmt::format( "null method in struct '{}'", structDefinition.structName ),
+					fmt::format( "null method in struct \"{}\"", structDefinition.structName ),
 					structDefinition.sourceLocation
 				);
 				continue;
@@ -157,7 +157,7 @@ namespace uranite::ir::hir {
 		for( const HIREnumVariantDescriptor& variant : enumDefinition.variantDescriptors ) {
 			if( variant.variantName.empty() ) {
 				this->addError(
-					fmt::format( "variant in enum '{}' has empty name", enumDefinition.enumName ),
+					fmt::format( "variant in enum \"{}\" has empty name", enumDefinition.enumName ),
 					enumDefinition.sourceLocation
 				);
 			}
@@ -165,7 +165,7 @@ namespace uranite::ir::hir {
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : enumDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
-					fmt::format( "null method in enum '{}'", enumDefinition.enumName ),
+					fmt::format( "null method in enum \"{}\"", enumDefinition.enumName ),
 					enumDefinition.sourceLocation
 				);
 				continue;
@@ -181,7 +181,7 @@ namespace uranite::ir::hir {
 		for( const std::shared_ptr<HIRFunctionDefinition>& method : interfaceDefinition.methodDefinitions ) {
 			if( method == nullptr ) {
 				this->addError(
-					fmt::format( "null method in interface '{}'", interfaceDefinition.interfaceName ),
+					fmt::format( "null method in interface \"{}\"", interfaceDefinition.interfaceName ),
 					interfaceDefinition.sourceLocation
 				);
 				continue;
@@ -522,7 +522,7 @@ namespace uranite::ir::hir {
 			case HIRNodeKind::NoneLiteral:
 			case HIRNodeKind::Identifier:
 			case HIRNodeKind::SelfReference:
-			case HIRNodeKind::SuperReference:
+			case HIRNodeKind::ParentReference:
 			case HIRNodeKind::TypeReference:
 			case HIRNodeKind::ArrayLiteral:
 			case HIRNodeKind::TupleLiteral:

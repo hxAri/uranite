@@ -20,7 +20,9 @@
 #ifndef _URANITE_DESCRIPTOR_DESCRIPTOR_HPP_
 #define _URANITE_DESCRIPTOR_DESCRIPTOR_HPP_
 
+#include <set>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include <functional>
 #include <unordered_map>
@@ -239,7 +241,17 @@ namespace uranite::descriptor {
 			 * @brief Registers all built-in types into the registry.
 			 */
 			void registerAllTypes();
-		
+			
+			static const std::set<std::string> oopWrapperNames;
+			
+			static const std::set<std::string> numericOopNames;
+			
+			static const std::set<std::string> floatOopNames;
+			
+			static const std::unordered_set<std::string> unsignedOopNames;
+			
+			static const std::unordered_map<std::string, int> integerBitWidths;
+			
 		private:
 			
 			/**

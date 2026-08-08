@@ -337,7 +337,7 @@ public class Color:
         """
         
         if other instanceof Color:
-            Color otherColor = other
+            Color otherColor = other as Color
             return self.hex == otherColor.hex
         return False
     
@@ -354,7 +354,7 @@ public class Color:
         
         return "Color(" + self.cssHex + ")"
     
-    public function fromRgb( self, I32 red, I32 green, I32 blue ) -> Color:
+    public static function fromRgb( I32 red, I32 green, I32 blue ) -> Color:
         
         """
         Create a Color from individual RGB channel values by packing them
@@ -379,7 +379,7 @@ public class Color:
         
         return new Color( ColorConverter.rgbToHex( red, green, blue ) )
     
-    public function fromHsl( self, F64 hue, F64 saturation, F64 lightness ) -> Color:
+    public static function fromHsl( F64 hue, F64 saturation, F64 lightness ) -> Color:
         
         """
         Create a Color from HSL components by converting to RGB and packing
@@ -404,7 +404,7 @@ public class Color:
         
         return new Color( ColorConverter.hslToHex( hue, saturation, lightness ) )
     
-    public function fromHsv( self, F64 hue, F64 saturation, F64 value ) -> Color:
+    public static function fromHsv( F64 hue, F64 saturation, F64 value ) -> Color:
         
         """
         Create a Color from HSV components by converting to RGB and packing
@@ -429,7 +429,7 @@ public class Color:
         
         return new Color( ColorConverter.hsvToHex( hue, saturation, value ) )
     
-    public function fromCmyk( self, F64 cyan, F64 magenta, F64 yellow, F64 key ) -> Color:
+    public static function fromCmyk( F64 cyan, F64 magenta, F64 yellow, F64 key ) -> Color:
         
         """
         Create a Color from CMYK components by converting to RGB and packing

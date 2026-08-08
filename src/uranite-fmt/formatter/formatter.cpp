@@ -601,13 +601,13 @@ namespace uranite::formatter {
 		}
 		this->writer_.writeRaw( "interface " + node.name );
 		this->emitGenericParameters( node.genericParameters );
-		if( node.superInterfaces.empty() == false ) {
+		if( node.parentInterfaces.empty() == false ) {
 			this->writer_.writeRaw( " extends " );
-			for( size_t interfaceIndex = 0; interfaceIndex < node.superInterfaces.size(); interfaceIndex++ ) {
+			for( size_t interfaceIndex = 0; interfaceIndex < node.parentInterfaces.size(); interfaceIndex++ ) {
 				if( interfaceIndex > 0 ) {
 					this->writer_.writeRaw( ", " );
 				}
-				this->emitType( node.superInterfaces[interfaceIndex] );
+				this->emitType( node.parentInterfaces[interfaceIndex] );
 			}
 		}
 		this->writer_.writeRaw( ":\n" );
@@ -1365,7 +1365,7 @@ namespace uranite::formatter {
 		this->writer_.writeRaw( "self" );
 	}
 	
-	void Formatter::visit( ast::nodes::SuperExpression& node ) {
+	void Formatter::visit( ast::nodes::ParentExpression& node ) {
 		this->writer_.writeRaw( "parent" );
 	}
 

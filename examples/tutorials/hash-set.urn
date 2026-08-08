@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-package main
+package uranite.examples.tutorials.hash-set
 
 from uranite.collection.hash-set import HashSet
 from uranite.io.console import puts

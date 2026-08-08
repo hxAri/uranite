@@ -150,6 +150,9 @@ public class IoRequestQueue:
         self.lock.unlock()
         return idx
     
+    public function submit( self, RequestType reqType, I64 deviceId, I64 blockNumber, I64 bufferAddr, I64 length, I64 tag ) -> I64:
+        return self.submit( reqType.value, deviceId, blockNumber, bufferAddr, length, tag )
+    
     public function dequeue( self ) -> I64:
         
         """

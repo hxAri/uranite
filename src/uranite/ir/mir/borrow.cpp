@@ -109,10 +109,7 @@ namespace uranite::ir::mir {
 					if( functionDefinition.variableDescriptorTable.count( sourceOperand ) > 0 ) {
 						variableName = functionDefinition.variableDescriptorTable.at( sourceOperand ).variableName;
 					}
-					this->reportViolation(
-						fmt::format( "use of moved variable '{}'", variableName ),
-						instruction.sourceLocation
-					);
+					this->reportViolation( fmt::format( "use of moved variable \"{}\"", variableName ), instruction.sourceLocation );
 				}
 			}
 		}
@@ -174,7 +171,7 @@ namespace uranite::ir::mir {
 								variableName = functionDefinition.variableDescriptorTable.at( sourceVariable ).variableName;
 							}
 							this->reportViolation(
-								fmt::format( "double-free: dropping already moved variable '{}'", variableName ),
+								fmt::format( "double-free: dropping already moved variable \"{}\"", variableName ),
 								instruction.sourceLocation
 							);
 						}

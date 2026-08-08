@@ -91,7 +91,7 @@ namespace uranite::compiler {
 			
 			/** @brief Resolves a logical module path into an absolute file system path. */
 			std::string resolveModulePath( const std::vector<std::string>& modulePath );
-
+			
 			/**
 			 * @brief Returns the stdlib directory segment for the active target architecture.
 			 *
@@ -109,7 +109,7 @@ namespace uranite::compiler {
 			
 			/** @brief Reads the raw source code from the input file into memory. */
 			int readSource();
-
+			
 			/** @brief Compiles IR to object or executable, links runtime, optionally runs. */
 			int linkFromIR( const std::string& inputIrFile );
 			
@@ -123,22 +123,28 @@ namespace uranite::compiler {
 			mutable bool modulesDirectoryCached_ = false;
 			
 			std::unordered_map<std::string, ModuleInfo> modules;
-
+			
 			std::unordered_map<std::string, semantic::TypeSharedPointer> accumulatedModuleTypes_;
 			std::unordered_map<std::string, std::vector<semantic::SymbolSharedPointer>> accumulatedModuleSymbols_;
-
+			
 			/** @brief Maps include paths to their root package name from __mod__.urn. */
 			std::unordered_map<std::string, std::string> includePathPackagePrefix_;
-
+			
 			/** @brief Whether include path package prefixes have been resolved. */
 			bool includePathPrefixesCached_ = false;
-
+			
+			/** @brief Cached root package name from the entry file's __mod__.urn. */
+			std::string selfPackagePrefix_;
+			
+			/** @brief Whether the self-package prefix has been resolved. */
+			bool selfPackagePrefixCached_ = false;
+			
 			/** @brief Resolves and caches package prefixes for all include paths. */
 			void resolveIncludePathPrefixes();
-
+			
 			/** @brief Local copy of the configuration settings for the current driver session. */
 			Options options;
-
+			
 			/** @brief The primary source content file being compiled. */
 			std::string source;
 		

@@ -72,7 +72,7 @@ class SemanticBorrowTest : public ::testing::Test {
 				diagnostic.warningCount()
 			};
 		}
-		
+	
 };
 
 TEST_F( SemanticBorrowTest, ConstVariableCannotBeReassigned ) {
