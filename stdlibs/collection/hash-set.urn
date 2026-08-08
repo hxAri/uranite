@@ -658,7 +658,7 @@ public class HashSet<E> implements MutableSet<E>:
         """
         
         if object instanceof HashSet:
-            HashSet<E> other = object
+            HashSet<E> other = object as HashSet<E>
             if self.count != other.count:
                 return False
             for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
