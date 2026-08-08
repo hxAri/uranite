@@ -159,8 +159,8 @@ namespace uranite::visitors {
 			/** @brief Visits a struct definition. */
 			virtual void visit( ast::nodes::StructDeclaration& node ) = 0;
 			
-			/** @brief Visits a super-class reference expression. */
-			virtual void visit( ast::nodes::SuperExpression& node ) = 0;
+			/** @brief Visits a parent-class reference expression. */
+			virtual void visit( ast::nodes::ParentExpression& node ) = 0;
 			
 			/** @brief Visits an exception throw statement. */
 			virtual void visit( ast::nodes::ThrowStatement& node ) = 0;
@@ -319,8 +319,8 @@ namespace uranite::visitors {
 			case ast::Node::Kind::StructDeclaration:
 				visitor.visit( static_cast<ast::nodes::StructDeclaration&>( node ) );
 				break;
-			case ast::Node::Kind::SuperExpression:
-				visitor.visit( static_cast<ast::nodes::SuperExpression&>( node ) );
+			case ast::Node::Kind::ParentExpression:
+				visitor.visit( static_cast<ast::nodes::ParentExpression&>( node ) );
 				break;
 			case ast::Node::Kind::ThrowStatement:
 				visitor.visit( static_cast<ast::nodes::ThrowStatement&>( node ) );
