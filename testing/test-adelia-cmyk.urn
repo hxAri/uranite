@@ -1,8 +1,8 @@
 package testing
 
-from uranite.adelia.cmyk import CMYK
-from uranite.io.console import putsln
-from uranite.testing.assertions import assertEqualF64, assertFalse, assertTrue
+from uranite.adelia import CMYK
+from uranite.io import putsln
+from uranite.testing import assertEqualF64, assertFalse, assertTrue
 
 public function main() -> I32:
     putsln( "Adelia CMYK Tests" )
