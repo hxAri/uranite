@@ -37,14 +37,14 @@ function multiplyAv( Int n, Memory<Double> v, Memory<Double> resultAv ) -> Void:
     for Int i = 0; i < n; i++:
         Double sum = 0.0
         for Int j = 0; j < n; j++:
-            sum = sum + evaluateMatrixA( i, j ) * v.get( j )
+            sum+= evaluateMatrixA( i, j ) * v.get( j )
         resultAv.set( i, sum )
 
 function multiplyAtv( Int n, Memory<Double> v, Memory<Double> resultAtv ) -> Void:
     for Int i = 0; i < n; i++:
         Double sum = 0.0
         for Int j = 0; j < n; j++:
-            sum = sum + evaluateMatrixA( j, i ) * v.get( j )
+            sum+= evaluateMatrixA( j, i ) * v.get( j )
         resultAtv.set( i, sum )
 
 function multiplyAtAv( Int n, Memory<Double> v, Memory<Double> resultAtAv, Memory<Double> tmpBuffer ) -> Void:
@@ -67,8 +67,8 @@ function calculateEigenvalue( Int n, Memory<Double> u, Memory<Double> v ) -> Dou
     for Int i = 0; i < n; i++:
         Double ui = u.get( i )
         Double vi = v.get( i )
-        vBv = vBv + ui * vi
-        vv = vv + vi * vi
+        vBv+= ui * vi
+        vv+= vi * vi
     return sqrt( vBv / vv )
 
 public function main() -> I32:
