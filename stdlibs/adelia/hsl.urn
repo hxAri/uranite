@@ -89,7 +89,7 @@ public struct HSL:
         """
         
         if other instanceof HSL:
-            HSL otherHsl = other
+            HSL otherHsl = other as HSL
             return self.hue == otherHsl.hue and self.saturation == otherHsl.saturation and self.lightness == otherHsl.lightness
         return False
     
