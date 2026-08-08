@@ -348,7 +348,7 @@ namespace uranite::lexer {
 						continue;
 					}
 					default: {
-						std::string warningMessage = fmt::format( "unknown escape sequence '\\{}'", std::string( 1, escapeChar ) );
+						std::string warningMessage = fmt::format( "unknown escape sequence \"\\{}\"", std::string( 1, escapeChar ) );
 						this->diagnostic.warning( this->currentSource(), warningMessage );
 						stringValue+= escapeChar;
 						break;
@@ -724,7 +724,7 @@ namespace uranite::lexer {
 					this->tokens.push_back( token::Token( token::Type::Tilde, operatorSource, "~" ) );
 					break;
 				default: {
-					std::string errorMessage = fmt::format( "unexpected character '{}'", std::string( 1, character ) );
+					std::string errorMessage = fmt::format( "unexpected character \"{}\"", std::string( 1, character ) );
 					this->diagnostic.error( operatorSource, errorMessage );
 					this->tokens.push_back( token::Token( token::Type::Error, operatorSource, std::string( 1, character ) ) );
 					break;
