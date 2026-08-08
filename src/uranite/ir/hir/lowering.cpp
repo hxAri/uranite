@@ -23,6 +23,7 @@
 #include <llvm/TargetParser/Triple.h>
 
 #include "uranite/ir/hir/lowering.hpp"
+#include "uranite/semantic/qualnames.hpp"
 
 namespace uranite::ir::hir {
 	
@@ -36,7 +37,7 @@ namespace uranite::ir::hir {
 		if( extPos != std::string::npos ) {
 			relative = relative.substr( 0, extPos );
 		}
-		std::string modulePath = "uranite.";
+		std::string modulePath = std::string( semantic::qualname::modules::Uranite ) + ".";
 		for( char c : relative ) {
 			if( c == '/' ) {
 				modulePath += '.';
@@ -576,6 +577,9 @@ namespace uranite::ir::hir {
 				if( variableStatement.initializer != nullptr ) {
 					initializerExpression = this->lowerExpression( variableStatement.initializer );
 				}
+				else if( variableType && variableType->kind == semantic::Type::Kind::Optional ) {
+					initializerExpression = std::make_shared<HIRNoneLiteral>( variableType, variableStatement.source );
+				}
 				std::shared_ptr<HIRVariableBinding> hirVariable = std::make_shared<HIRVariableBinding>(
 					variableStatement.name,
 					variableType,
@@ -854,8 +858,8 @@ namespace uranite::ir::hir {
 			case ast::Node::Kind::SelfExpression: {
 				return std::make_shared<HIRSelfReference>( expression->semanticType, expression->source );
 			}
-			case ast::Node::Kind::SuperExpression: {
-				return std::make_shared<HIRSuperReference>( expression->semanticType, expression->source );
+			case ast::Node::Kind::ParentExpression: {
+				return std::make_shared<HIRParentReference>( expression->semanticType, expression->source );
 			}
 			case ast::Node::Kind::BinaryExpression: {
 				ast::nodes::BinaryExpression& binaryExpression = static_cast<ast::nodes::BinaryExpression&>( *expression );
@@ -1256,6 +1260,9 @@ namespace uranite::ir::hir {
 		descriptor.isReadonlyField = field.isReadonly;
 		if( field.defaultValue != nullptr ) {
 			descriptor.defaultValueExpression = this->lowerExpression( field.defaultValue );
+		}
+		else if( descriptor.fieldType && descriptor.fieldType->kind == semantic::Type::Kind::Optional ) {
+			descriptor.defaultValueExpression = std::make_shared<HIRNoneLiteral>( descriptor.fieldType, field.source );
 		}
 		return descriptor;
 	}
