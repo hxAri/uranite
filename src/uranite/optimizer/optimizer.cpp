@@ -22,6 +22,7 @@
 #include <spdlog/spdlog.h>
 
 #include "uranite/optimizer/optimizer.hpp"
+#include "uranite/semantic/qualnames.hpp"
 
 namespace uranite::optimizer {
 	
@@ -417,7 +418,7 @@ namespace uranite::optimizer {
 		if( statement->kind == ast::Node::Kind::ReturnStatement ) {
 			ast::nodes::ReturnStatement& returns = static_cast<ast::nodes::ReturnStatement&>( *statement );
 			if( returns.value && returns.value->kind == ast::Node::Kind::CallExpression ) {
-				spdlog::debug( "TCO: marked recursive call to '{}' as tail call", functionName );
+				spdlog::debug( "tco: marked recursive call to \"{}\" as tail call", functionName );
 			}
 		}
 	}
@@ -474,7 +475,7 @@ namespace uranite::optimizer {
 					ast::nodes::IfStatement& ifStatement = static_cast<ast::nodes::IfStatement&>( **iterator );
 					if( this->isDeadBranch( ifStatement.condition ) ) {
 						this->statistic.deadBranchesEliminated++;
-						spdlog::debug( "DCE: dead branch eliminated in function '{}'", functionDeclaration.name );
+						spdlog::debug( "dce: dead branch eliminated in function \"{}\"", functionDeclaration.name );
 						if( ifStatement.condition->kind == ast::Node::Kind::BooleanLiteral ) {
 							bool value = static_cast<ast::nodes::BoolLiteralExpression&>( *ifStatement.condition ).value;
 							if( value ) {
@@ -503,7 +504,7 @@ namespace uranite::optimizer {
 				[&foundReturn, &functionDeclaration, this]( const ast::nodes::StatementSharedPointer& s ) {
 					if( foundReturn ) {
 						this->statistic.unreachableStatementsEliminated++;
-						spdlog::debug( "DCE: unreachable statement removed in function '{}'", functionDeclaration.name );
+						spdlog::debug( "dce: unreachable statement removed in function \"{}\"", functionDeclaration.name );
 						return true;
 					}
 					if( s && s->kind == ast::Node::Kind::ReturnStatement ) {
@@ -520,7 +521,7 @@ namespace uranite::optimizer {
 	
 	void Optimizer::eliminateUnusedFunctions( ast::nodes::Program& program ) {
 		std::unordered_set<std::string> calledFunctions;
-		calledFunctions.insert( "main" );
+		calledFunctions.insert( semantic::qualname::functions::main::Name );
 		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
 			if( declaration == nullptr ) continue;
 			if( declaration->kind == ast::Node::Kind::FunctionDeclaration ) {
@@ -561,9 +562,9 @@ namespace uranite::optimizer {
 		while( iterator != program.declarations.end() ) {
 			if( *iterator && ( *iterator )->kind == ast::Node::Kind::FunctionDeclaration ) {
 				ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( **iterator );
-				if( functionDeclaration.access != ast::AccessModifier::Public && functionDeclaration.name != "main" &&
+				if( functionDeclaration.access != ast::AccessModifier::Public && functionDeclaration.name != semantic::qualname::functions::main::Name &&
 					calledFunctions.find( functionDeclaration.name ) == calledFunctions.end() ) {
-					spdlog::debug( "DCE: unused function '{}' removed", functionDeclaration.name );
+					spdlog::debug( "dce: unused function \"{}\" removed", functionDeclaration.name );
 					this->statistic.unusedFunctionsEliminated++;
 					iterator = program.declarations.erase( iterator );
 					continue;
@@ -591,7 +592,7 @@ namespace uranite::optimizer {
 					variable.initializer->kind == ast::Node::Kind::IdentifierExpression ||
 					variable.initializer->kind == ast::Node::Kind::MemberAccessExpression;
 				if( hasNoSideEffects && usedIdentifiers.find( variable.name ) == usedIdentifiers.end() ) {
-					spdlog::debug( "DCE: unused variable '{}' removed in function '{}'", variable.name, function.name );
+					spdlog::debug( "dce: unused variable \"{}\" removed in function \"{}\"", variable.name, function.name );
 					this->statistic.unusedVariablesEliminated++;
 					iterator = function.body.erase( iterator );
 					continue;
@@ -753,7 +754,7 @@ namespace uranite::optimizer {
 			ast::nodes::FunctionDeclaration& functionDeclaration = static_cast<ast::nodes::FunctionDeclaration&>( *declaration );
 			if( this->shouldInline( functionDeclaration ) ) {
 				this->statistic.inlinedFunctions++;
-				spdlog::debug( "Marked function '{}' as inline candidate", functionDeclaration.name );
+				spdlog::debug( "marked function \"{}\" as inline candidate", functionDeclaration.name );
 			}
 		}
 	}
@@ -762,7 +763,7 @@ namespace uranite::optimizer {
 		if( this->level == Level::O0 ) {
 			return;
 		}
-		spdlog::info( "Running optimization passes( level: O{} )", this->level == Level::O1 ? "1" : this->level == Level::O2 ? "2" : this->level == Level::O3 ? "3" : "fast" );
+		spdlog::info( "running optimization passes( level: O{} )", this->level == Level::O1 ? "1" : this->level == Level::O2 ? "2" : this->level == Level::O3 ? "3" : "fast" );
 		this->evaluateConstExpressions( program );
 		this->optimizeTailCalls( program );
 		if( this->level >= Level::O2 ) {
@@ -772,7 +773,7 @@ namespace uranite::optimizer {
 		if( this->level >= Level::O3 ) {
 			this->markInlineCandidates( program );
 		}
-		spdlog::info( "Optimization complete: {} tail calls, {} devirtualized, {} constexpression evaluated",
+		spdlog::info( "optimization complete: {} tail calls, {} devirtualized, {} constexpression evaluated",
 			this->statistic.tailCallsOptimized, 
 			this->statistic.functionsDevirtualized,
 			this->statistic.constantExpressionResionEvaluated
