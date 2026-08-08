@@ -1,6 +1,8 @@
 package testing
 
-from uranite.adelia import Adelia
+from uranite import Adelia
+from uranite.io import puts
 
 public function main() -> Void:
-    Adelia a = new Adelia
+    Adelia adelia = new Adelia
+    puts( adelia )
