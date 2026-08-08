@@ -76,7 +76,7 @@ namespace uranite::ir::hir {
 		NoneLiteral,
 		Identifier,
 		SelfReference,
-		SuperReference,
+		ParentReference,
 		BinaryOperation,
 		UnaryOperation,
 		FunctionCall,
@@ -608,13 +608,13 @@ namespace uranite::ir::hir {
 	
 	};
 	
-	/** @brief Super/parent reference expression. */
-	struct HIRSuperReference : HIRNode {
+	/** @brief Parent reference expression. */
+	struct HIRParentReference : HIRNode {
 		
-		HIRSuperReference(
+		HIRParentReference(
 			semantic::TypeSharedPointer resolvedType,
 			const lookup::SourceSharedPointer& sourceLocation
-		) : HIRNode( HIRNodeKind::SuperReference, std::move( resolvedType ), sourceLocation ) {
+		) : HIRNode( HIRNodeKind::ParentReference, std::move( resolvedType ), sourceLocation ) {
 		}
 	
 	};
@@ -1171,7 +1171,7 @@ namespace uranite::ir::hir {
 		ast::AccessModifier accessModifier = ast::AccessModifier::Default;
 		std::vector<std::shared_ptr<HIRFunctionDefinition>> methodDefinitions;
 		std::vector<HIRGenericParameterDescriptor> genericParameters;
-		std::vector<std::string> superInterfaceQualifiedNames;
+		std::vector<std::string> parentInterfaceQualifiedNames;
 		std::vector<HIRNodeSharedPointer> nestedDeclarations;
 		bool isFinalInterface = false;
 		
