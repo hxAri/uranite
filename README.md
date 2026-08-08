@@ -2,7 +2,7 @@
 <!--
 @author hxAri (hxari)
 @create 2025-02-24 15:15
-@update 2026-07-26 23:30
+@update 2026-08-08 21:37
 @github https://github.com/uranite-lang/uranite
 
 Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -60,7 +60,7 @@ public function main() -> I32:
 ```
 
 ```bash
-./build/uranite --run --verbose hello.urn
+./build/uranite -r hello.urn
 # Hello, Uranite!
 ```
 
@@ -112,10 +112,10 @@ The pipeline is orchestrated by `compiler::Driver` in `src/uranite/compiler/driv
 | `uranite-doc` | Documentation generator from `"""..."""` doccomments |
 | `uranite-pkg` | Package manager with dependency resolution and semantic versioning |
 
-- **HIR** (High-Level IR) preserves high-level semantics (loops, match, classes) with resolved types. Desugars elif chains to nested conditionals and unifies all loop forms. 60 node types. Accessible via `--dump-hir`.
+- **HIR** (High-Level IR) preserves high-level semantics (loops, match, classes) with resolved types. Desugars elif chains to nested conditionals and unifies all loop forms. Lowers nested function closures with captured variable analysis. 64 node types. Accessible via `--dump-hir`.
 - **MIR** (Mid-Level IR) flattens the HIR tree into a control-flow graph of basic blocks with linear instruction sequences. Each block terminates with exactly one control flow instruction. Accessible via `--dump-mir`.
 - **MIR Analysis** provides backward dataflow liveness analysis (fixed-point iteration over def/use sets), forward dataflow ownership verification (use-after-move and double-free detection), and five optimization passes (dead store elimination, copy propagation, constant folding, block merging, unreachable block elimination).
-- **MIR Codegen** generates LLVM IR from MIR. Runtime-verified for functions, recursion, loops, conditionals, boolean logic, bitwise ops, float arithmetic, extern calls, division/modulo, class constructors, method calls, field access, OOP wrapper classes (via shared descriptor registry), virtual dispatch via interface tables, exception handling with shadow call stack, defer statements, keyword arguments, variadic parameters, generics, enums, async/await, and inline assembly.
+- **MIR Codegen** generates LLVM IR from MIR. Runtime-verified for functions, recursion, loops, conditionals, boolean logic, bitwise ops, float arithmetic, extern calls, division/modulo, class constructors, method calls, field access, OOP wrapper classes (via shared descriptor registry), virtual dispatch via interface tables, exception handling with shadow call stack and exception chaining, defer statements (including defer-in-loop before break/continue), keyword arguments, variadic parameters with forwarding, generics with monomorphization, enums, collection literals, list/set/map comprehensions with filtering, generator functions with for-in iteration, nested function closure capture, `Memory<T>` and `Arena<T>` compiler intrinsics, async/await, and inline assembly.
 
 ## Repository Development Infrastructure
 
@@ -158,6 +158,12 @@ Produces `./build/uranite`, `./build/uranite-tests`, `./build/uranite-fmt`, `./b
 
 # Verbose compilation (shows each pipeline stage including MIR analysis)
 ./build/uranite source.urn --verbose -o program
+
+# Interactive REPL
+./build/uranite --repl
+
+# Run unit tests
+./build/uranite-tests
 ```
 
 ## Language Comparison Matrix
