@@ -37,7 +37,7 @@ public final class CssFormatter:
     CSS color value. All methods are static (no self parameter).
     """
     
-    public function hex( self, I32 hexValue ) -> String:
+    public static function hex( I32 hexValue ) -> String:
         
         """
         Format a packed 24-bit hex color value as a CSS hex color string with
@@ -59,9 +59,9 @@ public final class CssFormatter:
         I32 r = ( hexValue >> 16 ) & 255
         I32 g = ( hexValue >> 8 ) & 255
         I32 b = hexValue & 255
-        return "#" + self.byteToHex( r ) + self.byteToHex( g ) + self.byteToHex( b )
+        return "#" + CssFormatter.byteToHex( r ) + CssFormatter.byteToHex( g ) + CssFormatter.byteToHex( b )
     
-    public function rgb( self, I32 red, I32 green, I32 blue ) -> String:
+    public static function rgb( I32 red, I32 green, I32 blue ) -> String:
         
         """
         Format RGB channel values as a CSS rgb() functional notation string
@@ -82,7 +82,7 @@ public final class CssFormatter:
         
         return "rgb(" + red + ", " + green + ", " + blue + ")"
     
-    public function hsl( self, F64 hue, F64 saturation, F64 lightness ) -> String:
+    public static function hsl( F64 hue, F64 saturation, F64 lightness ) -> String:
         
         """
         Format HSL component values as a CSS hsl() functional notation string
@@ -111,7 +111,7 @@ public final class CssFormatter:
         F64 l = round( lightness * 100.0 )
         return "hsl(" + h + ", " + s + "%, " + l + "%)"
     
-    public function hexFromRgb( self, I32 red, I32 green, I32 blue ) -> String:
+    public static function hexFromRgb( I32 red, I32 green, I32 blue ) -> String:
         
         """
         Format RGB channel values as a CSS hex color string by first packing
@@ -131,9 +131,9 @@ public final class CssFormatter:
         """
         
         I32 hexVal = ( red << 16 ) | ( green << 8 ) | blue
-        return self.hex( hexVal )
+        return CssFormatter.hex( hexVal )
     
-    private function byteToHex( self, I32 value ) -> String:
+    private static function byteToHex( I32 value ) -> String:
         
         """
         Convert a single byte value (0-255) to a two-character lowercase
