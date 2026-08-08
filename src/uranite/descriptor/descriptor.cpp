@@ -17,6 +17,8 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#include <fmt/format.h>
+
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
@@ -24,8 +26,7 @@
 #include <llvm/IR/Module.h>
 
 #include "uranite/descriptor/descriptor.hpp"
-
-#include "fmt/format.h"
+#include "uranite/semantic/qualnames.hpp"
 
 namespace uranite::descriptor {
 	
@@ -457,65 +458,74 @@ namespace uranite::descriptor {
 	}
 	
 	const std::unordered_map<std::string, std::string> Builtin::oopToPrimitive = {
-		
-		// --- Floating Point ---
-		
-		{ "Double",   "f64" },
-		{ "F32",      "f32" },
-		{ "F64",      "f64" },
-		{ "Float",    "f64" },
-		
-		// --- Integers ---
-		
-		{ "Byte",     "u8" },
-		{ "I8",       "i8" },
-		{ "I16",      "i16" },
-		{ "I32",      "i32" },
-		{ "I64",      "i64" },
-		{ "Int",      "i64" },
-		{ "Integer",  "i32" },
-		{ "Long",     "i64" },
-		{ "U8",       "u8" },
-		{ "U16",      "u16" },
-		{ "U32",      "u32" },
-		{ "U64",      "u64" },
-		{ "UInt",     "u64" },
-		
-		// --- Others ---
-		
-		{ "Boolean",  "bool" },
-		{ "Char",     "char" },
-		{ "NoneType", "void" },
-		{ "String",   "str" },
-		{ "Void",     "void" }
-		
+		{ semantic::qualname::classes::Double::Name,   "f64" },
+		{ semantic::qualname::classes::f32::Name,      "f32" },
+		{ semantic::qualname::classes::f64::Name,      "f64" },
+		{ semantic::qualname::classes::Float::Name,    "f64" },
+		{ semantic::qualname::classes::byte::Name,     "u8" },
+		{ semantic::qualname::classes::i8::Name,       "i8" },
+		{ semantic::qualname::classes::i16::Name,      "i16" },
+		{ semantic::qualname::classes::i32::Name,      "i32" },
+		{ semantic::qualname::classes::i64::Name,      "i64" },
+		{ semantic::qualname::classes::Int::Name,      "i64" },
+		{ semantic::qualname::classes::integer::Name,  "i32" },
+		{ semantic::qualname::classes::Long::Name,     "i64" },
+		{ semantic::qualname::classes::u8::Name,       "u8" },
+		{ semantic::qualname::classes::u16::Name,      "u16" },
+		{ semantic::qualname::classes::u32::Name,      "u32" },
+		{ semantic::qualname::classes::u64::Name,      "u64" },
+		{ semantic::qualname::classes::uint::Name,     "u64" },
+		{ semantic::qualname::classes::boolean::Name,  semantic::qualname::primitives::names::Bool },
+		{ semantic::qualname::classes::Char::Name,     semantic::qualname::primitives::names::Char },
+		{ semantic::qualname::classes::nonetype::Name, semantic::qualname::primitives::names::Void },
+		{ semantic::qualname::classes::string::Name,   semantic::qualname::primitives::names::Str },
+		{ semantic::qualname::classes::Void::Name,     semantic::qualname::primitives::names::Void }
 	};
 	
 	const std::unordered_map<std::string, std::string> Builtin::primitiveToOOP = {
-		
-		// --- Floating Point ---
-		
-		{ "f32",  "F32" },
-		{ "f64",  "F64" },
-		
-		// --- Integers ---
-		
-		{ "i8",   "I8" },
-		{ "i16",  "I16" },
-		{ "i32",  "I32" },
-		{ "i64",  "I64" },
-		{ "u8",   "U8" },
-		{ "u16",  "U16" },
-		{ "u32",  "U32" },
-		{ "u64",  "U64" },
-		
-		// --- Others ---
-		
-		{ "bool", "Boolean" },
-		{ "char", "Char" },
-		{ "str",  "String" },
-		{ "void", "Void" }
-		
+		{ semantic::qualname::primitives::names::F32,  semantic::qualname::classes::f32::Name },
+		{ semantic::qualname::primitives::names::F64,  semantic::qualname::classes::f64::Name },
+		{ semantic::qualname::primitives::names::I8,   semantic::qualname::classes::i8::Name },
+		{ semantic::qualname::primitives::names::I16,  semantic::qualname::classes::i16::Name },
+		{ semantic::qualname::primitives::names::I32,  semantic::qualname::classes::i32::Name },
+		{ semantic::qualname::primitives::names::I64,  semantic::qualname::classes::i64::Name },
+		{ semantic::qualname::primitives::names::U8,   semantic::qualname::classes::u8::Name },
+		{ semantic::qualname::primitives::names::U16,  semantic::qualname::classes::u16::Name },
+		{ semantic::qualname::primitives::names::U32,  semantic::qualname::classes::u32::Name },
+		{ semantic::qualname::primitives::names::U64,  semantic::qualname::classes::u64::Name },
+		{ semantic::qualname::primitives::names::Bool, semantic::qualname::classes::boolean::Name },
+		{ semantic::qualname::primitives::names::Char, semantic::qualname::classes::Char::Name },
+		{ semantic::qualname::primitives::names::Str,  semantic::qualname::classes::string::Name },
+		{ semantic::qualname::primitives::names::Void, semantic::qualname::classes::Void::Name }
+	};
+	
+	const std::set<std::string> Builtin::oopWrapperNames = {
+		semantic::qualname::classes::Int::Name, semantic::qualname::classes::i8::Name, semantic::qualname::classes::i16::Name, semantic::qualname::classes::i32::Name, semantic::qualname::classes::i64::Name,
+		semantic::qualname::classes::uint::Name, semantic::qualname::classes::u8::Name, semantic::qualname::classes::u16::Name, semantic::qualname::classes::u32::Name, semantic::qualname::classes::u64::Name,
+		semantic::qualname::classes::Float::Name, semantic::qualname::classes::f32::Name, semantic::qualname::classes::f64::Name, semantic::qualname::classes::Double::Name,
+		semantic::qualname::classes::Long::Name, semantic::qualname::classes::integer::Name, semantic::qualname::classes::boolean::Name, semantic::qualname::classes::byte::Name,
+		semantic::qualname::classes::Char::Name, semantic::qualname::classes::string::Name, semantic::qualname::classes::Void::Name, semantic::qualname::classes::object::Name
+	};
+	
+	const std::set<std::string> Builtin::numericOopNames = {
+		semantic::qualname::classes::Int::Name, semantic::qualname::classes::i8::Name, semantic::qualname::classes::i16::Name, semantic::qualname::classes::i32::Name, semantic::qualname::classes::i64::Name,
+		semantic::qualname::classes::uint::Name, semantic::qualname::classes::u8::Name, semantic::qualname::classes::u16::Name, semantic::qualname::classes::u32::Name, semantic::qualname::classes::u64::Name,
+		semantic::qualname::classes::Float::Name, semantic::qualname::classes::f32::Name, semantic::qualname::classes::f64::Name, semantic::qualname::classes::Double::Name,
+		semantic::qualname::classes::integer::Name, semantic::qualname::classes::Long::Name, semantic::qualname::classes::byte::Name
+	};
+	
+	const std::set<std::string> Builtin::floatOopNames = {
+		semantic::qualname::classes::Float::Name, semantic::qualname::classes::f32::Name, semantic::qualname::classes::f64::Name, semantic::qualname::classes::Double::Name
+	};
+	
+	const std::unordered_set<std::string> Builtin::unsignedOopNames = {
+		semantic::qualname::classes::uint::Name, semantic::qualname::classes::u64::Name, semantic::qualname::classes::u32::Name, semantic::qualname::classes::u16::Name, semantic::qualname::classes::u8::Name, semantic::qualname::classes::byte::Name
+	};
+	
+	const std::unordered_map<std::string, int> Builtin::integerBitWidths = {
+		{semantic::qualname::classes::Int::Name, 64}, {semantic::qualname::classes::i64::Name, 64}, {semantic::qualname::classes::Long::Name, 64}, {semantic::qualname::classes::integer::Name, 64}, {semantic::qualname::classes::uint::Name, 64}, {semantic::qualname::classes::u64::Name, 64},
+		{semantic::qualname::classes::i32::Name, 32}, {semantic::qualname::classes::u32::Name, 32}, {semantic::qualname::classes::i16::Name, 16}, {semantic::qualname::classes::u16::Name, 16},
+		{semantic::qualname::classes::i8::Name, 8}, {semantic::qualname::classes::u8::Name, 8}, {semantic::qualname::classes::byte::Name, 8}, {semantic::qualname::classes::Char::Name, 32}
 	};
 	
 	Builtin::Builtin() {
@@ -662,33 +672,33 @@ namespace uranite::descriptor {
 	void Builtin::registerBooleanType() {
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"Boolean",
-			"uranite.language.boolean",
+			semantic::qualname::classes::boolean::Name,
+			semantic::qualname::classes::boolean::Package,
 			"",
 			std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"getValue",
-					"Boolean",
+					semantic::qualname::classes::object::methods::GetValue,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>&, llvm::LLVMContext&, llvm::Value* self, std::vector<llvm::Value*>&, std::vector<std::pair<std::string, llvm::Value*>>& ) {
 						return self;
 					}
 				},
 				BuiltinMethodDescriptor {
-					"negate",
-					"Boolean",
+					semantic::qualname::interfaces::negatable::methods::Negate,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext&, llvm::Value* self, std::vector<llvm::Value*>&, std::vector<std::pair<std::string, llvm::Value*>>& ) {
 						return builder.CreateNot( self, "bneg" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"logicalAnd",
-					"Boolean",
+					semantic::qualname::classes::object::methods::LogicalAnd,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({
 						MethodParameter {
-							"other",
-							"Boolean"
+							semantic::qualname::fields::Other,
+							semantic::qualname::classes::boolean::Name
 						}
 					}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext&, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& ) -> llvm::Value* {
@@ -699,12 +709,12 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"logicalOr",
-					"Boolean",
+					semantic::qualname::classes::object::methods::LogicalOr,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({
 						MethodParameter {
-							"other",
-							"Boolean"
+							semantic::qualname::fields::Other,
+							semantic::qualname::classes::boolean::Name
 						}
 					}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext&, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& ) -> llvm::Value* {
@@ -712,16 +722,16 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>&, std::vector<std::pair<std::string, llvm::Value*>>& ) {
 						return builder.CreateZExt( self, llvm::Type::getInt64Ty( context ), "bhash" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>&, std::vector<std::pair<std::string, llvm::Value*>>& ) {
 						llvm::Constant* trueStringPointer = builder.CreateGlobalStringPtr( "True", "true.str" );
@@ -739,54 +749,54 @@ namespace uranite::descriptor {
 	void Builtin::registerByteType() {
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"Byte",
-			"uranite.language.byte",
+			semantic::qualname::classes::byte::Name,
+			semantic::qualname::classes::byte::Package,
 			"",
 			std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"getValue",
-					"U8",
+					semantic::qualname::classes::object::methods::GetValue,
+					semantic::qualname::classes::u8::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return self;
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toInt",
-					"I32",
+					semantic::qualname::classes::object::methods::ToInt,
+					semantic::qualname::classes::i32::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateZExt( self, llvm::Type::getInt32Ty( context ), "btoi" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"bitwiseAnd",
-					"Byte",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Byte" } }),
+					semantic::qualname::classes::object::methods::BitwiseAnd,
+					semantic::qualname::classes::byte::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::byte::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateAnd( self, arguments[0], "bandtmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"bitwiseOr",
-					"Byte",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Byte" } }),
+					semantic::qualname::classes::object::methods::BitwiseOr,
+					semantic::qualname::classes::byte::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::byte::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateOr( self, arguments[0], "bortmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"bitwiseXor",
-					"Byte",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Byte" } }),
+					semantic::qualname::classes::object::methods::BitwiseXor,
+					semantic::qualname::classes::byte::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::byte::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateXor( self, arguments[0], "bxortmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"shiftLeft",
-					"Byte",
-					std::vector<MethodParameter>({ MethodParameter { "amount", "I32" } }),
+					semantic::qualname::classes::object::methods::ShiftLeft,
+					semantic::qualname::classes::byte::Name,
+					std::vector<MethodParameter>({ MethodParameter { "amount", semantic::qualname::classes::i32::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() ) return nullptr;
 						llvm::Value* amount = builder.CreateTrunc( arguments[0], llvm::Type::getInt8Ty( context ), "shamt" );
@@ -794,9 +804,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"shiftRight",
-					"Byte",
-					std::vector<MethodParameter>({ MethodParameter { "amount", "I32" } }),
+					semantic::qualname::classes::object::methods::ShiftRight,
+					semantic::qualname::classes::byte::Name,
+					std::vector<MethodParameter>({ MethodParameter { "amount", semantic::qualname::classes::i32::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() ) return nullptr;
 						llvm::Value* amount = builder.CreateTrunc( arguments[0], llvm::Type::getInt8Ty( context ), "shamt" );
@@ -804,16 +814,16 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateZExt( self, llvm::Type::getInt64Ty( context ), "byhash" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -834,21 +844,21 @@ namespace uranite::descriptor {
 	void Builtin::registerCharType() {
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"Char",
-			"uranite.language.char",
+			semantic::qualname::classes::Char::Name,
+			semantic::qualname::classes::Char::Package,
 			"",
 			std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"getValue",
-					"Char",
+					semantic::qualname::classes::object::methods::GetValue,
+					semantic::qualname::classes::Char::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return self;
 					}
 				},
 				BuiltinMethodDescriptor {
-					"isAlpha",
-					"Boolean",
+					semantic::qualname::classes::object::methods::IsAlpha,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::IntegerType* int32Type = llvm::Type::getInt32Ty( context );
@@ -863,8 +873,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"isDigit",
-					"Boolean",
+					semantic::qualname::classes::object::methods::IsDigit,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::IntegerType* int32Type = llvm::Type::getInt32Ty( context );
@@ -875,8 +885,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"isAlphanumeric",
-					"Boolean",
+					semantic::qualname::classes::object::methods::IsAlphanumeric,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::IntegerType* int32Type = llvm::Type::getInt32Ty( context );
@@ -895,8 +905,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"isWhitespace",
-					"Boolean",
+					semantic::qualname::classes::object::methods::IsWhitespace,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::IntegerType* int32Type = llvm::Type::getInt32Ty( context );
@@ -909,8 +919,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toUpper",
-					"Char",
+					semantic::qualname::classes::string::methods::ToUpper,
+					semantic::qualname::classes::Char::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::IntegerType* int32Type = llvm::Type::getInt32Ty( context );
@@ -924,8 +934,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toLower",
-					"Char",
+					semantic::qualname::classes::string::methods::ToLower,
+					semantic::qualname::classes::Char::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::IntegerType* int32Type = llvm::Type::getInt32Ty( context );
@@ -939,16 +949,16 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateZExt( self, llvm::Type::getInt64Ty( context ), "chash" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -970,61 +980,61 @@ namespace uranite::descriptor {
 	void Builtin::registerFloatTypes() {
 		this->registerType( BuiltinTypeDescriptor {
 			false,
-			"Float",
-			"uranite.language.float",
+			semantic::qualname::classes::Float::Name,
+			semantic::qualname::classes::Float::Package,
 			"",
 			std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"getValue",
-					"F64",
+					semantic::qualname::classes::object::methods::GetValue,
+					semantic::qualname::classes::f64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return self;
 					}
 				},
 				BuiltinMethodDescriptor {
-					"add",
-					"Float",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Float" } }),
+					semantic::qualname::interfaces::addable::methods::Add,
+					semantic::qualname::classes::Float::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::Float::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateFAdd( self, arguments[0], "faddtmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"subtract",
-					"Float",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Float" } }),
+					semantic::qualname::interfaces::subtractable::methods::Subtract,
+					semantic::qualname::classes::Float::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::Float::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateFSub( self, arguments[0], "fsubtmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"multiply",
-					"Float",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Float" } }),
+					semantic::qualname::interfaces::multipliable::methods::Multiply,
+					semantic::qualname::classes::Float::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::Float::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateFMul( self, arguments[0], "fmultmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"divide",
-					"Float",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Float" } }),
+					semantic::qualname::interfaces::dividable::methods::Divide,
+					semantic::qualname::classes::Float::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::Float::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateFDiv( self, arguments[0], "fdivtmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"negate",
-					"Float",
+					semantic::qualname::interfaces::negatable::methods::Negate,
+					semantic::qualname::classes::Float::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateFNeg( self, "fnegtmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"abs",
-					"Float",
+					semantic::qualname::classes::object::methods::Abs,
+					semantic::qualname::classes::Float::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Value* negatedValue = builder.CreateFNeg( self, "fneg" );
@@ -1033,17 +1043,17 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"equals",
-					"Boolean",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Float" } }),
+					semantic::qualname::interfaces::equatable::methods::Equals,
+					semantic::qualname::classes::boolean::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::Float::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return arguments.empty() ? nullptr : builder.CreateFCmpOEQ( self, arguments[0], "feqtmp" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"compareTo",
-					"I32",
-					std::vector<MethodParameter>({ MethodParameter { "other", "Float" } }),
+					semantic::qualname::classes::object::methods::CompareTo,
+					semantic::qualname::classes::i32::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::Float::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::Type* i32Type = llvm::Type::getInt32Ty( context );
@@ -1056,16 +1066,16 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"isNaN",
-					"Boolean",
+					semantic::qualname::classes::object::methods::IsNan,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateFCmpUNO( self, self, "isnan" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"isInfinite",
-					"Boolean",
+					semantic::qualname::classes::object::methods::IsInfinite,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Value* selfSubSelf = builder.CreateFSub( self, self, "sub.self" );
@@ -1075,8 +1085,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"floor",
-					"Float",
+					semantic::qualname::classes::object::methods::Floor,
+					semantic::qualname::classes::Float::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Type* selfType = self->getType();
@@ -1086,8 +1096,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"ceil",
-					"Float",
+					semantic::qualname::classes::object::methods::Ceil,
+					semantic::qualname::classes::Float::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Type* selfType = self->getType();
@@ -1097,8 +1107,8 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"round",
-					"Float",
+					semantic::qualname::classes::object::methods::Round,
+					semantic::qualname::classes::Float::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Type* selfType = self->getType();
@@ -1108,40 +1118,40 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toDouble",
-					"F64",
+					semantic::qualname::classes::object::methods::ToDouble,
+					semantic::qualname::classes::f64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateFPCast( self, llvm::Type::getDoubleTy( context ), "todouble" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toFloat",
-					"Float",
+					semantic::qualname::classes::object::methods::ToFloat,
+					semantic::qualname::classes::Float::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return self;
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toInt",
-					"I64",
+					semantic::qualname::classes::object::methods::ToInt,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateFPToSI( self, llvm::Type::getInt64Ty( context ), "ftoi" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateBitCast( self, llvm::Type::getInt64Ty( context ), "fhash" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -1157,26 +1167,26 @@ namespace uranite::descriptor {
 				return llvm::Type::getDoubleTy( context );
 			}
 		});
-		this->registerType( BuiltinTypeDescriptor { true, "F32", "uranite.language.f32", "Float", std::vector<BuiltinMethodDescriptor>({}), []( llvm::LLVMContext& context ) -> llvm::Type* { return llvm::Type::getFloatTy( context ); } });
-		this->registerType( BuiltinTypeDescriptor { true, "F64", "uranite.language.f64", "Float", std::vector<BuiltinMethodDescriptor>({}), []( llvm::LLVMContext& context ) -> llvm::Type* { return llvm::Type::getDoubleTy( context ); } });
-		this->registerType( BuiltinTypeDescriptor { true, "Double", "uranite.language.double", "Float", std::vector<BuiltinMethodDescriptor>({}), []( llvm::LLVMContext& context ) -> llvm::Type* { return llvm::Type::getDoubleTy( context ); } });
+		this->registerType( BuiltinTypeDescriptor { true, semantic::qualname::classes::f32::Name, semantic::qualname::classes::f32::Package, semantic::qualname::classes::Float::Name, std::vector<BuiltinMethodDescriptor>({}), []( llvm::LLVMContext& context ) -> llvm::Type* { return llvm::Type::getFloatTy( context ); } });
+		this->registerType( BuiltinTypeDescriptor { true, semantic::qualname::classes::f64::Name, semantic::qualname::classes::f64::Package, semantic::qualname::classes::Float::Name, std::vector<BuiltinMethodDescriptor>({}), []( llvm::LLVMContext& context ) -> llvm::Type* { return llvm::Type::getDoubleTy( context ); } });
+		this->registerType( BuiltinTypeDescriptor { true, semantic::qualname::classes::Double::Name, semantic::qualname::classes::Double::Package, semantic::qualname::classes::Float::Name, std::vector<BuiltinMethodDescriptor>({}), []( llvm::LLVMContext& context ) -> llvm::Type* { return llvm::Type::getDoubleTy( context ); } });
 	}
 	
 	void Builtin::registerIntTypes() {
 		std::function<std::vector<BuiltinMethodDescriptor>(const std::string&)> makeIntArithmeticMethods = [this]( const std::string& typeName ) -> std::vector<BuiltinMethodDescriptor> {
 			return std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"getValue",
-					"I64",
+					semantic::qualname::classes::object::methods::GetValue,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return self;
 					}
 				},
 				BuiltinMethodDescriptor {
-					"add",
+					semantic::qualname::interfaces::addable::methods::Add,
 					typeName,
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1188,9 +1198,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"subtract",
+					semantic::qualname::interfaces::subtractable::methods::Subtract,
 					typeName,
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1202,9 +1212,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"multiply",
+					semantic::qualname::interfaces::multipliable::methods::Multiply,
 					typeName,
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1216,9 +1226,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"divide",
+					semantic::qualname::interfaces::dividable::methods::Divide,
 					typeName,
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1230,9 +1240,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"modulo",
+					semantic::qualname::interfaces::modulable::methods::Modulo,
 					typeName,
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1244,7 +1254,7 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"negate",
+					semantic::qualname::interfaces::negatable::methods::Negate,
 					typeName,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
@@ -1253,7 +1263,7 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"abs",
+					semantic::qualname::classes::object::methods::Abs,
 					typeName,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
@@ -1265,9 +1275,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"equals",
-					"Boolean",
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					semantic::qualname::interfaces::equatable::methods::Equals,
+					semantic::qualname::classes::boolean::Name,
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1279,9 +1289,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"compareTo",
-					"I32",
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					semantic::qualname::classes::object::methods::CompareTo,
+					semantic::qualname::classes::i32::Name,
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1297,9 +1307,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"min",
+					semantic::qualname::classes::object::methods::Min,
 					typeName,
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1311,9 +1321,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"max",
+					semantic::qualname::classes::object::methods::Max,
 					typeName,
-					std::vector<MethodParameter>({ MethodParameter { "other", typeName } }),
+					std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Other, typeName } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* int64Type = llvm::Type::getInt64Ty( context );
@@ -1325,16 +1335,16 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateIntCast( self, llvm::Type::getInt64Ty( context ), true, "hash" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -1349,19 +1359,19 @@ namespace uranite::descriptor {
 		};
 		this->registerType( BuiltinTypeDescriptor {
 			false,
-			"Int",
-			"uranite.language.int",
+			semantic::qualname::classes::Int::Name,
+			semantic::qualname::classes::Int::Package,
 			"",
-			makeIntArithmeticMethods( "Int" ),
+			makeIntArithmeticMethods( semantic::qualname::classes::Int::Name ),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt64Ty( context );
 			}
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"I8",
-			"uranite.language.i8",
-			"Int",
+			semantic::qualname::classes::i8::Name,
+			semantic::qualname::classes::i8::Package,
+			semantic::qualname::classes::Int::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt8Ty( context );
@@ -1369,9 +1379,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"I16",
-			"uranite.language.i16",
-			"Int",
+			semantic::qualname::classes::i16::Name,
+			semantic::qualname::classes::i16::Package,
+			semantic::qualname::classes::Int::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt16Ty( context );
@@ -1379,9 +1389,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"I32",
-			"uranite.language.i32",
-			"Int",
+			semantic::qualname::classes::i32::Name,
+			semantic::qualname::classes::i32::Package,
+			semantic::qualname::classes::Int::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt32Ty( context );
@@ -1389,9 +1399,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"I64",
-			"uranite.language.i64",
-			"Int",
+			semantic::qualname::classes::i64::Name,
+			semantic::qualname::classes::i64::Package,
+			semantic::qualname::classes::Int::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt64Ty( context );
@@ -1399,9 +1409,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"Integer",
-			"uranite.language.integer",
-			"Int",
+			semantic::qualname::classes::integer::Name,
+			semantic::qualname::classes::integer::Package,
+			semantic::qualname::classes::Int::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt32Ty( context );
@@ -1409,9 +1419,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"Long",
-			"uranite.language.long",
-			"Int",
+			semantic::qualname::classes::Long::Name,
+			semantic::qualname::classes::Long::Package,
+			semantic::qualname::classes::Int::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt64Ty( context );
@@ -1422,29 +1432,29 @@ namespace uranite::descriptor {
 	void Builtin::registerSpecialTypes() {
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"NoneType",
-			"uranite.language.none",
+			semantic::qualname::classes::nonetype::Name,
+			semantic::qualname::classes::nonetype::Package,
 			"",
 			std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateGlobalStringPtr( "None", "none.str" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"equals",
-					"Boolean",
+					semantic::qualname::interfaces::equatable::methods::Equals,
+					semantic::qualname::classes::boolean::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return llvm::ConstantInt::getTrue( context );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return llvm::ConstantInt::get( llvm::Type::getInt64Ty( context ), 0 );
@@ -1457,21 +1467,21 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"Void",
-			"uranite.language.void",
+			semantic::qualname::classes::Void::Name,
+			semantic::qualname::classes::Void::Package,
 			"",
 			std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateGlobalStringPtr( "void", "void.str" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return llvm::ConstantInt::get( llvm::Type::getInt64Ty( context ), 0 );
@@ -1488,24 +1498,24 @@ namespace uranite::descriptor {
 		std::vector<BuiltinMethodDescriptor> methods;
 		methods.reserve( 8 );
 		methods.push_back( BuiltinMethodDescriptor {
-			"getValue",
-			"String",
+			semantic::qualname::classes::object::methods::GetValue,
+			semantic::qualname::classes::string::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				return self;
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"toString",
-			"String",
+			semantic::qualname::classes::object::methods::ToString,
+			semantic::qualname::classes::string::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				return self;
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"length",
-			"I64",
+			semantic::qualname::classes::string::methods::Length,
+			semantic::qualname::classes::i64::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::FunctionType* strlenType = llvm::FunctionType::get( llvm::Type::getInt64Ty( context ), { llvm::PointerType::getUnqual( context ) }, false );
@@ -1514,8 +1524,8 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"isEmpty",
-			"Boolean",
+			semantic::qualname::classes::string::methods::IsEmpty,
+			semantic::qualname::classes::boolean::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::FunctionType* strlenType = llvm::FunctionType::get( llvm::Type::getInt64Ty( context ), { llvm::PointerType::getUnqual( context ) }, false );
@@ -1525,9 +1535,9 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"equals",
-			"Boolean",
-			std::vector<MethodParameter>({ MethodParameter { "other", "String" } }),
+			semantic::qualname::interfaces::equatable::methods::Equals,
+			semantic::qualname::classes::boolean::Name,
+			std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::string::Name } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.empty() == false ) {
 					llvm::FunctionType* strcmpType = llvm::FunctionType::get( llvm::Type::getInt32Ty( context ), { llvm::PointerType::getUnqual( context ), llvm::PointerType::getUnqual( context ) }, false );
@@ -1539,9 +1549,9 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"concat",
-			"String",
-			std::vector<MethodParameter>({ MethodParameter { "other", "String" } }),
+			semantic::qualname::classes::string::methods::Concat,
+			semantic::qualname::classes::string::Name,
+			std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::string::Name } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.empty() == false ) {
 					llvm::Type* i8PtrType = llvm::PointerType::getUnqual( context );
@@ -1567,9 +1577,9 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"startsWith",
-			"Boolean",
-			std::vector<MethodParameter>({ MethodParameter { "prefix", "String" } }),
+			semantic::qualname::classes::string::methods::StartsWith,
+			semantic::qualname::classes::boolean::Name,
+			std::vector<MethodParameter>({ MethodParameter { "prefix", semantic::qualname::classes::string::Name } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.empty() ) {
 					return nullptr;
@@ -1586,9 +1596,9 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"endsWith",
-			"Boolean",
-			std::vector<MethodParameter>({ MethodParameter { "suffix", "String" } }),
+			semantic::qualname::classes::string::methods::EndsWith,
+			semantic::qualname::classes::boolean::Name,
+			std::vector<MethodParameter>({ MethodParameter { "suffix", semantic::qualname::classes::string::Name } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.empty() ) {
 					return nullptr;
@@ -1612,9 +1622,9 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"contains",
-			"Boolean",
-			std::vector<MethodParameter>({ MethodParameter { "substr", "String" } }),
+			semantic::qualname::classes::string::methods::Contains,
+			semantic::qualname::classes::boolean::Name,
+			std::vector<MethodParameter>({ MethodParameter { "substr", semantic::qualname::classes::string::Name } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.empty() ) {
 					return nullptr;
@@ -1627,8 +1637,8 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"toUpper",
-			"String",
+			semantic::qualname::classes::string::methods::ToUpper,
+			semantic::qualname::classes::string::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -1679,8 +1689,8 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"toLower",
-			"String",
+			semantic::qualname::classes::string::methods::ToLower,
+			semantic::qualname::classes::string::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -1731,8 +1741,8 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"trim",
-			"String",
+			semantic::qualname::classes::string::methods::Trim,
+			semantic::qualname::classes::string::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -1812,9 +1822,9 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"replace",
-			"String",
-			std::vector<MethodParameter>({ MethodParameter { "old", "String" }, MethodParameter { "replacement", "String" } }),
+			semantic::qualname::classes::string::methods::Replace,
+			semantic::qualname::classes::string::Name,
+			std::vector<MethodParameter>({ MethodParameter { "old", semantic::qualname::classes::string::Name }, MethodParameter { "replacement", semantic::qualname::classes::string::Name } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				if( arguments.size() < 2 ) {
 					return nullptr;
@@ -1897,24 +1907,24 @@ namespace uranite::descriptor {
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"split",
-			"String",
-			std::vector<MethodParameter>({ MethodParameter { "delimiter", "String" } }),
+			semantic::qualname::classes::string::methods::Split,
+			semantic::qualname::classes::string::Name,
+			std::vector<MethodParameter>({ MethodParameter { semantic::qualname::fields::Delimiter, semantic::qualname::classes::string::Name } }),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				return self;
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"hash",
-			"I64",
+			semantic::qualname::classes::object::methods::Hash,
+			semantic::qualname::classes::i64::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				return builder.CreatePtrToInt( self, llvm::Type::getInt64Ty( context ), "strhash" );
 			}
 		});
 		methods.push_back( BuiltinMethodDescriptor {
-			"format",
-			"String",
+			semantic::qualname::classes::string::methods::Format,
+			semantic::qualname::classes::string::Name,
 			std::vector<MethodParameter>({}),
 			[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 				llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -2251,8 +2261,8 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			false,
-			"String",
-			"uranite.language.string",
+			semantic::qualname::classes::string::Name,
+			semantic::qualname::classes::string::Package,
 			"",
 			std::move( methods ),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
@@ -2268,22 +2278,22 @@ namespace uranite::descriptor {
 	void Builtin::registerUIntTypes() {
 		this->registerType( BuiltinTypeDescriptor {
 			false,
-			"UInt",
-			"uranite.language.uint",
+			semantic::qualname::classes::uint::Name,
+			semantic::qualname::classes::uint::Package,
 			"",
 			std::vector<BuiltinMethodDescriptor>({
 				BuiltinMethodDescriptor {
-					"getValue",
-					"U64",
+					semantic::qualname::classes::object::methods::GetValue,
+					semantic::qualname::classes::u64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return self;
 					}
 				},
 				BuiltinMethodDescriptor {
-					"add",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::interfaces::addable::methods::Add,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::Type* i64 = llvm::Type::getInt64Ty( context );
@@ -2295,9 +2305,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"subtract",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::interfaces::subtractable::methods::Subtract,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::Type* i64 = llvm::Type::getInt64Ty( context );
@@ -2309,9 +2319,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"multiply",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::interfaces::multipliable::methods::Multiply,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::Type* i64 = llvm::Type::getInt64Ty( context );
@@ -2323,9 +2333,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"divide",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::interfaces::dividable::methods::Divide,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::Type* i64 = llvm::Type::getInt64Ty( context );
@@ -2337,9 +2347,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"modulo",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::interfaces::modulable::methods::Modulo,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::Type* i64 = llvm::Type::getInt64Ty( context );
@@ -2351,9 +2361,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"equals",
-					"Boolean",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::interfaces::equatable::methods::Equals,
+					semantic::qualname::classes::boolean::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							return builder.CreateICmpEQ( self, arguments[0], "eqtmp" );
@@ -2362,9 +2372,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"compareTo",
-					"I32",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::classes::object::methods::CompareTo,
+					semantic::qualname::classes::i32::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							llvm::IntegerType* integer32Type = llvm::Type::getInt32Ty( context );
@@ -2377,9 +2387,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"bitwiseAnd",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::classes::object::methods::BitwiseAnd,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							return builder.CreateAnd( self, arguments[0], "andtmp" );
@@ -2388,9 +2398,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"bitwiseOr",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::classes::object::methods::BitwiseOr,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							return builder.CreateOr( self, arguments[0], "ortmp" );
@@ -2399,9 +2409,9 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"bitwiseXor",
-					"UInt",
-					std::vector<MethodParameter>({ MethodParameter { "other", "UInt" } }),
+					semantic::qualname::classes::object::methods::BitwiseXor,
+					semantic::qualname::classes::uint::Name,
+					std::vector<MethodParameter>({ MethodParameter { "other", semantic::qualname::classes::uint::Name } }),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						if( arguments.empty() == false ) {
 							return builder.CreateXor( self, arguments[0], "xortmp" );
@@ -2410,16 +2420,16 @@ namespace uranite::descriptor {
 					}
 				},
 				BuiltinMethodDescriptor {
-					"hash",
-					"I64",
+					semantic::qualname::classes::object::methods::Hash,
+					semantic::qualname::classes::i64::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						return builder.CreateIntCast( self, llvm::Type::getInt64Ty( context ), false, "hash" );
 					}
 				},
 				BuiltinMethodDescriptor {
-					"toString",
-					"String",
+					semantic::qualname::classes::object::methods::ToString,
+					semantic::qualname::classes::string::Name,
 					std::vector<MethodParameter>({}),
 					[]( llvm::IRBuilder<>& builder, llvm::LLVMContext& context, llvm::Value* self, std::vector<llvm::Value*>& arguments, std::vector<std::pair<std::string, llvm::Value*>>& keywordArguments ) -> llvm::Value* {
 						llvm::Module* currentModule = builder.GetInsertBlock()->getParent()->getParent();
@@ -2437,9 +2447,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"U8",
-			"uranite.language.u8",
-			"UInt",
+			semantic::qualname::classes::u8::Name,
+			semantic::qualname::classes::u8::Package,
+			semantic::qualname::classes::uint::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt8Ty( context );
@@ -2447,9 +2457,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"U16",
-			"uranite.language.u16",
-			"UInt",
+			semantic::qualname::classes::u16::Name,
+			semantic::qualname::classes::u16::Package,
+			semantic::qualname::classes::uint::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt16Ty( context );
@@ -2457,9 +2467,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"U32",
-			"uranite.language.u32",
-			"UInt",
+			semantic::qualname::classes::u32::Name,
+			semantic::qualname::classes::u32::Package,
+			semantic::qualname::classes::uint::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt32Ty( context );
@@ -2467,9 +2477,9 @@ namespace uranite::descriptor {
 		});
 		this->registerType( BuiltinTypeDescriptor {
 			true,
-			"U64",
-			"uranite.language.u64",
-			"UInt",
+			semantic::qualname::classes::u64::Name,
+			semantic::qualname::classes::u64::Package,
+			semantic::qualname::classes::uint::Name,
 			std::vector<BuiltinMethodDescriptor>({}),
 			[]( llvm::LLVMContext& context ) -> llvm::Type* {
 				return llvm::Type::getInt64Ty( context );
