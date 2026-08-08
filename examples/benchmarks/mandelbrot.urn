@@ -2,7 +2,7 @@
 # 
 # @author hxAri (hxari)
 # @create 2025-02-24 15:15
-# @update 2026-06-21 01:44
+# @update 2026-08-04 01:26
 # @github https://github.com/uranite-lang/uranite/blob/prod/examples/benchmarks/mandelbrot.urn
 # 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
@@ -28,37 +28,45 @@ from uranite.language.int import Int
 from uranite.language.u8 import U8
 from uranite.memory.memory import Memory
 
-public function main() -> I32:
-    Int n = 16000
-    puts( "P4 ", n, ":", n )
-    I64 start = clock()
-    Int bytesPerRow = n / 8
-    Memory<U8> bitmap = new Memory<U8>( n * bytesPerRow )
+function computeMandelbrot( Int n, Memory<U8> bitmap, Int bytesPerRow ) -> Void:
     for Int y = 0; y < n; y++:
-        Double Civ = ( y * 2.0 / n ) - 1.0
+        Double civ = ( y * 2.0 / n ) - 1.0
         for Int xByte = 0; xByte < bytesPerRow; xByte++:
             U8 res = 0
             for Int bit = 0; bit < 8; bit++:
                 Int x = xByte * 8 + bit
-                Double Crv = ( x * 2.0 / n ) - 1.5
-                Double Zrv = 0.0
-                Double Ziv = 0.0
-                Double Trv = 0.0
-                Double Tiv = 0.0
+                Double crv = ( x * 2.0 / n ) - 1.5
+                Double zrv = 0.0
+                Double ziv = 0.0
+                Double trv = 0.0
+                Double tiv = 0.0
                 Int i = 0
-                while i < 50 and ( Trv + Tiv <= 4.0 ):
-                    Ziv = ( Zrv * Ziv ) + ( Zrv * Ziv ) + Civ
-                    Zrv = Trv - Tiv + Crv
-                    Trv = Zrv * Zrv
-                    Tiv = Ziv * Ziv
-                    i = i + 1
+                while i < 50 and ( trv + tiv <= 4.0 ):
+                    ziv = ( zrv * ziv ) + ( zrv * ziv ) + civ
+                    zrv = trv - tiv + crv
+                    trv = zrv * zrv
+                    tiv = ziv * ziv
+                    i++
                 res = res << 1
-                if Trv + Tiv <= 4.0:
+                if trv + tiv <= 4.0:
                     res = res | 1
             bitmap.set( y * bytesPerRow + xByte, res )
-    I64 end = clock()
-    Double elapsed = ( end - start ) / 1000000.0
-    puts( "Total bits calculated: ", ( n as I64 ) * ( n as I64 ) )
-    puts( "Elapsed time: ", elapsed, " seconds" )
+
+public function main() -> I32:
+    Int n = 3200000000
+    puts( "Uranite Extreme Mandelbrot Benchmark (P4 {}:{})".format( n, n ) )
+    I64 totalStart = clock()
+    Int bytesPerRow = n / 8
+    Memory<U8> bitmap = new Memory<U8>( n * bytesPerRow )
+    puts( "-   initializing mandelbrot computation" )
+    I64 compStart = clock()
+    computeMandelbrot( n, bitmap, bytesPerRow )
+    I64 compEnd = clock()
+    Double compElapsed = ( compEnd - compStart ) / 1000000.0
+    puts( "    computation routine elapsed time: {} seconds".format( compElapsed ) )
+    I64 totalEnd = clock()
+    Double totalElapsed = ( totalEnd - totalStart ) / 1000000.0
+    puts( "-   bits calculated: {}".format( ( n as I64 ) * ( n as I64 ) ) )
+    puts( "elapsed time: {} seconds".format( totalElapsed ) )
     bitmap.free()
     return 0
