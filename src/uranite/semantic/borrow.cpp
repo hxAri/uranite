@@ -21,6 +21,7 @@
 #include <algorithm>
 
 #include "uranite/semantic/borrow.hpp"
+#include "uranite/semantic/qualnames.hpp"
 #include "uranite/semantic/typeref.hpp"
 
 #include "fmt/format.h"
@@ -54,7 +55,7 @@ namespace uranite::semantic {
 			}
 			if( ownershipInformation.isMutable == false ) {
 				std::string immutableVariableErrorMessage = fmt::format( "cannot borrow immutable variable \"{}\" as mutable", ownerName );
-				this->diagnostic.error( source, immutableVariableErrorMessage, "declare with 'mut' to allow mutable borrows" );
+				this->diagnostic.error( source, immutableVariableErrorMessage, "declare with \"mut\" to allow mutable borrows" );
 				return;
 			}
 			ownershipInformation.hasMutableBorrow = true;
@@ -534,7 +535,7 @@ namespace uranite::semantic {
 					else if( constructorExpression.type && constructorExpression.type->kind == ast::Node::Kind::SimpleType ) {
 						constructorName = static_cast<ast::nodes::SimpleTypeNode&>( *constructorExpression.type ).name;
 					}
-					if( constructorName == "Arena" ) {
+					if( constructorName == semantic::qualname::classes::arena::Name ) {
 					}
 					else {
 						variableIterator->second.isHeapAllocated = true;
@@ -542,7 +543,7 @@ namespace uranite::semantic {
 				}
 				if( statement.initializer->kind == ast::Node::Kind::MethodCallExpression ) {
 					ast::nodes::MethodCallExpression& methodCallExpression = static_cast<ast::nodes::MethodCallExpression&>( *statement.initializer );
-					if( methodCallExpression.method == "alloc" && methodCallExpression.object &&
+					if( methodCallExpression.method == qualname::classes::arena::methods::Alloc && methodCallExpression.object &&
 						methodCallExpression.object->kind == ast::Node::Kind::IdentifierExpression ) {
 						ast::nodes::IdentifierExpression& arenaIdentifierExpression = static_cast<ast::nodes::IdentifierExpression&>( *methodCallExpression.object );
 						std::unordered_map<std::string,BorrowOwnershipInfo>::iterator arenaIterator = this->ownershipTracking.find( arenaIdentifierExpression.name );
