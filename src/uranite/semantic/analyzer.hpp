@@ -357,7 +357,7 @@ namespace uranite::semantic {
 			void populateClassMembers( ClassTypeSharedPointer classType );
 			
 			/**
-			 * @brief Populates an interface type's generic params, super interfaces, and method signatures.
+			 * @brief Populates an interface type's generic params, parent interfaces, and method signatures.
 			 * @param interfaceType The interface type to populate.
 			 */
 			void populateInterfaceMethods( InterfaceTypeSharedPointer interfaceType );
@@ -452,6 +452,7 @@ namespace uranite::semantic {
 			std::string userSourceFile_;
 			std::unordered_set<std::string> userImportedIdentifiers_;
 			bool isInUserCode_ = false;
+			bool isAnalyzingAssignTarget_ = false;
 			
 	};
 	
