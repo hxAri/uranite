@@ -2528,12 +2528,22 @@ namespace uranite::ir::mir {
 		if( leftOperand == nullptr || rightOperand == nullptr ) {
 			return;
 		}
-		if( leftOperand->getType()->isIntegerTy( 1 ) == false && leftOperand->getType()->isIntegerTy() ) {
+		if( leftOperand->getType()->isPointerTy() ) {
+			leftOperand = this->irBuilder.CreateICmpNE(
+				leftOperand, llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( leftOperand->getType() ) ), "lhs.bool"
+			);
+		}
+		else if( leftOperand->getType()->isIntegerTy( 1 ) == false && leftOperand->getType()->isIntegerTy() ) {
 			leftOperand = this->irBuilder.CreateICmpNE(
 				leftOperand, llvm::ConstantInt::get( leftOperand->getType(), 0 ), "lhs.bool"
 			);
 		}
-		if( rightOperand->getType()->isIntegerTy( 1 ) == false && rightOperand->getType()->isIntegerTy() ) {
+		if( rightOperand->getType()->isPointerTy() ) {
+			rightOperand = this->irBuilder.CreateICmpNE(
+				rightOperand, llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( rightOperand->getType() ) ), "rhs.bool"
+			);
+		}
+		else if( rightOperand->getType()->isIntegerTy( 1 ) == false && rightOperand->getType()->isIntegerTy() ) {
 			rightOperand = this->irBuilder.CreateICmpNE(
 				rightOperand, llvm::ConstantInt::get( rightOperand->getType(), 0 ), "rhs.bool"
 			);
