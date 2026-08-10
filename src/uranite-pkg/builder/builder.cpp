@@ -37,6 +37,14 @@ namespace uranite::pkg {
 			modulePaths.push_back( localModulesPath );
 		}
 
+		std::string requirementsModulesPath = this->manifest_.requirements.modulesPath;
+		if( requirementsModulesPath.empty() ) {
+			requirementsModulesPath = "build/modules";
+		}
+		if( std::filesystem::exists( requirementsModulesPath ) ) {
+			modulePaths.push_back( requirementsModulesPath );
+		}
+
 		for( const ResolvedDependency& dependency : this->resolvedDependencies_ ) {
 			std::string dependencyModulesPath = this->packageCache_.getModulesPath(
 				dependency.packageName, dependency.resolvedVersion );
@@ -53,8 +61,8 @@ namespace uranite::pkg {
 	}
 
 	std::string BuildOrchestrator::resolveOutputPath() const {
-		if( this->manifest_.buildConfig.outputPath.empty() == false ) {
-			return this->manifest_.buildConfig.outputPath;
+		if( this->manifest_.buildConfig.buildPath.empty() == false ) {
+			return this->manifest_.buildConfig.buildPath;
 		}
 		return "build/" + this->manifest_.packageName;
 	}
@@ -65,6 +73,9 @@ namespace uranite::pkg {
 		std::string entryFile = this->manifest_.entrySourceFile;
 		if( entryFile.empty() ) {
 			entryFile = "src/main.urn";
+		}
+		if( std::filesystem::is_directory( entryFile ) ) {
+			entryFile = ( std::filesystem::path( entryFile ) / "__mod__.urn" ).string();
 		}
 
 		if( std::filesystem::exists( entryFile ) == false ) {
@@ -92,11 +103,8 @@ namespace uranite::pkg {
 		compilerOptions.linkLibraries = this->collectLinkLibraries();
 
 		std::vector<std::string> modulePaths = this->collectModulePaths();
-		if( modulePaths.empty() == false ) {
-			compilerOptions.modulesPath = modulePaths[0];
-			for( size_t pathIndex = 1; pathIndex < modulePaths.size(); pathIndex++ ) {
-				compilerOptions.includePaths.push_back( modulePaths[pathIndex] );
-			}
+		for( const std::string& modulePath : modulePaths ) {
+			compilerOptions.includePaths.push_back( modulePath );
 		}
 
 		std::string optimizationLevel = this->manifest_.buildConfig.optimizationLevel;
@@ -113,7 +121,7 @@ namespace uranite::pkg {
 			compilerOptions.optimization = optimizer::Level::O2;
 		}
 
-		compilerOptions.stripDebugInfo = this->manifest_.buildConfig.stripDebugInfo;
+		compilerOptions.stripDebugInfo = this->manifest_.buildConfig.stripSymbols;
 
 		if( this->manifest_.buildConfig.targetTriple.empty() == false ) {
 			compilerOptions.targetTriple = this->manifest_.buildConfig.targetTriple;
