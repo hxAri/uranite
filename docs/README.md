@@ -242,7 +242,7 @@ Installation on Linux, macOS, and Windows. Platform support and architecture com
 
 Complete language reference organized by topic. Covers lexical conventions, the type system, variables and constants, operators, expressions, control flow, functions, classes, structs, interfaces, traits, abstract classes, generics, enums, collections, memory and ownership, error handling, async and concurrency, modules and packages, inline assembly, and foreign function interop. Each topic includes grammar rules, semantic behavior, and working code examples.
 
-### [Standard Library Guide](stdlib-guide/README.md)
+### [Standard Library Guide](stdlib/README.md)
 
 Practical usage guides for the core standard library modules. Collections, strings, memory management, console and file I/O, error handling patterns, async programming, threading, testing, math, date and time, cryptography, networking, encoding, regular expressions, OS primitives, and FFI. Not an API reference (generate that with `uranite-doc`), but a guide to writing idiomatic Uranite.
 
