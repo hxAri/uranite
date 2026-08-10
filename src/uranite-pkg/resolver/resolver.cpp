@@ -20,13 +20,13 @@ namespace uranite::pkg {
 		std::unordered_map<std::string, ResolvedDependency> resolvedMap;
 		std::unordered_set<std::string> visitedPackages;
 
-		for( const PackageDependency& dependency : manifest.dependencies ) {
+		for( const PackageDependency& dependency : manifest.requirements.dependencies ) {
 			this->resolveRecursive( dependency.packageName, dependency.versionConstraint,
 				dependency.sourceRepository, resolvedMap, visitedPackages, result.conflictMessages );
 		}
 
 		if( includeDevelopmentDependencies ) {
-			for( const PackageDependency& dependency : manifest.developmentDependencies ) {
+			for( const PackageDependency& dependency : manifest.requirements.developmentDependencies ) {
 				this->resolveRecursive( dependency.packageName, dependency.versionConstraint,
 					dependency.sourceRepository, resolvedMap, visitedPackages, result.conflictMessages );
 			}
@@ -107,7 +107,7 @@ namespace uranite::pkg {
 		resolved.sourceRepository = sourceRepository;
 
 		PackageManifest dependencyManifest = this->fetchPackageManifest( packageName, selectedVersion, sourceRepository );
-		for( const PackageDependency& transitiveDependency : dependencyManifest.dependencies ) {
+		for( const PackageDependency& transitiveDependency : dependencyManifest.requirements.dependencies ) {
 			resolved.transitiveDependencyNames.push_back( transitiveDependency.packageName );
 			this->resolveRecursive( transitiveDependency.packageName, transitiveDependency.versionConstraint,
 				transitiveDependency.sourceRepository, resolvedMap, visitedPackages, conflictMessages );
