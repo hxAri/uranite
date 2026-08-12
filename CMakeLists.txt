@@ -102,7 +102,7 @@ if( GIT_FOUND )
 endif()
 
 # Adding macro definition to C++
-add_definitions( -D_URANITE_COMPILER_VERSION_="1.2.0" )
+add_definitions( -D_URANITE_COMPILER_VERSION_="1.3.0" )
 add_definitions( -D_URANITE_LANGUAGE_DESCRIPTION_="${PROJECT_DESCRIPTION}" )
 add_definitions( -D_URANITE_LANGUAGE_VERSION_="${PROJECT_VERSION}" )
 add_definitions( -D_URANITE_GIT_HASH_="${_URANITE_GIT_HASH_}" )
