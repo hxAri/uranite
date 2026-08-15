@@ -172,7 +172,7 @@ To understand where Uranite stands in the modern engineering landscape, here is 
 
 | Language | Compilation / Runtime Type | Memory Management Model | Syntax Style | Error Handling Paradigm | Type System Safety | Developer Ergonomics |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Uranite** | **AOT Native (LLVM 19)** | **Ownership & Move (No GC, No Lifetime Tags)** | **Indentation-Based** | **Strict Exception Hierarchy (`LookupError`)** | **Static (Fully Qualified Name Check)** | **High (Pythonic/Frictionless)** |
+| **Uranite** | **AOT Native (LLVM 19)** | **Ownership & Move (No GC, No Lifetime Tags)** | **Indentation-Based** | **Strict Exception Hierarchy** | **Static (Fully Qualified Name Check)** | **High (Pythonic/Frictionless)** |
 | **C / C++** | AOT Native | Manual / RAII | Curly Braces | Error Codes / Uncaught Exceptions | Static (Weak Name Resolution Danger) | Low to Medium (Verbose) |
 | **C#** | Managed (CLR VM / JIT) | Garbage Collection (GC) | Curly Braces | Structured Exceptions | Static | High |
 | **Go** | AOT Native | Garbage Collection (GC) | Curly Braces | Explicit Multi-Value Returns | Static | Medium to High |
