@@ -1,6 +1,6 @@
 # Language Syntax
 
-This section is the complete reference for every syntactic construct in the Uranite programming language. It covers everything from lexical tokens and primitive types through ownership semantics, concurrency primitives, and inline assembly. Each subsection describes what the construct does, how to write it, and how it interacts with other language features.
+This section is the complete reference for every syntactic construct in the Uranite programming language. It covers lexical conventions, literals, declarations, statements, expressions, the type system, ownership semantics, and advanced language features. Each subsection describes what the construct does, how to write it, and how it interacts with other language features.
 
 ---
 
@@ -11,34 +11,34 @@ This section is the complete reference for every syntactic construct in the Uran
   - [Syntax Philosophy](#syntax-philosophy)
   - [Section Map](#section-map)
     - [Lexical Conventions](#lexical-conventions)
-    - [Types](#types)
-    - [Variables](#variables)
-    - [Operators](#operators)
+    - [Literals](#literals)
+    - [Declarations](#declarations)
+    - [Statements](#statements)
     - [Expressions](#expressions)
-    - [Control Flow](#control-flow)
-    - [Functions](#functions)
-    - [Classes](#classes)
-    - [Structs](#structs)
-    - [Interfaces](#interfaces)
-    - [Traits](#traits)
-    - [Abstract Classes](#abstract-classes)
-    - [Generics](#generics)
-    - [Enums](#enums)
-    - [Collections](#collections)
-    - [Memory and Ownership](#memory-and-ownership)
-    - [Error Handling](#error-handling)
-    - [Async and Concurrency](#async-and-concurrency)
-    - [Modules and Packages](#modules-and-packages)
-    - [Inline Assembly](#inline-assembly)
-    - [Interop](#interop)
+    - [Types](#types)
+    - [Ownership](#ownership)
+    - [Advanced Concepts](#advanced-concepts)
+  - [Reserved Keywords](#reserved-keywords)
+    - [Control Flow Keywords](#control-flow-keywords)
+    - [Declaration Keywords](#declaration-keywords)
+    - [Access Modifier Keywords](#access-modifier-keywords)
+    - [Object-Oriented Keywords](#object-oriented-keywords)
+    - [Memory and Safety Keywords](#memory-and-safety-keywords)
+    - [Logical Operator Keywords](#logical-operator-keywords)
+    - [Literal Value Keywords](#literal-value-keywords)
+    - [Error Handling Keywords](#error-handling-keywords)
+    - [General Purpose Keywords](#general-purpose-keywords)
+  - [Complete Keyword Reference](#complete-keyword-reference)
+  - [Case Sensitivity](#case-sensitivity)
+  - [Builtin Type Names](#builtin-type-names)
 
 ---
 
 ## Syntax Philosophy
 
-Uranite's syntax is built on four foundational principles that differentiate it from C-family languages:
+Uranite's syntax is built on four foundational principles that differentiate it from C-family languages.
 
-**Indentation defines structure.** Blocks are opened by a colon and delimited by indentation level, not braces. The compiler enforces consistent indentation (4 spaces per level) as a hard requirement, not a style preference. There are no optional braces, no "one-liner" forms that bypass indentation, and no ambiguity about where a block begins or ends.
+**Indentation defines structure.** Blocks are opened by a colon and delimited by indentation level, not braces. There are no optional braces, no single-line forms that bypass indentation, and no ambiguity about where a block begins or ends.
 
 ```uranite
 public function classify( I64 temperature ) -> String:
@@ -50,20 +50,21 @@ public function classify( I64 temperature ) -> String:
         return "normal"
 ```
 
-**Keywords replace symbols for logical operations.** Boolean logic uses `and`, `or`, and `not` exclusively. The symbols `&&`, `||`, and `!` are not valid tokens. Identity checks use `is` and `is not` rather than reference-equality operators. This makes conditional expressions read as natural-language predicates:
+**Keywords replace symbols for logical operations.** Boolean logic uses `and`, `or`, and `not` exclusively. The symbols `&&`, `||`, and `!` are not valid tokens. Identity checks use `is` and `is not` rather than reference-equality operators. Both operands of `and` and `or` are always evaluated.
+
+**Static typing is explicit and mandatory.** Every variable, parameter, and return type carries an explicit type annotation. There is no type inference for declarations. Generic type parameters are specified at instantiation (`ArrayList<String>`), with diamond inference (`new ArrayList<>()`) permitted only in constructor calls where the target type is unambiguous from the left-hand side of an assignment.
+
+**Move semantics are the default.** Non-primitive types transfer ownership on assignment. After assignment to a new binding, the original variable is invalidated. Any subsequent access to the original produces a compile-time error caught by the borrow checker. There is no garbage collector, no reference counting, and no runtime pause for memory reclamation.
 
 ```uranite
-if connection is not None and retryCount < maxRetries:
-    if isAuthenticated or hasGuestAccess:
-        if not rateLimited:
-            processRequest( connection )
+ArrayList<String> original = new ArrayList<>()
+original.add( "alpha" )
+original.add( "beta" )
+
+ArrayList<String> transferred = original
 ```
 
-**Static typing is explicit and mandatory.** Every variable, parameter, and return type carries an explicit type annotation. There is no type inference for declarations — `I64 count = 0`, never `count = 0`. Generic type parameters are specified at instantiation (`ArrayList<String>`), with diamond inference (`new ArrayList<>()`) permitted only in constructor calls where the target type is unambiguous from the left-hand side of an assignment.
-
-**Move semantics are the default.** Non-primitive types transfer ownership on assignment. After `ArrayList<I64> moved = original`, the variable "original" is invalidated and any subsequent use is a compile-time error caught by the borrow checker. This eliminates an entire class of use-after-free and double-free bugs without requiring a garbage collector.
-
-These four principles — structural indentation, keyword-based logic, explicit typing, and ownership-by-default — form the syntactic identity of Uranite. Every construct documented in this section operates within these constraints.
+After the last line, `original` is invalidated and cannot be used.
 
 ---
 
@@ -76,74 +77,65 @@ The foundational building blocks of Uranite source code: how text becomes tokens
 | Document | Description |
 |---|---|
 | [Source Files and Encoding](lexical-conventions/source-files-and-encoding.md) | File encoding requirements, the `.urn` extension, and source file structure rules. |
-| [Comments and Doccomments](lexical-conventions/comments-and-doccomments.md) | Single-line `#` comments, triple-quoted `"""..."""` doccomments placed after declarations, and the "Parameters:", "Returns:", "Complexity:" doccomment format. |
-| [Indentation and Blocks](lexical-conventions/indentation-and-blocks.md) | How indentation defines block boundaries, the 4-space convention, tab normalization, and common indentation errors. |
-| [Reserved Keywords](lexical-conventions/reserved-keywords.md) | Complete enumeration of all 78 reserved keywords, organized by category (control flow, declarations, types, modifiers, operators, memory). |
-| [Identifiers and Naming](lexical-conventions/identifiers-and-naming.md) | Identifier rules, naming conventions (descriptive names required, no single-letter identifiers), and the linter's enforcement of minimum name lengths. |
-| [Integer Literals](lexical-conventions/integer-literals.md) | Decimal, hexadecimal (`0x`), octal (`0o`), and binary (`0b`) integer literal formats. |
-| [Float Literals](lexical-conventions/float-literals.md) | Floating-point literal syntax, scientific notation, and IEEE 754 representation. |
-| [String Literals](lexical-conventions/string-literals.md) | String literal syntax, escape sequences, and UTF-8 encoding. |
-| [Char Literals](lexical-conventions/char-literals.md) | Character literal syntax, Unicode representation, and the 32-bit `Char` type. |
-| [Boolean and None Literals](lexical-conventions/boolean-and-none-literals.md) | `True`, `False`, and `None` literal tokens and their semantic meaning. |
-| [Regex Literals](lexical-conventions/regex-literals.md) | Regular expression literal syntax and compilation. |
+| [Comments and Doccomments](lexical-conventions/comments-and-doccomments.md) | Single-line `#` comments, triple-quoted `"""..."""` doccomments, and the required doccomment format. |
+| [Indentation and Blocks](lexical-conventions/indentation-and-blocks.md) | How indentation defines block boundaries, the 4-space convention, and common indentation errors. |
+| [Identifiers and Naming](lexical-conventions/identifiers-and-naming.md) | Identifier rules, naming conventions, and linter enforcement of minimum name lengths. |
 
-### [Types](types/README.md)
+### [Literals](literals/README.md)
 
-The complete type system: every type kind the language supports, from machine integers to metatypes.
+All literal value forms for scalars and collections.
 
 | Document | Description |
 |---|---|
-| [Integer Types](types/integer-types.md) | `I8`, `I16`, `I32`, `I64`, `Int`, `Long` — signed integer types with sizes and ranges. |
-| [Unsigned Integer Types](types/unsigned-integer-types.md) | `U8`, `U16`, `U32`, `U64`, `Byte` — unsigned integer types. |
-| [Floating-Point Types](types/floating-point-types.md) | `F32`, `F64`, `Float`, `Double` — IEEE 754 floating-point types. |
-| [Boolean Type](types/boolean-type.md) | The `Bool` type, `True`/`False` values, and truthiness rules. |
-| [Char Type](types/char-type.md) | The 32-bit `Char` type for Unicode characters. |
-| [String Type](types/string-type.md) | The `String` type — UTF-8 text, wrapper methods, and common operations. |
-| [Void and None](types/void-and-none.md) | `Void` as a return type, `None` as the null value, and their distinct roles. |
-| [Nullable Types](types/nullable-types.md) | The `?T` nullable type prefix, `None` assignment, and `is`/`is not` checks. |
-| [Callable Types](types/callable-types.md) | `Callable<ReturnType, <ParamTypes>>` for function references and lambda typing. |
-| [Tuple Types](types/tuple-types.md) | `Tuple<E>` as a fixed-size heterogeneous container. |
-| [Array Types](types/array-types.md) | Raw `Memory<T>` arrays, array literals, and heap allocation. |
-| [Pointer Types](types/pointer-types.md) | Raw pointer types for low-level memory access within `unsafe` blocks. |
-| [Reference Types](types/reference-types.md) | Reference semantics and their interaction with the borrow checker. |
-| [Union Types](types/union-types.md) | Union type declarations for type-safe tagged unions. |
-| [Result Types](types/result-types.md) | Result types for error-handling patterns without exceptions. |
-| [Meta Types](types/meta-types.md) | Metatype representations used in reflection and type introspection. |
-| [Future Type](types/future-type.md) | `Future<T>` as the return type of async functions. |
-| [Generator Type](types/generator-type.md) | `Generator<T>` for lazy value production with `yield`. |
-| [Type Aliases](types/type-aliases.md) | `type NewName = ExistingType` declarations and their semantic equivalence. |
-| [Type Identity](types/type-identity-and-qualified-names.md) | How Uranite determines whether two types are the same, and fully-qualified name comparison. |
-| [OOP Wrappers](types/oop-wrappers.md) | Primitive wrapper classes (`uranite.language.Integer`, `uranite.language.Float`, etc.) and their relationship to primitive types. |
+| [Integer Literals](literals/integer-literals.md) | Decimal, hexadecimal (`0x`), octal (`0o`), and binary (`0b`) integer literal formats. |
+| [Float Literals](literals/float-literals.md) | Floating-point literal syntax, scientific notation, and IEEE 754 representation. |
+| [String Literals](literals/string-literals.md) | String literal syntax, escape sequences, and UTF-8 encoding. |
+| [Char Literals](literals/char-literals.md) | Character literal syntax, Unicode representation, and the 32-bit `Char` type. |
+| [Boolean Literals](literals/boolean-literals.md) | `True` and `False` literal tokens. |
+| [None Literals](literals/none-literals.md) | The `None` literal and its role as the null-equivalent value. |
+| [Regex Literals](literals/regex-literals.md) | Regular expression literal syntax and compilation. |
+| [Array Literals](literals/array-literals.md) | `[1, 2, 3]` syntax for creating raw arrays. |
+| [Map Literals](literals/map-literals.md) | `{"key": value}` syntax for creating `HashMap` instances. |
+| [Set Literals](literals/set-literals.md) | `{value1, value2}` syntax for creating `HashSet` instances. |
+| [Tuple Literals](literals/tuple-literals.md) | `(value1, value2)` syntax for creating `Tuple` instances. |
 
-### [Variables](variables/README.md)
+### [Declarations](declarations/README.md)
 
-Variable declarations, constants, assignment, and mutability.
+Constructs that define named entities: types, functions, and bindings.
 
 | Document | Description |
 |---|---|
-| [Variable Declarations](variables/variable-declarations.md) | Typed variable declarations (`Type name = value`), scope rules, and shadowing behavior. |
-| [Constants](variables/constants.md) | Top-level `const` declarations for compile-time constant values. |
-| [Assignment](variables/assignment.md) | Simple assignment statements and ownership transfer semantics. |
-| [Compound Assignment](variables/compound-assignment.md) | `+=`, `-=`, `*=`, `/=` operators and their desugaring. |
-| [Mutable and Volatile](variables/mutable-and-volatile.md) | The `mut` and `volatile` modifiers and their effects on optimization and access rules. |
+| [Variable](declarations/variable.md) | Typed variable declarations, scope rules, mutability with `mut`, and `volatile` modifier. |
+| [Constants](declarations/constants.md) | Top-level `const` declarations for compile-time constant values. |
+| [Functions](declarations/functions.md) | Function declarations, parameters, return types, default values, variadic and keyword parameters, `extern` declarations, and nested functions. |
+| [Classes](declarations/classes.md) | Class declarations with fields, methods, constructors, visibility modifiers, static members, properties, `readonly`, `final`, `native`, and `virtual` dispatch. |
+| [Class Inheritance](declarations/class-inheritance.md) | Single inheritance with `extends`, `parent()` constructor delegation, method overriding with `override`, and polymorphic dispatch. |
+| [Abstract Classes](declarations/abstract-classes.md) | `abstract class` with `abstract function` signatures and concrete methods. |
+| [Structs](declarations/structs.md) | Value-type struct declarations with fields and value semantics. |
+| [Enums](declarations/enums.md) | Enum declarations with `unit` variants, `backed` enums with explicit discriminant values, and enum methods. |
+| [Interfaces](declarations/interfaces.md) | Interface declarations defining method contracts, `implements` on classes, and multiple interface implementation. |
+| [Traits](declarations/traits.md) | Trait declarations with default method implementations and `use` for mixing into classes. |
+| [Generics](declarations/generics.md) | Generic type parameters, `where` clause constraints, diamond inference, and generic functions. |
 
-### [Operators](operators/README.md)
+### [Statements](statements/README.md)
 
-Every operator in the language, its precedence, and how operators map to interface methods.
+Constructs that execute actions and control flow.
 
 | Document | Description |
 |---|---|
-| [Arithmetic Operators](operators/arithmetic-operators.md) | `+`, `-`, `*`, `/`, `%` — wrapping arithmetic for integers, IEEE 754 for floats, auto-inserted zero-checks for division and modulo. |
-| [Comparison Operators](operators/comparison-operators.md) | `==`, `!=`, `<`, `>`, `<=`, `>=` — mapped to `Equatable` and `Comparable` interface methods. |
-| [Logical Operators](operators/logical-operators.md) | `and`, `or`, `not` — keyword-based boolean logic with short-circuit evaluation. |
-| [Bitwise Operators](operators/bitwise-operators.md) | Bitwise AND, OR, XOR, NOT, left shift, and right shift operations. |
-| [Assignment Operators](operators/assignment-operators.md) | Simple and compound assignment operators. |
-| [Identity Operators](operators/identity-operators.md) | `is` and `is not` for reference identity and `None` checking. |
-| [Power Operator](operators/power-operator.md) | The exponentiation operator and its precedence. |
-| [Unary Operators](operators/unary-operators.md) | Prefix negation (`-x`) mapped to `Negatable.negate()`, and other unary operations. |
-| [Increment and Decrement](operators/increment-and-decrement.md) | `++` and `--` as prefix and postfix operators. |
-| [Operator Precedence](operators/operator-precedence.md) | Complete precedence table from highest to lowest binding strength. |
-| [Operator Interfaces](operators/operator-interfaces.md) | How `+` maps to `Addable.add()`, `==` maps to `Equatable.equals()`, and the full mapping table for all operator-to-interface bindings. |
+| [Assignment](statements/assignment.md) | Simple and compound assignment operators (`=`, `+=`, `-=`, `*=`, `/=`). |
+| [If / Elif / Else](statements/if-elif-else.md) | Conditional branching with indentation-delimited bodies. |
+| [While Loops](statements/while-loops.md) | Condition-based iteration. |
+| [For-In Loops](statements/for-in-loops.md) | Iterator-based loops over ranges, collections, and any `Iterable<T>` type. |
+| [Switch / Case](statements/switch-case.md) | Block-based value dispatch with `case` arms. |
+| [Break and Continue](statements/break-and-continue.md) | Loop control statements for early exit and iteration skipping. |
+| [Return](statements/return.md) | Return values from functions and transfer control to the caller. |
+| [Pass](statements/pass.md) | No-op placeholder for intentionally empty blocks. |
+| [Yield](statements/yield.md) | Produce values from generator functions without terminating them. |
+| [Raise](statements/raise.md) | Throw exceptions with `raise` and declare throwable functions with `raises`. |
+| [Try / Except / Finally](statements/try-except-finally.md) | Structured exception handling with typed `except` clauses and cleanup blocks. |
+| [Defer](statements/defer.md) | Schedule cleanup statements that execute on scope exit regardless of control flow. |
+| [Delete](statements/delete.md) | Explicitly destroy objects and release resources. |
 
 ### [Expressions](expressions/README.md)
 
@@ -151,238 +143,330 @@ All expression forms that produce values.
 
 | Document | Description |
 |---|---|
-| [Binary Expressions](expressions/binary-expressions.md) | Arithmetic, comparison, and logical binary operations. |
-| [Unary Expressions](expressions/unary-expressions.md) | Prefix and postfix unary operations. |
-| [String Concatenation](expressions/string-concatenation.md) | String `+` operator behavior and performance characteristics. |
-| [String Formatting](expressions/string-formatting.md) | Formatted string construction patterns. |
-| [Range Expressions](expressions/range-expressions.md) | Exclusive ranges (`0..10`) and inclusive ranges (`1...15`). |
-| [Index Expressions](expressions/index-expressions.md) | Collection indexing (`array[index]`) mapped to `Indexable.get()`. |
-| [Member Access Expressions](expressions/member-access-expressions.md) | Dot-notation field access (`object.field`). |
-| [Method Call Expressions](expressions/method-call-expressions.md) | Method invocation (`object.method( args )`) and dynamic dispatch. |
-| [Call Expressions](expressions/call-expressions.md) | Free function calls, static method calls, and scope-resolution (`Class::method`). |
+| [Call Expressions](expressions/call-expressions.md) | Free function calls, static method calls, and argument passing. |
+| [Method Call Expressions](expressions/method-call-expressions.md) | Instance method invocation and dynamic dispatch. |
 | [Constructor Expressions](expressions/constructor-expressions.md) | `new ClassName( args )` heap allocation and constructor invocation. |
-| [Cast Expressions](expressions/cast-expressions.md) | `value as TargetType` explicit type casting. |
-| [Instanceof and Subclassof](expressions/instanceof-and-subclassof.md) | Runtime type checking expressions. |
-| [Self and Parent](expressions/self-and-parent.md) | `self` for instance reference, `parent` for parent class access. |
-| [Lambda Expressions](expressions/lambda-expressions.md) | Anonymous functions: `lambda ParamType param: body`. |
-| [Await Expressions](expressions/await-expressions.md) | `await futureValue` for asynchronous result extraction. |
-| [Yield Expressions](expressions/yield-expressions.md) | `yield value` for generator-based lazy evaluation. |
+| [Member Access Expressions](expressions/member-access-expressions.md) | Dot-notation field access (`object.field`). |
+| [Index Expressions](expressions/index-expressions.md) | Collection indexing (`collection[index]`) mapped to `Indexable.get()`. |
+| [Range Expressions](expressions/range-expressions.md) | Exclusive ranges (`0..10`) for iteration and slicing. |
+| [Instanceof Expressions](expressions/instanceof-expressions.md) | Runtime type checking with `instanceof`. |
+| [Subclassof Expressions](expressions/subclassof-expressions.md) | Compile-time subclass relationship checks with `subclassof`. |
+| [Self Expressions](expressions/self-expressions.md) | `self` for referencing the current instance within methods. |
+| [Parent Expressions](expressions/parent-expressions.md) | `parent` for accessing parent class constructors and overridden methods. |
+| [Lambda Expressions](expressions/lambda-expressions.md) | Anonymous functions with `lambda` and captured scope. |
+| [Match Expressions](expressions/match-expressions.md) | Inline pattern matching with `match ... in` and `=>` arms. |
+| [Await Expressions](expressions/await-expressions.md) | `await` for suspending until async operations complete. |
+| [Operator Precedence](expressions/operator-precedence.md) | Complete precedence table from highest to lowest binding strength. |
 
-### [Control Flow](control-flow/README.md)
-
-Branching, looping, and pattern matching.
-
-| Document | Description |
-|---|---|
-| [If / Elif / Else](control-flow/if-elif-else.md) | Conditional branching with indentation-delimited bodies. |
-| [While Loops](control-flow/while-loops.md) | Condition-based iteration. |
-| [For-In Loops](control-flow/for-in-loops.md) | Iterator-based loops using the `Iterator<T>` protocol (`has()`/`next()`). |
-| [Range Iteration](control-flow/range-iteration.md) | `for x in start..end` and `for x in start...end` range-based loops. |
-| [Collection Iteration](control-flow/collection-iteration.md) | Iterating over `ArrayList`, `HashSet`, `Generator`, and other `Iterable<T>` types. |
-| [Map Destructuring Iteration](control-flow/map-destructuring-iteration.md) | `for String key, Value value in hashMap` two-variable destructuring. |
-| [Break and Continue](control-flow/break-and-continue.md) | Loop control statements. |
-| [Match Statements](control-flow/match-statements.md) | Pattern matching with `case` branches and wildcard `*` fallback. |
-| [Match Expressions](control-flow/match-expressions.md) | Match as an expression producing a value. |
-| [Switch/Case Statements](control-flow/switch-case-statements.md) | Traditional switch-case branching for value-based dispatch. |
-| [Pass Statement](control-flow/pass-statement.md) | The `pass` no-op placeholder for empty blocks. |
-
-### [Functions](functions/README.md)
-
-Function declarations, parameter forms, closures, and external linkage.
+**[Operators](expressions/operators/README.md)**
 
 | Document | Description |
 |---|---|
-| [Function Declarations](functions/function-declarations.md) | `function name( params ) -> ReturnType:` syntax, access modifiers, and the `self` convention. |
-| [Parameters and Return Types](functions/parameters-and-return-types.md) | Typed parameters, mandatory return type annotations, and `Void` return. |
-| [Default Parameters](functions/default-parameters.md) | `Type param = defaultValue` syntax and evaluation semantics. |
-| [Variadic Parameters](functions/variadic-parameters.md) | `Type args{}` variadic parameter syntax for accepting variable numbers of arguments. |
-| [Keyword Parameters](functions/keyword-parameters.md) | `Type kwargs{}` keyword parameter syntax for named argument passing. |
-| [Nested Functions](functions/nested-functions.md) | Functions defined inside other functions with lexical scope access. |
-| [Closures and Capture](functions/closures-and-capture.md) | Variable capture semantics for lambdas and nested functions. |
-| [Recursion](functions/recursion.md) | Recursive function patterns and tail-call behavior. |
-| [Extern Declarations](functions/extern-declarations.md) | `extern function` for C ABI linkage to native libraries. |
+| [Arithmetic Operators](expressions/operators/arithmetic-operators.md) | `+`, `-`, `*`, `/`, `%` with wrapping arithmetic and auto-inserted zero-checks. |
+| [Comparison Operators](expressions/operators/comparison-operators.md) | `==`, `!=`, `<`, `>`, `<=`, `>=`, `is`, `is not`. |
+| [Logical Operators](expressions/operators/logical-operators.md) | `and`, `or`, `not` keyword-based boolean logic. |
+| [Bitwise Operators](expressions/operators/bitwise-operators.md) | Bitwise AND, OR, XOR, NOT, left shift, and right shift. |
+| [Unary Operators](expressions/operators/unary-operators.md) | Prefix negation and other unary operations. |
 
-### [Classes](classes/README.md)
-
-Object-oriented programming constructs.
+**[Comprehensions](expressions/comprehensions/README.md)**
 
 | Document | Description |
 |---|---|
-| [Class Declarations](classes/class-declarations.md) | `class ClassName:` syntax and class body structure. |
-| [Fields and Visibility](classes/fields-and-visibility.md) | Instance fields with `public`, `private`, `protect` modifiers. |
-| [Constructors](classes/constructors.md) | Constructor methods named after the class, taking `self` as first parameter. |
-| [Constructor Overloading](classes/constructor-overloading.md) | Multiple constructors with different parameter signatures. |
-| [Methods](classes/methods.md) | Instance methods, the implicit `self` parameter, and method resolution. |
-| [Static Methods](classes/static-methods.md) | Class-level methods without `self`, invoked via `ClassName.method()`. |
-| [Properties](classes/properties.md) | `property name( self ) -> Type:` computed field accessors. |
-| [Inheritance and Extends](classes/inheritance-and-extends.md) | Single inheritance with `extends` and `parent()` constructor chaining. |
-| [Parent Constructor Calls](classes/parent-constructor-calls.md) | `parent( args )` syntax for invoking parent class constructors. |
-| [Method Overriding](classes/method-overriding.md) | `override function` for replacing inherited method implementations. |
-| [Readonly Classes](classes/readonly-classes.md) | `Readonly class` where fields are immutable after construction. |
-| [Final Classes](classes/final-classes.md) | Classes that cannot be subclassed. |
-| [Native Classes](classes/native-classes.md) | Classes with native runtime backing implementations. |
-| [Virtual Dispatch](classes/virtual-dispatch.md) | How method calls on polymorphic types resolve at runtime. |
+| [List Comprehensions](expressions/comprehensions/list-comprehensions.md) | `[expr for Type x in iterable]` array comprehension syntax. |
+| [Map Comprehensions](expressions/comprehensions/map-comprehensions.md) | `{key: value for Type x in iterable}` map comprehension syntax. |
+| [Set Comprehensions](expressions/comprehensions/set-comprehensions.md) | `{expr for Type x in iterable}` set comprehension syntax. |
 
-### [Structs](structs/README.md)
+### [Types](types/README.md)
 
-Value types with no inheritance.
+The complete type system: every type kind the language supports.
 
 | Document | Description |
 |---|---|
-| [Struct Declarations](structs/struct-declarations.md) | `struct StructName:` syntax, value semantics, and differences from classes. |
+| [Primitive Types](types/primitive-types.md) | Overview of all built-in scalar types, their sizes, ranges, and relationships. |
+| [Void and None Types](types/void-and-none-types.md) | `Void` as a return type and `None` as the null value. |
+| [Optional Types](types/optional-types.md) | The `?T` optional type prefix and `is`/`is not` checks. |
+| [Union Types](types/union-types.md) | Union type declarations for type-safe tagged unions. |
+| [Pointer and Reference Types](types/pointer-and-reference-types.md) | Raw pointer types, borrowed references, and borrow checker interaction. |
+| [Type Aliases](types/type-aliases.md) | `type NewName = ExistingType` declarations. |
+| [Type Casting](types/type-casting.md) | The `as` keyword for explicit type conversions. |
+| [Type Compatibility](types/type-compatibility.md) | Rules governing which types can be assigned to which. |
+| [Type Identity](types/type-identity.md) | How Uranite determines whether two types are the same. |
+| [Type Inference](types/type-inference.md) | Diamond syntax and the boundaries of what the compiler can infer. |
 
-### [Interfaces](interfaces/README.md)
-
-Contract-based polymorphism.
-
-| Document | Description |
-|---|---|
-| [Interface Declarations](interfaces/interface-declarations.md) | `interface InterfaceName:` with bodyless method signatures (trailing semicolons). |
-| [Implementing Interfaces](interfaces/implementing-interfaces.md) | `class X implements Y:` and the `implement InterfaceName for ClassName:` block form. |
-| [Multiple Interface Implementation](interfaces/multiple-interface-implementation.md) | `implements InterfaceA, InterfaceB` syntax for implementing multiple contracts. |
-| [Builtin Operator Interfaces](interfaces/builtin-operator-interfaces.md) | `Addable`, `Subtractable`, `Multipliable`, `Dividable`, `Modulable`, `Equatable`, `Comparable`, `Negatable`, `Stringable`, `Hashable`, `Indexable`, `Iterable`, `Iterator`, `Droper`. |
-
-### [Traits](traits/README.md)
-
-Reusable method implementations mixed into classes.
-
-| Document | Description |
-|---|---|
-| [Trait Declarations](traits/trait-declarations.md) | `trait TraitName:` with default method implementations. |
-| [Trait Mixing with Use](traits/trait-mixing-with-use.md) | `use TraitName` to mix trait methods into a class body. |
-| [Trait Method Resolution](traits/trait-method-resolution.md) | Resolution order when multiple traits provide the same method name. |
-
-### [Abstract Classes](abstract-classes/README.md)
-
-Partially implemented base classes.
-
-| Document | Description |
-|---|---|
-| [Abstract Declarations](abstract-classes/abstract-declarations.md) | `abstract class` with `abstract function` bodyless signatures and concrete methods. |
-| [Polymorphic Dispatch](abstract-classes/polymorphic-dispatch.md) | How abstract method calls resolve at runtime through dynamic dispatch. |
-
-### [Generics](generics/README.md)
-
-Parametric polymorphism.
-
-| Document | Description |
-|---|---|
-| [Type Parameters](generics/type-parameters.md) | `<T>`, `<K, V>` type parameter syntax and constraints. |
-| [Generic Classes](generics/generic-classes.md) | `class Container<T>:` with type-parameterized fields and methods. |
-| [Generic Functions](generics/generic-functions.md) | `function identity<T>( T value ) -> T:` standalone generic functions. |
-| [Generic Static Methods](generics/generic-static-methods.md) | `static function create<T>( T value ) -> T:` on generic classes. |
-| [Diamond Inference](generics/diamond-inference.md) | `new ArrayList<>()` where the type parameter is inferred from context. |
-| [Where Clauses](generics/where-clauses.md) | Constraint clauses restricting type parameters to specific interfaces. |
-| [Type Erasure and Runtime Representation](generics/type-erasure-and-runtime-representation.md) | How generic types are represented at runtime and the implications for type safety. |
-
-### [Enums](enums/README.md)
-
-Enumerated types with optional backing values.
-
-| Document | Description |
-|---|---|
-| [Simple Enums](enums/simple-enums.md) | `enum Direction:` with `unit` variants. |
-| [Backed Enums](enums/backed-enums.md) | `enum HttpStatus backed I64:` with `unit Ok 200` value association. |
-| [Enum Name and Value Properties](enums/enum-name-and-value-properties.md) | `.name` and `.value` accessors on enum variants. |
-| [Enum Methods](enums/enum-methods.md) | Methods and properties defined on enum types. |
-| [Per-Variant Overrides](enums/per-variant-overrides.md) | Variant-level method overrides with colon-indented bodies after the backing value. |
-
-### [Collections](collections/README.md)
-
-Collection types, literals, and comprehensions.
-
-| Document | Description |
-|---|---|
-| [ArrayList](collections/array-list.md) | `ArrayList<E>` — resizable array-backed list with `add()`, `get()`, `remove()`, `size()`. |
-| [HashMap](collections/hash-map.md) | `HashMap<K, V>` — hash-based key-value associative container. |
-| [HashSet](collections/hash-set.md) | `HashSet<E>` — hash-based unordered unique element collection. |
-| [Tuple](collections/tuple.md) | `Tuple<E>` — fixed-size ordered container. |
-| [Pair](collections/pair.md) | `Pair<K, V>` — two-element key-value pair. |
-| [Generator](collections/generator.md) | `Generator<T>` — lazy value sequence produced by `yield`. |
-| [Array Literals](collections/array-literals.md) | `[1, 2, 3]` syntax for creating raw arrays. |
-| [Map Literals](collections/map-literals.md) | `{"key": value}` syntax for creating `HashMap` instances. |
-| [Set Literals](collections/set-literals.md) | `{value1, value2}` syntax for creating `HashSet` instances. |
-| [Tuple Literals](collections/tuple-literals.md) | `(value1, value2)` syntax for creating `Tuple` instances. |
-| [List Comprehensions](collections/list-comprehensions.md) | `[expr for Type x in iterable if condition]` array comprehension syntax. |
-| [Map Comprehensions](collections/map-comprehensions.md) | `{key: value for Type x in iterable}` map comprehension syntax. |
-| [Set Comprehensions](collections/set-comprehensions.md) | `{expr for Type x in iterable}` set comprehension syntax. |
-| [Sequence Interfaces](collections/sequence-interfaces.md) | `Collection<E>`, `Sequence<E>`, `ImmutableSequence<E>`, `Map<K, V>` interface hierarchy. |
-| [Iterator Protocol](collections/iterator-protocol.md) | `Iterable<T>` and `Iterator<T>` — the `iterator()`/`has()`/`next()` protocol for `for-in` loops. |
-
-### [Memory and Ownership](memory-and-ownership/README.md)
+### [Ownership](ownership/README.md)
 
 Ownership semantics, move rules, manual memory management, and safety boundaries.
 
 | Document | Description |
 |---|---|
-| [Ownership Model](memory-and-ownership/ownership-model.md) | The single-owner rule: every heap-allocated value has exactly one owner at any point. |
-| [Move Semantics](memory-and-ownership/move-semantics.md) | Assignment transfers ownership. The source variable is invalidated. |
-| [Move Keyword](memory-and-ownership/move-keyword.md) | Explicit `move` for transferring ownership in ambiguous contexts. |
-| [Own Keyword](memory-and-ownership/own-keyword.md) | The `own` annotation for ownership transfer in function parameters. |
-| [Borrow Checking](memory-and-ownership/borrow-checking.md) | How use-after-move is detected and prevented at compile time. |
-| [Memory Intrinsic](memory-and-ownership/memory-intrinsic.md) | `Memory<T>` — raw heap allocation with `get()`, `set()`, `resize()`. |
-| [Arena Allocator](memory-and-ownership/arena-allocator.md) | `Arena<T>` — bulk allocation with single-deallocation semantics. |
-| [Slab Allocator](memory-and-ownership/slab-allocator.md) | Slab allocation for fixed-size object pools. |
-| [Delete Statement](memory-and-ownership/delete-statement.md) | `delete variable` explicit deallocation. |
-| [Addressof Operator](memory-and-ownership/addressof-operator.md) | Taking raw memory addresses for low-level operations. |
-| [Droper Interface](memory-and-ownership/droper-interface.md) | `Droper` interface with `drop( self )` — custom cleanup on deallocation. |
-| [Unsafe Blocks](memory-and-ownership/unsafe-blocks.md) | `unsafe:` blocks for raw pointer operations, bypassing borrow checker restrictions. |
+| [Ownership Model](ownership/ownership-model.md) | The single-owner rule, `move`, `own`, `addressof`, and `reference` keywords. |
+| [Borrow Checking](ownership/borrow-checking.md) | How use-after-move is detected and prevented at compile time. |
+| [Memory Management](ownership/memory-management.md) | Manual memory management strategies and allocator patterns. |
+| [Droper Interface](ownership/droper-interface.md) | `Droper` interface with `drop( self )` for custom cleanup on deallocation. |
+| [Unsafe Blocks](ownership/unsafe-blocks.md) | `unsafe:` blocks for raw pointer operations and bypassing borrow checker restrictions. |
 
-### [Error Handling](error-handling/README.md)
+### [Advanced Concepts](advanced-concepts/README.md)
 
-Exception-based error handling with stack unwinding.
+Higher-level language features that combine multiple constructs.
 
 | Document | Description |
 |---|---|
-| [Exception Hierarchy](error-handling/exception-hierarchy.md) | `Throwable` > `Exception` > `Error` > specific error types (`ArithmeticError`, `ZeroDivisionError`, `OverflowError`). |
-| [Try / Except / Finally](error-handling/try-except-finally.md) | Structured exception handling with typed except clauses and cleanup blocks. |
-| [Raise Statement](error-handling/raise-statement.md) | `raise new Exception( message, code, cause )` — raising exceptions. |
-| [Raises Specifier](error-handling/raises-specifier.md) | Function-level annotation declaring which exceptions a function may raise. |
-| [Defer Statement](error-handling/defer-statement.md) | `defer action()` — scope-exit cleanup executing regardless of how the scope exits. |
-| [Custom Exceptions](error-handling/custom-exceptions.md) | Defining application-specific exception classes extending `Exception`. |
+| [Error Handling](advanced-concepts/error-handling.md) | Exception hierarchy, `try`/`except`/`finally` patterns, `raise`/`raises`, `defer`, and custom exceptions. |
+| [Async](advanced-concepts/async.md) | `async`/`await`, `Future<T>`, and the pure-Uranite async runtime. |
+| [Modules and Packages](advanced-concepts/modules-and-packages.md) | `package`, `import`, `from`, `export`, access modifiers, and module resolution. |
+| [Inline Assembly](advanced-concepts/inline-assembly.md) | `asm` blocks for embedding platform-specific instructions. |
+| [Interop](advanced-concepts/interop.md) | FFI, `extern` declarations, native library linking, and cross-compilation. |
 
-### [Async and Concurrency](async-and-concurrency/README.md)
+---
 
-Asynchronous programming, concurrency primitives, and parallelism.
+## Reserved Keywords
 
-| Document | Description |
-|---|---|
-| [Async Functions](async-and-concurrency/async-functions.md) | `async function` declarations that return `Future<T>`. |
-| [Future Type](async-and-concurrency/future-type.md) | `Future<T>` as the handle for pending asynchronous results. |
-| [Await Expressions](async-and-concurrency/await-expressions.md) | `await future` — suspending execution until a future resolves. |
-| [Generators and Yield](async-and-concurrency/generators-and-yield.md) | `yield value` for lazy sequence generation via `Generator<T>`. |
-| [Coroutines](async-and-concurrency/coroutines.md) | Lightweight cooperative multitasking primitives. |
-| [Fibers](async-and-concurrency/fibers.md) | User-space fiber scheduling and context switching. |
-| [Threading](async-and-concurrency/threading.md) | OS-level threading via `Thread`, `ScopedThread`, and thread pools. |
-| [Synchronization Primitives](async-and-concurrency/synchronization-primitives.md) | `Mutex`, `RwLock`, `Semaphore`, `Barrier`, and `ConditionVariable`. |
-| [Channels](async-and-concurrency/channels.md) | Typed message-passing channels for inter-thread communication. |
+Uranite reserves 78 keywords. These identifiers are unconditionally reserved and cannot be used as variable names, function names, type names, parameter names, or any other user-defined identifier.
 
-### [Modules and Packages](modules-and-packages/README.md)
+### Control Flow Keywords
 
-The module system, import mechanics, and visibility controls.
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `break` | Exit the innermost loop immediately. | [Break and Continue](statements/break-and-continue.md) |
+| `case` | Individual branch within a `switch` statement. | [Switch / Case](statements/switch-case.md) |
+| `continue` | Skip the rest of the current iteration. | [Break and Continue](statements/break-and-continue.md) |
+| `elif` | Additional conditional branch in an if/elif/else chain. | [If / Elif / Else](statements/if-elif-else.md) |
+| `else` | Fallback branch when no `if` or `elif` condition matched. | [If / Elif / Else](statements/if-elif-else.md) |
+| `for` | Iterate over sequences, ranges, or any `Iterable<T>` type. | [For-In Loops](statements/for-in-loops.md) |
+| `if` | Conditional branch based on a `Boolean` condition. | [If / Elif / Else](statements/if-elif-else.md) |
+| `match` | Inline pattern matching with `=>` arms. | [Match Expressions](expressions/match-expressions.md) |
+| `return` | Return a value from a function. | [Return](statements/return.md) |
+| `switch` | Block-based branching with `case` arms. | [Switch / Case](statements/switch-case.md) |
+| `while` | Loop while a `Boolean` condition remains `True`. | [While Loops](statements/while-loops.md) |
+| `yield` | Produce a value from a generator function. | [Yield](statements/yield.md) |
 
-| Document | Description |
-|---|---|
-| [Package Declarations](modules-and-packages/package-declarations.md) | `package dotted.name` at the top of every source file. |
-| [Import Syntax](modules-and-packages/import-syntax.md) | `from package.path import Entity`, comma-separated imports, and brace-wrapped imports. |
-| [Access Modifiers](modules-and-packages/access-modifiers.md) | `public`, `private`, `protect` visibility levels and their scoping rules. |
-| [Export Blocks](modules-and-packages/export-blocks.md) | `export { ... }` for grouping declarations to expose from a module. |
-| [Module Resolution](modules-and-packages/module-resolution.md) | How import paths translate to filesystem paths: three candidate paths, standard library search, and include path prefix resolution. |
+### Declaration Keywords
 
-### [Inline Assembly](inline-assembly/README.md)
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `class` | Declare a class type with fields, methods, and constructors. | [Classes](declarations/classes.md) |
+| `const` | Declare a compile-time constant value. | [Constants](declarations/constants.md) |
+| `enum` | Declare an enumeration type with named variants. | [Enums](declarations/enums.md) |
+| `extern` | Declare an external function implemented outside Uranite. | [Functions](declarations/functions.md) |
+| `from` | Specify the source module in an import statement. | [Modules and Packages](advanced-concepts/modules-and-packages.md) |
+| `function` | Declare a named function. | [Functions](declarations/functions.md) |
+| `implements` | Declare that a class implements an interface contract. | [Interfaces](declarations/interfaces.md) |
+| `import` | Import entities from another module. | [Modules and Packages](advanced-concepts/modules-and-packages.md) |
+| `interface` | Declare an abstract method contract. | [Interfaces](declarations/interfaces.md) |
+| `package` | Declare the package identity of a source file. | [Modules and Packages](advanced-concepts/modules-and-packages.md) |
+| `static` | Declare a class-level member that belongs to the class itself. | [Classes](declarations/classes.md) |
+| `struct` | Declare a value-type struct. | [Structs](declarations/structs.md) |
+| `trait` | Declare a trait with reusable method implementations. | [Traits](declarations/traits.md) |
+| `type` | Declare a type alias. | [Type Aliases](types/type-aliases.md) |
 
-Embedding raw machine instructions in Uranite source.
+### Access Modifier Keywords
 
-| Document | Description |
-|---|---|
-| [Asm Blocks](inline-assembly/asm-volatile.md) | `asm` blocks with constraint syntax for embedding architecture-specific instructions (x86_64 `syscall`, AArch64 `svc #0`, etc.). |
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `private` | Visible only within the declaring class. | [Modules and Packages](advanced-concepts/modules-and-packages.md) |
+| `protect` | Visible within the declaring class and its subclasses. | [Modules and Packages](advanced-concepts/modules-and-packages.md) |
+| `public` | Visible to all modules that import the declaration. | [Modules and Packages](advanced-concepts/modules-and-packages.md) |
 
-### [Interop](interop/README.md)
+When no access modifier is specified, declarations default to package-private visibility.
 
-Foreign function interface and native library integration.
+### Object-Oriented Keywords
 
-| Document | Description |
-|---|---|
-| [FFI](interop/ffi.md) | Foreign function interface mechanics for calling C code from Uranite. |
-| [Linking Native Libraries](interop/linking-native-libraries.md) | The `-l` flag, `link` manifest field, and dynamic/static library linking. |
-| [Cross-Compilation](interop/cross-compilation.md) | `--target` triples, sysroot configuration, and multi-architecture builds. |
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `abstract` | Mark a class as non-instantiable or a method as requiring override. | [Abstract Classes](declarations/abstract-classes.md) |
+| `delete` | Explicitly destroy an object and release its resources. | [Delete](statements/delete.md) |
+| `extends` | Declare that a class inherits from a parent class. | [Class Inheritance](declarations/class-inheritance.md) |
+| `final` | Prevent a class from being subclassed or a method from being overridden. | [Classes](declarations/classes.md) |
+| `native` | Mark a method as implemented in native code. | [Classes](declarations/classes.md) |
+| `new` | Construct a new object instance. | [Constructor Expressions](expressions/constructor-expressions.md) |
+| `override` | Mark a method as intentionally overriding a parent class method. | [Class Inheritance](declarations/class-inheritance.md) |
+| `parent` | Reference the parent class for constructors or overridden methods. | [Parent Expressions](expressions/parent-expressions.md) |
+| `property` | Declare a computed property with getter semantics. | [Classes](declarations/classes.md) |
+| `readonly` | Mark a field as immutable after construction. | [Classes](declarations/classes.md) |
+| `Readonly` | Alternate casing of `readonly`. Identical in meaning. | [Classes](declarations/classes.md) |
+| `self` | Reference the current object instance within methods. | [Self Expressions](expressions/self-expressions.md) |
+| `virtual` | Mark a method for dynamic dispatch. | [Classes](declarations/classes.md) |
+
+### Memory and Safety Keywords
+
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `addressof` | Obtain the raw memory address of a variable. | [Ownership Model](ownership/ownership-model.md) |
+| `move` | Transfer ownership of a value to a new binding. | [Ownership Model](ownership/ownership-model.md) |
+| `mut` | Mark a variable or parameter as mutable. | [Variable](declarations/variable.md) |
+| `own` | Declare explicit ownership semantics for a parameter. | [Ownership Model](ownership/ownership-model.md) |
+| `reference` | Pass a value by reference without transferring ownership. | [Ownership Model](ownership/ownership-model.md) |
+| `unsafe` | Enter a block where borrow checker rules are relaxed. | [Unsafe Blocks](ownership/unsafe-blocks.md) |
+
+### Logical Operator Keywords
+
+Uranite uses word-form logical operators exclusively. The symbols `&&` and `||` are not valid tokens. Both operands of `and` and `or` are always evaluated.
+
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `and` | Logical AND. Evaluates both operands. | [Logical Operators](expressions/operators/logical-operators.md) |
+| `not` | Logical NOT. Negates a `Boolean` value. | [Logical Operators](expressions/operators/logical-operators.md) |
+| `or` | Logical OR. Evaluates both operands. | [Logical Operators](expressions/operators/logical-operators.md) |
+
+### Literal Value Keywords
+
+These three keywords are the only identifiers that begin with an uppercase letter and are reserved. All other capitalized identifiers (`I64`, `String`, `ArrayList`) are type names, not keywords.
+
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `False` | Boolean false literal. | [Boolean Literals](literals/boolean-literals.md) |
+| `None` | Null-equivalent representing the absence of a value. | [None Literals](literals/none-literals.md) |
+| `True` | Boolean true literal. | [Boolean Literals](literals/boolean-literals.md) |
+
+### Error Handling Keywords
+
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `except` | Catch an exception by type within a `try` block. | [Try / Except / Finally](statements/try-except-finally.md) |
+| `finally` | Execute cleanup code regardless of whether an exception occurred. | [Try / Except / Finally](statements/try-except-finally.md) |
+| `raise` | Throw an exception. | [Raise](statements/raise.md) |
+| `raises` | Declare in a function signature that it may raise exceptions. | [Raise](statements/raise.md) |
+| `try` | Begin a protected block for exception handling. | [Try / Except / Finally](statements/try-except-finally.md) |
+
+### General Purpose Keywords
+
+| Keyword | Purpose | Documentation |
+|---|---|---|
+| `as` | Type casting or import aliasing. | [Type Casting](types/type-casting.md) |
+| `asm` | Introduce an inline assembly block. | [Inline Assembly](advanced-concepts/inline-assembly.md) |
+| `async` | Mark a function as asynchronous, returning `Future<T>`. | [Async](advanced-concepts/async.md) |
+| `await` | Suspend execution until an async operation completes. | [Await Expressions](expressions/await-expressions.md) |
+| `backed` | Specify a backing type for an enum. | [Enums](declarations/enums.md) |
+| `defer` | Schedule a statement to execute on scope exit. | [Defer](statements/defer.md) |
+| `export` | Make declarations available for import by other modules. | [Modules and Packages](advanced-concepts/modules-and-packages.md) |
+| `in` | Iteration target in `for` loops or membership test. | [For-In Loops](statements/for-in-loops.md) |
+| `instanceof` | Runtime type check against a class or interface. | [Instanceof Expressions](expressions/instanceof-expressions.md) |
+| `is` | Identity comparison or `None` checking. | [Comparison Operators](expressions/operators/comparison-operators.md) |
+| `lambda` | Declare an anonymous function expression. | [Lambda Expressions](expressions/lambda-expressions.md) |
+| `pass` | No-op placeholder for intentionally empty blocks. | [Pass](statements/pass.md) |
+| `subclassof` | Compile-time subclass relationship check. | [Subclassof Expressions](expressions/subclassof-expressions.md) |
+| `unit` | Declare individual variants within an enum type. | [Enums](declarations/enums.md) |
+| `use` | Mix a trait into a class body. | [Traits](declarations/traits.md) |
+| `volatile` | Prevent compiler optimization of reads and writes. | [Variable](declarations/variable.md) |
+| `where` | Type constraint clause on generic declarations. | [Generics](declarations/generics.md) |
+
+---
+
+## Complete Keyword Reference
+
+All 78 keywords sorted alphabetically. Entry #56 (`readonly`) and #57 (`Readonly`) are two accepted casings of the same keyword.
+
+| # | Keyword | Category | Casing |
+|---|---|---|---|
+| 1 | `abstract` | OOP | all lowercase |
+| 2 | `addressof` | Memory | all lowercase |
+| 3 | `and` | Logic | all lowercase |
+| 4 | `as` | General | all lowercase |
+| 5 | `asm` | General | all lowercase |
+| 6 | `async` | General | all lowercase |
+| 7 | `await` | General | all lowercase |
+| 8 | `backed` | General | all lowercase |
+| 9 | `break` | Control Flow | all lowercase |
+| 10 | `case` | Control Flow | all lowercase |
+| 11 | `class` | Declarations | all lowercase |
+| 12 | `const` | Declarations | all lowercase |
+| 13 | `continue` | Control Flow | all lowercase |
+| 14 | `defer` | General | all lowercase |
+| 15 | `delete` | OOP | all lowercase |
+| 16 | `elif` | Control Flow | all lowercase |
+| 17 | `else` | Control Flow | all lowercase |
+| 18 | `enum` | Declarations | all lowercase |
+| 19 | `except` | Error Handling | all lowercase |
+| 20 | `export` | General | all lowercase |
+| 21 | `extends` | OOP | all lowercase |
+| 22 | `extern` | Declarations | all lowercase |
+| 23 | `False` | Literal Values | capital F |
+| 24 | `final` | OOP | all lowercase |
+| 25 | `finally` | Error Handling | all lowercase |
+| 26 | `for` | Control Flow | all lowercase |
+| 27 | `from` | Declarations | all lowercase |
+| 28 | `function` | Declarations | all lowercase |
+| 29 | `if` | Control Flow | all lowercase |
+| 30 | `implements` | Declarations | all lowercase |
+| 31 | `import` | Declarations | all lowercase |
+| 32 | `in` | General | all lowercase |
+| 33 | `instanceof` | General | all lowercase |
+| 34 | `interface` | Declarations | all lowercase |
+| 35 | `is` | General | all lowercase |
+| 36 | `lambda` | General | all lowercase |
+| 37 | `match` | Control Flow | all lowercase |
+| 38 | `move` | Memory | all lowercase |
+| 39 | `mut` | Memory | all lowercase |
+| 40 | `native` | OOP | all lowercase |
+| 41 | `new` | OOP | all lowercase |
+| 42 | `None` | Literal Values | capital N |
+| 43 | `not` | Logic | all lowercase |
+| 44 | `or` | Logic | all lowercase |
+| 45 | `override` | OOP | all lowercase |
+| 46 | `own` | Memory | all lowercase |
+| 47 | `package` | Declarations | all lowercase |
+| 48 | `parent` | OOP | all lowercase |
+| 49 | `pass` | General | all lowercase |
+| 50 | `private` | Access | all lowercase |
+| 51 | `property` | OOP | all lowercase |
+| 52 | `protect` | Access | all lowercase |
+| 53 | `public` | Access | all lowercase |
+| 54 | `raise` | Error Handling | all lowercase |
+| 55 | `raises` | Error Handling | all lowercase |
+| 56 | `readonly` | OOP | all lowercase |
+| 57 | `Readonly` | OOP | capital R |
+| 58 | `reference` | Memory | all lowercase |
+| 59 | `return` | Control Flow | all lowercase |
+| 60 | `self` | OOP | all lowercase |
+| 61 | `static` | Declarations | all lowercase |
+| 62 | `struct` | Declarations | all lowercase |
+| 63 | `subclassof` | General | all lowercase |
+| 64 | `switch` | Control Flow | all lowercase |
+| 65 | `trait` | Declarations | all lowercase |
+| 66 | `True` | Literal Values | capital T |
+| 67 | `try` | Error Handling | all lowercase |
+| 68 | `type` | Declarations | all lowercase |
+| 69 | `unit` | General | all lowercase |
+| 70 | `unsafe` | Memory | all lowercase |
+| 71 | `use` | General | all lowercase |
+| 72 | `virtual` | OOP | all lowercase |
+| 73 | `volatile` | General | all lowercase |
+| 74 | `where` | General | all lowercase |
+| 75 | `while` | Control Flow | all lowercase |
+| 76 | `yield` | Control Flow | all lowercase |
+
+---
+
+## Case Sensitivity
+
+Keyword matching is case-sensitive. Most keywords are entirely lowercase. Five entries have non-lowercase forms:
+
+| Keyword | Casing | Notes |
+|---|---|---|
+| `False` | Capital F | `false` (all lowercase) is a valid identifier, not a keyword. |
+| `True` | Capital T | `true` (all lowercase) is a valid identifier, not a keyword. |
+| `None` | Capital N | `none` (all lowercase) is a valid identifier, not a keyword. |
+| `Readonly` | Capital R | Alternate casing of `readonly`. Both forms are accepted. |
+| `readonly` | All lowercase | Primary casing. Identical in meaning to `Readonly`. |
+
+All other capitalization variants (`IF`, `Class`, `RETURN`, `TRUE`) are not keywords and can be used as identifiers, though doing so is strongly discouraged.
+
+---
+
+## Builtin Type Names
+
+Beyond the 78 reserved keywords, Uranite recognizes a set of builtin type names that the compiler pre-registers during initialization. These are identifiers at the lexical level, not reserved words. While shadowing them with local variables is technically valid, the linter flags such usage as a warning.
+
+**Integer types:** `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `Int`, `UInt`, `Byte`
+
+**Floating-point types:** `Float`, `Double`
+
+**Core types:** `Boolean`, `Char`, `String`, `Void`, `Object`
+
+**Memory types:** `Memory<T>`, `Args<T>`, `Kwargs<K, V>`
+
+**Async types:** `Future<T>`, `Generator<T>`
+
+**Error hierarchy:** `Throwable`, `Error`, `Exception`, `Warning`, `Traceback`, `ArithmeticError`, `ZeroDivisionError`, `OverflowError`, `UnderflowError`
+
+For detailed coverage of each type, see the [Standard Library Language section](../stdlib/language/README.md) and [Types](types/README.md).
