@@ -234,7 +234,7 @@ This program demonstrates indentation-based blocks, classes with inheritance, in
 
 ## Documentation Map
 
-### [Getting Started](getting-started/README.md)
+### [Getting Started](started/README.md)
 
 Installation on Linux, macOS, and Windows. Platform support and architecture compatibility. Building the compiler and toolchain. Your first Uranite program from source file to native executable.
 
