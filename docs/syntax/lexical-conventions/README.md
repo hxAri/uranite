@@ -1,8 +1,6 @@
 # Lexical Conventions
 
-This section documents how Uranite transforms raw source text into a stream of tokens. Every syntactic construct in the language — from a simple integer literal to a multi-module import declaration — begins as a sequence of tokens. Understanding lexical conventions is essential because Uranite treats whitespace as structural: indentation is not cosmetic but produces explicit block-opening and block-closing boundaries that determine program structure.
-
-The lexer is a single-pass, character-by-character scanner. It processes the entire source file in one sweep, producing a flat sequence of tokens with no tree structure. The tokens are then consumed by the parser to build program structure.
+This section documents how Uranite transforms raw source text into a stream of tokens. Every syntactic construct in the language begins as a sequence of tokens. Understanding lexical conventions is essential because Uranite treats whitespace as structural: indentation produces explicit block-opening and block-closing boundaries that determine program structure.
 
 ---
 
@@ -51,7 +49,7 @@ The lexer processes source text in a single loop. At each iteration, it examines
 
 7. **Operator and punctuation scanning.** All remaining characters produce operator and punctuation tokens. Multi-character operators (`==`, `!=`, `->`, `**`, `..`, `...`, `::`, `=>`, `<<`, `>>`) are resolved by lookahead, always matching the longest possible sequence.
 
-After the main loop completes, the lexer performs end-of-file cleanup: it closes all remaining open blocks, appends a final line boundary if needed, and terminates with an end-of-file marker.
+After the main loop exhausts all source characters, the lexer performs end-of-file cleanup: it closes all remaining open blocks, appends a final line boundary if needed, and terminates with an end-of-file marker.
 
 ---
 
@@ -249,8 +247,6 @@ The lexer handles four integer bases and floating-point numbers:
 
 Floating-point numbers are detected when a decimal point appears followed by a digit (`3.14`), or when an exponent suffix appears (`1e10`, `2.5E-3`). The exponent can include a sign (`+` or `-`).
 
-Number literals can include a trailing alphabetic suffix (e.g., `100u64`), which is captured as part of the token value for type inference.
-
 ### Strings
 
 Double-quoted strings support the following escape sequences:
@@ -359,18 +355,9 @@ After the main scanning loop exhausts all source characters, the lexer performs 
 
 ## Subpage Index
 
-Each lexical topic is covered in depth in its own document:
-
 | Document | Description |
 |---|---|
 | [Source Files and Encoding](source-files-and-encoding.md) | File encoding requirements (UTF-8), the `.urn` extension, and source file structure rules. |
 | [Comments and Doccomments](comments-and-doccomments.md) | Line comments (`#`), block comments (`#{...}#`), and triple-quoted doccomments with the "Parameters:", "Returns:", "Complexity:" format. |
 | [Indentation and Blocks](indentation-and-blocks.md) | How indentation defines block boundaries: tab normalization (1 tab = 4 units), the 4-space convention, and common indentation errors. |
-| [Reserved Keywords](reserved-keywords.md) | Complete enumeration of all 78 reserved keywords organized by category with descriptions and usage context. |
 | [Identifiers and Naming](identifiers-and-naming.md) | Identifier character rules (`[a-zA-Z_][a-zA-Z0-9_]*`), case sensitivity, naming conventions, and linter enforcement of descriptive names. |
-| [Integer Literals](integer-literals.md) | Decimal, hexadecimal (`0x`), octal (`0o`), and binary (`0b`) formats. Underscore digit separators. Numeric suffixes. |
-| [Float Literals](float-literals.md) | Decimal floating-point syntax, scientific notation (`1.5e10`), and IEEE 754 representation. |
-| [String Literals](string-literals.md) | Double-quoted strings, escape sequences (`\n`, `\t`, `\xHH`, etc.), and UTF-8 encoding. |
-| [Char Literals](char-literals.md) | Single-quoted character literals, escape sequences, and the 32-bit `Char` type. |
-| [Boolean and None Literals](boolean-and-none-literals.md) | `True`, `False`, and `None` as keyword tokens — case-sensitive, not identifiers. |
-| [Regex Literals](regex-literals.md) | `/pattern/` syntax, context-sensitive disambiguation from division, escape handling, and character class support. |
