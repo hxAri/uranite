@@ -912,6 +912,7 @@ namespace uranite::ir::mir {
 	
 	void MIRCodegen::generateFunction( MIRFunctionDefinition& functionDefinition ) {
 		this->concreteClassMap.clear();
+		this->droperCleanupEntries.clear();
 		std::string llvmFunctionName = functionDefinition.functionName;
 		if( functionDefinition.ownerClassQualifiedName.empty() == false ) {
 			llvmFunctionName = functionDefinition.ownerClassQualifiedName + "." + functionDefinition.functionName;
@@ -1042,6 +1043,27 @@ namespace uranite::ir::mir {
 			this->irBuilder.CreateStore( argument, parameterAlloca );
 			this->variableValueMap[parameterVariable] = parameterAlloca;
 			parameterIndex++;
+		}
+		for( size_t paramIdx = 0; paramIdx < functionDefinition.parameterVariableIdentifiers.size(); paramIdx++ ) {
+			if( functionDefinition.ownerClassQualifiedName.empty() == false && paramIdx == 0 ) {
+				continue;
+			}
+			MIRVariableIdentifier paramVariable = functionDefinition.parameterVariableIdentifiers[paramIdx];
+			if( functionDefinition.variableDescriptorTable.count( paramVariable ) > 0 ) {
+				MIRVariableDescriptor& descriptor = functionDefinition.variableDescriptorTable[paramVariable];
+				if( descriptor.variableType != nullptr &&
+					descriptor.variableType->kind == semantic::Type::Kind::Class ) {
+					semantic::ClassTypeSharedPointer classType =
+						std::static_pointer_cast<semantic::ClassType>( descriptor.variableType );
+					if( classType->implementsDroper ) {
+						std::string typeName = classType->qualified;
+						if( typeName.empty() ) {
+							typeName = classType->name;
+						}
+						this->registerDroperCleanupEntry( paramVariable, typeName );
+					}
+				}
+			}
 		}
 		if( isMainFunction && llvmFunction->arg_size() >= 2 ) {
 			llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
@@ -1405,9 +1427,16 @@ namespace uranite::ir::mir {
 				this->generateYield( instruction );
 				break;
 			case MIRInstructionKind::NoOperation:
-			case MIRInstructionKind::DropValue:
 			case MIRInstructionKind::DeferPush:
 			case MIRInstructionKind::DeferEmit:
+				break;
+			case MIRInstructionKind::DropValue:
+				if( instruction.sourceOperands.empty() == false ) {
+					llvm::Value* dropTarget = this->loadVariableValue( instruction.sourceOperands[0] );
+					if( dropTarget != nullptr ) {
+						this->emitDropCallForVariable( instruction.sourceOperands[0], dropTarget );
+					}
+				}
 				break;
 			case MIRInstructionKind::InvokeFunction:
 				this->generateCallFunction( instruction, functionDefinition );
@@ -1993,6 +2022,14 @@ namespace uranite::ir::mir {
 					this->concreteClassMap[instruction.sourceOperands[0]];
 			}
 		}
+		if( instruction.sourceOperands.empty() == false ) {
+			for( DroperCleanupEntry& entry : this->droperCleanupEntries ) {
+				if( entry.variableIdentifier == instruction.sourceOperands[0] ) {
+					entry.variableIdentifier = instruction.destinationVariable;
+					break;
+				}
+			}
+		}
 	}
 	
 	void MIRCodegen::generateCopyValue( const MIRInstruction& instruction ) {
@@ -2008,6 +2045,35 @@ namespace uranite::ir::mir {
 	
 	void MIRCodegen::generateMoveValue( const MIRInstruction& instruction ) {
 		this->generateCopyValue( instruction );
+		if( instruction.sourceOperands.empty() == false ) {
+			MIRVariableIdentifier sourceVar = instruction.sourceOperands[0];
+			bool markedDead = false;
+			for( DroperCleanupEntry& entry : this->droperCleanupEntries ) {
+				if( entry.variableIdentifier == sourceVar ) {
+					this->irBuilder.CreateStore( llvm::ConstantInt::getFalse( this->llvmContext ), entry.aliveFlag );
+					markedDead = true;
+					break;
+				}
+			}
+			if( markedDead == false ) {
+				llvm::Value* sourceRaw = this->getVariableValue( sourceVar );
+				if( sourceRaw != nullptr ) {
+					llvm::Value* sourceAlloca = nullptr;
+					if( llvm::LoadInst* loadInst = llvm::dyn_cast<llvm::LoadInst>( sourceRaw ) ) {
+						sourceAlloca = loadInst->getPointerOperand();
+					}
+					if( sourceAlloca != nullptr ) {
+						for( DroperCleanupEntry& entry : this->droperCleanupEntries ) {
+							llvm::Value* entryValue = this->getVariableValue( entry.variableIdentifier );
+							if( entryValue != nullptr && entryValue == sourceAlloca ) {
+								this->irBuilder.CreateStore( llvm::ConstantInt::getFalse( this->llvmContext ), entry.aliveFlag );
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	
 	void MIRCodegen::generateConstantInteger( const MIRInstruction& instruction ) {
@@ -6492,6 +6558,10 @@ namespace uranite::ir::mir {
 			this->irBuilder.CreateBr( this->currentGeneratorContext->exitBlock );
 			return;
 		}
+		MIRVariableIdentifier returnExcludeVariable = INVALID_VARIABLE_IDENTIFIER;
+		if( instruction.sourceOperands.empty() == false ) {
+			returnExcludeVariable = instruction.sourceOperands[0];
+		}
 		if( this->isGeneratingAsyncWrapper ) {
 			llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
 			llvm::Value* completionValue = llvm::ConstantInt::get( i64Type, 0 );
@@ -6531,6 +6601,7 @@ namespace uranite::ir::mir {
 				llvm::Value* taskArg = wrapperFunc->getArg( 0 );
 				this->irBuilder.CreateCall( completeFunc, { taskArg, completionValue } );
 			}
+			this->emitDroperScopeCleanup( returnExcludeVariable );
 			this->emitPopFrame();
 			this->irBuilder.CreateRetVoid();
 			return;
@@ -6549,17 +6620,20 @@ namespace uranite::ir::mir {
 			this->irBuilder.CreateCall( runSchedulerFunc );
 		}
 		if( expectedReturnType->isVoidTy() ) {
+			this->emitDroperScopeCleanup( returnExcludeVariable );
 			this->emitPopFrame();
 			this->irBuilder.CreateRetVoid();
 			return;
 		}
 		if( instruction.sourceOperands.empty() ) {
+			this->emitDroperScopeCleanup( returnExcludeVariable );
 			this->emitPopFrame();
 			this->irBuilder.CreateRet( llvm::Constant::getNullValue( expectedReturnType ) );
 			return;
 		}
 		llvm::Value* returnValue = this->loadVariableValue( instruction.sourceOperands[0] );
 		if( returnValue == nullptr ) {
+			this->emitDroperScopeCleanup( returnExcludeVariable );
 			this->emitPopFrame();
 			this->irBuilder.CreateRet( llvm::Constant::getNullValue( expectedReturnType ) );
 			return;
@@ -6591,11 +6665,13 @@ namespace uranite::ir::mir {
 				returnValue = this->irBuilder.CreateFPToSI( returnValue, expectedReturnType, "ret.ftoi" );
 			}
 			else {
+				this->emitDroperScopeCleanup( returnExcludeVariable );
 				this->emitPopFrame();
 				this->irBuilder.CreateRet( llvm::Constant::getNullValue( expectedReturnType ) );
 				return;
 			}
 		}
+		this->emitDroperScopeCleanup( returnExcludeVariable );
 		this->emitPopFrame();
 		this->irBuilder.CreateRet( returnValue );
 	}
@@ -7081,13 +7157,188 @@ namespace uranite::ir::mir {
 		if( pointer == nullptr ) {
 			return;
 		}
+		this->emitDropCallForVariable( instruction.sourceOperands[0], pointer );
 		llvm::Function* freeFunction = this->getOrCreateFree();
 		llvm::Value* castPointer = this->irBuilder.CreateBitCast(
 			pointer, llvm::PointerType::getUnqual( this->llvmContext ), "free.cast"
 		);
 		this->irBuilder.CreateCall( freeFunction, { castPointer } );
+		bool matchedCleanupEntry = false;
+		for( DroperCleanupEntry& entry : this->droperCleanupEntries ) {
+			if( entry.variableIdentifier == instruction.sourceOperands[0] ) {
+				this->irBuilder.CreateStore( llvm::ConstantInt::getFalse( this->llvmContext ), entry.aliveFlag );
+				matchedCleanupEntry = true;
+				break;
+			}
+		}
+		if( matchedCleanupEntry == false ) {
+			llvm::Value* sourceRaw = this->getVariableValue( instruction.sourceOperands[0] );
+			if( sourceRaw != nullptr ) {
+				llvm::Value* sourceAlloca = nullptr;
+				if( llvm::LoadInst* loadInst = llvm::dyn_cast<llvm::LoadInst>( sourceRaw ) ) {
+					sourceAlloca = loadInst->getPointerOperand();
+				}
+				if( sourceAlloca != nullptr ) {
+					for( DroperCleanupEntry& entry : this->droperCleanupEntries ) {
+						llvm::Value* entryValue = this->getVariableValue( entry.variableIdentifier );
+						if( entryValue != nullptr && entryValue == sourceAlloca ) {
+							this->irBuilder.CreateStore( llvm::ConstantInt::getFalse( this->llvmContext ), entry.aliveFlag );
+							break;
+						}
+					}
+				}
+			}
+		}
 	}
-	
+
+	void MIRCodegen::emitDropCallForVariable( MIRVariableIdentifier variableId, llvm::Value* pointer ) {
+		if( pointer == nullptr || this->currentMIRFunction == nullptr ) {
+			return;
+		}
+		std::string typeName;
+		bool hasDroper = false;
+		std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor>::iterator descriptorIter =
+			this->currentMIRFunction->variableDescriptorTable.find( variableId );
+		if( descriptorIter != this->currentMIRFunction->variableDescriptorTable.end() &&
+			descriptorIter->second.variableType != nullptr &&
+			descriptorIter->second.variableType->kind == semantic::Type::Kind::Class ) {
+			semantic::ClassTypeSharedPointer classType =
+				std::static_pointer_cast<semantic::ClassType>( descriptorIter->second.variableType );
+			if( classType->implementsDroper ) {
+				hasDroper = true;
+				typeName = classType->qualified;
+				if( typeName.empty() ) {
+					typeName = classType->name;
+				}
+			}
+		}
+		if( hasDroper == false && this->concreteClassMap.count( variableId ) > 0 ) {
+			std::string concreteName = this->concreteClassMap[variableId];
+			semantic::TypeSharedPointer semanticType = this->semanticAnalyzer.types().lookupType( concreteName );
+			if( semanticType != nullptr && semanticType->kind == semantic::Type::Kind::Class ) {
+				semantic::ClassTypeSharedPointer classType =
+					std::static_pointer_cast<semantic::ClassType>( semanticType );
+				if( classType->implementsDroper ) {
+					hasDroper = true;
+					typeName = concreteName;
+				}
+			}
+		}
+		if( hasDroper == false || typeName.empty() ) {
+			return;
+		}
+		size_t genericPos = typeName.find( '<' );
+		if( genericPos != std::string::npos ) {
+			typeName = typeName.substr( 0, genericPos );
+		}
+		std::string dropFunctionName = typeName + "." + semantic::qualname::interfaces::droper::methods::Drop;
+		llvm::Function* dropFunction = nullptr;
+		std::unordered_map<std::string, llvm::Function*>::iterator dropIter =
+			this->functionResolutionMap.find( dropFunctionName );
+		if( dropIter != this->functionResolutionMap.end() ) {
+			dropFunction = dropIter->second;
+		}
+		else {
+			dropFunction = this->llvmModule->getFunction( dropFunctionName );
+		}
+		if( dropFunction != nullptr && dropFunction->arg_size() > 0 ) {
+			llvm::Value* selfArg = pointer;
+			llvm::Type* expectedType = dropFunction->arg_begin()->getType();
+			if( selfArg->getType() != expectedType ) {
+				selfArg = this->irBuilder.CreateBitCast( selfArg, expectedType, "drop.cast" );
+			}
+			this->irBuilder.CreateCall( dropFunction, { selfArg } );
+		}
+	}
+
+	void MIRCodegen::registerDroperCleanupEntry( MIRVariableIdentifier variableId, const std::string& typeName ) {
+		llvm::BasicBlock* insertBlock = this->irBuilder.GetInsertBlock();
+		if( insertBlock == nullptr ) {
+			return;
+		}
+		llvm::Function* currentFunc = insertBlock->getParent();
+		if( currentFunc == nullptr ) {
+			return;
+		}
+		llvm::Type* i1Type = llvm::Type::getInt1Ty( this->llvmContext );
+		std::string flagName = fmt::format( "droper.alive.{}", variableId );
+		llvm::AllocaInst* aliveFlag = this->createEntryBlockAllocation( currentFunc, flagName, i1Type );
+		llvm::IRBuilder<> initBuilder( aliveFlag->getParent(), std::next( llvm::BasicBlock::iterator( aliveFlag ) ) );
+		initBuilder.CreateStore( llvm::ConstantInt::getFalse( this->llvmContext ), aliveFlag );
+		this->irBuilder.CreateStore( llvm::ConstantInt::getTrue( this->llvmContext ), aliveFlag );
+		DroperCleanupEntry entry;
+		entry.variableIdentifier = variableId;
+		entry.qualifiedTypeName = typeName;
+		entry.aliveFlag = aliveFlag;
+		this->droperCleanupEntries.push_back( entry );
+	}
+
+	void MIRCodegen::emitDroperScopeCleanup( MIRVariableIdentifier excludeVariable ) {
+		if( this->droperCleanupEntries.empty() ) {
+			return;
+		}
+		llvm::BasicBlock* insertBlock = this->irBuilder.GetInsertBlock();
+		if( insertBlock == nullptr ) {
+			return;
+		}
+		llvm::Function* currentFunc = insertBlock->getParent();
+		if( currentFunc == nullptr ) {
+			return;
+		}
+		for( std::vector<DroperCleanupEntry>::reverse_iterator entryIter = this->droperCleanupEntries.rbegin();
+			 entryIter != this->droperCleanupEntries.rend(); ++entryIter ) {
+			DroperCleanupEntry& entry = *entryIter;
+			if( entry.variableIdentifier == excludeVariable ) {
+				continue;
+			}
+			llvm::Value* isAlive = this->irBuilder.CreateLoad(
+				llvm::Type::getInt1Ty( this->llvmContext ), entry.aliveFlag, "droper.alive.check"
+			);
+			llvm::BasicBlock* dropBlock = llvm::BasicBlock::Create(
+				this->llvmContext, "droper.cleanup", currentFunc
+			);
+			llvm::BasicBlock* skipBlock = llvm::BasicBlock::Create(
+				this->llvmContext, "droper.skip", currentFunc
+			);
+			this->irBuilder.CreateCondBr( isAlive, dropBlock, skipBlock );
+			this->irBuilder.SetInsertPoint( dropBlock );
+			llvm::Value* pointer = this->loadVariableValue( entry.variableIdentifier );
+			if( pointer != nullptr ) {
+				std::string cleanTypeName = entry.qualifiedTypeName;
+				size_t genericPos = cleanTypeName.find( '<' );
+				if( genericPos != std::string::npos ) {
+					cleanTypeName = cleanTypeName.substr( 0, genericPos );
+				}
+				std::string dropFuncName = cleanTypeName + "." + semantic::qualname::interfaces::droper::methods::Drop;
+				llvm::Function* dropFunc = nullptr;
+				std::unordered_map<std::string, llvm::Function*>::iterator dropIter =
+					this->functionResolutionMap.find( dropFuncName );
+				if( dropIter != this->functionResolutionMap.end() ) {
+					dropFunc = dropIter->second;
+				}
+				else {
+					dropFunc = this->llvmModule->getFunction( dropFuncName );
+				}
+				if( dropFunc != nullptr && dropFunc->arg_size() > 0 ) {
+					llvm::Value* selfArg = pointer;
+					llvm::Type* expectedSelfType = dropFunc->arg_begin()->getType();
+					if( selfArg->getType() != expectedSelfType ) {
+						selfArg = this->irBuilder.CreateBitCast( selfArg, expectedSelfType, "drop.cast" );
+					}
+					this->irBuilder.CreateCall( dropFunc, { selfArg } );
+				}
+				llvm::Function* freeFunc = this->getOrCreateFree();
+				llvm::Value* rawPtr = this->irBuilder.CreateBitCast(
+					pointer, llvm::PointerType::getUnqual( this->llvmContext ), "droper.free.cast"
+				);
+				this->irBuilder.CreateCall( freeFunc, { rawPtr } );
+			}
+			this->irBuilder.CreateStore( llvm::ConstantInt::getFalse( this->llvmContext ), entry.aliveFlag );
+			this->irBuilder.CreateBr( skipBlock );
+			this->irBuilder.SetInsertPoint( skipBlock );
+		}
+	}
+
 	void MIRCodegen::generatePhiNode( const MIRInstruction& instruction ) {
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ||
 			instruction.phiIncomingValues.empty() ) {
@@ -7518,6 +7769,9 @@ namespace uranite::ir::mir {
 						}
 						defaultFieldIndex++;
 					}
+				}
+				if( constructClassType->implementsDroper ) {
+					this->registerDroperCleanupEntry( instruction.destinationVariable, typeName );
 				}
 			}
 		}
