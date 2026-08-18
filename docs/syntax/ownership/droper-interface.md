@@ -8,16 +8,22 @@
   - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
   - [Implementing Droper](#implementing-droper)
-  - [Manual Cleanup Pattern](#manual-cleanup-pattern)
-  - [Deferred Cleanup](#deferred-cleanup)
-  - [Multiple Resources](#multiple-resources)
+  - [Automatic Cleanup on Delete](#automatic-cleanup-on-delete)
+  - [Scope-Exit Cleanup](#scope-exit-cleanup)
+  - [Explicit Delete Skips Scope Cleanup](#explicit-delete-skips-scope-cleanup)
   - [Ownership Transfer with Droper](#ownership-transfer-with-droper)
+  - [Sink Functions](#sink-functions)
 
 ## Overview
 
-The `Droper` interface defines a `drop` method for custom resource cleanup. Types that hold external resources such as file descriptors, network connections, locks, or memory pools implement `Droper` to release those resources before deallocation.
+The `Droper` interface defines a `drop` method for custom resource cleanup. Types that hold external resources such as file descriptors, network connections, locks, or memory pools implement `Droper` to release those resources when the object is freed.
 
-The `drop` method is not called automatically by `delete`. The `delete` statement frees the object's memory but does not invoke `drop`. Cleanup logic must be called explicitly, either directly or through `defer`.
+The compiler automatically calls `drop` in two situations:
+
+- When `delete` is used on an object that implements `Droper`, the compiler calls `drop` before freeing the memory.
+- When a function returns, all live `Droper` objects constructed or received in that scope are automatically cleaned up in reverse construction order.
+
+Objects that have already been explicitly deleted are tracked and skipped during scope-exit cleanup. Objects that have been moved out are also skipped.
 
 The `Droper` interface is imported from `uranite.memory.droper`.
 
@@ -43,16 +49,15 @@ public class FileHandle implements Droper:
 public function main() -> I32:
     FileHandle handle = new FileHandle( 42 )
     puts( handle.descriptor )
-    handle.drop()
     delete handle
     return 0
 ```
 
-The `drop` method is called explicitly before `delete`. The `delete` statement frees the memory. The program prints `42`, `closing file`.
+The `delete handle` statement automatically calls `drop` before freeing the memory. The program prints `42`, `closing file`.
 
-## Manual Cleanup Pattern
+## Automatic Cleanup on Delete
 
-The standard cleanup sequence for a `Droper` type is: call `drop` to release resources, then call `delete` to free memory. Calling `drop` after `delete` is undefined behavior because the object's memory has been freed.
+When `delete` is used on an object whose class implements `Droper`, the compiler inserts a call to `drop` before the memory is freed. No manual `drop` call is needed.
 
 ```uranite
 package testing
@@ -72,51 +77,16 @@ public class Pool implements Droper:
 public function main() -> I32:
     Pool pool = new Pool( 64 )
     puts( pool.size )
-    pool.drop()
     delete pool
     puts( "after delete" )
     return 0
 ```
 
-The `drop` method runs cleanup logic while the object is still valid. The subsequent `delete` frees the memory. The program prints `64`, `pool released`, `after delete`.
+The `delete pool` statement calls `drop` first, then frees the memory. The program prints `64`, `pool released`, `after delete`.
 
-## Deferred Cleanup
+## Scope-Exit Cleanup
 
-The `defer` statement automates the cleanup sequence. Deferred statements execute in LIFO order, so `defer delete` must appear before `defer drop` to ensure `drop` runs first.
-
-```uranite
-package testing
-
-from uranite.io.console import puts
-from uranite.memory.droper import Droper
-
-public class Connection implements Droper:
-    public String host
-
-    public function Connection( self, String host ) -> Void:
-        self.host = host
-
-    public function drop( self ) -> Void:
-        puts( "disconnecting" )
-
-public function useConnection() -> Void:
-    Connection conn = new Connection( "server" )
-    defer delete conn
-    defer conn.drop()
-    puts( conn.host )
-    puts( "working" )
-
-public function main() -> I32:
-    useConnection()
-    puts( "done" )
-    return 0
-```
-
-The `defer delete conn` is registered first and runs last. The `defer conn.drop()` is registered second and runs first. This guarantees `drop` executes while the object is still valid, followed by memory deallocation. The program prints `server`, `working`, `disconnecting`, `done`.
-
-## Multiple Resources
-
-When multiple `Droper` objects are active, each must be cleaned up independently. Release resources in reverse order of acquisition.
+When a function returns, all live `Droper` objects in that scope are automatically cleaned up in reverse construction order. No explicit `delete` is required.
 
 ```uranite
 package testing
@@ -124,33 +94,96 @@ package testing
 from uranite.io.console import puts
 from uranite.memory.droper import Droper
 
-public class Lock implements Droper:
+public class Guard implements Droper:
     public String name
 
-    public function Lock( self, String name ) -> Void:
+    public function Guard( self, String name ) -> Void:
         self.name = name
-        puts( name )
 
     public function drop( self ) -> Void:
         puts( self.name )
 
-public function main() -> I32:
-    Lock first = new Lock( "lock-a" )
-    Lock second = new Lock( "lock-b" )
+public function work() -> Void:
+    Guard first = new Guard( "guard-a" )
+    Guard second = new Guard( "guard-b" )
     puts( "working" )
-    second.drop()
-    delete second
-    first.drop()
-    delete first
+
+public function main() -> I32:
+    work()
     puts( "done" )
     return 0
 ```
 
-Two locks are acquired in order. They are released in reverse: `second` is dropped and deleted before `first`. The program prints `lock-a`, `lock-b`, `working`, `lock-b`, `lock-a`, `done`.
+When `work` returns, both guards are cleaned up in reverse order: `second` is dropped and freed before `first`. The program prints `working`, `guard-b`, `guard-a`, `done`.
+
+## Explicit Delete Skips Scope Cleanup
+
+When an object is explicitly deleted with `delete`, the compiler marks it as no longer alive. Scope-exit cleanup skips objects that have already been deleted.
+
+```uranite
+package testing
+
+from uranite.io.console import puts
+from uranite.memory.droper import Droper
+
+public class Resource implements Droper:
+    public String label
+
+    public function Resource( self, String label ) -> Void:
+        self.label = label
+
+    public function drop( self ) -> Void:
+        puts( self.label )
+
+public function work() -> Void:
+    Resource first = new Resource( "alpha" )
+    Resource second = new Resource( "beta" )
+    delete first
+    puts( "middle" )
+
+public function main() -> I32:
+    work()
+    puts( "done" )
+    return 0
+```
+
+The variable `first` is explicitly deleted, which calls `drop` and frees it. When `work` returns, scope cleanup only processes `second` because `first` is already dead. The program prints `alpha`, `middle`, `beta`, `done`.
 
 ## Ownership Transfer with Droper
 
-When a `Droper` object is moved to another function, the receiving function becomes responsible for both calling `drop` and freeing the memory.
+When a `Droper` object is moved to another function, the source variable is marked as dead. The receiving function's scope becomes responsible for cleanup. The caller's scope-exit cleanup skips the moved variable.
+
+```uranite
+package testing
+
+from uranite.io.console import puts
+from uranite.memory.droper import Droper
+
+public class Session implements Droper:
+    public I64 identifier
+
+    public function Session( self, I64 identifier ) -> Void:
+        self.identifier = identifier
+
+    public function drop( self ) -> Void:
+        puts( "session closed" )
+
+public function useSession( Session session ) -> Void:
+    puts( session.identifier )
+    puts( "used" )
+
+public function main() -> I32:
+    Session session = new Session( 7 )
+    useSession( move session )
+    puts( "after use" )
+    return 0
+```
+
+Ownership transfers from `main` to `useSession` via `move`. When `useSession` returns, the parameter is cleaned up automatically — `drop` is called, then memory is freed. The caller's scope skips the moved variable. The program prints `7`, `used`, `session closed`, `after use`.
+
+## Sink Functions
+
+A sink function receives ownership of a `Droper` object and explicitly deletes it. The explicit `delete` calls `drop` and marks the parameter as dead, so scope-exit cleanup skips it.
 
 ```uranite
 package testing
@@ -169,7 +202,6 @@ public class Session implements Droper:
 
 public function closeSession( Session session ) -> Void:
     puts( session.identifier )
-    session.drop()
     delete session
 
 public function main() -> I32:
@@ -179,4 +211,4 @@ public function main() -> I32:
     return 0
 ```
 
-Ownership of the `Session` transfers to `closeSession` via `move`. The function calls `drop` to release resources, then `delete` to free memory. The caller's variable is invalidated after the move. The program prints `7`, `session closed`, `after close`.
+The function `closeSession` receives ownership via `move` and deletes the session explicitly. The `delete` calls `drop` once, frees the memory, and marks it dead. No double-drop occurs. The program prints `7`, `session closed`, `after close`.
