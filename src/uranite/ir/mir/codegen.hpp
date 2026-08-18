@@ -93,6 +93,9 @@ namespace uranite::ir::mir {
 		void generateComputeIndexAddress( const MIRInstruction& instruction );
 		void generateHeapAllocate( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateHeapFree( const MIRInstruction& instruction );
+		void emitDropCallForVariable( MIRVariableIdentifier variableId, llvm::Value* pointer );
+		void emitDroperScopeCleanup( MIRVariableIdentifier excludeVariable );
+		void registerDroperCleanupEntry( MIRVariableIdentifier variableId, const std::string& typeName );
 		void generatePhiNode( const MIRInstruction& instruction );
 		void generateConstructObject( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateYield( const MIRInstruction& instruction );
@@ -212,7 +215,15 @@ namespace uranite::ir::mir {
 		
 		// Per-class vtable identifier constant (itable global or unique marker)
 		std::unordered_map<std::string, llvm::Constant*> classVtableIdentifier;
-	
+
+		struct DroperCleanupEntry {
+			MIRVariableIdentifier variableIdentifier;
+			std::string qualifiedTypeName;
+			llvm::AllocaInst* aliveFlag = nullptr;
+		};
+
+		std::vector<DroperCleanupEntry> droperCleanupEntries;
+
 	};
 
 } // namespace uranite::ir::mir
