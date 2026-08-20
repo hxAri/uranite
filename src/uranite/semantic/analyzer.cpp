@@ -4362,8 +4362,26 @@ namespace uranite::semantic {
 				variableType = initializerType;
 			}
 			else if( initializerType && this->typeRegistry.isAssignable( variableType, initializerType ) == false ) {
-				std::string typeMismatchErrorMessage = fmt::format( "cannot assign value of type \"{}\" to variable of type \"{}\"", initializerType->toString(), variableType->toString() );
-				this->diagnostic.error( statement.source, typeMismatchErrorMessage );
+				bool autoWrapped = false;
+				if( variableType->kind == Type::Kind::Class &&
+					statement.initializer->kind != ast::Node::Kind::TupleExpression ) {
+					ClassTypeSharedPointer declaredClassType = std::static_pointer_cast<ClassType>( variableType );
+					if( declaredClassType->name.rfind( qualname::classes::tuple::Name, 0 ) == 0 ||
+						declaredClassType->qualified.rfind( qualname::classes::tuple::Qualified, 0 ) == 0 ) {
+						std::vector<ast::nodes::ExpressionSharedPointer> tupleElements;
+						tupleElements.push_back( statement.initializer );
+						statement.initializer = std::make_shared<ast::nodes::TupleExpression>(
+							std::move( tupleElements ), statement.initializer->source
+						);
+						initializerType = this->analyzeExpression( statement.initializer );
+						autoWrapped = true;
+					}
+				}
+				if( autoWrapped == false ||
+					( initializerType && this->typeRegistry.isAssignable( variableType, initializerType ) == false ) ) {
+					std::string typeMismatchErrorMessage = fmt::format( "cannot assign value of type \"{}\" to variable of type \"{}\"", initializerType->toString(), variableType->toString() );
+					this->diagnostic.error( statement.source, typeMismatchErrorMessage );
+				}
 			}
 		}
 		if( variableType == nullptr ) {
