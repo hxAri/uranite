@@ -21,7 +21,6 @@
 
 package uranite.language.object
 
-
 public class Object:
 
     """
