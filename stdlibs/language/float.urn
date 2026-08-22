@@ -20,8 +20,6 @@
 
 package uranite.language.float
 
-
-
 class Float:
     
     """
