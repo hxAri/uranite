@@ -20,8 +20,6 @@
 
 package uranite.language.callable
 
-
-
 final class Callable:
     
     """
