@@ -20,8 +20,6 @@
 
 package uranite.language.void
 
-
-
 final class Void:
     
     """
