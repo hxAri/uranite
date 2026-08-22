@@ -146,6 +146,26 @@ int main( int argc, char* argv[] ) {
 		.help( "Show detailed version information" )
 		.default_value( false )
 		.implicit_value( true );
+	program.add_argument( "--macro-git-hash" )
+		.help( "Print the build git commit hash" )
+		.default_value( false )
+		.implicit_value( true );
+	program.add_argument( "--macro-llc" )
+		.help( "Print the configured LLVM llc path" )
+		.default_value( false )
+		.implicit_value( true );
+	program.add_argument( "--macro-opt" )
+		.help( "Print the configured LLVM opt path" )
+		.default_value( false )
+		.implicit_value( true );
+	program.add_argument( "--macro-modules-dir" )
+		.help( "Print the standard library modules directory" )
+		.default_value( false )
+		.implicit_value( true );
+	program.add_argument( "--macro-c-runtime-dir" )
+		.help( "Print the C runtime libraries directory" )
+		.default_value( false )
+		.implicit_value( true );
 	std::vector<std::string> gdbDynamicFlags;
 	std::vector<char*> filteredArgv;
 	for( int i = 0; i < argc; i++ ) {
@@ -192,6 +212,26 @@ int main( int argc, char* argv[] ) {
 		banner();
 		fmt::print( "Host: {}\n", llvm::sys::getDefaultTargetTriple() );
 		fmt::print( "LLVM Version: {}\n", LLVM_VERSION_STRING );
+		return 0;
+	}
+	if( program.get<bool>( "--macro-git-hash" ) ) {
+		fmt::print( "{}\n", _URANITE_GIT_HASH_ );
+		return 0;
+	}
+	if( program.get<bool>( "--macro-llc" ) ) {
+		fmt::print( "{}\n", _URANITE_LLC_ );
+		return 0;
+	}
+	if( program.get<bool>( "--macro-opt" ) ) {
+		fmt::print( "{}\n", _URANITE_OPT_ );
+		return 0;
+	}
+	if( program.get<bool>( "--macro-modules-dir" ) ) {
+		fmt::print( "{}\n", _URANITE_MODULES_DIR_ );
+		return 0;
+	}
+	if( program.get<bool>( "--macro-c-runtime-dir" ) ) {
+		fmt::print( "{}\n", _URANITE_C_RUNTIME_DIR_ );
 		return 0;
 	}
 	if( program.get<bool>( "--repl" ) ) {
