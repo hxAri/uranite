@@ -26,6 +26,8 @@ namespace uranite::codegen {
 
 			RuntimeFunctionSpec getPushFrameFunction( llvm::LLVMContext& context ) override;
 			RuntimeFunctionSpec getPopFrameFunction( llvm::LLVMContext& context ) override;
+			RuntimeFunctionSpec getGetFrameDepthFunction( llvm::LLVMContext& context ) override;
+			RuntimeFunctionSpec getGetFrameAtFunction( llvm::LLVMContext& context ) override;
 
 			RuntimeFunctionSpec getMallocFunction( llvm::LLVMContext& context ) override;
 			RuntimeFunctionSpec getFreeFunction( llvm::LLVMContext& context ) override;
