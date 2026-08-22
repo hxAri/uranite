@@ -20,8 +20,6 @@
 
 package uranite.errors.throwable
 
-from uranite.errors.traceback import Traceback
-
 public interface Throwable:
     
     """
@@ -80,16 +78,6 @@ public interface Throwable:
         Returns:
             ?Throwable:
                 The previous throwable that caused this one, or None.
-        """
-    
-    public function getTraceback( self ) -> ?Traceback:
-        
-        """
-        Return the traceback information for this throwable, or None if not available.
-        
-        Returns:
-            ?Traceback:
-                The traceback record containing source location info, or None.
         """
     
     public function toString( self ) -> String:
