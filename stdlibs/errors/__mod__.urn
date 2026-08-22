@@ -22,11 +22,12 @@ package uranite.errors
 
 from uranite.errors.error import Error
 from uranite.errors.exception import Exception
+from uranite.errors.interrupt import KeyboardInterruptError
 from uranite.errors.lookup import IndexError, KeyError, LookupError
 from uranite.errors.panic import PanicContext, PanicHandler, PanicReason
 from uranite.errors.state import CapacityError, NotImplementedError, StateError
 from uranite.errors.throwable import Throwable
-from uranite.errors.traceback import Traceback
+from uranite.errors.traceback.traceback import Traceback
 from uranite.errors.type import TypeError
 from uranite.errors.value import ValueError
 from uranite.errors.warning import Warning
