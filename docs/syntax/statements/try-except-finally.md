@@ -60,7 +60,7 @@ No exception is raised, so only `inside try` is printed. The `except` block is s
 
 ## Catching a Raised Exception
 
-When a `raise` statement executes inside a `try` block, execution immediately transfers to the matching `except` clause. Code after the `raise` within the `try` block does not execute.
+When a `raise` statement executes inside a `try` block, execution immediately transfers to the matching `except` clause. Code after the `raise` within the `try` block does not execute. The caught exception object provides `getMessage()` and `getCode()` to access its data.
 
 ```uranite
 package testing
@@ -69,13 +69,14 @@ from uranite.io.console import puts
 
 public function main() -> I32:
     try:
-        raise new Exception( "fail", 0, None )
+        raise new Exception( "connection failed", 503, None )
     except Exception as error:
-        puts( "caught exception" )
+        puts( error.getMessage() )
+        puts( error.getCode() )
     return 0
 ```
 
-The `raise` statement creates an `Exception` and transfers control to the `except` clause. The program prints `caught exception`.
+The `raise` statement creates an `Exception` and transfers control to the `except` clause. The handler accesses the exception's message and error code. The output is `connection failed` followed by `503`.
 
 ## Except Without Variable Binding
 
@@ -147,15 +148,15 @@ from uranite.io.console import puts
 
 public function main() -> I32:
     try:
-        raise new Exception( "boom", 0, None )
+        raise new Exception( "timeout", 0, None )
     except Exception as error:
-        puts( "caught" )
+        puts( error.getMessage() )
     finally:
-        puts( "finally after catch" )
+        puts( "cleanup done" )
     return 0
 ```
 
-The exception is raised, caught by the `except` clause, and then the `finally` block runs. The output is `caught` followed by `finally after catch`.
+The exception is raised, caught by the `except` clause which prints the message, and then the `finally` block runs. The output is `timeout` followed by `cleanup done`.
 
 ## Try with Finally Only
 
