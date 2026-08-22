@@ -13,6 +13,7 @@
   - [Conditional Raise](#conditional-raise)
   - [Raising Without Raises Annotation](#raising-without-raises-annotation)
   - [Chained Exceptions](#chained-exceptions)
+  - [Exception Traceback](#exception-traceback)
 
 ## Overview
 
@@ -26,7 +27,7 @@ The `raises` annotation on a function signature declares which exception types t
 
 ## Raising an Exception
 
-The `raise` statement throws a new exception object. The exception must be constructed with the `new` keyword.
+The `raise` statement throws a new exception object. The exception must be constructed with the `new` keyword. The caught exception object provides methods to access its message, error code, previous cause, and traceback.
 
 ```uranite
 package testing
@@ -37,11 +38,11 @@ public function main() -> I32:
     try:
         raise new Exception( "something went wrong", 0, None )
     except Exception as error:
-        puts( "caught" )
+        puts( error.getMessage() )
     return 0
 ```
 
-The `raise` statement constructs an `Exception` and transfers control to the matching `except` clause. The program prints `caught`.
+The `raise` statement constructs an `Exception` and transfers control to the matching `except` clause. The `error` variable holds the caught exception, and `getMessage()` returns the message string. The program prints `something went wrong`.
 
 ## Raising from a Function
 
@@ -128,20 +129,64 @@ The function `boom` has no `raises` annotation but still throws an exception. Th
 
 ## Chained Exceptions
 
-An exception can wrap a previous exception by passing it as the third constructor parameter. This creates a chain of exceptions that preserves the original cause.
+An exception can wrap a previous exception by passing it as the third constructor parameter. This creates a chain of exceptions that preserves the original cause. The `getPrevious()` method returns the chained cause.
 
 ```uranite
 package testing
 
 from uranite.io.console import puts
 
+public function failWithCause() -> Void raises Exception:
+    Exception original = new Exception( "root cause", 1, None )
+    raise new Exception( "wrapper error", 2, original )
+
 public function main() -> I32:
     try:
-        Exception original = new Exception( "root", 1, None )
-        raise new Exception( "wrapper", 2, original )
+        failWithCause()
     except Exception as error:
-        puts( "caught chained" )
+        puts( error.getMessage() )
+        puts( error.getCode() )
+        ?Throwable cause = error.getPrevious()
+        if cause is not None:
+            puts( cause.getMessage() )
+            puts( cause.getCode() )
     return 0
 ```
 
-The first `Exception` is created as a local variable. The second `Exception` wraps it via the third parameter. When caught, the chained exception preserves both the wrapper message and the original cause. The program prints `caught chained`.
+The function `failWithCause` creates an original exception and wraps it in a second exception. The `except` handler accesses the wrapper's message and code, then follows the chain with `getPrevious()` to access the original cause. The output is `wrapper error`, `2`, `root cause`, `1`.
+
+## Exception Traceback
+
+When an exception is raised, the runtime captures a traceback containing the stack frames at the point of the raise. The `getTraceback()` method on `Exception` returns a `?Traceback` object. The `Traceback` class implements `Iterable<Frame>`, so frames can be traversed with a `for-in` loop. Each `Frame` provides `file`, `line`, `functionName`, and `moduleName` fields.
+
+```uranite
+package testing
+
+from uranite.io.console import puts
+from uranite.errors.traceback.traceback import Traceback
+from uranite.errors.traceback.frame import Frame
+
+public function inner() -> Void raises Exception:
+    raise new Exception( "deep failure", 0, None )
+
+public function outer() -> Void raises Exception:
+    inner()
+
+public function printTraceback( Traceback tb ) -> Void:
+    I64 count = tb.length()
+    puts( count )
+    for Frame frame in tb:
+        puts( frame.functionName )
+
+public function main() -> I32:
+    try:
+        outer()
+    except Exception as error:
+        puts( error.getMessage() )
+        ?Traceback tb = error.getTraceback()
+        if tb is not None:
+            printTraceback( tb )
+    return 0
+```
+
+The exception is raised in `inner`, propagates through `outer`, and is caught in `main`. The traceback contains three frames corresponding to `main`, `outer`, and `inner`. The `printTraceback` function iterates the frames and prints each function name. The output is `deep failure`, `3`, `main`, `outer`, `inner`.
