@@ -20,8 +20,6 @@
 
 package uranite.language.byte
 
-
-
 final class Byte:
     
     """
