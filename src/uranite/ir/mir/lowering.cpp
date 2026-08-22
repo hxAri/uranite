@@ -2218,9 +2218,11 @@ namespace uranite::ir::mir {
 			}
 			this->switchToBlock( handlerBlock );
 			if( handler.exceptionVariableName.empty() == false ) {
+				semantic::TypeSharedPointer handlerType = handler.exceptionTypes.empty() ? nullptr : handler.exceptionTypes[0];
 				MIRVariableIdentifier handlerVariable = this->currentFunction->allocateVariable(
-					handler.exceptionVariableName, nullptr, false
+					handler.exceptionVariableName, handlerType, false
 				);
+				this->variableNameMap[handler.exceptionVariableName] = handlerVariable;
 				MIRInstruction copyException( MIRInstructionKind::CopyValue );
 				copyException.destinationVariable = handlerVariable;
 				copyException.sourceOperands.push_back( exceptionVariable );
