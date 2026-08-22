@@ -50,6 +50,9 @@ void __uranite_end_catch( void* unwind_exception_ptr );
 void __uranite_push_frame( const char* file, int64_t line, int64_t column, const char* function );
 void __uranite_pop_frame( void );
 
+int64_t __uranite_get_frame_depth( void );
+UraniteStackFrame* __uranite_get_frame_at( int64_t index );
+
 #ifdef __cplusplus
 }
 #endif
