@@ -47,6 +47,17 @@ void __uranite_pop_frame( void ) {
     }
 }
 
+int64_t __uranite_get_frame_depth( void ) {
+    return (int64_t)uranite_frame_depth;
+}
+
+UraniteStackFrame* __uranite_get_frame_at( int64_t index ) {
+    if( index < 0 || index >= uranite_frame_depth ) {
+        return NULL;
+    }
+    return &uranite_frame_stack[index];
+}
+
 static void uranite_exception_cleanup( _Unwind_Reason_Code reason, struct _Unwind_Exception* exc ) {
     free( exc );
 }
