@@ -21,7 +21,7 @@
 package uranite.errors.warning
 
 from uranite.errors.throwable import Throwable
-from uranite.errors.traceback import Traceback
+from uranite.errors.traceback.traceback import Traceback
 
 public Readonly class Warning implements Throwable:
     
