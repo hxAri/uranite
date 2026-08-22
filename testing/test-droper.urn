@@ -1,0 +1,64 @@
+package testing.test-droper
+
+from uranite.io.console import putsln
+from uranite.memory.droper import Droper
+from uranite.memory.memory import Memory
+
+public class Resource implements Droper:
+
+    protect I64 resourceId
+    protect Memory<I64> buffer
+
+    public function Resource( self, I64 resourceId ) -> Void:
+        self.resourceId = resourceId
+        self.buffer = new Memory<I64>( 8 )
+        self.buffer.set( 0, resourceId )
+
+    public function getId( self ) -> I64:
+        return self.resourceId
+
+    public function drop( self ) -> Void:
+        self.buffer.free()
+        putsln( "drop called for resource {}".format( self.resourceId ) )
+
+public class SimpleObject:
+
+    protect I64 value
+
+    public function SimpleObject( self, I64 value ) -> Void:
+        self.value = value
+
+    public function getValue( self ) -> I64:
+        return self.value
+
+function testExplicitDelete() -> Void:
+    Resource resource = new Resource( 42 )
+    defer:
+        delete resource
+        putsln( "explicit delete OK" )
+    putsln( "resource id = {}".format( resource.getId() ) )
+
+function testScopeExitDrop() -> Void:
+    Resource resource = new Resource( 99 )
+    putsln( "resource id = {}".format( resource.getId() ) )
+    putsln( "scope exit drop OK" )
+
+function testNonDroperDelete() -> Void:
+    SimpleObject simple = new SimpleObject( 10 )
+    putsln( "simple value = {}".format( simple.getValue() ) )
+    delete simple
+    putsln( "non-droper delete OK" )
+
+function testMultipleDropers() -> Void:
+    Resource first = new Resource( 1 )
+    Resource second = new Resource( 2 )
+    putsln( "first = {}, second = {}".format( first.getId(), second.getId() ) )
+    delete first
+    putsln( "multiple droper OK" )
+
+function main() -> Void:
+    testExplicitDelete()
+    testScopeExitDrop()
+    testNonDroperDelete()
+    testMultipleDropers()
+    putsln( "All Droper tests passed" )
