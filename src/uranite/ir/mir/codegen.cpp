@@ -1170,6 +1170,12 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
+		if( isMainFunction ) {
+			llvm::Function* signalSetupFunc = this->llvmModule->getFunction( semantic::qualname::functions::signal::RegisterSignalHandlers );
+			if( signalSetupFunc != nullptr ) {
+				this->irBuilder.CreateCall( signalSetupFunc );
+			}
+		}
 		std::string frameDisplayName = functionDefinition.functionName;
 		if( functionDefinition.ownerClassQualifiedName.empty() == false ) {
 			std::string ownerShort = functionDefinition.ownerClassQualifiedName;
@@ -1382,6 +1388,22 @@ namespace uranite::ir::mir {
 					this->irBuilder.CreateStore(
 						llvm::ConstantInt::get( i64Type, lineNumber ), lineGEP
 					);
+				}
+				{
+					llvm::Type* tbPtrType = llvm::PointerType::getUnqual( this->llvmContext );
+					llvm::Type* tbI64Type = llvm::Type::getInt64Ty( this->llvmContext );
+					llvm::Function* buildTracebackFunc = this->getOrCreateBuildTraceback();
+					llvm::Value* tracebackValue = this->irBuilder.CreateCall(
+						buildTracebackFunc, {}, "traceback"
+					);
+					llvm::StructType* throwableFullType = llvm::StructType::get(
+						this->llvmContext,
+						{ tbPtrType, tbI64Type, tbPtrType, tbI64Type, tbPtrType, tbPtrType, tbPtrType }
+					);
+					llvm::Value* tracebackGEP = this->irBuilder.CreateStructGEP(
+						throwableFullType, thrownObject, 6, "tb.traceback.ptr"
+					);
+					this->irBuilder.CreateStore( tracebackValue, tracebackGEP );
 				}
 				std::string typeName = instruction.calledFunctionQualifiedName.empty()
 					? semantic::qualname::classes::error::Name
@@ -5409,7 +5431,7 @@ namespace uranite::ir::mir {
 										receiverStructType = this->structTypeCache[abstractOwnerName];
 									}
 									if( receiverStructType == nullptr || receiverStructType->getNumElements() == 0 ) {
-										receiverStructType = llvm::StructType::get( this->llvmContext, { ptrType } );
+										receiverStructType = llvm::StructType::get( this->llvmContext, llvm::ArrayRef<llvm::Type*>( ptrType ), false );
 									}
 									llvm::Value* vtableSlotPtr = this->irBuilder.CreateStructGEP(
 										receiverStructType,
@@ -8093,6 +8115,12 @@ namespace uranite::ir::mir {
 				if( this->structTypeCache.count( elementClassName ) > 0 ) {
 					return this->structTypeCache[elementClassName];
 				}
+				for( const std::pair<const std::string, llvm::StructType*>& cacheEntry : this->structTypeCache ) {
+					size_t lastDot = cacheEntry.first.rfind( '.' );
+					if( lastDot != std::string::npos && cacheEntry.first.substr( lastDot + 1 ) == shortElementName ) {
+						return cacheEntry.second;
+					}
+				}
 				llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, elementClassName );
 				if( structType != nullptr ) {
 					return structType;
@@ -8481,6 +8509,189 @@ namespace uranite::ir::mir {
 		return function;
 	}
 	
+	llvm::Function* MIRCodegen::getOrCreateGetFrameDepth() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getGetFrameDepthFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function != nullptr && function->getFunctionType() != spec.functionSignature ) {
+			function->eraseFromParent();
+			function = nullptr;
+		}
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateGetFrameAt() {
+		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getGetFrameAtFunction( this->llvmContext );
+		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
+		if( function != nullptr && function->getFunctionType() != spec.functionSignature ) {
+			function->eraseFromParent();
+			function = nullptr;
+		}
+		if( function == nullptr ) {
+			function = llvm::Function::Create(
+				spec.functionSignature, spec.linkageType, spec.functionName, this->llvmModule.get()
+			);
+		}
+		return function;
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateBuildTraceback() {
+		llvm::Function* existing = this->llvmModule->getFunction( "__uranite_build_traceback" );
+		if( existing != nullptr ) {
+			return existing;
+		}
+		llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+		llvm::FunctionType* funcType = llvm::FunctionType::get( ptrType, false );
+		llvm::Function* function = llvm::Function::Create(
+			funcType, llvm::Function::InternalLinkage, "__uranite_build_traceback", this->llvmModule.get()
+		);
+		llvm::BasicBlock* savedBlock = this->irBuilder.GetInsertBlock();
+		llvm::BasicBlock::iterator savedPoint;
+		if( savedBlock != nullptr ) {
+			savedPoint = this->irBuilder.GetInsertPoint();
+		}
+		llvm::BasicBlock* entryBlock = llvm::BasicBlock::Create( this->llvmContext, "entry", function );
+		llvm::BasicBlock* buildBlock = llvm::BasicBlock::Create( this->llvmContext, "build", function );
+		llvm::BasicBlock* loopHeader = llvm::BasicBlock::Create( this->llvmContext, "loop.header", function );
+		llvm::BasicBlock* loopBody = llvm::BasicBlock::Create( this->llvmContext, "loop.body", function );
+		llvm::BasicBlock* loopEnd = llvm::BasicBlock::Create( this->llvmContext, "loop.end", function );
+		llvm::BasicBlock* emptyBlock = llvm::BasicBlock::Create( this->llvmContext, "empty", function );
+		this->irBuilder.SetInsertPoint( entryBlock );
+		llvm::Function* getDepthFunc = this->getOrCreateGetFrameDepth();
+		llvm::Value* depth = this->irBuilder.CreateCall( getDepthFunc, {}, "depth" );
+		llvm::Value* hasFrames = this->irBuilder.CreateICmpSGT(
+			depth, llvm::ConstantInt::get( i64Type, 0 ), "has.frames"
+		);
+		this->irBuilder.CreateCondBr( hasFrames, buildBlock, emptyBlock );
+		this->irBuilder.SetInsertPoint( emptyBlock );
+		this->irBuilder.CreateRet(
+			llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) )
+		);
+		this->irBuilder.SetInsertPoint( buildBlock );
+		llvm::StructType* frameStructType = llvm::StructType::get(
+			this->llvmContext, { ptrType, i64Type, ptrType, ptrType }
+		);
+		llvm::StructType* tracebackStructType = nullptr;
+		unsigned tbFramesIndex = 0;
+		unsigned tbSizeIndex = 1;
+		std::unordered_map<std::string, llvm::StructType*>::iterator tbCacheIterator = this->structTypeCache.find( semantic::qualname::classes::traceback::Name );
+		if( tbCacheIterator != this->structTypeCache.end() ) {
+			tracebackStructType = tbCacheIterator->second;
+			unsigned numFields = tracebackStructType->getNumElements();
+			if( numFields >= 3 ) {
+				tbFramesIndex = numFields - 2;
+				tbSizeIndex = numFields - 1;
+			}
+		}
+		else {
+			tracebackStructType = llvm::StructType::get(
+				this->llvmContext, { ptrType, i64Type }
+			);
+		}
+		llvm::DataLayout dataLayout( this->llvmModule.get() );
+		uint64_t ptrSize = dataLayout.getTypeAllocSize( ptrType );
+		llvm::Value* ptrSizeVal = llvm::ConstantInt::get( i64Type, ptrSize );
+		llvm::Function* callocFunc = this->getOrCreateCalloc();
+		llvm::Value* framesPtr = this->irBuilder.CreateCall(
+			callocFunc, { depth, ptrSizeVal }, "frames.raw"
+		);
+		uint64_t tbSize = dataLayout.getTypeAllocSize( tracebackStructType );
+		if( tbSize < 64 ) {
+			tbSize = 64;
+		}
+		llvm::Value* tbSizeVal = llvm::ConstantInt::get( i64Type, tbSize );
+		llvm::Function* mallocFunc = this->getOrCreateMalloc();
+		llvm::Value* tbPtr = this->irBuilder.CreateCall( mallocFunc, { tbSizeVal }, "tb.raw" );
+		if( tbFramesIndex > 0 ) {
+			llvm::Value* tbItableGEP = this->irBuilder.CreateStructGEP(
+				tracebackStructType, tbPtr, 0, "tb.itable.ptr"
+			);
+			this->irBuilder.CreateStore(
+				llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) ),
+				tbItableGEP
+			);
+		}
+		llvm::Value* tbFramesGEP = this->irBuilder.CreateStructGEP(
+			tracebackStructType, tbPtr, tbFramesIndex, "tb.frames.ptr"
+		);
+		this->irBuilder.CreateStore( framesPtr, tbFramesGEP );
+		llvm::Value* tbSizeGEP = this->irBuilder.CreateStructGEP(
+			tracebackStructType, tbPtr, tbSizeIndex, "tb.size.ptr"
+		);
+		this->irBuilder.CreateStore( depth, tbSizeGEP );
+		llvm::Value* emptyModStr = this->irBuilder.CreateGlobalStringPtr( "", "tb.empty.mod" );
+		uint64_t frameObjSize = dataLayout.getTypeAllocSize( frameStructType );
+		if( frameObjSize < 64 ) {
+			frameObjSize = 64;
+		}
+		llvm::Value* frameObjSizeVal = llvm::ConstantInt::get( i64Type, frameObjSize );
+		this->irBuilder.CreateBr( loopHeader );
+		this->irBuilder.SetInsertPoint( loopHeader );
+		llvm::PHINode* indexPhi = this->irBuilder.CreatePHI( i64Type, 2, "idx" );
+		indexPhi->addIncoming( llvm::ConstantInt::get( i64Type, 0 ), buildBlock );
+		llvm::Value* loopDone = this->irBuilder.CreateICmpSGE( indexPhi, depth, "loop.done" );
+		this->irBuilder.CreateCondBr( loopDone, loopEnd, loopBody );
+		this->irBuilder.SetInsertPoint( loopBody );
+		llvm::StructType* crtFrameType = llvm::StructType::get(
+			this->llvmContext, { ptrType, i64Type, i64Type, ptrType }
+		);
+		llvm::Function* getFrameAtFunc = this->getOrCreateGetFrameAt();
+		llvm::Value* crtFramePtr = this->irBuilder.CreateCall(
+			getFrameAtFunc, { indexPhi }, "crt.frame"
+		);
+		llvm::Value* crtFileGEP = this->irBuilder.CreateStructGEP(
+			crtFrameType, crtFramePtr, 0, "crt.file.ptr"
+		);
+		llvm::Value* crtFile = this->irBuilder.CreateLoad( ptrType, crtFileGEP, "crt.file" );
+		llvm::Value* crtLineGEP = this->irBuilder.CreateStructGEP(
+			crtFrameType, crtFramePtr, 1, "crt.line.ptr"
+		);
+		llvm::Value* crtLine = this->irBuilder.CreateLoad( i64Type, crtLineGEP, "crt.line" );
+		llvm::Value* crtFuncGEP = this->irBuilder.CreateStructGEP(
+			crtFrameType, crtFramePtr, 3, "crt.func.ptr"
+		);
+		llvm::Value* crtFunc = this->irBuilder.CreateLoad( ptrType, crtFuncGEP, "crt.func" );
+		llvm::Value* frameObj = this->irBuilder.CreateCall(
+			mallocFunc, { frameObjSizeVal }, "frame.obj"
+		);
+		llvm::Value* frameFileGEP = this->irBuilder.CreateStructGEP(
+			frameStructType, frameObj, 0, "frame.file.ptr"
+		);
+		this->irBuilder.CreateStore( crtFile, frameFileGEP );
+		llvm::Value* frameLineGEP = this->irBuilder.CreateStructGEP(
+			frameStructType, frameObj, 1, "frame.line.ptr"
+		);
+		this->irBuilder.CreateStore( crtLine, frameLineGEP );
+		llvm::Value* frameFuncGEP = this->irBuilder.CreateStructGEP(
+			frameStructType, frameObj, 2, "frame.func.ptr"
+		);
+		this->irBuilder.CreateStore( crtFunc, frameFuncGEP );
+		llvm::Value* frameModGEP = this->irBuilder.CreateStructGEP(
+			frameStructType, frameObj, 3, "frame.mod.ptr"
+		);
+		this->irBuilder.CreateStore( emptyModStr, frameModGEP );
+		llvm::Value* slotPtr = this->irBuilder.CreateGEP(
+			ptrType, framesPtr, indexPhi, "slot.ptr"
+		);
+		this->irBuilder.CreateStore( frameObj, slotPtr );
+		llvm::Value* nextIndex = this->irBuilder.CreateAdd(
+			indexPhi, llvm::ConstantInt::get( i64Type, 1 ), "idx.next"
+		);
+		indexPhi->addIncoming( nextIndex, loopBody );
+		this->irBuilder.CreateBr( loopHeader );
+		this->irBuilder.SetInsertPoint( loopEnd );
+		this->irBuilder.CreateRet( tbPtr );
+		if( savedBlock != nullptr ) {
+			this->irBuilder.SetInsertPoint( savedBlock, savedPoint );
+		}
+		return function;
+	}
+
 	void MIRCodegen::emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName ) {
 		llvm::Function* pushFrame = this->getOrCreatePushFrame();
 		llvm::Value* fileStr = this->irBuilder.CreateGlobalStringPtr( file, "frame.file" );
