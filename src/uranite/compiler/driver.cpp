@@ -201,6 +201,18 @@ namespace uranite::compiler {
 				moduleInfo.packageName = moduleProgram->module->name;
 			}
 			size_t originalDeclCount = moduleProgram->declarations.size();
+			{
+				diagnostic::Engine stubDiagnostic( this->options.maximumErrorCount, -1 );
+				semantic::Analyzer stubAnalyzer( stubDiagnostic );
+				stubAnalyzer.importModuleTypes( this->accumulatedModuleTypes_ );
+				stubAnalyzer.preRegisterTypeStubs( *moduleProgram );
+				std::unordered_map<std::string, semantic::TypeSharedPointer> stubTypes = stubAnalyzer.getRegisteredTypes();
+				for( std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator stubIterator = stubTypes.begin(); stubIterator != stubTypes.end(); ++stubIterator ) {
+					if( this->accumulatedModuleTypes_.find( stubIterator->first ) == this->accumulatedModuleTypes_.end() ) {
+						this->accumulatedModuleTypes_[stubIterator->first] = stubIterator->second;
+					}
+				}
+			}
 			this->resolveImports( *moduleProgram );
 			if( moduleInfo.state == ModuleInfo::State::Parsed ) {
 				moduleInfo.state = ModuleInfo::State::Analyzing;
@@ -464,7 +476,8 @@ namespace uranite::compiler {
 			"errors/error.urn",
 			"errors/exception.urn",
 			"errors/throwable.urn",
-			"errors/traceback.urn",
+			"errors/traceback/frame.urn",
+			"errors/traceback/traceback.urn",
 			"errors/warning.urn"
 		};
 		for( std::string& relativeModulePath : corePreludeModulePaths ) {
@@ -1059,6 +1072,10 @@ namespace uranite::compiler {
 			}
 			std::string modulesDir = this->findModulesDirectory();
 			if( modulesDir.empty() == false ) {
+				std::filesystem::path objectModulePath = std::filesystem::path( modulesDir ) / "language" / "object.urn";
+				if( std::filesystem::exists( objectModulePath ) ) {
+					this->loadModule( objectModulePath.string(), *programRoot );
+				}
 				if( needsArgsModule ) {
 					std::filesystem::path argsModulePath = std::filesystem::path( modulesDir ) / "collection" / "args.urn";
 					if( std::filesystem::exists( argsModulePath ) ) {
@@ -1079,6 +1096,10 @@ namespace uranite::compiler {
 							spdlog::info( "auto-imported async runtime module" );
 						}
 					}
+				}
+				std::filesystem::path signalModulePath = std::filesystem::path( modulesDir ) / "os" / "signal.urn";
+				if( std::filesystem::exists( signalModulePath ) ) {
+					this->loadModule( signalModulePath.string(), *programRoot );
 				}
 				std::filesystem::path mathErrorsPath = std::filesystem::path( modulesDir ) / "math" / "errors.urn";
 				if( std::filesystem::exists( mathErrorsPath ) ) {
