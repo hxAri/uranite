@@ -20,8 +20,6 @@
 
 package uranite.language.none
 
-
-
 final class NoneType:
     
     """
