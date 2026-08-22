@@ -1,0 +1,45 @@
+#
+# @author hxAri (hxari)
+# @create 2026-08-22 19:23
+# @update 2026-08-22 19:23
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/language/object.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Object class, the root base class for all Uranite classes.
+# Every class implicitly extends Object unless an explicit base is given.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.language.object
+
+
+public class Object:
+
+    """
+    Root base class for all Uranite classes.
+    Every class without an explicit base class implicitly extends Object.
+    Subclasses should override toString to provide a meaningful string representation.
+    """
+
+    public function toString( self ) -> String:
+
+        """
+        Return a string representation of this object.
+        Subclasses should override this method to provide a meaningful description.
+
+        Returns:
+            String:
+                A String describing this object.
+        """
+
+        return "Object"
+
