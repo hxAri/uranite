@@ -41,6 +41,8 @@ namespace uranite::codegen {
 
 			virtual RuntimeFunctionSpec getPushFrameFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getPopFrameFunction( llvm::LLVMContext& context ) = 0;
+			virtual RuntimeFunctionSpec getGetFrameDepthFunction( llvm::LLVMContext& context ) = 0;
+			virtual RuntimeFunctionSpec getGetFrameAtFunction( llvm::LLVMContext& context ) = 0;
 
 			virtual RuntimeFunctionSpec getMallocFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getFreeFunction( llvm::LLVMContext& context ) = 0;
