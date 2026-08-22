@@ -1,0 +1,58 @@
+#
+# @author hxAri (hxari)
+# @create 2026-08-22 21:27
+# @update 2026-08-22 21:27
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/errors/os.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the OSError class, raised when a system-level operation fails
+# due to an operating system error such as a failed syscall or resource
+# exhaustion.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.os
+
+from uranite.errors.error import Error
+
+
+public class OSError extends Error:
+
+    """
+    Raised when a system-level operation fails due to an operating system
+    error. Wraps errno-style error codes from failed syscalls with a
+    human-readable context message describing the operation that failed.
+    """
+
+    public function OSError( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct an OSError with a descriptive message and errno code.
+
+        Parameters:
+            message (String):
+                Human-readable description of the failed operation.
+            code (I64):
+                The errno value from the failed syscall.
+            cause (?Error):
+                Optional chained error, or None.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        parent( message, code, cause )
+
+export {
+    OSError
+}
