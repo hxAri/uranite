@@ -58,6 +58,9 @@ namespace uranite::semantic::qualname {
 			};
 		};
 		static constexpr const char* Puts = "puts";
+		namespace signal {
+			static constexpr const char* RegisterSignalHandlers = "uranite.os.signal.registerSignalHandlers";
+		};
 	};
 	
 	namespace modules {
@@ -109,8 +112,9 @@ namespace uranite::semantic::qualname {
 	
 	namespace classes {
 		namespace object {
-			
-			static inline const std::string Qualified = "uranite.builtin.Object";
+
+			static inline const std::string Qualified = "uranite.language.object.Object";
+			static constexpr const char* Package = "uranite.language.object";
 			static constexpr const char* Name = "Object";
 			namespace methods {
 				static constexpr const char* ToString = "toString";
@@ -360,8 +364,12 @@ namespace uranite::semantic::qualname {
 			static constexpr const char* Name = "Warning";
 		};
 		namespace traceback {
-			static inline const std::string Qualified = "uranite.errors.traceback.Traceback";
+			static inline const std::string Qualified = "uranite.errors.traceback.traceback.Traceback";
 			static constexpr const char* Name = "Traceback";
+		};
+		namespace frame {
+			static inline const std::string Qualified = "uranite.errors.traceback.frame.Frame";
+			static constexpr const char* Name = "Frame";
 		};
 		namespace arithmeticerror {
 			static inline const std::string Qualified = "uranite.math.errors.ArithmeticError";
