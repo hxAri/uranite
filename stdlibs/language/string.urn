@@ -20,10 +20,6 @@
 
 package uranite.language.string
 
-from uranite.memory.allocator import alloc
-from uranite.io.syscall import ptrToString, readByteAt, stringLen, stringToPtr, writeByteAt
-
-
 class String:
     
     """
