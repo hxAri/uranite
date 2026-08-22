@@ -21,19 +21,19 @@
 package uranite.errors.error
 
 from uranite.errors.throwable import Throwable
-from uranite.errors.traceback import Traceback
+from uranite.errors.traceback.traceback import Traceback
 
 public Readonly class Error implements Throwable:
-    
+
     """
     Unrecoverable error that applications should not catch.
-    
+
     Errors represent serious problems that a reasonable application should not
     attempt to recover from, such as out-of-memory conditions or internal
     compiler failures. They implement the Throwable interface for use with
     the raise mechanism.
     """
-    
+
     protect I64 code
     protect String file
     protect I64 line
@@ -82,6 +82,6 @@ public Readonly class Error implements Throwable:
     
     public function getTraceback( self ) -> ?Traceback:
         return self.traceback
-    
+
     public function toString( self ) -> String:
         return self.message
