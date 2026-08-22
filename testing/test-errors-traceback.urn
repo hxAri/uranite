@@ -1,24 +1,41 @@
 package testing
 
-from uranite.errors.traceback import Traceback
-from uranite.io.console import putsln
-from uranite.testing.assertions import assertEqualI64, assertEqualStr
+from uranite.errors.exception import Exception
+from uranite.errors.traceback.traceback import Traceback
+from uranite.errors.traceback.frame import Frame
+from uranite.io.console import putsln, putsI64
+
+public function raiseNested() -> Void:
+    raise new Exception( "nested error", 2, None )
+
+public function raiseFromHelper() -> Void:
+    raiseNested()
 
 public function main() -> I32:
-    putsln( "Traceback Tests" )
-    Traceback tb = new Traceback( "main.urn", 42, "doStuff", "testing" )
-    assertEqualStr( "main.urn", tb.getFile(), "getFile" )
-    assertEqualI64( 42, tb.getLine(), "getLine" )
-    assertEqualStr( "doStuff", tb.getFunctionName(), "getFunctionName" )
-    assertEqualStr( "testing", tb.getModuleName(), "getModuleName" )
-    assertEqualStr( "main.urn", tb.toString(), "toString returns file" )
-    putsln( "traceback 1 OK" )
-    Traceback tb2 = new Traceback( "utils.urn", 100, "parseInput", "uranite.utils" )
-    assertEqualStr( "utils.urn", tb2.getFile(), "tb2 getFile" )
-    assertEqualI64( 100, tb2.getLine(), "tb2 getLine" )
-    assertEqualStr( "parseInput", tb2.getFunctionName(), "tb2 getFunctionName" )
-    assertEqualStr( "uranite.utils", tb2.getModuleName(), "tb2 getModuleName" )
-    assertEqualStr( "utils.urn", tb2.toString(), "tb2 toString" )
-    putsln( "traceback 2 OK" )
+    putsln( "Traceback Integration Tests" )
+
+    try:
+        raiseFromHelper()
+    except Exception as caught:
+        ?Traceback maybeTraceback = caught.getTraceback()
+        if maybeTraceback is None:
+            putsln( "FAIL: traceback is None" )
+            return 1
+        Traceback traceback = maybeTraceback
+        I64 frameCount = traceback.length()
+        putsln( "frame count:" )
+        putsI64( frameCount )
+        if frameCount < 1:
+            putsln( "FAIL: expected at least 1 frame" )
+            return 1
+        putsln( "traceback captured OK" )
+
+        I64 frameIndex = 0
+        while frameIndex < frameCount:
+            Frame frame = traceback.get( frameIndex )
+            putsln( frame.functionName )
+            putsI64( frame.line )
+            frameIndex = frameIndex + 1
+
     putsln( "All traceback tests passed" )
     return 0
