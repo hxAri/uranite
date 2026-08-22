@@ -1,0 +1,140 @@
+#
+# @author hxAri (hxari)
+# @create 2026-08-22 21:27
+# @update 2026-08-22 22:04
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/os/signal.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Signal handling for Uranite programs. Registers signal handlers using
+# the raw rt_sigaction syscall. The SIGINT handler raises a
+# KeyboardInterruptError through the standard exception mechanism,
+# allowing programs to catch Ctrl+C and perform graceful shutdown.
+#
+# The signal restorer is allocated as raw machine code in executable
+# memory rather than as a Uranite function, so libunwind can recognize
+# the signal frame and unwind through it for exception propagation.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.os.signal
+
+from uranite.errors.interrupt import KeyboardInterruptError
+from uranite.os.syscall.invoke import syscall4, syscall6
+from uranite.os.syscall.result import SyscallResult
+from uranite.memory.memory import Memory
+from uranite.os.arch.native.memory import memoryToPtr
+
+# Signal numbers (POSIX)
+const I64 SIGINT = 2
+const I64 SIGTERM = 15
+const I64 SIGKILL = 9
+
+# rt_sigaction syscall number (x86_64)
+const I64 SYS_RT_SIGACTION = 13
+
+# mmap syscall number (x86_64)
+const I64 SYS_MMAP = 9
+
+# SA_RESTORER flag required by kernel on x86_64
+const I64 SA_RESTORER = 67108864
+
+# Kernel sigset_t size in bytes
+const I64 SIGSET_SIZE = 8
+
+# Kernel sigaction struct field count (handler + flags + restorer + mask = 4 I64 fields)
+const I64 SIGACTION_FIELDS = 4
+
+# mmap page size
+const I64 MMAP_PAGE_SIZE = 4096
+
+# PROT_READ | PROT_WRITE | PROT_EXEC
+const I64 PROT_RWX = 7
+
+# MAP_PRIVATE | MAP_ANONYMOUS
+const I64 MAP_PRIVATE_ANON = 34
+
+
+function sigintHandler( I64 signum ) -> Void:
+
+    """
+    Signal handler invoked by the kernel on SIGINT delivery.
+    Raises KeyboardInterruptError through the standard exception mechanism.
+
+    Parameters:
+        signum (I64):
+            The signal number delivered by the kernel.
+    """
+
+    raise new KeyboardInterruptError( "keyboard interrupt", 130, None )
+
+
+function createSignalRestorer() -> I64:
+
+    """
+    Allocate executable memory containing a minimal rt_sigreturn
+    trampoline (mov $15, %rax; syscall). Returns the raw address
+    of the trampoline code for use as sa_restorer in sigaction.
+
+    The trampoline is raw machine code without any Uranite function
+    prologue, allowing libunwind to recognize the signal frame and
+    unwind through it for exception propagation into try/except.
+
+    Returns:
+        The memory address of the executable rt_sigreturn trampoline,
+        or 0 if allocation failed.
+    """
+
+    SyscallResult mmapResult = syscall6( SYS_MMAP, 0, MMAP_PAGE_SIZE, PROT_RWX, MAP_PRIVATE_ANON, -1, 0 )
+    if mmapResult.isError():
+        return 0
+    I64 codeAddr = mmapResult.value()
+    # Writes bytes: 48 C7 C0 0F 00 00 00 (mov $15,%rax) 0F 05 (syscall)
+    asm "movabsq $$0x0F0000000FC0C748, %rcx\nmovq %rcx, (%rdi)\nmovb $$0x05, 8(%rdi)" : : input( "{rdi}" codeAddr ) : clobber( "rcx", "memory" )
+    return codeAddr
+
+
+public function registerSignalHandlers() -> Void:
+
+    """
+    Register the default signal handlers for the Uranite runtime. Installs
+    a SIGINT handler that raises KeyboardInterruptError. Called automatically
+    at program startup before user code executes.
+
+    The sigaction struct is laid out to match the kernel ABI on x86_64:
+        offset 0: sa_handler  (function pointer, 8 bytes)
+        offset 1: sa_flags    (SA_RESTORER, 8 bytes)
+        offset 2: sa_restorer (restorer function pointer, 8 bytes)
+        offset 3: sa_mask     (empty signal mask, 8 bytes)
+    """
+
+    I64 restorerAddr = createSignalRestorer()
+    if restorerAddr == 0:
+        return
+    I64 handlerAddr = addressof sigintHandler
+
+    Memory<I64> sigactionBuf = new Memory<I64>( SIGACTION_FIELDS )
+    sigactionBuf.set( 0, handlerAddr )
+    sigactionBuf.set( 1, SA_RESTORER )
+    sigactionBuf.set( 2, restorerAddr )
+    sigactionBuf.set( 3, 0 )
+
+    I64 sigactionPtr = memoryToPtr( sigactionBuf )
+    syscall4( SYS_RT_SIGACTION, SIGINT, sigactionPtr, 0, SIGSET_SIZE )
+
+    sigactionBuf.free()
+
+export {
+    registerSignalHandlers,
+    SIGINT,
+    SIGTERM,
+    SIGKILL
+}
