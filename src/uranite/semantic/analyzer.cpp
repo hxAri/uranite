@@ -268,6 +268,17 @@ namespace uranite::semantic {
 		return this->globalScope_->symbols();
 	}
 	
+	void Analyzer::preRegisterTypeStubs( ast::nodes::Program& program ) {
+		if( program.module != nullptr ) {
+			this->currentPackageName = program.module->name;
+		}
+		for( ast::nodes::DeclarationSharedPointer& declaration : program.declarations ) {
+			if( declaration != nullptr ) {
+				this->registerTypeDeclaration( declaration );
+			}
+		}
+	}
+
 	bool Analyzer::analyzeModuleRegistration( ast::nodes::Program& program ) {
 		if( program.module != nullptr ) {
 			this->currentPackageName = program.module->name;
