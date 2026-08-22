@@ -1,6 +1,28 @@
 # Changelog
 
-## v1.3.0-2026.8 2026-08-011
+## v1.3.0-2026.8 2026-08-23
+
+**Added**
+- SIGINT signal handling via pure Uranite stdlib (`stdlibs/os/signal.urn`) - registers SIGINT handler using raw `rt_sigaction` syscall that raises `KeyboardInterruptError` through the standard exception mechanism; signal restorer allocated as raw machine code in mmap'd executable memory (rt_sigreturn trampoline) instead of a Uranite function, allowing libunwind to recognize the signal frame and unwind through it for exception propagation into try/except blocks
+- `--macro-git-hash`, `--macro-llc`, `--macro-opt`, `--macro-modules-dir`, `--macro-c-runtime-dir` CLI flags - each prints the corresponding compile-time build macro value and exits
+- Signal handler qualname constant `semantic::qualname::functions::signal::RegisterSignalHandlers` for signal handler registration lookup in MIR codegen
+- Full exception stack trace support - `__uranite_build_traceback` helper function generated per-module by MIR codegen reads the CRT shadow stack via `__uranite_get_frame_depth` and `__uranite_get_frame_at`, allocates each `Frame` object individually with `malloc` and stores pointers into a `calloc`'d pointer array matching `Memory<T>.get()` codegen stride, constructs a `Traceback` object, and stores it into the throwable's traceback field (index 6) at every `ThrowException` site; `getOrCreateBuildTraceback` dynamically looks up the `Traceback` struct type from `structTypeCache` to determine correct field indices when itable pointers shift layout
+- CRT frame accessor runtime functions `__uranite_get_frame_depth` (returns shadow stack depth as `i64`) and `__uranite_get_frame_at` (returns pointer to `UraniteStackFrame` at given index) with `RuntimeFunctionSpec` declarations in `RuntimeInterface`/`DefaultRuntime` and `getOrCreate*` wrappers in MIR codegen
+- `Traceback` class implements `Iterable<Frame>` with `iterator()` property returning `TracebackIterator` - enables for-in loop traversal of stack frames
+- `TracebackIterator` class implements `Iterator<Frame>` in standalone module `uranite.errors.traceback.iterator` with `has` and `next` properties
+- `getTraceback() -> ?Traceback` accessor on `Error`, `Exception`, and `Warning` classes returning captured stack trace or `None`
+- `Frame` qualname entry `semantic::qualname::classes::frame` with qualified path `uranite.errors.traceback.frame.Frame`
+- Pre-registration phase in module loading (`Analyzer::preRegisterTypeStubs`) - runs `registerTypeDeclaration` for all module declarations before `resolveImports` in `Driver::loadModule`, adding type stubs to `accumulatedModuleTypes_` so circular dependency chains (e.g., `errors/error.urn` → `traceback.urn` → `iterators/iterator.urn` → `language/__mod__` → `string.urn` → `io/errors.urn` → needs `Error`) find the type name already registered
+
+**Changed**
+- Prelude module paths updated in `Driver::loadPrelude` - `errors/traceback.urn` replaced with `errors/traceback/frame.urn` and `errors/traceback/traceback.urn`
+
+**Fixed**
+- Calling methods on caught exception object segfaults (TELLING #53) - MIR lowering allocated the exception handler variable (`except Type as error`) and emitted a `CopyValue` instruction from the landing pad result, but never registered the variable name in `variableNameMap`; subsequent references to the caught variable in the handler body produced a `LoadVariable` with empty `sourceOperands`, causing codegen to emit `null` as the method call self pointer; fixed by registering `handler.exceptionVariableName` in the variable name map after allocation and passing the exception type to `allocateVariable`
+- Hardcoded signal handler function name string in MIR codegen replaced with `semantic::qualname::functions::signal::RegisterSignalHandlers` constant
+- Circular module dependency during prelude loading breaks compilation when traceback types implement interfaces - loading `errors/error.urn` triggers transitive import chain through `traceback.urn` → `iterators/iterator.urn` → `language/__mod__.urn` → `string.urn` → `memory/allocator.urn` → `io/syscall.urn` → `io/errors.urn` which needs `Error` type still mid-load; `IOError extends Error` fails with "unknown type Error" because `analyzeModuleRegistration` for `error.urn` hasn't run yet; fixed by pre-registering type stubs before `resolveImports`
+- `Traceback.get()` segfault when accessing frames - `getOrCreateBuildTraceback` allocated Frame structs contiguously via `calloc(depth, sizeof(Frame))` but `Memory<T>.get()` codegen generates `getelementptr ptr` (8-byte pointer stride); frames at 32-byte intervals were unreachable; fixed by allocating each Frame individually with `malloc` and storing pointers into a pointer-sized array slot
+- `Traceback` struct layout mismatch after implementing `Iterable<Frame>` - `getOrCreateBuildTraceback` hardcoded `{ptr, i64}` layout but implementing Iterable adds itable pointer at index 0, shifting `frames` to index 1 and `size` to index 2; builder stored `depth` at old index 1, `length()` read from new index 2 (zero); fixed by looking up actual struct type from `structTypeCache` and computing field indices dynamically
 
 ## v1.2.0-2026.8 2026-08-08
 
