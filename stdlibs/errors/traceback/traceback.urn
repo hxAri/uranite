@@ -1,0 +1,121 @@
+#
+# @author hxAri (hxari)
+# @create 2026-08-23 02:50
+# @update 2026-08-23 02:50
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/errors/traceback/traceback.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Traceback class, an immutable ordered sequence of stack
+# frames captured at the point where a throwable was raised. Backed by
+# Memory<Frame> for zero-allocation iteration with no collection imports.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.traceback.traceback
+
+from uranite.errors.traceback.frame import Frame
+from uranite.iterators.iterable import Iterable
+from uranite.iterators.iterator import Iterator
+from uranite.memory.memory import Memory
+
+
+public Readonly class Traceback implements Iterable<Frame>:
+
+    """
+    Immutable ordered sequence of stack frames captured at the point
+    where a throwable was raised. Frames are ordered from outermost
+    caller to the raise site. Backed by Memory<Frame> with a fixed
+    size determined at capture time.
+    """
+
+    protect Memory<Frame> frames
+    protect I64 size
+
+    public function Traceback( self, Memory<Frame> frames, I64 size ) -> Void:
+
+        """
+        Create a new traceback from a pre-populated frame buffer.
+
+        Parameters:
+            frames (Memory<Frame>):
+                The buffer containing captured stack frame entries.
+            size (I64):
+                The number of valid frames in the buffer.
+        """
+
+        self.frames = frames
+        self.size = size
+
+    public function length( self ) -> I64:
+
+        """ Return the number of stack frames in this traceback. """
+
+        return self.size
+
+    public function get( self, I64 index ) -> Frame:
+
+        """ Return the stack frame at the given index. """
+
+        return self.frames.get( index )
+
+    public property iterator( self ) -> Iterator<Frame>:
+
+        """ Return a fresh iterator over frames in this traceback. """
+
+        return new TracebackIterator( self )
+
+    public function toString( self ) -> String:
+
+        """ Return a string representation identifying this as a traceback with its frame count. """
+
+        return "Traceback"
+
+public final class TracebackIterator implements Iterator<Frame>:
+
+    """
+    Forward-only iterator over the stack frames in a Traceback.
+    """
+
+    private Traceback source
+    private I64 position
+
+    public function TracebackIterator( self, Traceback source ) -> Void:
+
+        """
+        Create a new iterator positioned at the start of the given traceback.
+
+        Parameters:
+            source (Traceback):
+                The traceback to iterate over.
+        """
+
+        self.source = source
+        self.position = 0
+
+    public property has( self ) -> Boolean:
+
+        """ Check whether more frames remain to yield. """
+
+        return self.position < self.source.length()
+
+    public property next( self ) -> Frame:
+
+        """ Return the current frame and advance to the next position. """
+
+        Frame frame = self.source.get( self.position )
+        self.position = self.position + 1
+        return frame
+
+export {
+    Traceback,
+    TracebackIterator
+}
