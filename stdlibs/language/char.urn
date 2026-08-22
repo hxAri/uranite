@@ -20,8 +20,6 @@
 
 package uranite.language.char
 
-
-
 final class Char:
     
     """
