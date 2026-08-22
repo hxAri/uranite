@@ -133,6 +133,9 @@ namespace uranite::ir::mir {
 		bool tryBuiltinDescriptor( const std::string& typeName, const std::string& methodName, const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		llvm::Function* getOrCreatePushFrame();
 		llvm::Function* getOrCreatePopFrame();
+		llvm::Function* getOrCreateGetFrameDepth();
+		llvm::Function* getOrCreateGetFrameAt();
+		llvm::Function* getOrCreateBuildTraceback();
 		void emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName );
 		void emitPopFrame();
 		
