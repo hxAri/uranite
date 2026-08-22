@@ -79,6 +79,18 @@ public function main() -> I32:
     puts( "    make cumulative routine elapsed time: {} seconds".format( cumElapsed ) )
     Int LINE_LENGTH = 60
     Memory<U8> buffer = new Memory<U8>( LINE_LENGTH + 1 )
+    defer:
+        puts( "cleanup iubSymbols" )
+        iubSymbols.free()
+        puts( "cleanup iubProbs" )
+        iubProbs.free()
+        puts( "cleanup homoSymbols" )
+        homoSymbols.free()
+        puts( "cleanup homoProbs" )
+        homoProbs.free()
+        puts( "cleanup buffer" )
+        buffer.free()
+    defer puts( "cleanup done" )
     Int generated = 0
     puts( "-   executing main generation sequence" )
     I64 genStart = clock()
@@ -97,9 +109,4 @@ public function main() -> I32:
     Double totalElapsed = ( totalEnd - totalStart ) / 1000000.0
     puts( "generated {} base pairs".format( n ) )
     puts( "elapsed time: {} seconds".format( totalElapsed ) )
-    iubSymbols.free()
-    iubProbs.free()
-    homoSymbols.free()
-    homoProbs.free()
-    buffer.free()
     return 0
