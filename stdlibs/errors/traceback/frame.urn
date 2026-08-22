@@ -1,0 +1,71 @@
+#
+# @author hxAri (hxari)
+# @create 2026-08-23 02:50
+# @update 2026-08-23 02:50
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/errors/traceback/frame.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the Frame struct for recording a single stack frame used in
+# diagnostic reporting. Each Frame captures the file path, line number,
+# function name, and module name of one call site in the execution stack.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.traceback.frame
+
+
+public struct Frame:
+
+    """
+    Single stack frame record for diagnostic reporting.
+
+    Each Frame captures the source location of one call site in the
+    execution stack. Traceback objects hold an ordered sequence of
+    these frames representing the full call stack at the point where
+    an error was raised.
+    """
+
+    public String file
+    public I64 line
+    public String functionName
+    public String moduleName
+
+    public function Frame( self, String file, I64 line, String functionName, String moduleName ) -> Void:
+
+        """
+        Create a new stack frame entry for the given source location.
+
+        Parameters:
+            file (String):
+                The file path of the source file containing this stack frame.
+            line (I64):
+                The line number within the source file.
+            functionName (String):
+                The name of the function at this stack frame.
+            moduleName (String):
+                The name of the module containing this stack frame.
+        """
+
+        self.file = file
+        self.line = line
+        self.functionName = functionName
+        self.moduleName = moduleName
+
+    public function toString( self ) -> String:
+
+        """ Return the file path as the string representation of this frame. """
+
+        return self.file
+
+export {
+    Frame
+}
