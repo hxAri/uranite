@@ -1,0 +1,57 @@
+#
+# @author hxAri (hxari)
+# @create 2026-08-22 21:27
+# @update 2026-08-22 21:27
+# @github https://github.com/uranite-lang/uranite/blob/prod/stdlibs/errors/interrupt.urn
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Provides the KeyboardInterruptError, raised when the user sends
+# an interrupt signal (SIGINT) to the running program.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.interrupt
+
+from uranite.errors.error import Error
+
+
+public class KeyboardInterruptError extends Error:
+
+    """
+    Raised when the user sends an interrupt signal (SIGINT) to the program,
+    typically by pressing Ctrl+C. Programs can catch this error to perform
+    graceful shutdown or cleanup before exiting.
+    """
+
+    public function KeyboardInterruptError( self, String message, I64 code, ?Error cause ) -> Void:
+
+        """
+        Construct a KeyboardInterruptError with a descriptive message.
+
+        Parameters:
+            message (String):
+                Human-readable description of the interrupt condition.
+            code (I64):
+                Numeric error code, typically 130 for SIGINT.
+            cause (?Error):
+                Optional chained error, or None.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        parent( message, code, cause )
+
+export {
+    KeyboardInterruptError
+}
