@@ -121,6 +121,7 @@ namespace uranite::semantic {
 			std::unordered_map<std::string, TypeSharedPointer> getRegisteredTypes() const;
 			std::unordered_map<std::string, std::vector<SymbolSharedPointer>> getRegisteredSymbols() const;
 			bool analyzeModuleRegistration( ast::nodes::Program& program );
+			void preRegisterTypeStubs( ast::nodes::Program& program );
 			
 			/**
 			 * @brief Accesses the type registry used by the analyzer.
