@@ -515,10 +515,11 @@ TEST_F( IntegrationTest, FinalClassRejected ) {
 TEST_F( IntegrationTest, FinallyAlwaysRuns ) {
 	IntegrationTest::CompileResult compiled = this->compileAndRun(
 		"package main\n"
+		"from uranite.errors import Error\n"
 		"extern function puts( String s ) -> I32\n"
 		"public function main() -> I32:\n"
 		"    try:\n"
-		"        raise \"boom\"\n"
+		"        raise new Error( \"boom\" )\n"
 		"    except as e:\n"
 		"        puts( \"caught\" )\n"
 		"    finally:\n"
