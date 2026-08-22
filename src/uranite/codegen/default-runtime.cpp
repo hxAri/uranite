@@ -83,6 +83,27 @@ namespace uranite::codegen {
 		return spec;
 	}
 
+	RuntimeFunctionSpec DefaultRuntime::getGetFrameDepthFunction( llvm::LLVMContext& context ) {
+		RuntimeFunctionSpec spec;
+		spec.functionName = "__uranite_get_frame_depth";
+		spec.functionSignature = llvm::FunctionType::get(
+			llvm::Type::getInt64Ty( context ),
+			false
+		);
+		return spec;
+	}
+
+	RuntimeFunctionSpec DefaultRuntime::getGetFrameAtFunction( llvm::LLVMContext& context ) {
+		RuntimeFunctionSpec spec;
+		spec.functionName = "__uranite_get_frame_at";
+		spec.functionSignature = llvm::FunctionType::get(
+			llvm::PointerType::getUnqual( context ),
+			{ llvm::Type::getInt64Ty( context ) },
+			false
+		);
+		return spec;
+	}
+
 	RuntimeFunctionSpec DefaultRuntime::getMallocFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "malloc";
