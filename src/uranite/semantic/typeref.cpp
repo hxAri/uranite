@@ -47,7 +47,7 @@ namespace uranite::semantic {
 		this->integer8Type->package = qualname::primitives::Package;
 		this->integer8Type->qualified = qualname::primitives::I8;
 		this->objectType = std::make_shared<ClassType>( qualname::classes::object::Name );
-		this->objectType->package = qualname::primitives::Package;
+		this->objectType->package = qualname::classes::object::Package;
 		this->objectType->qualified = qualname::Object;
 		this->stringType = std::make_shared<Type>( Type::Kind::String, "str", "uranite.builtin", qualname::PrimString );
 		this->unsigned16Type = std::make_shared<IntegerType>( 16, false );
