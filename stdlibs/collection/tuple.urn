@@ -238,6 +238,19 @@ public class Tuple<E> implements Iterable<E>:
 
         return new TupleIterator<E>( self )
 
+    public function destroy( self ) -> Void:
+
+        """
+        Release the heap-allocated element buffer held by this tuple.
+        Must be called exactly once after the tuple is no longer needed.
+
+        Complexity:
+            Time: O(1)
+            Space: O(1)
+        """
+
+        self.data.free()
+
 
 public class TupleIterator<E> implements Iterator<E>:
 
