@@ -171,7 +171,6 @@ public class Router:
         
         I64 pathPtr = stringToPtr( path )
         I64 pathLen = stringLen( path )
-        Memory<I64> pathSegs = new Memory<I64>( 16 )
         Memory<I64> pathSegStarts = new Memory<I64>( 16 )
         Memory<I64> pathSegEnds = new Memory<I64>( 16 )
         I64 pathSegCount = 0
@@ -216,8 +215,12 @@ public class Router:
                             allMatch = False
                     si = si + 1
                 if allMatch:
+                    pathSegStarts.free()
+                    pathSegEnds.free()
                     return new MatchResult( route.handlerAddr, True )
             ri = ri + 1
+        pathSegStarts.free()
+        pathSegEnds.free()
         return new MatchResult( 0, False )
 
     public function get( self, String pattern, Callable<Void, <HttpRequest, HttpResponse>> handler ) -> Router:
