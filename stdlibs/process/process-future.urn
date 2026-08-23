@@ -94,15 +94,19 @@ public class ProcessFutureBase:
             Space: O(1)
         """
         
-        self.resultBuffer = new Memory<I64>( 1 )
+        Memory<I64> discardedResultBuffer = new Memory<I64>( 1 )
+        self.resultBuffer = discardedResultBuffer
         asm volatile:
             x86-64 "movq $1, $0" : output( "=r" self.resultBuffer ) : input( "r" slotAddr ) : clobber()
             aarch64 "mov $0, $1" : output( "=r" self.resultBuffer ) : input( "r" slotAddr ) : clobber()
+        discardedResultBuffer.free()
         I64 excAddr = slotAddr + 8
-        self.exceptionSlot = new Memory<I64>( 1 )
+        Memory<I64> discardedExceptionBuffer = new Memory<I64>( 1 )
+        self.exceptionSlot = discardedExceptionBuffer
         asm volatile:
             x86-64 "movq $1, $0" : output( "=r" self.exceptionSlot ) : input( "r" excAddr ) : clobber()
             aarch64 "mov $0, $1" : output( "=r" self.exceptionSlot ) : input( "r" excAddr ) : clobber()
+        discardedExceptionBuffer.free()
         self.state = new AtomicI64( PFUTURE_PENDING )
         self.completionEvent = new Event()
         self.scheduler = scheduler
