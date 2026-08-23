@@ -557,6 +557,8 @@ public class NativeScheduler implements Scheduler:
         if self.epollFd >= 0:
             sysClose( self.epollFd )
             self.epollFd = -1
+        self.taskSlots.free()
+        self.mainRspBuf.free()
 
 export {
     MAX_TASKS,
