@@ -333,9 +333,11 @@ public class Subprocess:
         writeI32At( statusPtr, 0, 0 )
         SyscallResult syscallResult = syscall4( SYS_WAIT4, self.pid, statusPtr, 0, 0 )
         if syscallResult.isError():
+            statusMem.free()
             raise new SubprocessError( "wait4 failed", syscallResult.errorCode(), None )
         self.running = False
         I64 rawStatus = readI32At( statusPtr, 0 )
+        statusMem.free()
         I64 exitCode = ( rawStatus / 256 ) % 256
         return exitCode
 
