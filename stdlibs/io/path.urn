@@ -25,15 +25,17 @@ from uranite.io.stat import FileStat, lstatPath, statPath
 from uranite.io.syscall import {
     F_OK,
     memoryToPtr,
+    raiseFromErrno,
     readByteAt,
     stringLen,
     stringToPtr,
     sysAccess,
-    sysGetcwd,
-    sysReadlink,
     writeByteAt
 }
 from uranite.memory.memory import Memory
+from uranite.os.arch.native.syscall import SYS_GETCWD, scReadlink
+from uranite.os.syscall.invoke import syscall2
+from uranite.os.syscall.result import SyscallResult
 
 public function join( String basePath, String childPath ) -> String:
 
@@ -389,7 +391,11 @@ public function readlink( String path ) -> String:
     I64 allocationWords = ( readBufferSize + 8 ) / 8
     Memory<I64> readBuffer = new Memory<I64>( allocationWords )
     I64 readBufferAddress = memoryToPtr( readBuffer )
-    I64 bytesRead = sysReadlink( pathPointer, readBufferAddress, readBufferSize )
+    SyscallResult syscallResult = scReadlink( pathPointer, readBufferAddress, readBufferSize )
+    if syscallResult.isError():
+        readBuffer.free()
+        raiseFromErrno( syscallResult.errorCode(), "readlink failed" )
+    I64 bytesRead = syscallResult.value()
     writeByteAt( readBufferAddress, bytesRead, 0 )
     String result = ""
     asm volatile:
@@ -431,7 +437,10 @@ public function absolute( String path ) -> String:
     I64 cwdBufferWords = ( cwdBufferSize + 8 ) / 8
     Memory<I64> cwdBuffer = new Memory<I64>( cwdBufferWords )
     I64 cwdBufferAddress = memoryToPtr( cwdBuffer )
-    sysGetcwd( cwdBufferAddress, cwdBufferSize )
+    SyscallResult syscallResult = syscall2( SYS_GETCWD, cwdBufferAddress, cwdBufferSize )
+    if syscallResult.isError():
+        cwdBuffer.free()
+        raiseFromErrno( syscallResult.errorCode(), "getcwd failed" )
     String currentDirectory = ""
     asm volatile:
         x86-64 "movq $1, $0" : output( "=r" currentDirectory ) : input( "r" cwdBufferAddress ) : clobber()
