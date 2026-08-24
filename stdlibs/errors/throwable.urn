@@ -20,15 +20,29 @@
 
 package uranite.errors.throwable
 
-public interface Throwable:
+from uranite.memory.droper import Droper
+
+public interface Throwable extends Droper:
     
     """
     Root interface for all error and exception types in Uranite.
     
     Any type that can be used with the raise statement must implement this
     interface. It defines the common contract for accessing error metadata
-    including the error code, source location, message, and optional chained cause.
+    including the error code, source location, message, and optional chained
+    cause. Implementing types also inherit the Droper contract so that heap
+    resources captured alongside a raised throwable are released when the
+    owning reference leaves scope.
     """
+    
+    public function drop( self ) -> Void:
+        
+        """
+        Release all heap resources captured alongside this throwable, such as
+        the traceback recorded at raise time. Called automatically when the
+        owning reference leaves scope; calling it manually more than once
+        releases shared resources twice.
+        """
     
     public function getCode( self ) -> I64:
         
