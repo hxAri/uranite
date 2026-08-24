@@ -20,6 +20,7 @@
 
 package uranite.errors.error
 
+from uranite.errors.runtime import __uranite_release_traceback_of
 from uranite.errors.throwable import Throwable
 from uranite.errors.traceback.traceback import Traceback
 
@@ -82,6 +83,22 @@ public Readonly class Error implements Throwable:
     
     public function getTraceback( self ) -> ?Traceback:
         return self.traceback
+
+    public function drop( self ) -> Void:
+
+        """
+        Release the heap-allocated traceback captured when this error was
+        raised, freeing the frame buffer, every captured frame record, and the
+        traceback container. Called automatically when the owning reference
+        leaves scope; calling it manually more than once releases shared
+        memory twice.
+
+        Complexity:
+            Time: O(f) where f is the number of captured stack frames.
+            Space: O(1)
+        """
+
+        __uranite_release_traceback_of( addressof self )
 
     public function toString( self ) -> String:
         return self.message
