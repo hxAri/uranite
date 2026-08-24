@@ -913,6 +913,7 @@ namespace uranite::ir::mir {
 	void MIRCodegen::generateFunction( MIRFunctionDefinition& functionDefinition ) {
 		this->concreteClassMap.clear();
 		this->droperCleanupEntries.clear();
+		this->trySerialSlotMap.clear();
 		std::string llvmFunctionName = functionDefinition.functionName;
 		if( functionDefinition.ownerClassQualifiedName.empty() == false ) {
 			llvmFunctionName = functionDefinition.ownerClassQualifiedName + "." + functionDefinition.functionName;
@@ -1216,6 +1217,7 @@ namespace uranite::ir::mir {
 		for( llvm::BasicBlock& llvmBlock : *llvmFunction ) {
 			if( llvmBlock.getTerminator() == nullptr ) {
 				this->irBuilder.SetInsertPoint( &llvmBlock );
+				this->emitDroperScopeCleanup( INVALID_VARIABLE_IDENTIFIER );
 				this->emitPopFrame();
 				if( functionReturnType->isVoidTy() ) {
 					this->irBuilder.CreateRetVoid();
@@ -1473,6 +1475,14 @@ namespace uranite::ir::mir {
 				llvm::StructType* landingPadType = llvm::StructType::get( this->llvmContext, { ptrType, i32Type } );
 				llvm::LandingPadInst* landingPad = this->irBuilder.CreateLandingPad( landingPadType, 1, "lp" );
 				landingPad->addClause( llvm::Constant::getNullValue( ptrType ) );
+				llvm::BasicBlock* padBlock = this->irBuilder.GetInsertBlock();
+				if( this->trySerialSlotMap.count( padBlock ) > 0 ) {
+					llvm::Value* savedSerial = this->irBuilder.CreateLoad(
+						llvm::Type::getInt64Ty( this->llvmContext ),
+						this->trySerialSlotMap[padBlock]
+					);
+					this->irBuilder.CreateCall( this->getOrCreateRestoreFrames(), { savedSerial } );
+				}
 				llvm::Value* exceptionPtr = this->irBuilder.CreateExtractValue( landingPad, 0, "exc.ptr" );
 				llvm::Value* caughtObject = this->irBuilder.CreateCall( this->getOrCreateBeginCatch(), { exceptionPtr }, "caught" );
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
@@ -7288,10 +7298,18 @@ namespace uranite::ir::mir {
 		llvm::IRBuilder<> initBuilder( aliveFlag->getParent(), std::next( llvm::BasicBlock::iterator( aliveFlag ) ) );
 		initBuilder.CreateStore( llvm::ConstantInt::getFalse( this->llvmContext ), aliveFlag );
 		this->irBuilder.CreateStore( llvm::ConstantInt::getTrue( this->llvmContext ), aliveFlag );
+		llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+		std::string slotName = fmt::format( "droper.ptr.{}", variableId );
+		llvm::AllocaInst* pointerSlot = this->createEntryBlockAllocation( currentFunc, slotName, ptrType );
+		initBuilder.CreateStore( llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) ), pointerSlot );
+		if( llvm::Value* currentValue = this->getVariableValue( variableId ) ) {
+			this->irBuilder.CreateStore( currentValue, pointerSlot );
+		}
 		DroperCleanupEntry entry;
 		entry.variableIdentifier = variableId;
 		entry.qualifiedTypeName = typeName;
 		entry.aliveFlag = aliveFlag;
+		entry.pointerSlot = pointerSlot;
 		this->droperCleanupEntries.push_back( entry );
 	}
 
@@ -7324,7 +7342,9 @@ namespace uranite::ir::mir {
 			);
 			this->irBuilder.CreateCondBr( isAlive, dropBlock, skipBlock );
 			this->irBuilder.SetInsertPoint( dropBlock );
-			llvm::Value* pointer = this->loadVariableValue( entry.variableIdentifier );
+			llvm::Value* pointer = this->irBuilder.CreateLoad(
+				llvm::PointerType::getUnqual( this->llvmContext ), entry.pointerSlot, "droper.ptr.load"
+			);
 			if( pointer != nullptr ) {
 				std::string cleanTypeName = entry.qualifiedTypeName;
 				size_t genericPos = cleanTypeName.find( '<' );
@@ -7340,6 +7360,23 @@ namespace uranite::ir::mir {
 				}
 				else {
 					dropFunc = this->llvmModule->getFunction( dropFuncName );
+				}
+				if( dropFunc == nullptr ) {
+					semantic::TypeSharedPointer dropSearchType = this->semanticAnalyzer.types().lookupType( cleanTypeName );
+					while( dropFunc == nullptr && dropSearchType != nullptr && dropSearchType->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassTypeSharedPointer dropSearchClass =
+							std::static_pointer_cast<semantic::ClassType>( dropSearchType );
+						std::string ancestorDropName = dropSearchClass->qualified + "." +
+							semantic::qualname::interfaces::droper::methods::Drop;
+						std::unordered_map<std::string, llvm::Function*>::iterator ancestorIter =
+							this->functionResolutionMap.find( ancestorDropName );
+						if( ancestorIter != this->functionResolutionMap.end() ) {
+							dropFunc = ancestorIter->second;
+							break;
+						}
+						dropFunc = this->llvmModule->getFunction( ancestorDropName );
+						dropSearchType = dropSearchClass->baseClass;
+					}
 				}
 				if( dropFunc != nullptr && dropFunc->arg_size() > 0 ) {
 					llvm::Value* selfArg = pointer;
@@ -8025,6 +8062,11 @@ namespace uranite::ir::mir {
 		if( variableIdentifier != INVALID_VARIABLE_IDENTIFIER && value != nullptr ) {
 			this->variableValueMap[variableIdentifier] = value;
 		}
+		for( DroperCleanupEntry& cleanupEntry : this->droperCleanupEntries ) {
+			if( cleanupEntry.variableIdentifier == variableIdentifier && cleanupEntry.pointerSlot != nullptr && value != nullptr ) {
+				this->irBuilder.CreateStore( value, cleanupEntry.pointerSlot );
+			}
+		}
 	}
 	
 	llvm::AllocaInst* MIRCodegen::createEntryBlockAllocation(
@@ -8486,6 +8528,24 @@ namespace uranite::ir::mir {
 		}
 		return function;
 	}
+
+	llvm::Function* MIRCodegen::getOrCreateRestoreFrames() {
+		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+		return this->getOrCreateExtern( "__uranite_restore_frames_to", llvm::Type::getVoidTy( this->llvmContext ), { i64Type } );
+	}
+
+	llvm::AllocaInst* MIRCodegen::getOrCreateTrySerialSlot( llvm::Function* enclosingFunction, llvm::BasicBlock* unwindDestination ) {
+		std::unordered_map<llvm::BasicBlock*, llvm::AllocaInst*>::iterator slotIterator = this->trySerialSlotMap.find( unwindDestination );
+		if( slotIterator != this->trySerialSlotMap.end() ) {
+			return slotIterator->second;
+		}
+		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+		llvm::BasicBlock& entryBlock = enclosingFunction->getEntryBlock();
+		llvm::IRBuilder<> entryBuilder( &entryBlock, entryBlock.begin() );
+		llvm::AllocaInst* slot = entryBuilder.CreateAlloca( i64Type, nullptr, "try.serial.slot" );
+		this->trySerialSlotMap[unwindDestination] = slot;
+		return slot;
+	}
 	
 	llvm::Function* MIRCodegen::getOrCreatePushFrame() {
 		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getPushFrameFunction( this->llvmContext );
@@ -8716,6 +8776,9 @@ namespace uranite::ir::mir {
 			}
 			llvm::BasicBlock* normalDest = this->blockMap[instruction.trueBranchTarget];
 			llvm::BasicBlock* unwindDest = this->blockMap[instruction.landingPadTarget];
+			llvm::Value* currentDepth = this->irBuilder.CreateCall( this->getOrCreateGetFrameDepth() );
+			llvm::AllocaInst* serialSlot = this->getOrCreateTrySerialSlot( enclosingFunction, unwindDest );
+			this->irBuilder.CreateStore( currentDepth, serialSlot );
 			llvm::InvokeInst* invokeResult = this->irBuilder.CreateInvoke( callee, normalDest, unwindDest, arguments );
 			this->irBuilder.SetInsertPoint( normalDest );
 			return invokeResult;
