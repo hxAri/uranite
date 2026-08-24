@@ -31,14 +31,14 @@ static UraniteStackFrame uranite_frame_stack[URANITE_MAX_STACK_FRAMES];
 static int uranite_frame_depth = 0;
 
 void __uranite_push_frame( const char* file, int64_t line, int64_t column, const char* function ) {
-    if( uranite_frame_depth < URANITE_MAX_STACK_FRAMES ) {
-        UraniteStackFrame* frame = &uranite_frame_stack[uranite_frame_depth];
-        frame->file = file;
-        frame->line = line;
-        frame->column = column;
-        frame->function = function;
-        uranite_frame_depth++;
-    }
+	if( uranite_frame_depth < URANITE_MAX_STACK_FRAMES ) {
+		UraniteStackFrame* frame = &uranite_frame_stack[uranite_frame_depth];
+		frame->file = file;
+		frame->line = line;
+		frame->column = column;
+		frame->function = function;
+		uranite_frame_depth++;
+	}
 }
 
 void __uranite_pop_frame( void ) {
@@ -48,14 +48,23 @@ void __uranite_pop_frame( void ) {
 }
 
 int64_t __uranite_get_frame_depth( void ) {
-    return (int64_t)uranite_frame_depth;
+	return (int64_t)uranite_frame_depth;
 }
 
 UraniteStackFrame* __uranite_get_frame_at( int64_t index ) {
-    if( index < 0 || index >= uranite_frame_depth ) {
-        return NULL;
-    }
-    return &uranite_frame_stack[index];
+	if( index < 0 || index >= uranite_frame_depth ) {
+		return NULL;
+	}
+	return &uranite_frame_stack[index];
+}
+
+void __uranite_restore_frames_to( int64_t targetDepth ) {
+	if( targetDepth < 0 ) {
+		targetDepth = 0;
+	}
+	if( uranite_frame_depth > targetDepth ) {
+		uranite_frame_depth = (int)targetDepth;
+	}
 }
 
 static void uranite_exception_cleanup( _Unwind_Reason_Code reason, struct _Unwind_Exception* exc ) {
@@ -193,12 +202,35 @@ void __uranite_throw( void* object, const char* typeName ) {
 }
 
 void* __uranite_begin_catch( void* unwind_exception_ptr ) {
-    UraniteException* exc = (UraniteException*)unwind_exception_ptr;
-    return exc->uraniteObject;
+	UraniteException* exc = (UraniteException*)unwind_exception_ptr;
+	return exc->uraniteObject;
 }
 
 void __uranite_end_catch( void* unwind_exception_ptr ) {
-    free( unwind_exception_ptr );
+	free( unwind_exception_ptr );
+}
+
+typedef struct UraniteTracebackLayout {
+	void* itable;
+	void* frames;
+	int64_t size;
+} UraniteTracebackLayout;
+
+void __uranite_release_traceback_of( int64_t throwableObjectAddress ) {
+	if( throwableObjectAddress == 0 ) {
+		return;
+	}
+	UraniteThrowableLayout* throwable = (UraniteThrowableLayout*)(uintptr_t)throwableObjectAddress;
+	UraniteTracebackLayout* traceback = (UraniteTracebackLayout*)throwable->traceback;
+	if( traceback == NULL ) {
+		return;
+	}
+	void** frames = (void**)traceback->frames;
+	for( int64_t frameIndex = 0; frameIndex < traceback->size; frameIndex++ ) {
+		free( frames[frameIndex] );
+	}
+	free( frames );
+	free( traceback );
 }
 
 static uintptr_t read_uleb128( const uint8_t** p ) {
@@ -238,10 +270,10 @@ _Unwind_Reason_Code __uranite_personality_v0(
         return _URC_FATAL_PHASE1_ERROR;
     }
 
-    const uint8_t* lsda = (const uint8_t*)_Unwind_GetLanguageSpecificData( context );
-    if( !lsda ) {
-        return _URC_CONTINUE_UNWIND;
-    }
+	const uint8_t* lsda = (const uint8_t*)_Unwind_GetLanguageSpecificData( context );
+	if( !lsda ) {
+		return _URC_CONTINUE_UNWIND;
+	}
 
     uintptr_t ip = _Unwind_GetIP( context ) - 1;
     uintptr_t funcStart = _Unwind_GetRegionStart( context );
@@ -287,25 +319,25 @@ _Unwind_Reason_Code __uranite_personality_v0(
                 return _URC_CONTINUE_UNWIND;
             }
 
-            if( actions & _UA_CLEANUP_PHASE ) {
-                uintptr_t selector = 0;
-                if( actions & _UA_HANDLER_FRAME ) {
-                    selector = ( csAction > 0 ) ? 1 : 0;
-                }
-                else {
-                    if( csAction > 0 ) {
-                        return _URC_CONTINUE_UNWIND;
-                    }
-                    selector = 0;
-                }
+			if( actions & _UA_CLEANUP_PHASE ) {
+				uintptr_t selector = 0;
+				if( actions & _UA_HANDLER_FRAME ) {
+					selector = ( csAction > 0 ) ? 1 : 0;
+				}
+				else {
+					if( csAction > 0 ) {
+						return _URC_CONTINUE_UNWIND;
+					}
+					selector = 0;
+				}
 
-                _Unwind_SetGR( context, __builtin_eh_return_data_regno( 0 ), (uintptr_t)exceptionObject );
-                _Unwind_SetGR( context, __builtin_eh_return_data_regno( 1 ), selector );
-                _Unwind_SetIP( context, landingPadAddr );
-                return _URC_INSTALL_CONTEXT;
-            }
-        }
-    }
+				_Unwind_SetGR( context, __builtin_eh_return_data_regno( 0 ), (uintptr_t)exceptionObject );
+				_Unwind_SetGR( context, __builtin_eh_return_data_regno( 1 ), selector );
+				_Unwind_SetIP( context, landingPadAddr );
+				return _URC_INSTALL_CONTEXT;
+			}
+		}
+	}
 
-    return _URC_CONTINUE_UNWIND;
+	return _URC_CONTINUE_UNWIND;
 }
