@@ -2076,12 +2076,30 @@ namespace uranite::semantic {
 		for( ast::nodes::DeclarationSharedPointer& nestedDeclaration : declaration.nestedDeclarations ) {
 			this->analyzeDeclaration( nestedDeclaration );
 		}
+		bool inheritsDroper = false;
+		std::function<void( const TypeSharedPointer& )> visitInterfacesForDroper = [&]( const TypeSharedPointer& currentType ) {
+			if( currentType == nullptr || inheritsDroper || currentType->kind != Type::Kind::Interface ) {
+				return;
+			}
+			InterfaceTypeSharedPointer currentInterface = std::static_pointer_cast<InterfaceType>( currentType );
+			if( currentInterface->qualified == qualname::Droper || currentInterface->name == qualname::interfaces::droper::Name ) {
+				inheritsDroper = true;
+				return;
+			}
+			for( const TypeSharedPointer& parentType : currentInterface->parentInterfaces ) {
+				visitInterfacesForDroper( parentType );
+			}
+		};
 		for( TypeSharedPointer& interfaceType : classType->interfaces ) {
 			this->validateInterfaceImplementation( classType, interfaceType, declaration.source );
-			if( interfaceType->qualified == qualname::Droper || interfaceType->name == qualname::interfaces::droper::Name ) {
-				classType->implementsDroper = true;
-			}
+			visitInterfacesForDroper( interfaceType );
 		}
+		ClassTypeSharedPointer droperAncestorType = std::static_pointer_cast<ClassType>( classType->baseClass );
+		while( droperAncestorType != nullptr && inheritsDroper == false ) {
+			inheritsDroper = droperAncestorType->implementsDroper;
+			droperAncestorType = std::static_pointer_cast<ClassType>( droperAncestorType->baseClass );
+		}
+		classType->implementsDroper = inheritsDroper;
 		this->popScope();
 		for( const std::pair<std::string, TypeSharedPointer>& saved : savedClassGenericTypesForRestore ) {
 			if( saved.second != nullptr ) {
