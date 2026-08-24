@@ -136,6 +136,8 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreateGetFrameDepth();
 		llvm::Function* getOrCreateGetFrameAt();
 		llvm::Function* getOrCreateBuildTraceback();
+		llvm::Function* getOrCreateRestoreFrames();
+		llvm::AllocaInst* getOrCreateTrySerialSlot( llvm::Function* enclosingFunction, llvm::BasicBlock* unwindDestination );
 		void emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName );
 		void emitPopFrame();
 		
@@ -151,6 +153,7 @@ namespace uranite::ir::mir {
 		// Per-function mappings
 		std::unordered_map<MIRVariableIdentifier, llvm::Value*> variableValueMap;
 		std::unordered_map<MIRBlockIdentifier, llvm::BasicBlock*> blockMap;
+		std::unordered_map<llvm::BasicBlock*, llvm::AllocaInst*> trySerialSlotMap;
 		
 		// Struct type cache
 		std::unordered_map<std::string, llvm::StructType*> structTypeCache;
@@ -223,6 +226,7 @@ namespace uranite::ir::mir {
 			MIRVariableIdentifier variableIdentifier;
 			std::string qualifiedTypeName;
 			llvm::AllocaInst* aliveFlag = nullptr;
+			llvm::AllocaInst* pointerSlot = nullptr;
 		};
 
 		std::vector<DroperCleanupEntry> droperCleanupEntries;
