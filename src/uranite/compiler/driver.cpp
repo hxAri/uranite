@@ -1076,6 +1076,13 @@ namespace uranite::compiler {
 				if( std::filesystem::exists( objectModulePath ) ) {
 					this->loadModule( objectModulePath.string(), *programRoot );
 				}
+				std::filesystem::path tupleModulePath = std::filesystem::path( modulesDir ) / "collection" / "tuple.urn";
+				if( std::filesystem::exists( tupleModulePath ) ) {
+					this->loadModule( tupleModulePath.string(), *programRoot );
+					if( this->options.verbose ) {
+						spdlog::info( "auto-imported tuple module" );
+					}
+				}
 				if( needsArgsModule ) {
 					std::filesystem::path argsModulePath = std::filesystem::path( modulesDir ) / "collection" / "args.urn";
 					if( std::filesystem::exists( argsModulePath ) ) {
