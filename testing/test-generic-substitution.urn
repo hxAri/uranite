@@ -1,0 +1,30 @@
+package testing
+
+from uranite.collection.array-list import ArrayList
+from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
+
+public function main() -> I32:
+    putsln( "Generic Substitution Tests" )
+    ArrayList<String> words = ["alpha", "beta", "gamma"]
+    ArrayList<Pair<Int, String>> indexed = words.enumerate()
+    assertEqualI64( 3, indexed.count, "enumerate count" )
+    Pair<Int, String> firstEntry = indexed.get( 0 )
+    assertEqualI64( 0, firstEntry.key, "enumerate first index" )
+    assertEqualStr( "alpha", firstEntry.value, "enumerate first element" )
+    Pair<Int, String> lastEntry = indexed.get( 2 )
+    assertEqualStr( "gamma", lastEntry.value, "enumerate last element" )
+    putsln( "enumerate OK" )
+    String head = words.get( 0 )
+    assertEqualStr( "alpha", head, "get returns substituted element type" )
+    ArrayList<Int> numbers = [7, 8, 9]
+    Int numberHead = numbers.get( 1 )
+    assertEqualI64( 8, numberHead, "get on Int list" )
+    ArrayList<Pair<Int, Int>> numbered = numbers.enumerate()
+    assertEqualI64( 3, numbered.count, "Int enumerate count" )
+    Pair<Int, Int> numberEntry = numbered.get( 1 )
+    assertEqualI64( 1, numberEntry.key, "Int enumerate index" )
+    assertEqualI64( 8, numberEntry.value, "Int enumerate element" )
+    putsln( "nested substitution OK" )
+    putsln( "All generic substitution tests passed" )
+    return 0
