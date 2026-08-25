@@ -1,0 +1,30 @@
+#
+# @author hxAri (hxari)
+# @create 2026-08-24 00:00
+# @github https://github.com/uranite-lang/uranite
+#
+# Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
+# Uranite Licence under GNU General Public Licence v3
+#
+# Declares extern bindings to the Uranite C exception runtime for
+# releasing heap memory captured alongside raised throwables.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+package uranite.errors.runtime
+
+
+
+extern function __uranite_release_traceback_of( I64 throwableObjectAddress ) -> Void;
+""" Release the heap-allocated traceback attached to the throwable stored at the given object address, freeing the frame buffer, every captured frame record, and the traceback container itself. Has no effect when the throwable carries no traceback or when the address is zero. """
+
+export {
+    __uranite_release_traceback_of
+}
