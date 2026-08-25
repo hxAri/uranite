@@ -2816,6 +2816,31 @@ namespace uranite::ir::mir {
 	}
 	
 	void MIRCodegen::generateCallFunction( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition ) {
+		{
+			std::string dispatchedMethodName = instruction.calledFunctionQualifiedName;
+			size_t lastDotForDispatch = dispatchedMethodName.rfind( '.' );
+			if( lastDotForDispatch != std::string::npos ) {
+				dispatchedMethodName = dispatchedMethodName.substr( lastDotForDispatch + 1 );
+			}
+			if( dispatchedMethodName == semantic::qualname::interfaces::iterable::methods::Iterator && instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER &&
+				instruction.sourceOperands.empty() == false ) {
+				std::unordered_map<uranite::ir::mir::MIRVariableIdentifier,uranite::ir::mir::MIRVariableDescriptor>::iterator receiverDescriptorIter = functionDefinition.variableDescriptorTable.find( instruction.sourceOperands[0] );
+				if( receiverDescriptorIter != functionDefinition.variableDescriptorTable.end() &&
+					receiverDescriptorIter->second.variableType != nullptr ) {
+					semantic::TypeSharedPointer listElementType = this->extractIteratorElementType(
+						receiverDescriptorIter->second.variableType->qualified.empty()
+							? receiverDescriptorIter->second.variableType->name
+							: receiverDescriptorIter->second.variableType->qualified
+					);
+					if( listElementType != nullptr ) {
+						this->iteratorElementTypeByVar[instruction.destinationVariable] = listElementType;
+					}
+				}
+			}
+			if( this->tryEmitSyntheticArrayListIteration( instruction, functionDefinition, dispatchedMethodName ) ) {
+				return;
+			}
+		}
 		std::string calledName = instruction.calledFunctionQualifiedName;
 		std::string shortCalledName = calledName;
 		std::string bareMethodName = calledName;
@@ -7398,6 +7423,148 @@ namespace uranite::ir::mir {
 		}
 	}
 
+	semantic::TypeSharedPointer MIRCodegen::extractIteratorElementType( const std::string& genericTypeName ) {
+		size_t bracketStart = genericTypeName.find( '<' );
+		if( bracketStart == std::string::npos ) {
+			return nullptr;
+		}
+		size_t bracketEnd = genericTypeName.rfind( '>' );
+		if( bracketEnd == std::string::npos || bracketEnd < bracketStart ) {
+			return nullptr;
+		}
+		std::string elementToken = genericTypeName.substr( bracketStart + 1, bracketEnd - bracketStart - 1 );
+		size_t commaPosition = elementToken.find( ',' );
+		if( commaPosition != std::string::npos ) {
+			elementToken = elementToken.substr( 0, commaPosition );
+		}
+		std::string shortToken = elementToken;
+		size_t tokenDot = shortToken.rfind( '.' );
+		if( tokenDot != std::string::npos ) {
+			shortToken = shortToken.substr( tokenDot + 1 );
+		}
+		static const std::unordered_map<std::string, semantic::Type::Kind> primitiveKinds = {
+			{ "F64", semantic::Type::Kind::Float }, { "F32", semantic::Type::Kind::Float },
+			{ "I8", semantic::Type::Kind::Integer }, { "I16", semantic::Type::Kind::Integer },
+			{ "I32", semantic::Type::Kind::Integer },
+			{ "U8", semantic::Type::Kind::Integer }, { "U16", semantic::Type::Kind::Integer },
+			{ "U32", semantic::Type::Kind::Integer },
+			{ "Bool", semantic::Type::Kind::Bool }
+		};
+		auto kindIterator = primitiveKinds.find( shortToken );
+		if( kindIterator == primitiveKinds.end() ) {
+			return nullptr;
+		}
+		return std::make_shared<semantic::Type>( kindIterator->second, elementToken );
+	}
+
+	bool MIRCodegen::tryEmitSyntheticArrayListIteration( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition, const std::string& methodName ) {
+		if( instruction.sourceOperands.empty() || instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ) {
+			return false;
+		}
+		MIRVariableIdentifier receiverVariable = instruction.sourceOperands[0];
+		semantic::TypeSharedPointer elementType;
+		auto descriptorIterator = functionDefinition.variableDescriptorTable.find( receiverVariable );
+		if( descriptorIterator != functionDefinition.variableDescriptorTable.end() &&
+			descriptorIterator->second.variableType != nullptr &&
+			descriptorIterator->second.variableType->qualified.find( "Iterator<" ) != std::string::npos ) {
+			elementType = this->extractIteratorElementType(
+				descriptorIterator->second.variableType->qualified.empty()
+					? descriptorIterator->second.variableType->name
+					: descriptorIterator->second.variableType->qualified
+			);
+		}
+		if( elementType == nullptr ) {
+			auto trackedIterator = this->iteratorElementTypeByVar.find( receiverVariable );
+			if( trackedIterator != this->iteratorElementTypeByVar.end() ) {
+				elementType = trackedIterator->second;
+			}
+		}
+		if( elementType == nullptr ) {
+			return false;
+		}
+		bool isFloatElement = elementType->kind == semantic::Type::Kind::Float;
+		bool isSmallIntegerElement = elementType->kind == semantic::Type::Kind::Integer;
+		bool isBooleanElement = elementType->kind == semantic::Type::Kind::Bool;
+		if( isFloatElement == false && isSmallIntegerElement == false && isBooleanElement == false ) {
+			return false;
+		}
+		llvm::Value* selfPointer = this->loadVariableValue( receiverVariable );
+		if( selfPointer == nullptr || selfPointer->getType()->isPointerTy() == false ) {
+			return false;
+		}
+		llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+		llvm::StructType* iteratorStructType = llvm::StructType::get(
+			this->llvmContext, { ptrType, ptrType, i64Type }
+		);
+		std::string arrayListQualifiedName = semantic::qualname::classes::arraylist::Qualified;
+		if( methodName == "has" ) {
+			llvm::Value* sourcePointer = this->irBuilder.CreateLoad(
+				ptrType, this->irBuilder.CreateStructGEP( iteratorStructType, selfPointer, 1, "iter.src.ptr" ), "iter.src"
+			);
+			llvm::Value* positionValue = this->irBuilder.CreateLoad(
+				i64Type, this->irBuilder.CreateStructGEP( iteratorStructType, selfPointer, 2, "iter.pos" ), "iter.pos.val"
+			);
+			llvm::Function* lengthFunction = this->functionResolutionMap.count( arrayListQualifiedName + ".length" )
+				? this->functionResolutionMap[arrayListQualifiedName + ".length"] : this->llvmModule->getFunction( arrayListQualifiedName + ".length" );
+			if( lengthFunction == nullptr ) {
+				return false;
+			}
+			std::vector<llvm::Value*> hasArguments{ sourcePointer };
+			llvm::Value* lengthValue = this->emitCallOrInvoke(
+				instruction, lengthFunction, hasArguments
+			);
+			if( lengthValue == nullptr || lengthValue->getType()->isIntegerTy() == false ) {
+				return false;
+			}
+			if( lengthValue->getType() != i64Type ) {
+				lengthValue = this->irBuilder.CreateTrunc( lengthValue, i64Type, "len.trunc" );
+			}
+			llvm::Value* hasMore = this->irBuilder.CreateICmpSLT( positionValue, lengthValue, "iter.has" );
+			if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+				this->setVariableValue( instruction.destinationVariable, hasMore );
+			}
+			return true;
+		}
+		if( methodName == "next" ) {
+			llvm::Value* sourcePointer = this->irBuilder.CreateLoad(
+				ptrType, this->irBuilder.CreateStructGEP( iteratorStructType, selfPointer, 1, "iter.src.ptr" ), "iter.src"
+			);
+			llvm::Value* positionValue = this->irBuilder.CreateLoad(
+				i64Type, this->irBuilder.CreateStructGEP( iteratorStructType, selfPointer, 2, "iter.pos" ), "iter.pos.val"
+			);
+			llvm::Function* getFunction = this->functionResolutionMap.count( arrayListQualifiedName + ".get" )
+				? this->functionResolutionMap[arrayListQualifiedName + ".get"] : this->llvmModule->getFunction( arrayListQualifiedName + ".get" );
+			if( getFunction == nullptr ) {
+				return false;
+			}
+			MIRInstruction getInstruction( MIRInstructionKind::CallFunction );
+			getInstruction.operandType = elementType;
+			getInstruction.destinationVariable = INVALID_VARIABLE_IDENTIFIER;
+			std::vector<llvm::Value*> nextArguments{ sourcePointer, positionValue };
+			llvm::Value* rawElement = this->emitCallOrInvoke( getInstruction, getFunction, nextArguments );
+			if( rawElement == nullptr ) {
+				return false;
+			}
+			llvm::Type* expectedElementType = this->toLLVMType( elementType );
+			llvm::AllocaInst* punSlot = this->irBuilder.CreateAlloca(
+				llvm::Type::getInt8Ty( this->llvmContext ),
+				llvm::ConstantInt::get( i64Type, 8 ), "iter.pun.slot"
+			);
+			this->irBuilder.CreateStore( rawElement, punSlot );
+			llvm::Value* typedElement = this->irBuilder.CreateLoad( expectedElementType, punSlot, "iter.elem.typed" );
+			this->irBuilder.CreateStore(
+				this->irBuilder.CreateAdd( positionValue, llvm::ConstantInt::get( i64Type, 1 ), "iter.pos.next" ),
+				this->irBuilder.CreateStructGEP( iteratorStructType, selfPointer, 2, "iter.pos.slot" )
+			);
+			if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+				this->setVariableValue( instruction.destinationVariable, typedElement );
+			}
+			return true;
+		}
+		return false;
+	}
+
 	void MIRCodegen::generatePhiNode( const MIRInstruction& instruction ) {
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ||
 			instruction.phiIncomingValues.empty() ) {
@@ -8529,6 +8696,7 @@ namespace uranite::ir::mir {
 		return function;
 	}
 
+
 	llvm::Function* MIRCodegen::getOrCreateRestoreFrames() {
 		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
 		return this->getOrCreateExtern( "__uranite_restore_frames_to", llvm::Type::getVoidTy( this->llvmContext ), { i64Type } );
@@ -8776,9 +8944,9 @@ namespace uranite::ir::mir {
 			}
 			llvm::BasicBlock* normalDest = this->blockMap[instruction.trueBranchTarget];
 			llvm::BasicBlock* unwindDest = this->blockMap[instruction.landingPadTarget];
-			llvm::Value* currentDepth = this->irBuilder.CreateCall( this->getOrCreateGetFrameDepth() );
+			llvm::Value* currentSerial = this->irBuilder.CreateCall( this->getOrCreateGetFrameDepth() );
 			llvm::AllocaInst* serialSlot = this->getOrCreateTrySerialSlot( enclosingFunction, unwindDest );
-			this->irBuilder.CreateStore( currentDepth, serialSlot );
+			this->irBuilder.CreateStore( currentSerial, serialSlot );
 			llvm::InvokeInst* invokeResult = this->irBuilder.CreateInvoke( callee, normalDest, unwindDest, arguments );
 			this->irBuilder.SetInsertPoint( normalDest );
 			return invokeResult;
@@ -8797,7 +8965,30 @@ namespace uranite::ir::mir {
 			this->irBuilder.SetInsertPoint( contBlock );
 			return invokeResult;
 		}
-		return this->irBuilder.CreateCall( callee, arguments );
+		llvm::Value* directResult = this->irBuilder.CreateCall( callee, arguments );
+		return this->reinterpretErasedPrimitiveResult( instruction, directResult );
+	}
+
+	llvm::Value* MIRCodegen::reinterpretErasedPrimitiveResult( const MIRInstruction& instruction, llvm::Value* callResult ) {
+		if( callResult == nullptr || callResult->getType()->isPointerTy() == false ||
+			instruction.operandType == nullptr || instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ) {
+			return callResult;
+		}
+		llvm::Type* expectedType = this->toLLVMType( instruction.operandType );
+		bool isFloatResult = expectedType->isFloatTy() || expectedType->isDoubleTy();
+		bool isSmallIntegerResult = expectedType->isIntegerTy() && expectedType->getIntegerBitWidth() != 64;
+		bool isBooleanResult = expectedType->isIntegerTy( 1 );
+		if( isFloatResult == false && isSmallIntegerResult == false && isBooleanResult == false ) {
+			return callResult;
+		}
+		llvm::Function* enclosingFunction = this->irBuilder.GetInsertBlock()->getParent();
+		llvm::Value* byteSlot = this->irBuilder.CreateAlloca(
+			llvm::Type::getInt8Ty( this->llvmContext ),
+			llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 8 ),
+			"erased.pun.slot"
+		);
+		this->irBuilder.CreateStore( callResult, byteSlot );
+		return this->irBuilder.CreateLoad( expectedType, byteSlot, "erased.pun.load" );
 	}
 	
 	llvm::Function* MIRCodegen::getOrCreateExtern( const std::string& name, llvm::Type* returnType, std::vector<llvm::Type*> paramTypes ) {
