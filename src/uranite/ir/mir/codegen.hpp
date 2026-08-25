@@ -85,6 +85,7 @@ namespace uranite::ir::mir {
 		void generateCastType( const MIRInstruction& instruction );
 		void generateCallFunction( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		llvm::Value* emitCallOrInvoke( const MIRInstruction& instruction, llvm::Function* callee, std::vector<llvm::Value*>& arguments );
+		llvm::Value* reinterpretErasedPrimitiveResult( const MIRInstruction& instruction, llvm::Value* callResult );
 		void generateReturnValue( const MIRInstruction& instruction );
 		void generateBranchConditional( const MIRInstruction& instruction );
 		void generateJumpUnconditional( const MIRInstruction& instruction );
@@ -137,7 +138,14 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreateGetFrameAt();
 		llvm::Function* getOrCreateBuildTraceback();
 		llvm::Function* getOrCreateRestoreFrames();
+		llvm::Function* getOrCreateGetPushSerial();
 		llvm::AllocaInst* getOrCreateTrySerialSlot( llvm::Function* enclosingFunction, llvm::BasicBlock* unwindDestination );
+		bool registerCaughtThrowableBinding( MIRVariableIdentifier variableId, llvm::Value* caughtPointer );
+		std::unordered_map<MIRVariableIdentifier, semantic::TypeSharedPointer> iteratorElementTypeByVar;
+		semantic::TypeSharedPointer extractIteratorElementType( const std::string& concreteClassName );
+		bool tryEmitSyntheticArrayListIteration( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition, const std::string& methodName );
+		int64_t resolveDroperItableSlot( const semantic::TypeSharedPointer& interfaceType );
+		llvm::GlobalVariable* getOrCreateDroperGlobal( const std::string& globalName, llvm::Type* type, llvm::Constant* initialValue );
 		void emitPushFrame( const std::string& file, int64_t line, int64_t column, const std::string& functionName );
 		void emitPopFrame();
 		
