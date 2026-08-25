@@ -1,0 +1,25 @@
+package testing
+
+from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
+
+public function main() -> I32:
+    putsln( "Tuple Literal Tests" )
+    Tuple<I64> point = (10, 20, 30)
+    assertEqualI64( 3, point.size(), "tuple size" )
+    assertEqualI64( 10, point.get( 0 ), "tuple get(0)" )
+    assertEqualI64( 20, point.get( 1 ), "tuple get(1)" )
+    assertEqualI64( 30, point.get( 2 ), "tuple get(2)" )
+    putsln( "integer tuple OK" )
+    point.set( 1, 25 )
+    assertEqualI64( 25, point.get( 1 ), "tuple set(1,25)" )
+    putsln( "tuple mutation OK" )
+    Tuple<String> labels = ("red", "green")
+    assertEqualI64( 2, labels.size(), "string tuple size" )
+    assertEqualStr( "red", labels.get( 0 ), "string tuple get(0)" )
+    assertEqualStr( "green", labels.get( 1 ), "string tuple get(1)" )
+    putsln( "string tuple OK" )
+    Tuple<I64> single = (42)
+    assertEqualI64( 42, single.get( 0 ), "single-element tuple" )
+    putsln( "All tuple literal tests passed" )
+    return 0
