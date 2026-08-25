@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-#
+# 
 # @author hxAri (hxari)
 # @create 2026-06-17 19:34
 # @update 2026-06-17 20:03
 # @github https://github.com/uranite-lang/uranite
-#
+# 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
@@ -13,10 +13,10 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # any later version.
-#
+# 
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-#
+# 
 
 # Subshell status code
 # Just for container last subshell exit code.
