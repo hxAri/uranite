@@ -1,0 +1,37 @@
+package testing
+
+from uranite.collection.array-list import ArrayList
+from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
+
+public function main() -> I32:
+    putsln( "List Comprehension Tests" )
+    ArrayList<I64> rangeDoubled = [value * 2 for I64 value in 0..5]
+    assertEqualI64( 5, rangeDoubled.count, "range comprehension count" )
+    assertEqualI64( 0, rangeDoubled.get( 0 ), "range comprehension first" )
+    assertEqualI64( 8, rangeDoubled.get( 4 ), "range comprehension last" )
+    putsln( "range source OK" )
+    ArrayList<I64> source = [1, 2, 3, 4, 5]
+    ArrayList<I64> doubled = [value * 2 for I64 value in source]
+    assertEqualI64( 5, doubled.count, "arraylist comprehension count" )
+    assertEqualI64( 2, doubled.get( 0 ), "comprehension element 0" )
+    assertEqualI64( 10, doubled.get( 4 ), "comprehension element 4" )
+    putsln( "arraylist source OK" )
+    ArrayList<I64> evens = [value for I64 value in source if value % 2 == 0]
+    assertEqualI64( 2, evens.count, "filtered comprehension count" )
+    assertEqualI64( 2, evens.get( 0 ), "filtered comprehension first" )
+    assertEqualI64( 4, evens.get( 1 ), "filtered comprehension second" )
+    putsln( "filtered source OK" )
+    ArrayList<I64> fromLiteral = [value + 1 for I64 value in [10, 20]]
+    assertEqualI64( 2, fromLiteral.count, "literal source count" )
+    assertEqualI64( 11, fromLiteral.get( 0 ), "literal source element 0" )
+    assertEqualI64( 21, fromLiteral.get( 1 ), "literal source element 1" )
+    putsln( "literal source OK" )
+    ArrayList<String> words = ["sun", "moon"]
+    ArrayList<String> repeated = [word for String word in words]
+    assertEqualI64( 2, repeated.count, "string comprehension count" )
+    assertEqualStr( "sun", repeated.get( 0 ), "string comprehension element 0" )
+    assertEqualStr( "moon", repeated.get( 1 ), "string comprehension element 1" )
+    putsln( "string source OK" )
+    putsln( "All list comprehension tests passed" )
+    return 0
