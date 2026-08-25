@@ -3598,6 +3598,7 @@ namespace uranite::ir::mir {
 		bool useInvoke = ( this->activeLandingPad != INVALID_BLOCK_IDENTIFIER );
 		MIRInstruction callInstruction( useInvoke ? MIRInstructionKind::InvokeFunction : MIRInstructionKind::CallFunction );
 		std::string ownerClassName;
+		semantic::TypeSharedPointer callResultType = hirMethodCall.resolvedType;
 		if( hirMethodCall.receiverObject != nullptr &&
 			hirMethodCall.receiverObject->resolvedType != nullptr ) {
 			semantic::TypeSharedPointer receiverType = hirMethodCall.receiverObject->resolvedType;
@@ -3620,6 +3621,32 @@ namespace uranite::ir::mir {
 						size_t noneGenericPos = ownerClassName.find( '<' );
 						if( noneGenericPos != std::string::npos ) {
 							ownerClassName = ownerClassName.substr( 0, noneGenericPos );
+						}
+					}
+				}
+			}
+			if( receiverType->kind == semantic::Type::Kind::Interface ) {
+				semantic::InterfaceType* receiverInterface = static_cast<semantic::InterfaceType*>( receiverType.get() );
+				std::string interfaceQualifiedName = receiverInterface->qualified.empty()
+					? receiverInterface->name : receiverInterface->qualified;
+				size_t interfaceGenericPosition = interfaceQualifiedName.find( '<' );
+				if( interfaceGenericPosition != std::string::npos ) {
+					interfaceQualifiedName = interfaceQualifiedName.substr( 0, interfaceGenericPosition );
+				}
+				if( interfaceQualifiedName.empty() == false ) {
+					ownerClassName = interfaceQualifiedName;
+				}
+				if( callResultType != nullptr && callResultType->kind == semantic::Type::Kind::GenericParameter ) {
+					for( size_t parameterIndex = 0; parameterIndex < receiverInterface->genericParameters.size(); parameterIndex++ ) {
+						const semantic::TypeSharedPointer& parameterType = receiverInterface->genericParameters[parameterIndex];
+						if( parameterType != nullptr && parameterType->name == callResultType->name ) {
+							std::unordered_map<std::string, semantic::TypeSharedPointer>::const_iterator substitutionIterator =
+								receiverInterface->typeSubstitutions.find( parameterType->name );
+							if( substitutionIterator != receiverInterface->typeSubstitutions.end() &&
+								substitutionIterator->second != nullptr ) {
+								callResultType = substitutionIterator->second;
+							}
+							break;
 						}
 					}
 				}
@@ -3772,7 +3799,7 @@ namespace uranite::ir::mir {
 			}
 		}
 		callInstruction.sourceOperands = std::move( argumentVariables );
-		callInstruction.operandType = hirMethodCall.resolvedType;
+		callInstruction.operandType = callResultType;
 		callInstruction.sourceLocation = hirMethodCall.sourceLocation;
 		for( const std::pair<std::string, hir::HIRNodeSharedPointer>& keywordArgument : hirMethodCall.keywordArguments ) {
 			callInstruction.keywordArgumentKeys.push_back( keywordArgument.first );
@@ -3780,7 +3807,7 @@ namespace uranite::ir::mir {
 			callInstruction.keywordArgumentValues.push_back( valueVariable );
 		}
 		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
-			"_mcall", hirMethodCall.resolvedType, false
+			"_mcall", callResultType, false
 		);
 		callInstruction.destinationVariable = resultVariable;
 		if( useInvoke ) {
