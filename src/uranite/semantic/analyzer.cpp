@@ -23,6 +23,8 @@
 #include "uranite/semantic/analyzer.hpp"
 
 namespace uranite::semantic {
+
+	bool substitutionMapIsSelfReferential( const std::unordered_map<std::string, TypeSharedPointer>& substitutionMap );
 	
 	/**
 	 * @brief Recursively checks if an expression or any of its sub-expressions contain a yield.
@@ -3724,7 +3726,7 @@ namespace uranite::semantic {
 							continue;
 						}
 						TypeSharedPointer paramType = candidateFunction->parameterTypes[paramIndex];
-						if( classType->typeSubstitutions.empty() == false ) {
+						if( classType->typeSubstitutions.empty() == false && substitutionMapIsSelfReferential( classType->typeSubstitutions ) == false ) {
 							paramType = this->substituteGenericParameters( paramType, classType->typeSubstitutions );
 						}
 						if( paramType->toString() == argumentType->toString() ) {
@@ -3796,10 +3798,12 @@ namespace uranite::semantic {
 					}
 				}
 				std::unordered_map<std::string, TypeSharedPointer> fullSubstitutionMap = genericSubstitutionMap;
-				for( std::unordered_map<std::string, TypeSharedPointer>::const_iterator classSubIterator = classType->typeSubstitutions.begin();
-					 classSubIterator != classType->typeSubstitutions.end(); ++classSubIterator ) {
-					if( fullSubstitutionMap.find( classSubIterator->first ) == fullSubstitutionMap.end() ) {
-						fullSubstitutionMap[classSubIterator->first] = classSubIterator->second;
+				if( classType->typeSubstitutions.empty() == false && substitutionMapIsSelfReferential( classType->typeSubstitutions ) == false ) {
+					for( std::unordered_map<std::string, TypeSharedPointer>::const_iterator classSubIterator = classType->typeSubstitutions.begin();
+						 classSubIterator != classType->typeSubstitutions.end(); ++classSubIterator ) {
+						if( fullSubstitutionMap.find( classSubIterator->first ) == fullSubstitutionMap.end() ) {
+							fullSubstitutionMap[classSubIterator->first] = classSubIterator->second;
+						}
 					}
 				}
 				size_t methodFixedParamCount;
@@ -5133,7 +5137,31 @@ namespace uranite::semantic {
 			}
 		}
 	}
-	
+
+	bool substitutionMapIsSelfReferential( const std::unordered_map<std::string, TypeSharedPointer>& substitutionMap ) {
+		for( const std::pair<const std::string, TypeSharedPointer>& entry : substitutionMap ) {
+			if( entry.second == nullptr ) {
+				continue;
+			}
+			const std::string valueText = entry.second->toString();
+			std::string token;
+			for( size_t index = 0; index <= valueText.size(); ++index ) {
+				char character = index < valueText.size() ? valueText[index] : '\0';
+				bool tokenCharacter = std::isalnum( static_cast<unsigned char>( character ) ) != 0 || character == '_';
+				if( tokenCharacter ) {
+					token.push_back( character );
+				}
+				else {
+					if( token.empty() == false && substitutionMap.find( token ) != substitutionMap.end() ) {
+						return true;
+					}
+					token.clear();
+				}
+			}
+		}
+		return false;
+	}
+
 	TypeSharedPointer Analyzer::resolveType( const ast::nodes::TypeNodeSharedPointer& typeNode ) {
 		if( typeNode == nullptr ) {
 			return nullptr;
@@ -5202,10 +5230,21 @@ namespace uranite::semantic {
 				}
 				TypeSharedPointer existingType = this->typeRegistry.lookupType( monomorphizedName );
 				if( existingType ) {
-					if( existingType->kind == Type::Kind::Interface ) {
-						this->populateInterfaceMethods( std::static_pointer_cast<InterfaceType>( existingType ) );
+					if( existingType->kind == Type::Kind::Class && baseType->kind == Type::Kind::Class ) {
+						ClassTypeSharedPointer existingClass = std::static_pointer_cast<ClassType>( existingType );
+						ClassTypeSharedPointer cachedBaseClass = std::static_pointer_cast<ClassType>( baseType );
+						bool interfacesIncomplete = existingClass->interfaces.size() < cachedBaseClass->interfaces.size();
+						bool methodsIncomplete = existingClass->methods.empty() && cachedBaseClass->methods.empty() == false;
+						if( interfacesIncomplete == false && methodsIncomplete == false ) {
+							return existingType;
+						}
 					}
-					return existingType;
+					else {
+						if( existingType->kind == Type::Kind::Interface ) {
+							this->populateInterfaceMethods( std::static_pointer_cast<InterfaceType>( existingType ) );
+						}
+						return existingType;
+					}
 				}
 				std::function<TypeSharedPointer(TypeSharedPointer,const std::unordered_map<std::string,TypeSharedPointer>&)> substituteType = [&]( TypeSharedPointer targetType, const std::unordered_map<std::string,TypeSharedPointer>& substitutionMap ) -> TypeSharedPointer {
 					if( targetType == nullptr ) {
@@ -5337,38 +5376,38 @@ namespace uranite::semantic {
 							}
 							newQualifiedMonoName+= ">";
 						}
-						TypeSharedPointer existingMono = this->typeRegistry.lookupType( newMonomorphizedName );
-						if( existingMono ) {
-							return existingMono;
-						}
-						if( targetType->kind == Type::Kind::Interface ) {
-							InterfaceTypeSharedPointer baseInterface = std::static_pointer_cast<InterfaceType>( baseTypeLookup );
-							InterfaceTypeSharedPointer monoInterface = std::make_shared<InterfaceType>( newMonomorphizedName );
-							monoInterface->package = baseInterface->package;
-							monoInterface->qualified = newQualifiedMonoName.empty() == false ? newQualifiedMonoName : newMonomorphizedName;
-							monoInterface->astDeclaration = baseInterface->astDeclaration;
-							std::unordered_map<std::string,TypeSharedPointer> newSubstMap;
-							for( size_t i = 0; i < baseGenericParameters.size(); ++i ) newSubstMap[baseGenericParameters[i]->name] = effectiveArguments[i];
-							monoInterface->typeSubstitutions = newSubstMap;
-							this->typeRegistry.registerType( newMonomorphizedName, monoInterface );
-							for( TypeSharedPointer& parentInterface : baseInterface->parentInterfaces ) {
-								monoInterface->parentInterfaces.push_back( substituteType( parentInterface, newSubstMap ) );
-							}
-							this->populateInterfaceMethods( baseInterface );
-							for( MethodInfo& methodInfo : baseInterface->methods ) {
-								MethodInfo substitutedMethod = methodInfo;
-								substitutedMethod.type = substituteType( methodInfo.type, newSubstMap );
-								monoInterface->methods.push_back( substitutedMethod );
-							}
-							monoInterface->methodOrder = baseInterface->methodOrder;
-							for( int methodIndex = 0; methodIndex < static_cast<int>( monoInterface->methods.size() ); methodIndex++ ) {
-								monoInterface->methods[methodIndex].interfaceTableIndex = methodIndex;
-							}
-							return monoInterface;
-						}
-					}
-					return targetType;
-				};
+ 						TypeSharedPointer existingMono = this->typeRegistry.lookupType( newMonomorphizedName );
+ 						if( existingMono ) {
+ 							return existingMono;
+ 						}
+ 						if( targetType->kind == Type::Kind::Interface ) {
+ 							InterfaceTypeSharedPointer baseInterface = std::static_pointer_cast<InterfaceType>( baseTypeLookup );
+ 							InterfaceTypeSharedPointer monoInterface = std::make_shared<InterfaceType>( newMonomorphizedName );
+ 							monoInterface->package = baseInterface->package;
+ 							monoInterface->qualified = newQualifiedMonoName.empty() == false ? newQualifiedMonoName : newMonomorphizedName;
+ 							monoInterface->astDeclaration = baseInterface->astDeclaration;
+ 							std::unordered_map<std::string,TypeSharedPointer> newSubstMap;
+ 							for( size_t i = 0; i < baseGenericParameters.size(); ++i ) newSubstMap[baseGenericParameters[i]->name] = effectiveArguments[i];
+ 							monoInterface->typeSubstitutions = newSubstMap;
+ 							this->typeRegistry.registerType( newMonomorphizedName, monoInterface );
+ 							for( TypeSharedPointer& parentInterface : baseInterface->parentInterfaces ) {
+ 								monoInterface->parentInterfaces.push_back( substituteType( parentInterface, newSubstMap ) );
+ 							}
+ 							this->populateInterfaceMethods( baseInterface );
+ 							for( MethodInfo& methodInfo : baseInterface->methods ) {
+ 								MethodInfo substitutedMethod = methodInfo;
+ 								substitutedMethod.type = substituteType( methodInfo.type, newSubstMap );
+ 								monoInterface->methods.push_back( substitutedMethod );
+ 							}
+ 							monoInterface->methodOrder = baseInterface->methodOrder;
+ 							for( int methodIndex = 0; methodIndex < static_cast<int>( monoInterface->methods.size() ); methodIndex++ ) {
+ 								monoInterface->methods[methodIndex].interfaceTableIndex = methodIndex;
+ 							}
+  							return monoInterface;
+  						}
+  					}
+  					return targetType;
+  				};
 				if( baseType->kind == Type::Kind::Class ) {
 					ClassTypeSharedPointer baseClass = std::static_pointer_cast<ClassType>( baseType );
 					std::unordered_map<std::string,TypeSharedPointer> substitutionMap;
@@ -5405,19 +5444,19 @@ namespace uranite::semantic {
 					monoClass->astDeclaration = baseClass->astDeclaration;
 					monoClass->baseClass = substituteType( baseClass->baseClass, substitutionMap );
 					for( TypeSharedPointer& iface : baseClass->interfaces ) monoClass->interfaces.push_back( substituteType( iface, substitutionMap ) );
-					monoClass->typeSubstitutions = substitutionMap;
-					for( FieldInfo& field : baseClass->fields ) {
-						FieldInfo substitutedField = field;
-						substitutedField.type = substituteType( substitutedField.type, substitutionMap );
-						monoClass->fields.push_back( substitutedField );
-					}
-					for( MethodInfo& method : baseClass->methods ) {
-						MethodInfo substitutedMethod = method;
-						substitutedMethod.type = substituteType( substitutedMethod.type, substitutionMap );
-						monoClass->methods.push_back( substitutedMethod );
-					}
-					this->typeRegistry.registerType( monomorphizedName, monoClass );
-					return monoClass;
+ 					monoClass->typeSubstitutions = substitutionMap;
+ 					this->typeRegistry.registerType( monomorphizedName, monoClass );
+ 					for( FieldInfo& field : baseClass->fields ) {
+ 						FieldInfo substitutedField = field;
+ 						substitutedField.type = substituteType( substitutedField.type, substitutionMap );
+ 						monoClass->fields.push_back( substitutedField );
+ 					}
+ 					for( MethodInfo& method : baseClass->methods ) {
+ 						MethodInfo substitutedMethod = method;
+ 						substitutedMethod.type = substituteType( substitutedMethod.type, substitutionMap );
+ 						monoClass->methods.push_back( substitutedMethod );
+ 					}
+ 					return monoClass;
 				}
 				if( baseType->kind == Type::Kind::Interface ) {
 					InterfaceTypeSharedPointer baseInterface = std::static_pointer_cast<InterfaceType>( baseType );
@@ -5788,19 +5827,53 @@ namespace uranite::semantic {
 				existingSubstitutions = structType->typeSubstitutions;
 				baseName = structType->astDeclaration != nullptr ? structType->astDeclaration->name : structType->name;
 			}
+			std::vector<TypeSharedPointer> substitutedArgsSource;
+			std::vector<TypeSharedPointer> substitutedArgs;
 			if( genericParams.empty() ) {
-				return type;
+				std::vector<ast::nodes::GenericParameterSharedPointer>* declarationParameters = nullptr;
+				if( type->kind == Type::Kind::Class ) {
+					ClassTypeSharedPointer classInstance = std::static_pointer_cast<ClassType>( type );
+					if( classInstance->astDeclaration != nullptr ) {
+						declarationParameters = &classInstance->astDeclaration->genericParameters;
+					}
+				}
+				else if( type->kind == Type::Kind::Interface ) {
+					InterfaceTypeSharedPointer interfaceInstance = std::static_pointer_cast<InterfaceType>( type );
+					if( interfaceInstance->astDeclaration != nullptr ) {
+						declarationParameters = &interfaceInstance->astDeclaration->genericParameters;
+					}
+				}
+				else {
+					StructTypeSharedPointer structInstance = std::static_pointer_cast<StructType>( type );
+					if( structInstance->astDeclaration != nullptr ) {
+						declarationParameters = &structInstance->astDeclaration->genericParameters;
+					}
+				}
+				if( declarationParameters == nullptr || existingSubstitutions.empty() ) {
+					return type;
+				}
+				for( const ast::nodes::GenericParameterSharedPointer& declaredParameter : *declarationParameters ) {
+					std::unordered_map<std::string, TypeSharedPointer>::const_iterator boundIt = existingSubstitutions.find( declaredParameter->name );
+					if( boundIt == existingSubstitutions.end() ) {
+						return type;
+					}
+					substitutedArgsSource.push_back( boundIt->second );
+				}
+			}
+			else {
+				for( TypeSharedPointer& genericParam : genericParams ) {
+					TypeSharedPointer current = genericParam;
+					std::unordered_map<std::string, TypeSharedPointer>::const_iterator existingIt = existingSubstitutions.find( genericParam->name );
+					if( existingIt != existingSubstitutions.end() ) {
+						current = existingIt->second;
+					}
+					substitutedArgsSource.push_back( current );
+				}
 			}
 			bool hasSubstitution = false;
-			std::vector<TypeSharedPointer> substitutedArgs;
-			for( TypeSharedPointer& genericParam : genericParams ) {
-				TypeSharedPointer current = genericParam;
-				std::unordered_map<std::string, TypeSharedPointer>::const_iterator existingIt = existingSubstitutions.find( genericParam->name );
-				if( existingIt != existingSubstitutions.end() ) {
-					current = existingIt->second;
-				}
+			for( TypeSharedPointer& current : substitutedArgsSource ) {
 				TypeSharedPointer substituted = this->substituteGenericParameters( current, substitutionMap );
-				if( substituted != current || current != genericParam ) {
+				if( substituted != current ) {
 					hasSubstitution = true;
 				}
 				substitutedArgs.push_back( substituted );
