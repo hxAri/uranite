@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-#
+# 
 # @author hxAri (hxari)
 # @create 2026-07-28 12:47
 # @update 2026-07-28 12:50
 # @github https://github.com/uranite-lang/uranite/scripts/uranite-debug.sh
-#
+# 
 # Uranite Copyright (c) 2025 - hxAri <hxari@proton.me>
 # Uranite Licence under GNU General Public Licence v3
 # 
@@ -13,10 +13,10 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # any later version.
-#
+# 
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-#
+# 
 
 # Current filename.
 __name__="$0"
