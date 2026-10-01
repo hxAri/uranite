@@ -1,7 +1,5 @@
 package uranite.ffi.symbol
 
-
-
 public class ForeignSymbol:
     """
     Handle to a resolved symbol from a dynamic library. Wraps the raw
