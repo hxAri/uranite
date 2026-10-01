@@ -69,7 +69,7 @@ namespace uranite::ir::mir {
 		// Instruction category generators
 		void generateAllocateLocal( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateLoadVariable( const MIRInstruction& instruction );
-		void generateStoreVariable( const MIRInstruction& instruction );
+		void generateStoreVariable( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateCopyValue( const MIRInstruction& instruction );
 		void generateMoveValue( const MIRInstruction& instruction );
 		void generateConstantInteger( const MIRInstruction& instruction );
@@ -97,6 +97,12 @@ namespace uranite::ir::mir {
 		void emitDropCallForVariable( MIRVariableIdentifier variableId, llvm::Value* pointer );
 		void emitDroperScopeCleanup( MIRVariableIdentifier excludeVariable );
 		void registerDroperCleanupEntry( MIRVariableIdentifier variableId, const std::string& typeName );
+ 		bool isOptionalBoxedInnerType( const semantic::TypeSharedPointer& innerType );
+ 		bool optionalInnerIsScalarKind( const semantic::TypeSharedPointer& innerType );
+ 		llvm::Type* optionalScalarLLVMType( const semantic::TypeSharedPointer& innerType );
+ 		llvm::Value* createOptionalBox( llvm::Value* rawValue );
+		llvm::Value* unwrapOptionalOperand( MIRVariableIdentifier operandId, MIRFunctionDefinition& functionDefinition );
+		void emitOwnedBoxRelease( MIRVariableIdentifier variableId, MIRFunctionDefinition& functionDefinition );
 		void generatePhiNode( const MIRInstruction& instruction );
 		void generateConstructObject( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateYield( const MIRInstruction& instruction );
@@ -238,6 +244,9 @@ namespace uranite::ir::mir {
 		};
 
 		std::vector<DroperCleanupEntry> droperCleanupEntries;
+
+		// Variables whose current value is a heap-boxed optional payload owned by this function
+		std::unordered_set<MIRVariableIdentifier> optionalOwnedBoxes;
 
 	};
 
