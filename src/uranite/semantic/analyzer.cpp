@@ -3663,10 +3663,15 @@ namespace uranite::semantic {
 			bool isStaticCall = ( expression.object->resolvedSymbol == nullptr &&
 				expression.object->kind == ast::Node::Kind::IdentifierExpression );
 			std::vector<MethodInfo*> allMethodCandidates = classType->findAllMethods( expression.method );
-			if( allMethodCandidates.empty() && classType->astDeclaration ) {
-				ClassTypeSharedPointer baseClassType = std::dynamic_pointer_cast<ClassType>( this->typeRegistry.lookupType( classType->astDeclaration->name ) );
-				if( baseClassType ) {
-					allMethodCandidates = baseClassType->findAllMethods( expression.method );
+			if( allMethodCandidates.empty() ) {
+				ClassTypeSharedPointer baseWalker = ( classType->baseClass != nullptr && classType->baseClass->kind == Type::Kind::Class )
+					? std::static_pointer_cast<ClassType>( classType->baseClass ) : nullptr;
+				while( baseWalker != nullptr && allMethodCandidates.empty() ) {
+					allMethodCandidates = baseWalker->findAllMethods( expression.method );
+					if( allMethodCandidates.empty() ) {
+						baseWalker = ( baseWalker->baseClass != nullptr && baseWalker->baseClass->kind == Type::Kind::Class )
+							? std::static_pointer_cast<ClassType>( baseWalker->baseClass ) : nullptr;
+					}
 				}
 			}
 			std::vector<MethodInfo*> filteredCandidates;
@@ -3764,7 +3769,7 @@ namespace uranite::semantic {
 					methodInformation = filteredCandidates[0];
 				}
 			}
-			if( methodInformation && methodInformation->type && methodInformation->type->kind == Type::Kind::Function ) {
+			if( methodInformation != nullptr && methodInformation->type != nullptr && methodInformation->type->kind == Type::Kind::Function ) {
 				FunctionTypeSharedPointer functionType = std::static_pointer_cast<FunctionType>( methodInformation->type );
 				TypeSharedPointer returnType = functionType->returnType;
 				std::unordered_map<std::string, TypeSharedPointer> genericSubstitutionMap;
