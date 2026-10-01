@@ -1,5 +1,6 @@
 package testing
 
+from uranite.collection import enumerate
 from uranite.errors.exception import Exception
 from uranite.errors.traceback.traceback import Traceback
 from uranite.errors.traceback.frame import Frame
@@ -13,7 +14,6 @@ public function raiseFromHelper() -> Void:
 
 public function main() -> I32:
     putsln( "Traceback Integration Tests" )
-
     try:
         raiseFromHelper()
     except Exception as caught:
@@ -29,13 +29,8 @@ public function main() -> I32:
             putsln( "FAIL: expected at least 1 frame" )
             return 1
         putsln( "traceback captured OK" )
-
-        I64 frameIndex = 0
-        while frameIndex < frameCount:
-            Frame frame = traceback.get( frameIndex )
-            putsln( frame.functionName )
-            putsI64( frame.line )
-            frameIndex = frameIndex + 1
-
+        for Int i, Frame frame in enumerate<Frame>( traceback ):
+            putsln( "traceback: {}: {}: {}".format( i, frame.line, frame.functionName ) )
     putsln( "All traceback tests passed" )
     return 0
+
