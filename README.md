@@ -35,6 +35,7 @@ A low-level, high-productivity system programming language built on top of a C++
     - [CLI Usage](#cli-usage)
   - [Language Comparison Matrix](#language-comparison-matrix)
   - [Key Architectural Distinctions](#key-architectural-distinctions)
+  - [Transparency \& Author's Note](#transparency--authors-note)
   - [Warning](#warning)
   - [Issues](#issues)
   - [Support](#support)
@@ -191,6 +192,14 @@ To understand where Uranite stands in the modern engineering landscape, here is 
 * **Uranite vs. Rust**: Uranite enforces safe move semantics and strict ownership verification at compile time to eliminate double-free bugs. However, it completely bypasses Rust's verbose and steep compile-time lifetime annotation syntax through its unique internal semantic tracking engine.
 * **Uranite vs. C++ / Zig**: Uranite guarantees out-of-the-box memory safety without forcing the engineer to manually manage pointers or explicitly pass allocators through every single call stack level, while enforcing rigid type validation via Fully Qualified Names (`qualname`) to avoid structural type confusion.
 * **Uranite vs. Managed Languages (Go, Java, C#)**: Uranite eliminates runtime jitter, garbage collection pauses, and fat execution binaries by shipping a zero-C-runtime native footprint suited for high-throughput, predictable production systems.
+
+## Transparency & Author's Note
+
+Uranite is entirely human-engineered. Every language design decision — the indentation-based grammar, the ownership model without lifetime annotations, the fully-qualified-name type identity system, the multi-stage HIR/MIR pipeline architecture, the shadow-stack exception runtime, the zero-GC execution model — originates from a single engineer's vision and was built from the ground up by [hxAri](https://github.com/hxari).
+
+AI coding agents are used in this project as development accelerators: high-speed tools that execute precise architectural blueprints, implement specified algorithms, and handle the raw volume of code that a project of this scope demands. They do not design the language, decide its semantics, choose its compilation strategy, or define its standard library contracts. Every technical decision passes through one person. The AI is the chisel; the sculptor is human.
+
+This is stated openly because transparency matters more than optics. Modern engineering means leveraging every tool available to ship ambitious work faster — and Uranite is an ambitious project built by one person who refuses to let scale be a bottleneck. The soul of this language, its philosophy, its architecture, and every deliberate tradeoff in its design belong to its creator.
 
 ## Warning
 
