@@ -115,22 +115,21 @@ function main() {
 					executed=0
 				else
 					if [[ -f "$binary" ]]; then
-						# if [[ $debugable -eq 1 ]]; then
-						# 	timeout $timeout \
-						# 		gdb \
-						# 			-return-child-result \
-						# 			-batch \
-						# 			-ex "set confirm off" \
-						# 			-ex "run" \
-						# 			-ex "bt full" \
-						# 			-ex "info register" \
-						# 			-ex "quit" \
-						# 				"$binary" 2>&1 | tee "$temporary"
-						# else
-						# 	timeout $timeout "$binary" 2>&1 | tee "$temporary"
-						# fi
-						# executed=${PIPESTATUS[0]}
-						executed=0
+						if [[ $debugable -eq 1 ]]; then
+							timeout $timeout \
+								gdb \
+									-return-child-result \
+									-batch \
+									-ex "set confirm off" \
+									-ex "run" \
+									-ex "bt full" \
+									-ex "info register" \
+									-ex "quit" \
+										"$binary" 2>&1 | tee "$temporary"
+						else
+							timeout $timeout "$binary" 2>&1 | tee "$temporary"
+						fi
+						executed=${PIPESTATUS[0]}
 						compiled=$((compiled+1))
 						if [[ $executed -ne 0 ]]; then
 							local status=$executed
