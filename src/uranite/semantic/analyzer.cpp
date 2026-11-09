@@ -518,6 +518,7 @@ namespace uranite::semantic {
 				SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( externDeclaration.name, Symbol::Kind::Function, externDeclaration.source, functionType );
 				functionSymbol->access = externDeclaration.access;
 				functionSymbol->isInitialized = true;
+				functionSymbol->sourceModule = this->currentPackageName;
 				this->currentScope->define( externDeclaration.name, functionSymbol );
 			}
 			else if( declaration->kind == ast::Node::Kind::FunctionDeclaration ) {
@@ -580,6 +581,7 @@ namespace uranite::semantic {
 				SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( functionDeclaration.name, Symbol::Kind::Function, functionDeclaration.source, functionType );
 				functionSymbol->access = functionDeclaration.access;
 				functionSymbol->isInitialized = true;
+				functionSymbol->sourceModule = this->currentPackageName;
 				this->currentScope->define( functionDeclaration.name, functionSymbol );
 			}
 			else if( declaration->kind == ast::Node::Kind::ConstantDeclaration ) {
@@ -842,6 +844,7 @@ namespace uranite::semantic {
 					SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( externDeclaration.name, Symbol::Kind::Function, externDeclaration.source, functionType );
 					functionSymbol->access = externDeclaration.access;
 					functionSymbol->isInitialized = true;
+					functionSymbol->sourceModule = this->currentPackageName;
 					this->currentScope->define( externDeclaration.name, functionSymbol );
 					break;
 				}
@@ -939,6 +942,7 @@ namespace uranite::semantic {
 					SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( functionDeclaration.name, Symbol::Kind::Function, functionDeclaration.source, functionType );
 					functionSymbol->access = functionDeclaration.access;
 					functionSymbol->isInitialized = true;
+					functionSymbol->sourceModule = this->currentPackageName;
 					if( this->currentScope->define( functionDeclaration.name, functionSymbol ) == false ) {
 						std::string duplicateOverloadMessage = fmt::format( "function \"{}\" already has an overload with the same parameter signature", functionDeclaration.name );
 						this->diagnostic.error( functionDeclaration.source, duplicateOverloadMessage );
@@ -1378,6 +1382,17 @@ namespace uranite::semantic {
 			ast::nodes::IdentifierExpression& identifierCallee = static_cast<ast::nodes::IdentifierExpression&>( *expression.callee );
 			std::vector<SymbolSharedPointer> overloadCandidates = this->currentScope->lookupAll( identifierCallee.name );
 			if( overloadCandidates.size() > 1 ) {
+				// Determine the preferred source module: if candidates come from different
+				// modules, only consider those from the same module as the first candidate.
+				// This prevents false ambiguity when two unrelated functions (e.g. an extern
+				// C wrapper and a pure Uranite implementation) share the same short name.
+				std::string preferredOrigin;
+				for( const SymbolSharedPointer& candidate : overloadCandidates ) {
+					if( candidate->kind == Symbol::Kind::Function && candidate->typeref != nullptr && candidate->typeref->kind == Type::Kind::Function ) {
+						preferredOrigin = candidate->source && !candidate->source->filename.empty() ? candidate->source->filename : "";
+						break;
+					}
+				}
 				std::vector<TypeSharedPointer> argumentTypes;
 				for( ast::nodes::ExpressionSharedPointer& argument : expression.arguments ) {
 					argumentTypes.push_back( this->analyzeExpression( argument ) );
@@ -1390,6 +1405,10 @@ namespace uranite::semantic {
 				bool ambiguous = false;
 				for( const SymbolSharedPointer& candidate : overloadCandidates ) {
 					if( candidate->kind != Symbol::Kind::Function || candidate->typeref == nullptr || candidate->typeref->kind != Type::Kind::Function ) {
+						continue;
+					}
+					std::string candidateOrigin = candidate->source && !candidate->source->filename.empty() ? candidate->source->filename : "";
+					if( preferredOrigin.empty() == false && candidateOrigin != preferredOrigin ) {
 						continue;
 					}
 					FunctionTypeSharedPointer candidateFunction = std::static_pointer_cast<FunctionType>( candidate->typeref );
@@ -3031,6 +3050,7 @@ namespace uranite::semantic {
 		SymbolSharedPointer functionSymbol = std::make_shared<Symbol>( declaration.name, Symbol::Kind::Function, declaration.source, functionType );
 		functionSymbol->access = declaration.access;
 		functionSymbol->isInitialized = true;
+		functionSymbol->sourceModule = this->currentPackageName;
 		this->currentScope->define( declaration.name, functionSymbol );
 		this->pushScope( Scope::Kind::Function );
 		bool savedUserCodeStatus = this->isInUserCode_;
@@ -3125,6 +3145,7 @@ namespace uranite::semantic {
 			SymbolSharedPointer preRegSymbol = std::make_shared<Symbol>( nestedDecl.name, Symbol::Kind::Function, nestedDecl.source, preRegFuncType );
 			preRegSymbol->access = nestedDecl.access;
 			preRegSymbol->isInitialized = true;
+			preRegSymbol->sourceModule = this->currentPackageName;
 			this->currentScope->define( nestedDecl.name, preRegSymbol );
 		}
 		for( ast::nodes::StatementSharedPointer& bodyStatement : declaration.body ) {
