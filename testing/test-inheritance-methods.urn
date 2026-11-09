@@ -1,0 +1,81 @@
+package testing
+
+from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr
+
+public abstract class Shape:
+    public String label
+
+    public function Shape( self, String label ) -> Void:
+        self.label = label
+
+    public abstract function area( self ) -> I64;
+
+    public function describe( self ) -> String:
+        return self.label
+
+public class Animal:
+
+    public String name
+    public I64 age
+
+    public function Animal( self, String name, I64 age ) -> Void:
+        self.name = name
+        self.age = age
+
+    public function describe( self ) -> String:
+        return self.name
+
+    public function getAge( self ) -> I64:
+        return self.age
+
+public class Dog extends Animal:
+
+    public String breed
+
+    public function Dog( self, String name, I64 age, String breed ) -> Void:
+        parent( name, age )
+        self.breed = breed
+
+public class Puppy extends Dog:
+
+    public I64 weeksOld
+
+    public function Puppy( self, String name, I64 age, String breed, I64 weeksOld ) -> Void:
+        parent( name, age, breed )
+        self.weeksOld = weeksOld
+
+public class Square extends Shape:
+    public I64 side
+
+    public function Square( self, String label, I64 side ) -> Void:
+        parent( label )
+        self.side = side
+
+    public override function area( self ) -> I64:
+        return self.side * self.side
+
+public function main() -> I32:
+    putsln( "Inheritance Method Tests" )
+    Dog dog = new Dog( "Rex", 5, "Husky" )
+    assertEqualStr( "Rex", dog.describe(), "inherited method returns parent field" )
+    assertEqualI64( 5, dog.getAge(), "inherited method returns parent I64 field" )
+    assertEqualStr( "Rex", dog.name, "direct inherited field access" )
+    assertEqualStr( "Husky", dog.breed, "direct own field access" )
+    putsln( "two-level OK" )
+    Puppy puppy = new Puppy( "Bit", 1, "Beagle", 8 )
+    assertEqualStr( "Bit", puppy.describe(), "grandparent method" )
+    assertEqualI64( 1, puppy.getAge(), "grandparent method I64" )
+    assertEqualStr( "Beagle", puppy.breed, "parent field via grandchild" )
+    assertEqualI64( 8, puppy.weeksOld, "own field on grandchild" )
+    putsln( "three-level OK" )
+    Square square = new Square( "unit", 7 )
+    assertEqualStr( "unit", square.describe(), "abstract base concrete method" )
+    assertEqualI64( 49, square.area(), "override dispatch" )
+    putsln( "abstract base OK" )
+    Animal shelter = dog
+    assertEqualStr( "Rex", shelter.describe(), "upcast receiver keeps method" )
+    assertEqualI64( 5, shelter.getAge(), "upcast receiver I64 method" )
+    putsln( "upcast OK" )
+    putsln( "All inheritance method tests passed" )
+    return 0
