@@ -387,7 +387,7 @@ namespace uranite::compiler {
 				continue;
 			}
 			if( isSelectiveImportOperation && declarationIdentifier.empty() == false && selectivelyImportedIdentifiers.count( declarationIdentifier ) == 0 ) {
-				if( moduleDeclaration->kind != ast::Node::Kind::ConstantDeclaration && moduleDeclaration->kind != ast::Node::Kind::FunctionDeclaration ) {
+				if( moduleDeclaration->kind != ast::Node::Kind::ConstantDeclaration && moduleDeclaration->kind != ast::Node::Kind::FunctionDeclaration && moduleDeclaration->kind != ast::Node::Kind::ExternDeclaration ) {
 					continue;
 				}
 			}
