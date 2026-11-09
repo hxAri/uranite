@@ -5468,9 +5468,11 @@ namespace uranite::ir::mir {
 		}
 		if( callee == nullptr ) {
 			llvm::Value* calleePointer = nullptr;
+			semantic::TypeSharedPointer calleeVariableType;
 			for( std::pair<const MIRVariableIdentifier, MIRVariableDescriptor>& descriptorEntry : functionDefinition.variableDescriptorTable ) {
 				if( descriptorEntry.second.variableName == calledName ) {
 					calleePointer = this->loadVariableValue( descriptorEntry.first );
+					calleeVariableType = descriptorEntry.second.variableType;
 					break;
 				}
 			}
@@ -5487,6 +5489,45 @@ namespace uranite::ir::mir {
 				llvm::Type* returnType = llvm::Type::getInt64Ty( this->llvmContext );
 				if( instruction.operandType != nullptr ) {
 					returnType = this->toLLVMType( instruction.operandType );
+				}
+				if( calleeVariableType != nullptr && calleeVariableType->kind == semantic::Type::Kind::Callable ) {
+					semantic::CallableTypeSharedPointer callableType =
+						std::static_pointer_cast<semantic::CallableType>( calleeVariableType );
+					if( callableType->returnType != nullptr ) {
+						returnType = this->toLLVMType( callableType->returnType );
+					}
+					if( callableType->parameterTypes.empty() == false ) {
+						paramTypes.clear();
+						for( const semantic::TypeSharedPointer& parameterType : callableType->parameterTypes ) {
+							paramTypes.push_back( this->toLLVMType( parameterType ) );
+						}
+						for( size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++ ) {
+							if( argumentIndex < paramTypes.size() && arguments[argumentIndex]->getType() != paramTypes[argumentIndex] ) {
+								if( arguments[argumentIndex]->getType()->isIntegerTy() && paramTypes[argumentIndex]->isFloatingPointTy() ) {
+									arguments[argumentIndex] = this->irBuilder.CreateSIToFP( arguments[argumentIndex], paramTypes[argumentIndex], "arg.itof" );
+								}
+								else if( arguments[argumentIndex]->getType()->isFloatingPointTy() && paramTypes[argumentIndex]->isIntegerTy() ) {
+									arguments[argumentIndex] = this->irBuilder.CreateFPToSI( arguments[argumentIndex], paramTypes[argumentIndex], "arg.ftoi" );
+								}
+								else if( arguments[argumentIndex]->getType()->isIntegerTy() && paramTypes[argumentIndex]->isIntegerTy() ) {
+									arguments[argumentIndex] = this->irBuilder.CreateIntCast( arguments[argumentIndex], paramTypes[argumentIndex], true, "arg.icast" );
+								}
+								else if( arguments[argumentIndex]->getType()->isIntegerTy() && paramTypes[argumentIndex]->isPointerTy() ) {
+									arguments[argumentIndex] = this->irBuilder.CreateIntToPtr( arguments[argumentIndex], paramTypes[argumentIndex], "arg.itop" );
+								}
+								else if( arguments[argumentIndex]->getType()->isPointerTy() && paramTypes[argumentIndex]->isIntegerTy() ) {
+									arguments[argumentIndex] = this->irBuilder.CreatePtrToInt( arguments[argumentIndex], paramTypes[argumentIndex], "arg.ptoi" );
+								}
+							}
+						}
+					}
+				}
+				else if( calleeVariableType != nullptr && calleeVariableType->kind == semantic::Type::Kind::Function ) {
+					semantic::FunctionTypeSharedPointer functionType =
+						std::static_pointer_cast<semantic::FunctionType>( calleeVariableType );
+					if( functionType->returnType != nullptr ) {
+						returnType = this->toLLVMType( functionType->returnType );
+					}
 				}
 				llvm::FunctionType* indirectCallType = llvm::FunctionType::get( returnType, paramTypes, false );
 				if( calleePointer->getType()->isPointerTy() == false ) {
