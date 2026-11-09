@@ -1,0 +1,69 @@
+package testing
+
+from uranite.io.console import putsln
+from uranite.testing.assertions import assertEqualI64, assertEqualStr, assertTrue, assertFalse
+
+public class OptionalHolder:
+    public ?String label
+    public ?F64 threshold
+
+    public function OptionalHolder( self ) -> Void:
+        self.label = None
+        self.threshold = None
+
+public function findLabel( I64 key ) -> ?String:
+    if key == 0:
+        return "zero"
+    return None
+
+public function main() -> I32:
+    putsln( "Optional Type Tests" )
+    ?String name = "hello"
+    assertTrue( name is not None, "string optional holds value" )
+    name = None
+    assertTrue( name is None, "string optional accepts None" )
+    name = "world"
+    assertTrue( name is not None, "string optional reassignment" )
+    putsln( "string optional OK" )
+    ?I64 count = None
+    assertTrue( count is None, "int optional starts None" )
+    count = 42
+    assertTrue( count is not None, "int optional holds value" )
+    assertEqualI64( 42, count, "int optional value roundtrip" )
+    ?I64 zero = 0
+    assertFalse( zero is None, "zero value is not None" )
+    ?I64 afterNone = None
+    afterNone = 7
+    assertEqualI64( 7, afterNone, "assign after None" )
+    putsln( "int optional OK" )
+    ?F64 ratio = 2.5
+    assertTrue( ratio is not None, "float optional holds value" )
+    ratio = None
+    assertTrue( ratio is None, "float optional accepts None" )
+    ratio = 3.5
+    assertTrue( ratio is not None, "float optional reassignment" )
+    ?F32 small = 1.5
+    assertTrue( small is not None, "f32 optional holds value" )
+    putsln( "float optional OK" )
+    ?Char initial = 'A'
+    assertTrue( initial is not None, "char optional holds value" )
+    putsln( "char optional OK" )
+    OptionalHolder holder = new OptionalHolder()
+    assertTrue( holder.label is None, "field starts None" )
+    holder.label = "packed"
+    assertTrue( holder.label is not None, "field holds value" )
+    holder.threshold = 0.75
+    assertTrue( holder.threshold is not None, "float field holds value" )
+    putsln( "class fields OK" )
+    ?String found = findLabel( 0 )
+    assertTrue( found is not None, "returned optional has value" )
+    ?String missing = findLabel( 9 )
+    assertTrue( missing is None, "returned optional is None" )
+    putsln( "function returns OK" )
+    ?I64 extractSource = 42
+    if extractSource is not None:
+        I64 plain = extractSource
+        assertEqualI64( 42, plain, "guarded extraction" )
+    putsln( "guarded extraction OK" )
+    putsln( "All optional type tests passed" )
+    return 0
