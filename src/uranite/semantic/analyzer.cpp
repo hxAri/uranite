@@ -5588,6 +5588,16 @@ namespace uranite::semantic {
 				}
 				return this->typeRegistry.makeTuple( std::move( elementTypes ) );
 			}
+			case ast::Node::Kind::CallableType: {
+				ast::nodes::CallableTypeNode& callableTypeNode = static_cast<ast::nodes::CallableTypeNode&>( *typeNode );
+				std::vector<TypeSharedPointer> parameterTypes;
+				for( ast::nodes::TypeNodeSharedPointer& parameterNode : callableTypeNode.parameterTypes ) {
+					TypeSharedPointer resolvedParameter = this->resolveType( parameterNode );
+					parameterTypes.push_back( resolvedParameter ? resolvedParameter : this->typeRegistry.getError() );
+				}
+				TypeSharedPointer returnType = this->resolveType( callableTypeNode.returnType );
+				return this->typeRegistry.makeCallable( returnType ? returnType : this->typeRegistry.getVoid(), std::move( parameterTypes ) );
+			}
 			case ast::Node::Kind::FunctionType: {
 				ast::nodes::FunctionTypeNode& functionTypeNode = static_cast<ast::nodes::FunctionTypeNode&>( *typeNode );
 				std::vector<TypeSharedPointer> parameterTypes;
