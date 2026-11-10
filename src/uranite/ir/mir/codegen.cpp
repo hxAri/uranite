@@ -5291,8 +5291,28 @@ namespace uranite::ir::mir {
 					}
 					llvm::Type* vtablePtrType = llvm::PointerType::getUnqual( this->llvmContext );
 					std::vector<llvm::Type*> vtableWrapperFields = { vtablePtrType };
+					std::string recvTypeName = "unknown";
+					if( functionDefinition.variableDescriptorTable.count( receiverVariable ) > 0 ) {
+						semantic::TypeSharedPointer recvType = functionDefinition.variableDescriptorTable[receiverVariable].variableType;
+						if( recvType != nullptr ) {
+							recvTypeName = recvType->qualified.empty() ? recvType->name : recvType->qualified;
+						}
+					}
+					int dbgVtIdx = this->getVtableFieldIndex( recvTypeName );
+					int receiverVtableIndex = this->getVtableFieldIndex(
+						functionDefinition.variableDescriptorTable.count( receiverVariable ) > 0
+							? ( functionDefinition.variableDescriptorTable[receiverVariable].variableType != nullptr
+								? ( functionDefinition.variableDescriptorTable[receiverVariable].variableType->qualified.empty() == false
+									? functionDefinition.variableDescriptorTable[receiverVariable].variableType->qualified
+									: functionDefinition.variableDescriptorTable[receiverVariable].variableType->name )
+								: std::string() )
+							: std::string()
+					);
+					if( receiverVtableIndex < 0 ) {
+						receiverVtableIndex = 0;
+					}
 					llvm::Value* vtableSlotPtr = this->irBuilder.CreateStructGEP(
-						llvm::StructType::get( this->llvmContext, vtableWrapperFields ), receiverPtr, 0, "vtable.slot.ptr"
+						llvm::StructType::get( this->llvmContext, vtableWrapperFields ), receiverPtr, static_cast<unsigned>( receiverVtableIndex ), "vtable.slot.ptr"
 					);
 					llvm::Value* vtablePtr = this->irBuilder.CreateLoad( vtablePtrType, vtableSlotPtr, "vtable.ptr" );
 					llvm::FunctionType* voidFuncType = llvm::FunctionType::get( llvm::Type::getVoidTy( this->llvmContext ), false );
@@ -8178,7 +8198,11 @@ namespace uranite::ir::mir {
 				}
 				if( this->interfaceTableMap.count( itableKey ) > 0 ) {
 					llvm::GlobalVariable* itableGlobal = this->interfaceTableMap[itableKey];
-					llvm::Value* vtableSlot = this->irBuilder.CreateStructGEP( structType, typedPointer, 0, "vtable.slot" );
+					int vtableFieldIndex = this->getVtableFieldIndex( typeName );
+					if( vtableFieldIndex < 0 ) {
+						vtableFieldIndex = 0;
+					}
+					llvm::Value* vtableSlot = this->irBuilder.CreateStructGEP( structType, typedPointer, static_cast<unsigned>( vtableFieldIndex ), "vtable.slot" );
 					llvm::Value* itablePtr = this->irBuilder.CreateBitCast(
 						itableGlobal, llvm::PointerType::getUnqual( this->llvmContext ), "itable.ptr"
 					);
@@ -8760,6 +8784,27 @@ namespace uranite::ir::mir {
 		return resolved;
 	}
 	
+	int MIRCodegen::getVtableFieldIndex( const std::string& typeName ) {
+		if( this->currentMIRModule == nullptr ) {
+			return 0;
+		}
+		std::string lookupName = typeName;
+		size_t genericPos = lookupName.find( '<' );
+		if( genericPos != std::string::npos ) {
+			lookupName = lookupName.substr( 0, genericPos );
+		}
+		if( this->currentMIRModule->typeLayoutTable.count( lookupName ) == 0 ) {
+			return 0;
+		}
+		const TypeLayoutDescriptor& layout = this->currentMIRModule->typeLayoutTable.at( lookupName );
+		for( size_t fieldIndex = 0; fieldIndex < layout.fieldNames.size(); fieldIndex++ ) {
+			if( layout.fieldNames[fieldIndex] == "__vtable" ) {
+				return static_cast<int>( fieldIndex );
+			}
+		}
+		return -1;
+	}
+
 	llvm::Function* MIRCodegen::getOrCreateFree() {
 		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getFreeFunction( this->llvmContext );
 		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
