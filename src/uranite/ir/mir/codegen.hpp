@@ -225,6 +225,9 @@ namespace uranite::ir::mir {
 		// Interface dispatch: interface qualified name → ordered method names
 		std::unordered_map<std::string, std::vector<std::string>> interfaceMethodOrder;
 		
+		// Master VTable: global interface index → slot offset in master vtable (1-based, 0 = class vtable)
+		std::unordered_map<std::string, int> interfaceGlobalIndex;
+		
 		// Classes that have vtable pointers (implement interfaces)
 		std::unordered_set<std::string> classesWithVtable;
 		
