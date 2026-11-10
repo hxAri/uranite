@@ -87,7 +87,7 @@ namespace uranite::ir::mir {
 			std::string layoutKeyName = classDefinition->classQualifiedName.empty() == false
 				? classDefinition->classQualifiedName : classDefinition->className;
 			typeLayout.typeQualifiedName = layoutKeyName;
-			typeLayout.hasVirtualTable = ( classDefinition->implementedInterfaceQualifiedNames.empty() == false );
+			typeLayout.hasVirtualTable = true;
 			if( typeLayout.hasVirtualTable ) {
 				std::string shortName = classDefinition->className;
 				if( typeLayout.hasVirtualTable && this->typeRegistry != nullptr ) {
