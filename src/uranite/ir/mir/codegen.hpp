@@ -120,6 +120,7 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreateMalloc();
 		llvm::Function* getOrCreateCalloc();
 		llvm::Function* getOrCreateFree();
+		int getVtableFieldIndex( const std::string& typeName );
 		llvm::Function* getOrCreateMemcpy();
 		llvm::Function* getOrCreateStrlen();
 		llvm::Function* getOrCreateStrcmp();
