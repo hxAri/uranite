@@ -468,6 +468,34 @@ namespace uranite::ir::mir {
 			toStringBuilder.CreateRet( reprBuffer );
 			this->functionResolutionMap[perClassToStringName] = perClassToStringFunc;
 		}
+		// First pass: collect all interfaces and assign global indices
+		{
+			int globalIndex = 0;
+			for( const std::pair<const std::string, semantic::TypeSharedPointer>& entry : this->semanticAnalyzer.types().getUserTypes() ) {
+				if( entry.second == nullptr || entry.second->kind != semantic::Type::Kind::Interface ) {
+					continue;
+				}
+				std::string ifaceName = entry.second->name;
+				size_t bracketPos = ifaceName.find( '<' );
+				if( bracketPos != std::string::npos ) {
+					ifaceName = ifaceName.substr( 0, bracketPos );
+				}
+				if( this->interfaceGlobalIndex.count( ifaceName ) == 0 ) {
+					this->interfaceGlobalIndex[ifaceName] = globalIndex++;
+				}
+				if( entry.second->qualified.empty() == false ) {
+					std::string qualName = entry.second->qualified;
+					size_t qualBracket = qualName.find( '<' );
+					if( qualBracket != std::string::npos ) {
+						qualName = qualName.substr( 0, qualBracket );
+					}
+					if( this->interfaceGlobalIndex.count( qualName ) == 0 ) {
+						this->interfaceGlobalIndex[qualName] = this->interfaceGlobalIndex[ifaceName];
+					}
+				}
+			}
+		}
+
 		for( const std::pair<const std::string, semantic::TypeSharedPointer>& entry : this->semanticAnalyzer.types().getUserTypes() ) {
 			if( entry.second == nullptr || entry.second->kind != semantic::Type::Kind::Class ) {
 				continue;
@@ -502,6 +530,8 @@ namespace uranite::ir::mir {
 					classFullQualified = classFullQualified.substr( 0, bracketPos );
 				}
 			}
+			// Collect per-interface itables for master vtable construction
+			std::vector<std::pair<std::string, llvm::GlobalVariable*>> collectedIttables;
 			for( const semantic::TypeSharedPointer& interfaceRef : classType->interfaces ) {
 				if( interfaceRef == nullptr || interfaceRef->kind != semantic::Type::Kind::Interface ) {
 					continue;
@@ -570,14 +600,6 @@ namespace uranite::ir::mir {
 					llvm::ConstantArray::get( itableArrayType, itableEntries ),
 					itableGlobalName
 				);
-				this->interfaceTableMap[classQualified] = itableGlobal;
-				this->interfaceTableMap[className] = itableGlobal;
-				if( classNameBase != className ) {
-					this->interfaceTableMap[classNameBase] = itableGlobal;
-				}
-				if( classQualifiedBase != classQualified ) {
-					this->interfaceTableMap[classQualifiedBase] = itableGlobal;
-				}
 				std::string directIfaceName = interfaceType->name;
 				size_t directIfaceBracket = directIfaceName.find( '<' );
 				if( directIfaceBracket != std::string::npos ) {
@@ -592,6 +614,34 @@ namespace uranite::ir::mir {
 						directIfaceQualified = directIfaceQualified.substr( 0, qualBracketPos );
 					}
 					this->interfacesWithDirectItable.insert( directIfaceQualified );
+				}
+				collectedIttables.push_back( { directIfaceName, itableGlobal } );
+				// Also register all parent interfaces to use the same itable
+				std::vector<semantic::InterfaceType*> parentStack;
+				for( const semantic::TypeSharedPointer& parentIface : interfaceType->parentInterfaces ) {
+					if( parentIface != nullptr && parentIface->kind == semantic::Type::Kind::Interface ) {
+						parentStack.push_back( static_cast<semantic::InterfaceType*>( parentIface.get() ) );
+					}
+				}
+				std::set<std::string> visitedParents;
+				while( parentStack.empty() == false ) {
+					semantic::InterfaceType* parentIface = parentStack.back();
+					parentStack.pop_back();
+					std::string parentName = parentIface->name;
+					size_t parentBracket = parentName.find( '<' );
+					if( parentBracket != std::string::npos ) {
+						parentName = parentName.substr( 0, parentBracket );
+					}
+					if( visitedParents.count( parentName ) > 0 ) {
+						continue;
+					}
+					visitedParents.insert( parentName );
+					collectedIttables.push_back( { parentName, itableGlobal } );
+					for( const semantic::TypeSharedPointer& grandparent : parentIface->parentInterfaces ) {
+						if( grandparent != nullptr && grandparent->kind == semantic::Type::Kind::Interface ) {
+							parentStack.push_back( static_cast<semantic::InterfaceType*>( grandparent.get() ) );
+						}
+					}
 				}
 				std::vector<semantic::InterfaceType*> ancestorStack;
 				for( const semantic::TypeSharedPointer& parentInterface : interfaceType->parentInterfaces ) {
@@ -631,6 +681,39 @@ namespace uranite::ir::mir {
 						}
 					}
 				}
+			}
+			// Create master vtable: slot 0 = null (class vtable id), slots 1..N = itables
+			int numGlobalInterfaces = static_cast<int>( this->interfaceGlobalIndex.size() );
+			if( numGlobalInterfaces == 0 ) {
+				numGlobalInterfaces = 1;
+			}
+			llvm::FunctionType* masterVoidType = llvm::FunctionType::get( llvm::Type::getVoidTy( this->llvmContext ), false );
+			llvm::PointerType* masterPtrType = llvm::PointerType::getUnqual( masterVoidType );
+			std::vector<llvm::Constant*> masterEntries( numGlobalInterfaces + 1, llvm::ConstantPointerNull::get( masterPtrType ) );
+			for( const std::pair<std::string, llvm::GlobalVariable*>& itablePair : collectedIttables ) {
+				if( this->interfaceGlobalIndex.count( itablePair.first ) > 0 ) {
+					int slot = this->interfaceGlobalIndex[itablePair.first] + 1;
+					if( slot >= 0 && slot < static_cast<int>( masterEntries.size() ) ) {
+						masterEntries[slot] = llvm::ConstantExpr::getBitCast( itablePair.second, masterPtrType );
+					}
+				}
+			}
+			llvm::ArrayType* masterArrayType = llvm::ArrayType::get( masterPtrType, masterEntries.size() );
+			std::string masterName = fmt::format( "_MIR_master_vtable_{}", className );
+
+			llvm::GlobalVariable* masterVtable = new llvm::GlobalVariable(
+				*this->llvmModule, masterArrayType, true,
+				llvm::GlobalValue::InternalLinkage,
+				llvm::ConstantArray::get( masterArrayType, masterEntries ),
+				masterName
+			);
+			this->interfaceTableMap[classQualified] = masterVtable;
+			this->interfaceTableMap[className] = masterVtable;
+			if( classNameBase != className ) {
+				this->interfaceTableMap[classNameBase] = masterVtable;
+			}
+			if( classQualifiedBase != classQualified ) {
+				this->interfaceTableMap[classQualifiedBase] = masterVtable;
 			}
 		}
 		this->abstractClassSubclasses.clear();
@@ -5314,7 +5397,18 @@ namespace uranite::ir::mir {
 					llvm::Value* vtableSlotPtr = this->irBuilder.CreateStructGEP(
 						llvm::StructType::get( this->llvmContext, vtableWrapperFields ), receiverPtr, static_cast<unsigned>( receiverVtableIndex ), "vtable.slot.ptr"
 					);
-					llvm::Value* vtablePtr = this->irBuilder.CreateLoad( vtablePtrType, vtableSlotPtr, "vtable.ptr" );
+					llvm::Value* masterVtablePtr = this->irBuilder.CreateLoad( vtablePtrType, vtableSlotPtr, "master.vtable.ptr" );
+					// Extract the itable for this interface from the master vtable
+					int ifaceGlobalIndex = 0;
+					if( this->interfaceGlobalIndex.count( ifaceLookupKey ) > 0 ) {
+						ifaceGlobalIndex = this->interfaceGlobalIndex[ifaceLookupKey];
+					}
+					llvm::Value* itableSlotPtr = this->irBuilder.CreateGEP(
+						vtablePtrType, masterVtablePtr,
+						llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->llvmContext ), ifaceGlobalIndex + 1 ),
+						"itable.slot.ptr"
+					);
+					llvm::Value* vtablePtr = this->irBuilder.CreateLoad( vtablePtrType, itableSlotPtr, "vtable.ptr" );
 					llvm::FunctionType* voidFuncType = llvm::FunctionType::get( llvm::Type::getVoidTy( this->llvmContext ), false );
 					llvm::PointerType* funcPtrType = llvm::PointerType::getUnqual( voidFuncType );
 					llvm::Value* funcSlotPtr = this->irBuilder.CreateGEP(
