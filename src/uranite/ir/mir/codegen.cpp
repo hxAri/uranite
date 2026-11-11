@@ -731,9 +731,10 @@ namespace uranite::ir::mir {
 			semantic::TypeSharedPointer walkBase = classType->baseClass;
 			while( walkBase != nullptr && walkBase->kind == semantic::Type::Kind::Class ) {
 				semantic::ClassType* basePtr = static_cast<semantic::ClassType*>( walkBase.get() );
-				bool isBaseAbstract = basePtr->isAbstract ||
-					( basePtr->astDeclaration != nullptr && basePtr->astDeclaration->isAbstract );
-				if( isBaseAbstract ) {
+				bool isBaseVirtual = basePtr->isAbstract ||
+					( basePtr->astDeclaration != nullptr && basePtr->astDeclaration->isAbstract ) ||
+					( basePtr->virtualTable.empty() == false );
+				if( isBaseVirtual ) {
 					std::string concreteName = classType->name;
 					this->abstractClassSubclasses[basePtr->name].push_back( concreteName );
 					if( basePtr->qualified.empty() == false ) {
@@ -5714,153 +5715,153 @@ namespace uranite::ir::mir {
 				if( abstractOwnerType != nullptr && abstractOwnerType->kind == semantic::Type::Kind::Class ) {
 					semantic::ClassType* abstractClassType = static_cast<semantic::ClassType*>( abstractOwnerType.get() );
 					semantic::MethodInfo* abstractMethodInfo = abstractClassType->findMethod( abstractMethodName );
-					if( abstractClassType->isAbstract ||
-						( abstractClassType->astDeclaration != nullptr && abstractClassType->astDeclaration->isAbstract ) ) {
-						if( abstractMethodInfo != nullptr && abstractMethodInfo->isVirtual ) {
-							struct AbstractDispatchTarget {
-								llvm::Function* concreteMethod;
-								llvm::Constant* vtableIdentifier;
-							};
-							std::vector<AbstractDispatchTarget> dispatchTargets;
-							for( const std::string& subclassName : *concreteSubclasses ) {
-								llvm::Function* concreteMethod = nullptr;
-								semantic::TypeSharedPointer subType = this->semanticAnalyzer.types().lookupType( subclassName );
-								if( subType != nullptr && subType->qualified.empty() == false ) {
-									std::string qualifiedMethodName = subType->qualified + "." + abstractMethodName;
-									if( this->functionResolutionMap.count( qualifiedMethodName ) > 0 ) {
-										concreteMethod = this->functionResolutionMap[qualifiedMethodName];
-									}
+					if( ( abstractClassType->isAbstract ||
+						( abstractClassType->astDeclaration != nullptr && abstractClassType->astDeclaration->isAbstract ) ||
+						( abstractClassType->virtualTable.empty() == false ) ) &&
+						abstractMethodInfo != nullptr && abstractMethodInfo->isVirtual ) {
+						struct AbstractDispatchTarget {
+							llvm::Function* concreteMethod;
+							llvm::Constant* vtableIdentifier;
+						};
+						std::vector<AbstractDispatchTarget> dispatchTargets;
+						for( const std::string& subclassName : *concreteSubclasses ) {
+							llvm::Function* concreteMethod = nullptr;
+							semantic::TypeSharedPointer subType = this->semanticAnalyzer.types().lookupType( subclassName );
+							if( subType != nullptr && subType->qualified.empty() == false ) {
+								std::string qualifiedMethodName = subType->qualified + "." + abstractMethodName;
+								if( this->functionResolutionMap.count( qualifiedMethodName ) > 0 ) {
+									concreteMethod = this->functionResolutionMap[qualifiedMethodName];
 								}
-								if( concreteMethod == nullptr ) {
-									std::string shortMethodName = subclassName + "." + abstractMethodName;
-									if( this->functionResolutionMap.count( shortMethodName ) > 0 ) {
-										concreteMethod = this->functionResolutionMap[shortMethodName];
-									}
-								}
-								if( concreteMethod == nullptr ) {
-									continue;
-								}
-								llvm::Constant* vtableId = nullptr;
-								if( this->classVtableIdentifier.count( subclassName ) > 0 ) {
-									vtableId = this->classVtableIdentifier[subclassName];
-								}
-								if( vtableId == nullptr ) {
-									continue;
-								}
-								dispatchTargets.push_back( { concreteMethod, vtableId } );
 							}
-							if( dispatchTargets.empty() == false ) {
-								MIRVariableIdentifier receiverVar = instruction.sourceOperands[0];
-								llvm::Value* receiverPtr = this->loadVariableValue( receiverVar );
-								if( receiverPtr != nullptr && receiverPtr->getType()->isPointerTy() ) {
-									llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
-									llvm::StructType* receiverStructType = nullptr;
-									if( this->structTypeCache.count( abstractShortName ) > 0 ) {
-										receiverStructType = this->structTypeCache[abstractShortName];
-									}
-									else if( this->structTypeCache.count( abstractOwnerName ) > 0 ) {
-										receiverStructType = this->structTypeCache[abstractOwnerName];
-									}
-									if( receiverStructType == nullptr || receiverStructType->getNumElements() == 0 ) {
-										receiverStructType = llvm::StructType::get( this->llvmContext, llvm::ArrayRef<llvm::Type*>( ptrType ), false );
-									}
-									llvm::Value* vtableSlotPtr = this->irBuilder.CreateStructGEP(
-										receiverStructType,
-										receiverPtr, 0, "abstract.vtable.slot"
-									);
-									llvm::Value* vtablePtr = this->irBuilder.CreateLoad( ptrType, vtableSlotPtr, "abstract.vtable.ptr" );
-									llvm::Type* dispatchReturnType = llvm::Type::getVoidTy( this->llvmContext );
-									if( instruction.operandType != nullptr ) {
-										dispatchReturnType = this->toLLVMType( instruction.operandType );
-									}
-									bool hasReturnValue = ( dispatchReturnType->isVoidTy() == false );
-									std::vector<llvm::Value*> dispatchArgs;
-									for( size_t argIdx = 0; argIdx < instruction.sourceOperands.size(); argIdx++ ) {
-										llvm::Value* argVal = this->loadVariableValue( instruction.sourceOperands[argIdx] );
-										if( argVal != nullptr ) {
-											dispatchArgs.push_back( argVal );
-										}
-									}
-									llvm::Function* parentFunction = this->irBuilder.GetInsertBlock()->getParent();
-									llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(
-										this->llvmContext, "abstract.merge", parentFunction
-									);
-									llvm::BasicBlock* fallbackBlock = llvm::BasicBlock::Create(
-										this->llvmContext, "abstract.fallback", parentFunction
-									);
-									std::vector<std::pair<llvm::BasicBlock*, llvm::Value*>> phiIncoming;
-									llvm::BasicBlock* currentBlock = this->irBuilder.GetInsertBlock();
-									for( size_t targetIdx = 0; targetIdx < dispatchTargets.size(); targetIdx++ ) {
-										AbstractDispatchTarget& target = dispatchTargets[targetIdx];
-										llvm::BasicBlock* callBlock = llvm::BasicBlock::Create(
-											this->llvmContext, "abstract.call", parentFunction
-										);
-										llvm::BasicBlock* nextBlock = ( targetIdx + 1 < dispatchTargets.size() )
-											? llvm::BasicBlock::Create( this->llvmContext, "abstract.check", parentFunction )
-											: fallbackBlock;
-										this->irBuilder.SetInsertPoint( currentBlock );
-										llvm::Value* castedId = this->irBuilder.CreateBitCast(
-											target.vtableIdentifier, ptrType, "vtable.id"
-										);
-										llvm::Value* isMatch = this->irBuilder.CreateICmpEQ( vtablePtr, castedId, "type.match" );
-										this->irBuilder.CreateCondBr( isMatch, callBlock, nextBlock );
-										this->irBuilder.SetInsertPoint( callBlock );
-										std::vector<llvm::Value*> callArgs;
-										llvm::FunctionType* concreteType = target.concreteMethod->getFunctionType();
-										for( size_t argI = 0; argI < dispatchArgs.size() && argI < concreteType->getNumParams(); argI++ ) {
-											llvm::Value* arg = dispatchArgs[argI];
-											llvm::Type* expectedType = concreteType->getParamType( static_cast<unsigned>( argI ) );
-											if( arg->getType() != expectedType ) {
-												if( arg->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
-													arg = this->irBuilder.CreateSExtOrTrunc( arg, expectedType );
-												}
-											}
-											callArgs.push_back( arg );
-										}
-										llvm::Value* callResult = this->irBuilder.CreateCall( target.concreteMethod, callArgs );
-										phiIncoming.push_back( { callBlock, hasReturnValue ? callResult : nullptr } );
-										this->irBuilder.CreateBr( mergeBlock );
-										currentBlock = nextBlock;
-									}
-									this->irBuilder.SetInsertPoint( fallbackBlock );
-									llvm::Value* fallbackResult = nullptr;
-									if( hasReturnValue ) {
-										std::vector<llvm::Value*> fallbackArgs;
-										llvm::FunctionType* fallbackType = callee->getFunctionType();
-										for( size_t argI = 0; argI < dispatchArgs.size() && argI < fallbackType->getNumParams(); argI++ ) {
-											llvm::Value* arg = dispatchArgs[argI];
-											llvm::Type* expectedType = fallbackType->getParamType( static_cast<unsigned>( argI ) );
-											if( arg->getType() != expectedType ) {
-												if( arg->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
-													arg = this->irBuilder.CreateSExtOrTrunc( arg, expectedType );
-												}
-											}
-											fallbackArgs.push_back( arg );
-										}
-										fallbackResult = this->irBuilder.CreateCall( callee, fallbackArgs );
-									}
-									else {
-										std::vector<llvm::Value*> fallbackArgs;
-										llvm::FunctionType* fallbackType = callee->getFunctionType();
-										for( size_t argI = 0; argI < dispatchArgs.size() && argI < fallbackType->getNumParams(); argI++ ) {
-											fallbackArgs.push_back( dispatchArgs[argI] );
-										}
-										this->irBuilder.CreateCall( callee, fallbackArgs );
-									}
-									phiIncoming.push_back( { fallbackBlock, fallbackResult } );
-									this->irBuilder.CreateBr( mergeBlock );
-									this->irBuilder.SetInsertPoint( mergeBlock );
-									if( hasReturnValue && instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
-										llvm::PHINode* phi = this->irBuilder.CreatePHI(
-											dispatchReturnType, static_cast<unsigned>( phiIncoming.size() ), "abstract.result"
-										);
-										for( std::pair<llvm::BasicBlock*, llvm::Value*>& entry : phiIncoming ) {
-											phi->addIncoming( entry.second, entry.first );
-										}
-										this->setVariableValue( instruction.destinationVariable, phi );
-									}
-									return;
+							if( concreteMethod == nullptr ) {
+								std::string shortMethodName = subclassName + "." + abstractMethodName;
+								if( this->functionResolutionMap.count( shortMethodName ) > 0 ) {
+									concreteMethod = this->functionResolutionMap[shortMethodName];
 								}
+							}
+							if( concreteMethod == nullptr ) {
+								continue;
+							}
+							llvm::Constant* vtableId = nullptr;
+							if( this->classVtableIdentifier.count( subclassName ) > 0 ) {
+								vtableId = this->classVtableIdentifier[subclassName];
+							}
+							if( vtableId == nullptr ) {
+								continue;
+							}
+							dispatchTargets.push_back( { concreteMethod, vtableId } );
+						}
+						if( dispatchTargets.empty() == false ) {
+							MIRVariableIdentifier receiverVar = instruction.sourceOperands[0];
+							llvm::Value* receiverPtr = this->loadVariableValue( receiverVar );
+							if( receiverPtr != nullptr && receiverPtr->getType()->isPointerTy() ) {
+								llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+								llvm::StructType* receiverStructType = nullptr;
+								if( this->structTypeCache.count( abstractShortName ) > 0 ) {
+									receiverStructType = this->structTypeCache[abstractShortName];
+								}
+								else if( this->structTypeCache.count( abstractOwnerName ) > 0 ) {
+									receiverStructType = this->structTypeCache[abstractOwnerName];
+								}
+								if( receiverStructType == nullptr || receiverStructType->getNumElements() == 0 ) {
+									receiverStructType = llvm::StructType::get( this->llvmContext, llvm::ArrayRef<llvm::Type*>( ptrType ), false );
+								}
+								llvm::Value* vtableSlotPtr = this->irBuilder.CreateStructGEP(
+									receiverStructType,
+									receiverPtr, 0, "abstract.vtable.slot"
+								);
+								llvm::Value* vtablePtr = this->irBuilder.CreateLoad( ptrType, vtableSlotPtr, "abstract.vtable.ptr" );
+								llvm::Type* dispatchReturnType = llvm::Type::getVoidTy( this->llvmContext );
+								if( instruction.operandType != nullptr ) {
+									dispatchReturnType = this->toLLVMType( instruction.operandType );
+								}
+								bool hasReturnValue = ( dispatchReturnType->isVoidTy() == false );
+								std::vector<llvm::Value*> dispatchArgs;
+								for( size_t argIdx = 0; argIdx < instruction.sourceOperands.size(); argIdx++ ) {
+									llvm::Value* argVal = this->loadVariableValue( instruction.sourceOperands[argIdx] );
+									if( argVal != nullptr ) {
+										dispatchArgs.push_back( argVal );
+									}
+								}
+								llvm::Function* parentFunction = this->irBuilder.GetInsertBlock()->getParent();
+								llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(
+									this->llvmContext, "abstract.merge", parentFunction
+								);
+								llvm::BasicBlock* fallbackBlock = llvm::BasicBlock::Create(
+									this->llvmContext, "abstract.fallback", parentFunction
+								);
+								std::vector<std::pair<llvm::BasicBlock*, llvm::Value*>> phiIncoming;
+								llvm::BasicBlock* currentBlock = this->irBuilder.GetInsertBlock();
+								for( size_t targetIdx = 0; targetIdx < dispatchTargets.size(); targetIdx++ ) {
+									AbstractDispatchTarget& target = dispatchTargets[targetIdx];
+									llvm::BasicBlock* callBlock = llvm::BasicBlock::Create(
+										this->llvmContext, "abstract.call", parentFunction
+									);
+									llvm::BasicBlock* nextBlock = ( targetIdx + 1 < dispatchTargets.size() )
+										? llvm::BasicBlock::Create( this->llvmContext, "abstract.check", parentFunction )
+										: fallbackBlock;
+									this->irBuilder.SetInsertPoint( currentBlock );
+									llvm::Value* castedId = this->irBuilder.CreateBitCast(
+										target.vtableIdentifier, ptrType, "vtable.id"
+									);
+									llvm::Value* isMatch = this->irBuilder.CreateICmpEQ( vtablePtr, castedId, "type.match" );
+									this->irBuilder.CreateCondBr( isMatch, callBlock, nextBlock );
+									this->irBuilder.SetInsertPoint( callBlock );
+									std::vector<llvm::Value*> callArgs;
+									llvm::FunctionType* concreteType = target.concreteMethod->getFunctionType();
+									for( size_t argI = 0; argI < dispatchArgs.size() && argI < concreteType->getNumParams(); argI++ ) {
+										llvm::Value* arg = dispatchArgs[argI];
+										llvm::Type* expectedType = concreteType->getParamType( static_cast<unsigned>( argI ) );
+										if( arg->getType() != expectedType ) {
+											if( arg->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
+												arg = this->irBuilder.CreateSExtOrTrunc( arg, expectedType );
+											}
+										}
+										callArgs.push_back( arg );
+									}
+									llvm::Value* callResult = this->irBuilder.CreateCall( target.concreteMethod, callArgs );
+									phiIncoming.push_back( { callBlock, hasReturnValue ? callResult : nullptr } );
+									this->irBuilder.CreateBr( mergeBlock );
+									currentBlock = nextBlock;
+								}
+								this->irBuilder.SetInsertPoint( fallbackBlock );
+								llvm::Value* fallbackResult = nullptr;
+								if( hasReturnValue ) {
+									std::vector<llvm::Value*> fallbackArgs;
+									llvm::FunctionType* fallbackType = callee->getFunctionType();
+									for( size_t argI = 0; argI < dispatchArgs.size() && argI < fallbackType->getNumParams(); argI++ ) {
+										llvm::Value* arg = dispatchArgs[argI];
+										llvm::Type* expectedType = fallbackType->getParamType( static_cast<unsigned>( argI ) );
+										if( arg->getType() != expectedType ) {
+											if( arg->getType()->isIntegerTy() && expectedType->isIntegerTy() ) {
+												arg = this->irBuilder.CreateSExtOrTrunc( arg, expectedType );
+											}
+										}
+										fallbackArgs.push_back( arg );
+									}
+									fallbackResult = this->irBuilder.CreateCall( callee, fallbackArgs );
+								}
+								else {
+									std::vector<llvm::Value*> fallbackArgs;
+									llvm::FunctionType* fallbackType = callee->getFunctionType();
+									for( size_t argI = 0; argI < dispatchArgs.size() && argI < fallbackType->getNumParams(); argI++ ) {
+										fallbackArgs.push_back( dispatchArgs[argI] );
+									}
+									this->irBuilder.CreateCall( callee, fallbackArgs );
+								}
+								phiIncoming.push_back( { fallbackBlock, fallbackResult } );
+								this->irBuilder.CreateBr( mergeBlock );
+								this->irBuilder.SetInsertPoint( mergeBlock );
+								if( hasReturnValue && instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+									llvm::PHINode* phi = this->irBuilder.CreatePHI(
+										dispatchReturnType, static_cast<unsigned>( phiIncoming.size() ), "abstract.result"
+									);
+									for( std::pair<llvm::BasicBlock*, llvm::Value*>& entry : phiIncoming ) {
+										phi->addIncoming( entry.second, entry.first );
+									}
+									this->setVariableValue( instruction.destinationVariable, phi );
+								}
+								return;
 							}
 						}
 					}
