@@ -963,9 +963,9 @@ public class ArrayList<E> implements MutableSequence<E>:
         String result = "["
         for Int elementIndex = 0; elementIndex < self.count; elementIndex++:
             if elementIndex > 0:
-                result = result + ", "
-            result = result + self.data.get( elementIndex )
-        result = result + "]"
+                result+= ", "
+            result+= self.data.get( elementIndex ).toString()
+        result+= "]"
         return result
 
     public function any( self, Callable<Boolean, <E>> predicate ) -> Boolean:
