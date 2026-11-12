@@ -468,7 +468,6 @@ namespace uranite::ir::mir {
 			toStringBuilder.CreateRet( reprBuffer );
 			this->functionResolutionMap[perClassToStringName] = perClassToStringFunc;
 		}
-		// First pass: collect all interfaces and assign global indices
 		{
 			int globalIndex = 0;
 			for( const std::pair<const std::string, semantic::TypeSharedPointer>& entry : this->semanticAnalyzer.types().getUserTypes() ) {
@@ -495,7 +494,6 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-
 		for( const std::pair<const std::string, semantic::TypeSharedPointer>& entry : this->semanticAnalyzer.types().getUserTypes() ) {
 			if( entry.second == nullptr || entry.second->kind != semantic::Type::Kind::Class ) {
 				continue;
@@ -530,7 +528,6 @@ namespace uranite::ir::mir {
 					classFullQualified = classFullQualified.substr( 0, bracketPos );
 				}
 			}
-			// Collect per-interface itables for master vtable construction
 			std::vector<std::pair<std::string, llvm::GlobalVariable*>> collectedIttables;
 			for( const semantic::TypeSharedPointer& interfaceRef : classType->interfaces ) {
 				if( interfaceRef == nullptr || interfaceRef->kind != semantic::Type::Kind::Interface ) {
@@ -616,7 +613,6 @@ namespace uranite::ir::mir {
 					this->interfacesWithDirectItable.insert( directIfaceQualified );
 				}
 				collectedIttables.push_back( { directIfaceName, itableGlobal } );
-				// Also register all parent interfaces to use the same itable
 				std::vector<semantic::InterfaceType*> parentStack;
 				for( const semantic::TypeSharedPointer& parentIface : interfaceType->parentInterfaces ) {
 					if( parentIface != nullptr && parentIface->kind == semantic::Type::Kind::Interface ) {
@@ -682,6 +678,7 @@ namespace uranite::ir::mir {
 					}
 				}
 			}
+			
 			// Create master vtable: slot 0 = null (class vtable id), slots 1..N = itables
 			int numGlobalInterfaces = static_cast<int>( this->interfaceGlobalIndex.size() );
 			if( numGlobalInterfaces == 0 ) {
@@ -3029,6 +3026,44 @@ namespace uranite::ir::mir {
 	}
 	
 	void MIRCodegen::generateCallFunction( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition ) {
+		std::string _calledName = instruction.calledFunctionQualifiedName;
+		bool _isToStringCall = ( _calledName == "toString" );
+		if( _calledName.size() == 10 && _calledName[1] == '.' && _calledName.substr( 2 ) == "toString" &&
+		    _calledName[0] >= 'A' && _calledName[0] <= 'Z' ) {
+			_isToStringCall = true;
+		}
+		if( _isToStringCall && instruction.sourceOperands.size() >= 1 ) {
+			llvm::Value* receiverValue = this->loadVariableValue( instruction.sourceOperands[0] );
+			if( receiverValue != nullptr && receiverValue->getType()->isPointerTy() ) {
+				llvm::Value* asInt = this->irBuilder.CreatePtrToInt( receiverValue, llvm::Type::getInt64Ty( this->llvmContext ), "gen.tostr.ptoi" );
+				llvm::Value* threshold = llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 4096 );
+				llvm::Value* isSmall = this->irBuilder.CreateICmpULT( asInt, threshold, "gen.tostr.issmall" );
+				llvm::Function* currentFunc = this->irBuilder.GetInsertBlock()->getParent();
+				llvm::BasicBlock* primBlock = llvm::BasicBlock::Create( this->llvmContext, "gen.tostr.prim", currentFunc );
+				llvm::BasicBlock* ptrBlock = llvm::BasicBlock::Create( this->llvmContext, "gen.tostr.ptr", currentFunc );
+				llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create( this->llvmContext, "gen.tostr.merge", currentFunc );
+				this->irBuilder.CreateCondBr( isSmall, primBlock, ptrBlock );
+				this->irBuilder.SetInsertPoint( primBlock );
+				llvm::Function* intToStringFunc = this->llvmModule->getFunction( "uranite.convert.convert.intToString" );
+				llvm::Value* primResult = nullptr;
+				if( intToStringFunc != nullptr ) {
+					primResult = this->irBuilder.CreateCall( intToStringFunc, { asInt }, "gen.tostr.prim.result" );
+				}
+				this->irBuilder.CreateBr( mergeBlock );
+				llvm::BasicBlock* primExit = this->irBuilder.GetInsertBlock();
+				this->irBuilder.SetInsertPoint( ptrBlock );
+				this->irBuilder.CreateBr( mergeBlock );
+				llvm::BasicBlock* ptrExit = this->irBuilder.GetInsertBlock();
+				this->irBuilder.SetInsertPoint( mergeBlock );
+				llvm::PHINode* phiResult = this->irBuilder.CreatePHI( llvm::PointerType::getUnqual( this->llvmContext ), 2, "gen.tostr.result" );
+				phiResult->addIncoming( primResult != nullptr ? primResult : llvm::ConstantPointerNull::get( llvm::PointerType::getUnqual( this->llvmContext ) ), primExit );
+				phiResult->addIncoming( receiverValue, ptrExit );
+				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
+					this->setVariableValue( instruction.destinationVariable, phiResult );
+				}
+				return;
+			}
+		}
 		{
 			std::string dispatchedMethodName = instruction.calledFunctionQualifiedName;
 			size_t lastDotForDispatch = dispatchedMethodName.rfind( '.' );
@@ -5399,7 +5434,6 @@ namespace uranite::ir::mir {
 						llvm::StructType::get( this->llvmContext, vtableWrapperFields ), receiverPtr, static_cast<unsigned>( receiverVtableIndex ), "vtable.slot.ptr"
 					);
 					llvm::Value* masterVtablePtr = this->irBuilder.CreateLoad( vtablePtrType, vtableSlotPtr, "master.vtable.ptr" );
-					// Extract the itable for this interface from the master vtable
 					int ifaceGlobalIndex = 0;
 					if( this->interfaceGlobalIndex.count( ifaceLookupKey ) > 0 ) {
 						ifaceGlobalIndex = this->interfaceGlobalIndex[ifaceLookupKey];
@@ -8853,28 +8887,6 @@ namespace uranite::ir::mir {
 		llvm::Type* resolved = this->toLLVMType( elementSemaType );
 		if( resolved == nullptr || resolved->isVoidTy() ) {
 			return llvm::Type::getInt64Ty( this->llvmContext );
-		}
-		if( resolved->isPointerTy() && elementSemaType->kind == semantic::Type::Kind::Class ) {
-			std::string shortElementName = elementClassName;
-			size_t lastDotPos = shortElementName.rfind( '.' );
-			if( lastDotPos != std::string::npos ) {
-				shortElementName = shortElementName.substr( lastDotPos + 1 );
-			}
-			if( descriptor::Builtin::oopWrapperNames.count( shortElementName ) == 0 ) {
-				if( this->structTypeCache.count( elementClassName ) > 0 ) {
-					return this->structTypeCache[elementClassName];
-				}
-				for( const std::pair<const std::string, llvm::StructType*>& cacheEntry : this->structTypeCache ) {
-					size_t lastDot = cacheEntry.first.rfind( '.' );
-					if( lastDot != std::string::npos && cacheEntry.first.substr( lastDot + 1 ) == shortElementName ) {
-						return cacheEntry.second;
-					}
-				}
-				llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, elementClassName );
-				if( structType != nullptr ) {
-					return structType;
-				}
-			}
 		}
 		return resolved;
 	}
