@@ -234,6 +234,9 @@ namespace uranite::compiler {
 					}
 				}
 				for( std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator typeIterator = allTypes.begin(); typeIterator != allTypes.end(); ++typeIterator ) {
+					if( typeIterator->second != nullptr && typeIterator->second->kind == semantic::Type::Kind::GenericParameter ) {
+						continue;
+					}
 					if( this->accumulatedModuleTypes_.find( typeIterator->first ) == this->accumulatedModuleTypes_.end() ) {
 						moduleInfo.analyzedTypes[typeIterator->first] = typeIterator->second;
 						this->accumulatedModuleTypes_[typeIterator->first] = typeIterator->second;
