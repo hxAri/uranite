@@ -921,10 +921,14 @@ public class HashMap<K, V> implements MutableMapping<K, V>:
         for Int slotIndex = 0; slotIndex < self.capacity; slotIndex++:
             if self.status.get( slotIndex ) == 1:
                 if not first:
-                    result = result + ", "
-                result = result + self.keyData.get( slotIndex ) + ": " + self.valueData.get( slotIndex )
+                    result+= ", "
+                K keyset = self.keyData.get( slotIndex )
+                result+= keyset.toString()
+                V value = self.valueData.get( slotIndex )
+                result+= ": "
+                result+= value.toString()
                 first = False
-        result = result + "}"
+        result+= "}"
         return result
 
     public property size( self ) -> Int:
