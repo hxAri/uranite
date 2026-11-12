@@ -1002,17 +1002,46 @@ namespace uranite::ir::mir {
 						default:
 							break;
 					}
-					MIRInstruction arithmeticInstruction( arithmeticKind );
-					arithmeticInstruction.sourceOperands.push_back( loadedTarget );
-					arithmeticInstruction.sourceOperands.push_back( valueVariable );
-					arithmeticInstruction.operandType = assignment.valueExpression != nullptr
-						? assignment.valueExpression->resolvedType : nullptr;
-					arithmeticInstruction.sourceLocation = assignment.sourceLocation;
-					arithmeticInstruction.destinationVariable = this->currentFunction->allocateVariable(
-						"_compound_result", assignment.valueExpression != nullptr
-							? assignment.valueExpression->resolvedType : nullptr, false
-					);
-					valueVariable = this->emitInstruction( arithmeticInstruction );
+					bool isStringCompound = ( assignment.targetExpression != nullptr &&
+						assignment.targetExpression->resolvedType != nullptr &&
+						( assignment.targetExpression->resolvedType->kind == semantic::Type::Kind::String ||
+						  ( assignment.targetExpression->resolvedType->kind == semantic::Type::Kind::Class &&
+						    assignment.targetExpression->resolvedType->name == semantic::qualname::classes::string::Name ) ) ) ||
+						( assignment.valueExpression != nullptr &&
+						assignment.valueExpression->resolvedType != nullptr &&
+						( assignment.valueExpression->resolvedType->kind == semantic::Type::Kind::String ||
+						  ( assignment.valueExpression->resolvedType->kind == semantic::Type::Kind::Class &&
+						    assignment.valueExpression->resolvedType->name == semantic::qualname::classes::string::Name ) ) );
+					if( isStringCompound && assignment.assignmentOperator == token::Type::PlusAssignment ) {
+						MIRInstruction concatInstruction( MIRInstructionKind::CallFunction );
+						concatInstruction.calledFunctionQualifiedName = semantic::qualname::classes::string::methods::Concat;
+						concatInstruction.sourceOperands.push_back( loadedTarget );
+						concatInstruction.sourceOperands.push_back( valueVariable );
+						semantic::TypeSharedPointer concatResultType = assignment.valueExpression != nullptr
+							? assignment.valueExpression->resolvedType : nullptr;
+						if( concatResultType == nullptr ) {
+							concatResultType = std::make_shared<semantic::Type>( semantic::Type::Kind::String, semantic::qualname::classes::string::Name );
+						}
+						concatInstruction.operandType = concatResultType;
+						concatInstruction.sourceLocation = assignment.sourceLocation;
+						concatInstruction.destinationVariable = this->currentFunction->allocateVariable(
+							"_compound_result", concatResultType, false
+						);
+						valueVariable = this->emitInstruction( concatInstruction );
+					}
+					else {
+						MIRInstruction arithmeticInstruction( arithmeticKind );
+						arithmeticInstruction.sourceOperands.push_back( loadedTarget );
+						arithmeticInstruction.sourceOperands.push_back( valueVariable );
+						arithmeticInstruction.operandType = assignment.valueExpression != nullptr
+							? assignment.valueExpression->resolvedType : nullptr;
+						arithmeticInstruction.sourceLocation = assignment.sourceLocation;
+						arithmeticInstruction.destinationVariable = this->currentFunction->allocateVariable(
+							"_compound_result", assignment.valueExpression != nullptr
+								? assignment.valueExpression->resolvedType : nullptr, false
+						);
+						valueVariable = this->emitInstruction( arithmeticInstruction );
+					}
 				}
 				MIRInstruction storeInstruction( MIRInstructionKind::StoreVariable );
 				if( globalTargetName.empty() == false ) {
@@ -2156,7 +2185,36 @@ namespace uranite::ir::mir {
 				switchInstruction.defaultSwitchTarget = caseBlock->blockIdentifier;
 			}
 			else {
-				switchInstruction.switchBranchTargets.push_back( { static_cast<int64_t>( caseIndex ), caseBlock->blockIdentifier } );
+				int64_t discriminant = static_cast<int64_t>( caseIndex );
+				if( switchCase.casePattern != nullptr &&
+					switchCase.casePattern->nodeKind == hir::HIRNodeKind::FieldAccess ) {
+					hir::HIRFieldAccess& fieldAccess = static_cast<hir::HIRFieldAccess&>( *switchCase.casePattern );
+					if( fieldAccess.objectExpression != nullptr && fieldAccess.objectExpression->resolvedType != nullptr ) {
+						semantic::EnumTypeSharedPointer enumType = std::dynamic_pointer_cast<semantic::EnumType>(
+							fieldAccess.objectExpression->resolvedType
+						);
+						if( enumType != nullptr ) {
+							semantic::EnumVariantInfo* variantInfo = enumType->findVariant( fieldAccess.fieldName );
+							if( variantInfo != nullptr ) {
+								int64_t variantValue = variantInfo->discriminant;
+								if( enumType->astDeclaration != nullptr ) {
+									for( size_t vi = 0; vi < enumType->astDeclaration->variants.size(); vi++ ) {
+										ast::nodes::EnumVariantSharedPointer& astVariant = enumType->astDeclaration->variants[vi];
+										if( astVariant->name == fieldAccess.fieldName && astVariant->backedValue != nullptr ) {
+											if( astVariant->backedValue->kind == ast::Node::Kind::IntegerLiteral ) {
+												ast::nodes::IntegerLiteralExpression& intLit = static_cast<ast::nodes::IntegerLiteralExpression&>( *astVariant->backedValue );
+												variantValue = intLit.value;
+											}
+											break;
+										}
+									}
+								}
+								discriminant = variantValue;
+							}
+						}
+					}
+				}
+				switchInstruction.switchBranchTargets.push_back( { discriminant, caseBlock->blockIdentifier } );
 			}
 		}
 		this->emitTerminator( switchInstruction );
