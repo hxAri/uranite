@@ -488,6 +488,9 @@ namespace uranite::semantic {
 							enumType->interfaces.push_back( resolvedInterface );
 						}
 					}
+				for( TypeSharedPointer& genericParameter : enumType->genericParameters ) {
+					this->typeRegistry.unregisterType( genericParameter->name );
+				}
 					int moduleEnumDiscriminant = 0;
 					for( ast::nodes::EnumVariantSharedPointer& variant : enumDeclaration.variants ) {
 						EnumVariantInfo variantInfo;
@@ -683,6 +686,9 @@ namespace uranite::semantic {
 					if( resolvedInterface && resolvedInterface->kind == Type::Kind::Interface ) {
 						classType->interfaces.push_back( resolvedInterface );
 					}
+				}
+				for( TypeSharedPointer& genericParameter : classType->genericParameters ) {
+					this->typeRegistry.unregisterType( genericParameter->name );
 				}
 				this->popScope();
 			}
@@ -1964,6 +1970,13 @@ namespace uranite::semantic {
 				fieldInfo.isInitialized = true;
 			}
 		}
+		std::unordered_set<std::string> typesBeforeClassMethods;
+		for( const std::pair<const std::string, TypeSharedPointer>& entry : this->typeRegistry.getUserTypes() ) {
+			typesBeforeClassMethods.insert( entry.first );
+		}
+		for( TypeSharedPointer& classGenericParameter : classType->genericParameters ) {
+			this->typeRegistry.registerType( classGenericParameter->name, classGenericParameter );
+		}
 		for( ast::nodes::DeclarationSharedPointer& methodDeclaration : declaration.methods ) {
 			if( declaration.isBuiltin == false && methodDeclaration->access == ast::AccessModifier::Default ) {
 				if( methodDeclaration->kind == ast::Node::Kind::FunctionDeclaration ) {
@@ -2085,6 +2098,16 @@ namespace uranite::semantic {
 			}
 			for( const std::pair<std::string, TypeSharedPointer>& savedGeneric : savedClassGenericsForStatic ) {
 				this->typeRegistry.registerType( savedGeneric.first, savedGeneric.second );
+			}
+			// Remove any types that leaked during method analysis
+			std::vector<std::string> leakedTypes;
+			for( const std::pair<const std::string, TypeSharedPointer>& entry : this->typeRegistry.getUserTypes() ) {
+				if( typesBeforeClassMethods.count( entry.first ) == 0 ) {
+					leakedTypes.push_back( entry.first );
+				}
+			}
+			for( const std::string& leakedType : leakedTypes ) {
+				this->typeRegistry.unregisterType( leakedType );
 			}
 		}
 		if( classType->isReadonly ) {
@@ -3373,7 +3396,7 @@ namespace uranite::semantic {
 						TypeSharedPointer returnType = functionType->returnType;
 						if( interfaceType->typeSubstitutions.empty() == false && returnType->kind == Type::Kind::GenericParameter ) {
 							std::string paramName = returnType->name;
-							auto substitution = interfaceType->typeSubstitutions.find( paramName );
+							std::unordered_map<std::string, uranite::semantic::TypeSharedPointer>::iterator substitution = interfaceType->typeSubstitutions.find( paramName );
 							if( substitution != interfaceType->typeSubstitutions.end() ) {
 								return substitution->second;
 							}
@@ -3414,8 +3437,15 @@ namespace uranite::semantic {
 			}
 		}
 		else {
-			for( TypeSharedPointer& genericParameter : interfaceType->genericParameters ) {
-				this->typeRegistry.registerType( genericParameter->name, genericParameter );
+			for( ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
+				GenericParameterTypeSharedPointer genericParameterType = std::make_shared<GenericParameterType>( genericParameter->name );
+				interfaceType->genericParameters.push_back( genericParameterType );
+				this->typeRegistry.registerType( genericParameter->name, genericParameterType );
+			}
+			if( interfaceType->genericParameters.empty() ) {
+				for( TypeSharedPointer& genericParameter : interfaceType->genericParameters ) {
+					this->typeRegistry.registerType( genericParameter->name, genericParameter );
+				}
 			}
 		}
 		this->pushScope( Scope::Kind::Class );
@@ -5121,6 +5151,10 @@ namespace uranite::semantic {
 							existingInterfaceType->package = this->currentPackageName;
 							existingInterfaceType->qualified = thisQualified;
 						}
+						for( ast::nodes::GenericParameterSharedPointer& genericParameter : interfaceDeclaration.genericParameters ) {
+							GenericParameterTypeSharedPointer genericParameterType = std::make_shared<GenericParameterType>( genericParameter->name );
+							existingInterfaceType->genericParameters.push_back( genericParameterType );
+						}
 						for( ast::nodes::DeclarationSharedPointer& nestedDeclaration : interfaceDeclaration.nestedDeclarations ) {
 							this->registerTypeDeclaration( nestedDeclaration, thisQualified );
 						}
@@ -5198,6 +5232,11 @@ namespace uranite::semantic {
 				TypeSharedPointer resolvedType = this->typeRegistry.lookupType( simpleTypeNode.name );
 				if( resolvedType == nullptr && simpleTypeNode.name == qualname::identifier::SelfType && this->currentScope->isInsideClass() ) {
 					return this->currentScope->classType;
+				}
+				if( resolvedType == nullptr && simpleTypeNode.name.size() == 1 && simpleTypeNode.name[0] >= 'A' && simpleTypeNode.name[0] <= 'Z' ) {
+					GenericParameterTypeSharedPointer genericType = std::make_shared<GenericParameterType>( simpleTypeNode.name );
+					this->typeRegistry.registerType( simpleTypeNode.name, genericType );
+					resolvedType = genericType;
 				}
 				if( resolvedType == nullptr ) {
 					std::string unknownTypeErrorMessage = fmt::format( "unknown type \"{}\"", simpleTypeNode.name );
