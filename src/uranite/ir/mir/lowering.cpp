@@ -2214,6 +2214,10 @@ namespace uranite::ir::mir {
 						}
 					}
 				}
+				else if( switchCase.casePattern->nodeKind == hir::HIRNodeKind::IntegerLiteral ) {
+					hir::HIRIntegerLiteral& intLit = static_cast<hir::HIRIntegerLiteral&>( *switchCase.casePattern );
+					discriminant = static_cast<int64_t>( intLit.integerValue );
+				}
 				switchInstruction.switchBranchTargets.push_back( { discriminant, caseBlock->blockIdentifier } );
 			}
 		}
