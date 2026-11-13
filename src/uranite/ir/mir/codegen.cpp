@@ -2323,7 +2323,7 @@ namespace uranite::ir::mir {
 			return;
 		}
 		llvm::Value* constValue = llvm::ConstantInt::get(
-			llvm::Type::getInt64Ty( this->llvmContext ), instruction.integerConstantValue, true
+			llvm::Type::getInt64Ty( this->llvmContext ), instruction.integerConstantValue, false
 		);
 		this->setVariableValue( instruction.destinationVariable, constValue );
 	}
