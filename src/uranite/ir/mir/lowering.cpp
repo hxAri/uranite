@@ -2225,13 +2225,30 @@ namespace uranite::ir::mir {
 		for( size_t caseIndex = 0; caseIndex < hirSwitch.switchCases.size(); caseIndex++ ) {
 			this->switchToBlock( caseBlocks[caseIndex] );
 			hir::HIRSwitchCase& switchCase = hirSwitch.switchCases[caseIndex];
-			if( switchCase.caseBody != nullptr ) {
+			bool hasBody = ( switchCase.caseBody != nullptr ) && ( switchCase.caseBody->blockStatements.empty() == false );
+			if( hasBody ) {
 				this->lowerBlock( *switchCase.caseBody );
 			}
 			if( this->currentBlock->isTerminated == false ) {
-				MIRInstruction jumpToMerge( MIRInstructionKind::JumpUnconditional );
-				jumpToMerge.trueBranchTarget = mergeBlock->blockIdentifier;
-				this->emitTerminator( jumpToMerge );
+				// Fallthrough: if case has no body, jump to next case block
+				if( hasBody == false ) {
+					size_t nextIndex = caseIndex + 1;
+					if( nextIndex < caseBlocks.size() ) {
+						MIRInstruction jumpToNext( MIRInstructionKind::JumpUnconditional );
+						jumpToNext.trueBranchTarget = caseBlocks[nextIndex]->blockIdentifier;
+						this->emitTerminator( jumpToNext );
+					}
+					else {
+						MIRInstruction jumpToMerge( MIRInstructionKind::JumpUnconditional );
+						jumpToMerge.trueBranchTarget = mergeBlock->blockIdentifier;
+						this->emitTerminator( jumpToMerge );
+					}
+				}
+				else {
+					MIRInstruction jumpToMerge( MIRInstructionKind::JumpUnconditional );
+					jumpToMerge.trueBranchTarget = mergeBlock->blockIdentifier;
+					this->emitTerminator( jumpToMerge );
+				}
 			}
 		}
 		this->switchToBlock( mergeBlock );
