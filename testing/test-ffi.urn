@@ -1,0 +1,32 @@
+package testing
+
+from uranite.io.console import putsln
+from uranite.ffi.library import DynamicLibrary
+
+
+public function main() -> I32:
+    DynamicLibrary curlLib = new DynamicLibrary( "libcurl.so.4" )
+    curlLib.open()
+    I64 CURL_GLOBAL_DEFAULT = 3
+    I64 CURLOPT_URL = 10002
+    Callable<I64,<I64>> globalInitFn = curlLib.lookupSymbol( "curl_global_init" ) as Callable<I64,<I64>>
+    I64 initResult = globalInitFn( CURL_GLOBAL_DEFAULT )
+    putsln( "curl_global_init: ", initResult )
+    Callable<I64,<>> easyInitFn = curlLib.lookupSymbol( "curl_easy_init" ) as Callable<I64,<>>
+    I64 handle = easyInitFn()
+    putsln( "curl handle: ", handle )
+    Callable<I64,<I64,I64,String>> setoptStrFn = curlLib.lookupSymbol( "curl_easy_setopt" ) as Callable<I64,<I64,I64,String>>
+    I64 setResult = setoptStrFn( handle, CURLOPT_URL, "https://httpbin.org/get" )
+    putsln( "curl_easy_setopt: ", setResult )
+    putsln( "--- response start ---" )
+    Callable<I64,<I64>> performFn = curlLib.lookupSymbol( "curl_easy_perform" ) as Callable<I64,<I64>>
+    I64 performResult = performFn( handle )
+    putsln( "--- response end ---" )
+    putsln( "curl_easy_perform: ", performResult )
+    Callable<Void,<I64>> cleanupFn = curlLib.lookupSymbol( "curl_easy_cleanup" ) as Callable<Void,<I64>>
+    cleanupFn( handle )
+    Callable<Void,<>> globalCleanupFn = curlLib.lookupSymbol( "curl_global_cleanup" ) as Callable<Void,<>>
+    globalCleanupFn()
+    curlLib.close()
+    putsln( "done" )
+    return 0
