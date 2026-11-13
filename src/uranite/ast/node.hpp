@@ -1510,7 +1510,7 @@ namespace uranite::ast {
 			std::string raw;
 			
 			/** @brief The successfully parsed 64-bit integer value. */
-			int64_t value;
+			uint64_t value;
 			
 			/**
 			 * @brief Constructs an IntegerLiteralExpression.
@@ -1519,7 +1519,7 @@ namespace uranite::ast {
 			 * @param source The source code location information.
 			 */
 			IntegerLiteralExpression(
-				int64_t value,
+				uint64_t value,
 				const std::string& raw,
 				const lookup::SourceSharedPointer& source
 			) : Expression( Node::Kind::IntegerLiteral, source ),
