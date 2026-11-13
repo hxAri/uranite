@@ -2322,17 +2322,17 @@ namespace uranite::parser {
 				return std::make_shared<ast::nodes::FloatLiteralExpression>( raw, source, value );
 			}
 			case token::Type::LiteralInteger: {
-				int64_t value = 0;
+				uint64_t value = 0;
 				std::string raw = this->current().value;
 				this->advance();
 				if( raw.size() > 2 && raw[0] == '0' && ( raw[1] == 'x' || raw[1] == 'X' ) ) {
-					value = std::stoll( raw.substr( 2 ), nullptr, 16 );
+					value = std::stoull( raw.substr( 2 ), nullptr, 16 );
 				}
 				else if( raw.size() > 2 && raw[0] == '0' && ( raw[1] == 'b' || raw[1] == 'B' ) ) {
-					value = std::stoll( raw.substr( 2 ), nullptr, 2 );
+					value = std::stoull( raw.substr( 2 ), nullptr, 2 );
 				}
 				else if( raw.size() > 2 && raw[0] == '0' && ( raw[1] == 'o' || raw[1] == 'O' ) ) {
-					value = std::stoll( raw.substr( 2 ), nullptr, 8 );
+					value = std::stoull( raw.substr( 2 ), nullptr, 8 );
 				}
 				else {
 					std::string numericString;
@@ -2343,7 +2343,12 @@ namespace uranite::parser {
 						}
 						break;
 					}
-					value = std::stoll( numericString );
+					if( numericString.empty() == false && numericString[0] == '-' ) {
+						value = static_cast<uint64_t>( std::stoll( numericString ) );
+					}
+					else {
+						value = std::stoull( numericString );
+					}
 				}
 				return std::make_shared<ast::nodes::IntegerLiteralExpression>( value, raw, source );
 			}
