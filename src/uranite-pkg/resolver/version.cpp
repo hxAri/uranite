@@ -15,14 +15,14 @@
 #include "version.hpp"
 
 namespace uranite::pkg {
-
+	
 	bool SemanticVersion::operator==( const SemanticVersion& other ) const {
 		return this->majorVersion == other.majorVersion &&
 			this->minorVersion == other.minorVersion &&
 			this->patchVersion == other.patchVersion &&
 			this->prereleaseLabel == other.prereleaseLabel;
 	}
-
+	
 	bool SemanticVersion::operator<( const SemanticVersion& other ) const {
 		if( this->majorVersion != other.majorVersion ) {
 			return this->majorVersion < other.majorVersion;
@@ -44,19 +44,19 @@ namespace uranite::pkg {
 		}
 		return this->prereleaseLabel < other.prereleaseLabel;
 	}
-
+	
 	bool SemanticVersion::operator<=( const SemanticVersion& other ) const {
 		return *this == other || *this < other;
 	}
-
+	
 	bool SemanticVersion::operator>( const SemanticVersion& other ) const {
 		return other < *this;
 	}
-
+	
 	bool SemanticVersion::operator>=( const SemanticVersion& other ) const {
 		return *this == other || *this > other;
 	}
-
+	
 	std::string SemanticVersion::toString() const {
 		std::string result = std::to_string( this->majorVersion ) + "." +
 			std::to_string( this->minorVersion ) + "." +
@@ -66,25 +66,21 @@ namespace uranite::pkg {
 		}
 		return result;
 	}
-
+	
 	SemanticVersion VersionParser::parse( const std::string& versionString ) {
 		SemanticVersion version;
 		std::string input = versionString;
-
 		if( input.empty() == false && input[0] == 'v' ) {
 			input = input.substr( 1 );
 		}
-
 		size_t prereleasePosition = input.find( '-' );
 		std::string numericPart = input;
 		if( prereleasePosition != std::string::npos ) {
 			version.prereleaseLabel = input.substr( prereleasePosition + 1 );
 			numericPart = input.substr( 0, prereleasePosition );
 		}
-
 		std::istringstream numericStream( numericPart );
 		std::string segment;
-
 		if( std::getline( numericStream, segment, '.' ) ) {
 			version.majorVersion = static_cast<uint32_t>( std::stoul( segment ) );
 		}
@@ -94,25 +90,20 @@ namespace uranite::pkg {
 		if( std::getline( numericStream, segment, '.' ) ) {
 			version.patchVersion = static_cast<uint32_t>( std::stoul( segment ) );
 		}
-
 		return version;
 	}
-
+	
 	std::vector<VersionConstraint> VersionParser::parseConstraint( const std::string& constraintString ) {
 		std::vector<VersionConstraint> constraints;
-
 		std::istringstream constraintStream( constraintString );
 		std::string singleConstraint;
-
 		while( std::getline( constraintStream, singleConstraint, ',' ) ) {
 			size_t startPosition = singleConstraint.find_first_not_of( " \t" );
 			if( startPosition == std::string::npos ) {
 				continue;
 			}
 			singleConstraint = singleConstraint.substr( startPosition );
-
 			VersionConstraint constraint;
-
 			if( singleConstraint[0] == '^' ) {
 				constraint.constraintOperator = ConstraintOperator::Caret;
 				constraint.constraintVersion = parse( singleConstraint.substr( 1 ) );
@@ -161,39 +152,30 @@ namespace uranite::pkg {
 				constraint.constraintOperator = ConstraintOperator::Exact;
 				constraint.constraintVersion = parse( singleConstraint );
 			}
-
 			constraints.push_back( constraint );
 		}
-
 		if( constraints.empty() ) {
 			VersionConstraint fallback;
 			fallback.constraintOperator = ConstraintOperator::GreaterThanOrEqual;
 			fallback.constraintVersion = parse( "0.0.0" );
 			constraints.push_back( fallback );
 		}
-
 		return constraints;
 	}
-
+	
 	bool VersionParser::satisfiesSingle( const SemanticVersion& candidateVersion, const VersionConstraint& constraint ) {
 		const SemanticVersion& constraintVersion = constraint.constraintVersion;
-
 		switch( constraint.constraintOperator ) {
 			case ConstraintOperator::Exact:
 				return candidateVersion == constraintVersion;
-
 			case ConstraintOperator::GreaterThan:
 				return candidateVersion > constraintVersion;
-
 			case ConstraintOperator::GreaterThanOrEqual:
 				return candidateVersion >= constraintVersion;
-
 			case ConstraintOperator::LessThan:
 				return candidateVersion < constraintVersion;
-
 			case ConstraintOperator::LessThanOrEqual:
 				return candidateVersion <= constraintVersion;
-
 			case ConstraintOperator::Caret: {
 				if( candidateVersion < constraintVersion ) {
 					return false;
@@ -207,7 +189,6 @@ namespace uranite::pkg {
 				}
 				return candidateVersion == constraintVersion;
 			}
-
 			case ConstraintOperator::Tilde: {
 				if( candidateVersion < constraintVersion ) {
 					return false;
@@ -216,10 +197,9 @@ namespace uranite::pkg {
 					candidateVersion.minorVersion == constraintVersion.minorVersion;
 			}
 		}
-
 		return false;
 	}
-
+	
 	bool VersionParser::satisfies( const SemanticVersion& candidateVersion, const std::vector<VersionConstraint>& constraints ) {
 		for( const VersionConstraint& constraint : constraints ) {
 			if( satisfiesSingle( candidateVersion, constraint ) == false ) {
@@ -228,21 +208,18 @@ namespace uranite::pkg {
 		}
 		return true;
 	}
-
+	
 	SemanticVersion VersionParser::findHighestCompatible( const std::vector<SemanticVersion>& availableVersions,
 		const std::vector<VersionConstraint>& constraints ) {
-
 		std::vector<SemanticVersion> compatibleVersions;
 		for( const SemanticVersion& version : availableVersions ) {
 			if( satisfies( version, constraints ) ) {
 				compatibleVersions.push_back( version );
 			}
 		}
-
 		if( compatibleVersions.empty() ) {
 			throw std::runtime_error( "no compatible version found" );
 		}
-
 		std::sort( compatibleVersions.begin(), compatibleVersions.end() );
 		return compatibleVersions.back();
 	}
