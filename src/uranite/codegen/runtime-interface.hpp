@@ -19,7 +19,7 @@
 #include <llvm/IR/Type.h>
 
 namespace uranite::codegen {
-
+	
 	struct RuntimeFunctionSpec {
 		std::string functionName;
 		llvm::FunctionType* functionSignature = nullptr;
@@ -27,29 +27,29 @@ namespace uranite::codegen {
 		bool isNoReturn = false;
 		bool isVariadic = false;
 	};
-
+	
 	class RuntimeInterface {
-
+		
 		public:
-
+			
 			virtual ~RuntimeInterface() = default;
-
+			
 			virtual RuntimeFunctionSpec getThrowFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getPersonalityFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getBeginCatchFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getEndCatchFunction( llvm::LLVMContext& context ) = 0;
-
+			
 			virtual RuntimeFunctionSpec getPushFrameFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getPopFrameFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getGetFrameDepthFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getGetFrameAtFunction( llvm::LLVMContext& context ) = 0;
-
+			
 			virtual RuntimeFunctionSpec getMallocFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getFreeFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getCallocFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getMemcpyFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getReallocFunction( llvm::LLVMContext& context ) = 0;
-
+			
 			virtual RuntimeFunctionSpec getPrintfFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getSnprintfFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getStrlenFunction( llvm::LLVMContext& context ) = 0;
@@ -59,6 +59,7 @@ namespace uranite::codegen {
 			virtual RuntimeFunctionSpec getStrstrFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getStrncmpFunction( llvm::LLVMContext& context ) = 0;
 			virtual RuntimeFunctionSpec getWriteFunction( llvm::LLVMContext& context ) = 0;
+			
 	};
 
 } // namespace uranite::codegen
