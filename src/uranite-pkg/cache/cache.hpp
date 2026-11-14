@@ -17,21 +17,21 @@
 #include "../resolver/version.hpp"
 
 namespace uranite::pkg {
-
+	
 	struct CachedPackage {
 		std::string packageName;
 		SemanticVersion resolvedVersion;
 		std::string cachedDirectoryPath;
 		std::string sourceIntegrityHash;
 	};
-
+	
 	class PackageCache {
-
+		
 		public:
-
+			
 			PackageCache();
 			explicit PackageCache( const std::string& cacheRootDirectory );
-
+			
 			bool isPackageCached( const std::string& packageName, const SemanticVersion& version ) const;
 			std::string getPackagePath( const std::string& packageName, const SemanticVersion& version ) const;
 			std::string getModulesPath( const std::string& packageName, const SemanticVersion& version ) const;
@@ -41,9 +41,9 @@ namespace uranite::pkg {
 			std::vector<CachedPackage> listCachedPackages() const;
 			void ensureCacheDirectoryExists() const;
 			std::string getCacheRootDirectory() const;
-
+		
 		private:
-
+			
 			std::string buildPackageDirectoryName( const std::string& packageName, const SemanticVersion& version ) const;
 			std::string cacheRootDirectory_;
 	};
