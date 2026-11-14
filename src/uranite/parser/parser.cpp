@@ -2474,36 +2474,47 @@ namespace uranite::parser {
 						isConstVariable = true;
 						this->advance();
 					}
-					bool isNullablePrefix = this->check( token::Type::Question );
-					if( isNullablePrefix || this->check( token::Type::Identifier ) ) {
+					bool isTypeStart = this->check( token::Type::Question ) || this->check( token::Type::Identifier );
+					if( isTypeStart ) {
 						size_t typeStartPosition = this->position;
-						if( isNullablePrefix ) {
-							this->advance();
-						}
-						if( this->check( token::Type::Identifier ) ) {
-							this->advance();
-						}
-						if( this->check( token::Type::LessThan ) ) {
-							int genericDepth = 1;
-							this->advance();
-							while( ( genericDepth > 0 ) && ( this->isAtEnd( false ) ) ) {
-								if( this->check( token::Type::LessThan ) ) {
-									genericDepth++;
-								}
-								else if( this->check( token::Type::GreaterThan ) ) {
-									genericDepth--;
-								}
-								else if( this->check( token::Type::ShiftRight ) ) { 
-									genericDepth-= 2; 
-								}
+						auto parseOneTypePart = [&]() -> bool {
+							if( this->check( token::Type::Question ) ) {
 								this->advance();
 							}
-						}
-						if( this->check( token::Type::LeftBracket ) && ( this->peek( 1 ).type == token::Type::RightBracket ) ) {
+							if( this->check( token::Type::Identifier ) || this->check( token::Type::KeywordSelf ) ) {
+								this->advance();
+							}
+							else {
+								return false;
+							}
+							if( this->check( token::Type::LessThan ) ) {
+								int genericDepth = 1;
+								this->advance();
+								while( ( genericDepth > 0 ) && ( this->isAtEnd( false ) ) ) {
+									if( this->check( token::Type::LessThan ) ) {
+										genericDepth++;
+									}
+									else if( this->check( token::Type::GreaterThan ) ) {
+										genericDepth--;
+									}
+									else if( this->check( token::Type::ShiftRight ) ) { 
+										genericDepth-= 2; 
+									}
+									this->advance();
+								}
+							}
+							if( this->check( token::Type::LeftBracket ) && ( this->peek( 1 ).type == token::Type::RightBracket ) ) {
+								this->advance();
+								this->advance();
+							}
+							return true;
+						};
+						bool looksLikeType = parseOneTypePart();
+						while( looksLikeType && this->check( token::Type::Pipe ) ) {
 							this->advance();
-							this->advance();
+							looksLikeType = parseOneTypePart();
 						}
-						if( this->check( token::Type::Identifier ) ) {
+						if( looksLikeType && this->check( token::Type::Identifier ) ) {
 							this->position = typeStartPosition;
 							ast::nodes::TypeNodeSharedPointer parsedTypeNode = this->parseTypeNode();
 							std::string variableName = this->expect( token::Type::Identifier, "expected variable name" ).value;
@@ -2524,6 +2535,7 @@ namespace uranite::parser {
 							);
 							return variableStatement;
 						}
+						this->position = typeStartPosition;
 					}
 					this->position = savedPosition;
 				}

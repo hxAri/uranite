@@ -297,10 +297,11 @@ namespace uranite::ir::mir {
 			if( this->functionResolutionMap.count( llvmFunctionName ) > 0 ) {
 				llvm::Function* existingFunction = this->functionResolutionMap[llvmFunctionName];
 				std::string existingSuffix = fmt::format( "{}#{}", llvmFunctionName, existingFunction->arg_size() );
+				
 				// Don't register arity suffix as alias for existing function when overloads exist
-				(void)existingSuffix;
-				llvmFunctionName = fmt::format( "{}#{}", llvmFunctionName,
-					functionDefinition->parameterVariableIdentifiers.size() );
+				( void ) existingSuffix;
+				
+				llvmFunctionName = fmt::format( "{}#{}", llvmFunctionName, functionDefinition->parameterVariableIdentifiers.size() );
 				if( this->functionResolutionMap.count( llvmFunctionName ) > 0 ) {
 					llvm::Function* existingFunc = this->functionResolutionMap[llvmFunctionName];
 					bool typesMatch = ( existingFunc->arg_size() == functionDefinition->parameterVariableIdentifiers.size() );
@@ -1046,6 +1047,7 @@ namespace uranite::ir::mir {
 				}
 			}
 			if( llvmFunction != nullptr && llvmFunction->isDeclaration() == false ) {
+				
 				// Check if param types match; if not, this is an overload - create new function
 				bool typesMatch = ( llvmFunction->arg_size() == functionDefinition.parameterVariableIdentifiers.size() );
 				if( typesMatch ) {
@@ -1066,7 +1068,19 @@ namespace uranite::ir::mir {
 				if( typesMatch ) {
 					return;
 				}
-				llvmFunction = nullptr;  // Different overload - create new function
+				llvmFunction = nullptr;  // Different overload - reuse arity-suffixed function if pre-declared
+				{
+					std::string overloadFunctionName = fmt::format( "{}#{}", llvmFunctionName,
+						functionDefinition.parameterVariableIdentifiers.size() );
+					if( this->functionResolutionMap.count( overloadFunctionName ) > 0 ) {
+						llvm::Function* overloadFunction = this->functionResolutionMap[overloadFunctionName];
+						if( overloadFunction != nullptr &&
+							overloadFunction->arg_size() == functionDefinition.parameterVariableIdentifiers.size() ) {
+							llvmFunction = overloadFunction;
+							llvmFunctionName = overloadFunctionName;
+						}
+					}
+				}
 			}
 		}
 		this->variableValueMap.clear();
@@ -4248,6 +4262,7 @@ namespace uranite::ir::mir {
 									}
 									if( concatArgSemaType != nullptr &&
 										concatArgSemaType->kind == semantic::Type::Kind::GenericParameter ) {
+										
 										// Generic element ptr may be inttoptr'd integer — runtime branch
 										llvm::Value* ptrAsInt = this->irBuilder.CreatePtrToInt( otherValue, i64Type, "cat.ptoi" );
 										llvm::Value* threshold = llvm::ConstantInt::get( i64Type, 4096 );
@@ -5348,6 +5363,9 @@ namespace uranite::ir::mir {
 			}
 		}
 		llvm::Function* callee = nullptr;
+		if( this->functionResolutionMap.count( calledName ) > 0 ) {
+			callee = this->functionResolutionMap[calledName];
+		}
 		// For overloaded functions, find the best matching overload by argument types
 		{
 			llvm::Function* bestMatch = nullptr;
@@ -5357,7 +5375,6 @@ namespace uranite::ir::mir {
 				if( candidate == nullptr || candidate->isVarArg() ) continue;
 				if( candidate->arg_size() != instruction.sourceOperands.size() ) continue;
 				bestMatch = candidate;
-				// Prefer exact type match
 				bool typeMatch = true;
 				for( unsigned pi = 0; pi < instruction.sourceOperands.size(); pi++ ) {
 					llvm::Type* argType = nullptr;
@@ -5392,7 +5409,6 @@ namespace uranite::ir::mir {
 		if( callee == nullptr ) {
 			callee = this->llvmModule->getFunction( calledName );
 		}
-		// Overload resolution by argument types
 		if( callee != nullptr && callee->isVarArg() == false &&
 			instruction.sourceOperands.size() > 0 ) {
 			bool typesMatch = ( callee->arg_size() == instruction.sourceOperands.size() );
@@ -5402,16 +5418,23 @@ namespace uranite::ir::mir {
 					if( argVal != nullptr && pi < callee->getFunctionType()->getNumParams() ) {
 						llvm::Type* paramType = callee->getFunctionType()->getParamType( pi );
 						if( argVal->getType() != paramType ) {
-							typesMatch = false;
-							break;
+							bool coercibleBoxing = ( paramType->isPointerTy() && argVal->getType()->isIntegerTy() );
+							if( coercibleBoxing == false ) {
+								typesMatch = false;
+								break;
+							}
 						}
 					}
 				}
 			}
 			if( typesMatch == false ) {
-				// Search for a better matching overload
 				for( const std::pair<const std::string, llvm::Function*>& entry : this->functionResolutionMap ) {
-					if( entry.first != calledName && entry.first.find( calledName ) != 0 ) {
+					std::string entryBase = entry.first;
+					size_t hashPosition = entryBase.find( '#' );
+					if( hashPosition != std::string::npos ) {
+						entryBase = entryBase.substr( 0, hashPosition );
+					}
+					if( entryBase != calledName ) {
 						continue;
 					}
 					llvm::Function* candidate = entry.second;
@@ -5455,7 +5478,6 @@ namespace uranite::ir::mir {
 				}
 			}
 		}
-		// Overload resolution by argument types for functions with same name
 		if( callee != nullptr && callee->isVarArg() == false &&
 			instruction.sourceOperands.size() > 0 ) {
 			bool typesMatch = ( callee->arg_size() == instruction.sourceOperands.size() );
@@ -5465,8 +5487,11 @@ namespace uranite::ir::mir {
 					if( argVal != nullptr && pi < callee->getFunctionType()->getNumParams() ) {
 						llvm::Type* paramType = callee->getFunctionType()->getParamType( pi );
 						if( argVal->getType() != paramType ) {
-							typesMatch = false;
-							break;
+							bool coercibleBoxing = ( paramType->isPointerTy() && argVal->getType()->isIntegerTy() );
+							if( coercibleBoxing == false ) {
+								typesMatch = false;
+								break;
+							}
 						}
 					}
 				}
@@ -5476,7 +5501,6 @@ namespace uranite::ir::mir {
 					llvm::Function* candidate = entry.second;
 					if( candidate == nullptr || candidate->isVarArg() ) continue;
 					if( candidate->arg_size() != instruction.sourceOperands.size() ) continue;
-					// Name must match (possibly with #arity suffix)
 					std::string entryBase = entry.first;
 					size_t hashPos = entryBase.find( '#' );
 					if( hashPos != std::string::npos ) entryBase = entryBase.substr( 0, hashPos );
@@ -9046,6 +9070,22 @@ namespace uranite::ir::mir {
 		}
 		if( elementSemaType == nullptr ) {
 			return llvm::Type::getInt64Ty( this->llvmContext );
+		}
+		if( elementSemaType->kind == semantic::Type::Kind::Class || elementSemaType->kind == semantic::Type::Kind::Struct ) {
+			std::string lookupName = elementSemaType->qualified.empty() == false ? elementSemaType->qualified : elementSemaType->name;
+			if( this->structTypeCache.count( lookupName ) > 0 ) {
+				return this->structTypeCache[lookupName];
+			}
+			if( this->structTypeCache.count( elementSemaType->name ) > 0 ) {
+				return this->structTypeCache[elementSemaType->name];
+			}
+			llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, lookupName );
+			if( structType == nullptr ) {
+				structType = llvm::StructType::getTypeByName( this->llvmContext, elementSemaType->name );
+			}
+			if( structType != nullptr ) {
+				return structType;
+			}
 		}
 		llvm::Type* resolved = this->toLLVMType( elementSemaType );
 		if( resolved == nullptr || resolved->isVoidTy() ) {
