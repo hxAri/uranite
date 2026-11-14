@@ -18,43 +18,24 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 # 
 
-package uranite.examples.tutorials.testing
+package uranite.examples.testing
 
-from uranite.collection import ArrayList, HashMap, HashSet, Pair, Tuple
+from uranite.collection import ArrayList, Generator, HashMap, HashSet, Pair, Tuple
 from uranite.functions.builtin import enumerate
 from uranite.io import getpass, input, puts
-from uranite.io.stream import Stream
+from uranite.iterators import Iterable
 
-private function writer( I64 targetFileDescriptor, String args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
-    for Int i, String argument in enumerate<I64>( args, start=1 ):
-    # for Pair<Int,I64> pair in enumerate<I64>( args, start=1 ):
-        puts( "writter [{}] {}".format( i, argument ) )
+private function generator( Int start, Int end ) -> Generator<Int>:
+	for Int i in start..end:
+		yield i
 
-private function called( String args[], ?String separator=" ", ?String endline="\n", ?Stream stream=None, Boolean flush=False ) -> Void:
-    for Int i, String argument in enumerate<I64>( args, start=1 ):
-    # for Pair<Int,I64> pair in enumerate<I64>( args, start=1 ):
-        puts( "called [{}] {}".format( i, argument ) )
-    writer( 0, args=args, separator=separator, endline=endline, stream=stream, flush=flush )
+private async function printer( Iterable<Int> items ) -> Future<Void>:
+	for Int i, Int n in enumerate<Int>( items, 1 ):
+		puts( "Item: {} at index {}".format( n, i ) )
 
-public function main( I64 argc, ArrayList<String> argv ) -> Void:
-    Object object = { 1: "A", 2: "B", 3: "C" } # Garbage `��XUUU`
-    # Object object = { 1, 2, 3 } # Garbage `��XUUU`
-    # Object object = ( 1, 2, 3 ) # Garbage `��XUUU`
-    # Object object = [ 1, 2, 3 ] # Garbage `��XUUU`
-    # Object object = 10 # Segmentation Fault
-    # Object object = 1.0 # `None`
-    # Object object = "String" # Fine
-    puts( object )
-    puts( object as String )
-    puts( object as HashMap<I64,String> )
-    ArrayList<String> lists = [ "X" ]
-    HashMap<String,String> maps = { "x": "Y" }
-    HashSet<String> sets = { "x" }
-    Tuple<String> tuple = ( "" )
-    called( "AJG!" )
-    called( "X", "Y", "Z" )
-    for Int i, String argument in enumerate<String>( argv, 1 ):
-        puts( "argument [{}] {}".format( i, argument ) )
-    # String value = input( "Inputs: " )
-    # puts( value )
-    
+public function main() -> Void:
+	ArrayList<Int> items = []
+	Generator<Int> gen = generator( 1, 10 )
+	for Int i in generator( 1, 10 ):
+		items.append( i )
+	printer( items )
