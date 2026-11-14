@@ -15,7 +15,7 @@
 #include <vector>
 
 namespace uranite::pkg {
-
+	
 	struct LockfileEntry {
 		std::string packageName;
 		std::string resolvedVersionString;
@@ -23,22 +23,22 @@ namespace uranite::pkg {
 		std::string sourceRepository;
 		std::vector<std::string> transitiveDependencyNames;
 	};
-
+	
 	struct Lockfile {
 		std::string lockfileFormatVersion = "1";
 		std::vector<LockfileEntry> lockedEntries;
 	};
-
+	
 	class LockfileManager {
-
+		
 		public:
-
+			
 			static Lockfile readFromFile( const std::string& filePath );
 			static void writeToFile( const Lockfile& lockfile, const std::string& filePath );
 			static bool exists( const std::string& filePath );
-
+		
 		private:
-
+			
 			static std::string escapeYamlString( const std::string& input );
 	};
 
