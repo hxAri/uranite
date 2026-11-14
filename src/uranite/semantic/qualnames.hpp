@@ -112,7 +112,7 @@ namespace uranite::semantic::qualname {
 	
 	namespace classes {
 		namespace object {
-
+			
 			static inline const std::string Qualified = "uranite.language.object.Object";
 			static constexpr const char* Package = "uranite.language.object";
 			static constexpr const char* Name = "Object";
