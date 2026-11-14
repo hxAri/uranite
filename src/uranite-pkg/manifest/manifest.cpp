@@ -15,7 +15,7 @@
 #include "manifest.hpp"
 
 namespace uranite::pkg {
-
+	
 	std::string ManifestParser::trimWhitespace( const std::string& text ) {
 		size_t startPosition = text.find_first_not_of( " \t\r\n" );
 		if( startPosition == std::string::npos ) {
@@ -24,7 +24,7 @@ namespace uranite::pkg {
 		size_t endPosition = text.find_last_not_of( " \t\r\n" );
 		return text.substr( startPosition, endPosition - startPosition + 1 );
 	}
-
+	
 	std::string ManifestParser::stripQuotes( const std::string& text ) {
 		std::string trimmed = trimWhitespace( text );
 		if( trimmed.size() >= 2 ) {
@@ -35,7 +35,7 @@ namespace uranite::pkg {
 		}
 		return trimmed;
 	}
-
+	
 	int32_t ManifestParser::measureIndent( const std::string& line ) {
 		int32_t indentCount = 0;
 		for( size_t charIndex = 0; charIndex < line.size(); charIndex++ ) {
@@ -51,7 +51,7 @@ namespace uranite::pkg {
 		}
 		return indentCount;
 	}
-
+	
 	std::string ManifestParser::buildSectionPath( const std::vector<std::pair<int32_t, std::string>>& pathStack ) {
 		std::string sectionPath;
 		for( size_t entryIndex = 0; entryIndex < pathStack.size(); entryIndex++ ) {
@@ -62,22 +62,18 @@ namespace uranite::pkg {
 		}
 		return sectionPath;
 	}
-
+	
 	std::vector<std::string> ManifestParser::parseInlineSequence( const std::string& sequenceContent ) {
 		std::vector<std::string> elements;
 		std::string content = trimWhitespace( sequenceContent );
-
 		if( content.size() >= 2 && content.front() == '[' && content.back() == ']' ) {
 			content = content.substr( 1, content.size() - 2 );
 		}
-
 		std::string currentElement;
 		bool insideQuotes = false;
 		int32_t braceDepth = 0;
-
 		for( size_t charIndex = 0; charIndex < content.size(); charIndex++ ) {
 			char character = content[charIndex];
-
 			if( character == '"' && ( charIndex == 0 || content[charIndex - 1] != '\\' ) ) {
 				insideQuotes = !insideQuotes;
 				currentElement+= character;
@@ -105,29 +101,23 @@ namespace uranite::pkg {
 				currentElement+= character;
 			}
 		}
-
 		std::string lastElement = trimWhitespace( currentElement );
 		if( lastElement.empty() == false ) {
 			elements.push_back( stripQuotes( lastElement ) );
 		}
-
 		return elements;
 	}
-
+	
 	std::unordered_map<std::string, std::string> ManifestParser::parseInlineMapping( const std::string& mappingContent ) {
 		std::unordered_map<std::string, std::string> result;
 		std::string content = trimWhitespace( mappingContent );
-
 		if( content.size() >= 2 && content.front() == '{' && content.back() == '}' ) {
 			content = content.substr( 1, content.size() - 2 );
 		}
-
 		std::string currentPair;
 		bool insideQuotes = false;
-
 		for( size_t charIndex = 0; charIndex < content.size(); charIndex++ ) {
 			char character = content[charIndex];
-
 			if( character == '"' && ( charIndex == 0 || content[charIndex - 1] != '\\' ) ) {
 				insideQuotes = !insideQuotes;
 				currentPair+= character;
@@ -145,7 +135,6 @@ namespace uranite::pkg {
 				currentPair+= character;
 			}
 		}
-
 		if( currentPair.empty() == false ) {
 			size_t colonPosition = currentPair.find( ':' );
 			if( colonPosition != std::string::npos ) {
@@ -154,47 +143,37 @@ namespace uranite::pkg {
 				result[key] = value;
 			}
 		}
-
 		return result;
 	}
-
+	
 	std::unordered_map<std::string, std::unordered_map<std::string, ManifestParser::ConfigValue>> ManifestParser::parseYaml( const std::string& content ) {
 		std::unordered_map<std::string, std::unordered_map<std::string, ConfigValue>> sections;
-
 		std::vector<std::pair<int32_t, std::string>> pathStack;
 		std::unordered_map<std::string, size_t> arrayObjectIndexCounters;
-
 		std::istringstream stream( content );
 		std::string line;
-
 		while( std::getline( stream, line ) ) {
 			int32_t indent = measureIndent( line );
 			std::string trimmedLine = trimWhitespace( line );
-
 			if( trimmedLine.empty() || trimmedLine[0] == '#' ) {
 				continue;
 			}
-
 			bool isArrayItem = ( trimmedLine.size() >= 2 && trimmedLine[0] == '-' && ( trimmedLine[1] == ' ' || trimmedLine[1] == '\t' ) );
 			int32_t popThreshold = isArrayItem ? indent + 1 : indent;
 			while( pathStack.empty() == false && pathStack.back().first >= popThreshold ) {
 				pathStack.pop_back();
 			}
-
 			if( isArrayItem ) {
 				std::string itemContent = trimWhitespace( trimmedLine.substr( 2 ) );
-
 				if( pathStack.empty() ) {
 					continue;
 				}
-
 				std::string parentKey = pathStack.back().second;
 				std::string sectionPath;
 				if( pathStack.size() >= 2 ) {
 					std::vector<std::pair<int32_t, std::string>> sectionStack( pathStack.begin(), pathStack.end() - 1 );
 					sectionPath = buildSectionPath( sectionStack );
 				}
-
 				size_t itemColonPosition = std::string::npos;
 				bool itemInsideQuotes = false;
 				for( size_t charIndex = 0; charIndex < itemContent.size(); charIndex++ ) {
@@ -212,25 +191,21 @@ namespace uranite::pkg {
 						}
 					}
 				}
-
 				if( itemColonPosition != std::string::npos && itemContent.front() != '"' && itemContent.front() != '\'' ) {
 					std::string fullArrayKey = sectionPath.empty() ? parentKey : sectionPath + "." + parentKey;
 					size_t objectIndex = arrayObjectIndexCounters[fullArrayKey]++;
 					std::string indexedSectionPath = fullArrayKey + "." + std::to_string( objectIndex );
-
 					std::string firstKey = trimWhitespace( itemContent.substr( 0, itemColonPosition ) );
 					std::string firstRawValue;
 					if( itemColonPosition + 1 < itemContent.size() ) {
 						firstRawValue = trimWhitespace( itemContent.substr( itemColonPosition + 1 ) );
 					}
-
 					if( firstRawValue.empty() == false ) {
 						ConfigValue scalarValue;
 						scalarValue.valueKind = ConfigValue::Kind::String;
 						scalarValue.stringValue = stripQuotes( firstRawValue );
 						sections[indexedSectionPath][firstKey] = scalarValue;
 					}
-
 					pathStack.push_back( { indent + 1, std::to_string( objectIndex ) } );
 				}
 				else {
@@ -240,10 +215,8 @@ namespace uranite::pkg {
 				}
 				continue;
 			}
-
 			size_t colonPosition = std::string::npos;
 			bool insideQuotes = false;
-
 			for( size_t charIndex = 0; charIndex < trimmedLine.size(); charIndex++ ) {
 				char character = trimmedLine[charIndex];
 				if( character == '"' || character == '\'' ) {
@@ -260,28 +233,22 @@ namespace uranite::pkg {
 					}
 				}
 			}
-
 			if( colonPosition == std::string::npos ) {
 				continue;
 			}
-
 			std::string key = trimWhitespace( trimmedLine.substr( 0, colonPosition ) );
 			std::string rawValue;
 			if( colonPosition + 1 < trimmedLine.size() ) {
 				rawValue = trimWhitespace( trimmedLine.substr( colonPosition + 1 ) );
 			}
-
 			if( rawValue.empty() ) {
 				pathStack.push_back( { indent, key } );
 				continue;
 			}
-
 			if( rawValue == "{}" ) {
 				continue;
 			}
-
 			std::string sectionPath = buildSectionPath( pathStack );
-
 			if( rawValue == "[]" ) {
 				ConfigValue emptyArray;
 				emptyArray.valueKind = ConfigValue::Kind::Array;
@@ -306,19 +273,16 @@ namespace uranite::pkg {
 				sections[sectionPath][key] = scalarValue;
 			}
 		}
-
 		return sections;
 	}
-
+	
 	PackageDependency ManifestParser::parseDependencyString( const std::string& dependencySpec, bool isDevelopmentOnly ) {
 		PackageDependency dependency;
 		dependency.isDevelopmentOnly = isDevelopmentOnly;
-
 		size_t atPosition = dependencySpec.find( '@' );
 		if( atPosition != std::string::npos ) {
 			std::string sourceIdentifier = dependencySpec.substr( 0, atPosition );
 			dependency.versionConstraint = dependencySpec.substr( atPosition + 1 );
-
 			size_t slashPosition = sourceIdentifier.find( '/' );
 			if( slashPosition != std::string::npos ) {
 				dependency.packageName = sourceIdentifier.substr( slashPosition + 1 );
@@ -338,14 +302,12 @@ namespace uranite::pkg {
 				dependency.packageName = dependencySpec;
 			}
 		}
-
 		return dependency;
 	}
-
+	
 	PackageManifest ManifestParser::parseFromString( const std::string& yamlContent ) {
 		std::unordered_map<std::string, std::unordered_map<std::string, ConfigValue>> sections = parseYaml( yamlContent );
 		PackageManifest manifest;
-
 		std::unordered_map<std::string, ConfigValue>& packageSection = sections["package"];
 		if( packageSection.count( "name" ) > 0 ) {
 			manifest.packageName = packageSection["name"].stringValue;
@@ -371,7 +333,6 @@ namespace uranite::pkg {
 		if( packageSection.count( "exclude" ) > 0 && packageSection["exclude"].valueKind == ConfigValue::Kind::Array ) {
 			manifest.excludePatterns = packageSection["exclude"].arrayValues;
 		}
-
 		for( size_t authorIndex = 0; ; authorIndex++ ) {
 			std::string authorSectionPath = "package.authors." + std::to_string( authorIndex );
 			if( sections.count( authorSectionPath ) == 0 ) {
@@ -393,7 +354,6 @@ namespace uranite::pkg {
 			}
 			manifest.authorInfoList.push_back( authorInfo );
 		}
-
 		if( manifest.authorInfoList.empty() && packageSection.count( "authors" ) > 0 &&
 			packageSection["authors"].valueKind == ConfigValue::Kind::Array ) {
 			for( const std::string& authorString : packageSection["authors"].arrayValues ) {
@@ -402,7 +362,6 @@ namespace uranite::pkg {
 				manifest.authorInfoList.push_back( authorInfo );
 			}
 		}
-
 		std::unordered_map<std::string, ConfigValue>& repositorySection = sections["package.repository"];
 		if( repositorySection.count( "type" ) > 0 ) {
 			manifest.repository.type = repositorySection["type"].stringValue;
@@ -410,7 +369,6 @@ namespace uranite::pkg {
 		if( repositorySection.count( "url" ) > 0 ) {
 			manifest.repository.url = repositorySection["url"].stringValue;
 		}
-
 		std::unordered_map<std::string, ConfigValue>& requirementsSection = sections["requirements"];
 		if( requirementsSection.count( "path" ) > 0 ) {
 			manifest.requirements.modulesPath = requirementsSection["path"].stringValue;
@@ -431,7 +389,6 @@ namespace uranite::pkg {
 			requirementsSection["system-dependencies"].valueKind == ConfigValue::Kind::Array ) {
 			manifest.requirements.systemDependencies = requirementsSection["system-dependencies"].arrayValues;
 		}
-
 		for( std::pair<const std::string, std::unordered_map<std::string, ConfigValue>>& sectionPair : sections ) {
 			std::string sectionName = sectionPair.first;
 			if( sectionName.rfind( "requirements.", 0 ) != 0 ) {
@@ -461,8 +418,6 @@ namespace uranite::pkg {
 				manifest.requirements.dependencies.push_back( dependency );
 			}
 		}
-
-		// Legacy format: top-level dependencies/dev-dependencies sections
 		for( std::pair<const std::string, ConfigValue>& depEntry : sections["dependencies"] ) {
 			PackageDependency dependency;
 			dependency.packageName = depEntry.first;
@@ -479,7 +434,6 @@ namespace uranite::pkg {
 			}
 			manifest.requirements.dependencies.push_back( dependency );
 		}
-
 		for( std::pair<const std::string, ConfigValue>& depEntry : sections["dev-dependencies"] ) {
 			PackageDependency dependency;
 			dependency.packageName = depEntry.first;
@@ -497,7 +451,6 @@ namespace uranite::pkg {
 			}
 			manifest.requirements.developmentDependencies.push_back( dependency );
 		}
-
 		std::unordered_map<std::string, ConfigValue>& buildSection = sections["build"];
 		if( buildSection.count( "build-path" ) > 0 ) {
 			manifest.buildConfig.buildPath = buildSection["build-path"].stringValue;
@@ -529,7 +482,6 @@ namespace uranite::pkg {
 		if( buildSection.count( "link-libraries" ) > 0 && buildSection["link-libraries"].valueKind == ConfigValue::Kind::Array ) {
 			manifest.buildConfig.linkLibraries = buildSection["link-libraries"].arrayValues;
 		}
-
 		std::unordered_map<std::string, ConfigValue>& flagsSection = sections["build.flags"];
 		if( flagsSection.count( "strip-debug" ) > 0 ) {
 			manifest.buildConfig.stripSymbols = flagsSection["strip-debug"].stringValue == "true";
@@ -537,7 +489,6 @@ namespace uranite::pkg {
 		if( flagsSection.count( "emit-llvm" ) > 0 ) {
 			manifest.buildConfig.emitLlvmIr = flagsSection["emit-llvm"].stringValue == "true";
 		}
-
 		auto parseProfile = []( const std::unordered_map<std::string, ConfigValue>& profileSection ) -> BuildProfile {
 			BuildProfile profile;
 			if( profileSection.count( "optimization" ) > 0 ) {
@@ -554,20 +505,17 @@ namespace uranite::pkg {
 			}
 			return profile;
 		};
-
 		if( sections.count( "build.profiles.dev" ) > 0 ) {
 			manifest.buildConfig.profiles["dev"] = parseProfile( sections["build.profiles.dev"] );
 		}
 		if( sections.count( "build.profiles.release" ) > 0 ) {
 			manifest.buildConfig.profiles["release"] = parseProfile( sections["build.profiles.release"] );
 		}
-
 		for( std::pair<const std::string, ConfigValue>& scriptEntry : sections["scripts"] ) {
 			if( scriptEntry.second.valueKind == ConfigValue::Kind::String ) {
 				manifest.scripts[scriptEntry.first] = scriptEntry.second.stringValue;
 			}
 		}
-
 		std::unordered_map<std::string, ConfigValue>& testSection = sections["test"];
 		if( testSection.count( "path" ) > 0 ) {
 			manifest.testConfig.path = testSection["path"].stringValue;
@@ -590,14 +538,12 @@ namespace uranite::pkg {
 			}
 			catch( ... ) {}
 		}
-
 		for( std::pair<const std::string, ConfigValue>& envEntry : sections["test.environment"] ) {
 			manifest.testConfig.environment[envEntry.first] = envEntry.second.stringValue;
 		}
-
 		return manifest;
 	}
-
+	
 	PackageManifest ManifestParser::parseFromFile( const std::string& filePath ) {
 		std::ifstream fileStream( filePath );
 		if( fileStream.is_open() == false ) {
