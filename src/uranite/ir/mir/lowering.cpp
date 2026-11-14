@@ -25,8 +25,9 @@
 
 namespace uranite::ir::mir {
 	
-	MIRLowering::MIRLowering( diagnostic::Engine& diagnosticEngine, const semantic::Registry* typeRegistry )
-		: typeRegistry( typeRegistry ), diagnosticEngine( diagnosticEngine ) {
+	MIRLowering::MIRLowering( diagnostic::Engine& diagnosticEngine, const semantic::Registry* typeRegistry ) : 
+	typeRegistry( typeRegistry ), 
+	diagnosticEngine( diagnosticEngine ) {
 	}
 	
 	std::shared_ptr<MIRModuleDefinition> MIRLowering::lower( hir::HIRModule& hirModule ) {
@@ -413,9 +414,7 @@ namespace uranite::ir::mir {
 						size_t closeBracket = typeName.rfind( '>' );
 						if( openBracket != std::string::npos && closeBracket != std::string::npos ) {
 							std::string elementName = typeName.substr( openBracket + 1, closeBracket - openBracket - 1 );
-							mirFunction->variadicElementType = std::make_shared<semantic::Type>(
-								semantic::Type::Kind::Class, elementName
-							);
+							mirFunction->variadicElementType = std::make_shared<semantic::Type>( semantic::Type::Kind::Class, elementName );
 						}
 						else if( elemType->kind != semantic::Type::Kind::Array ) {
 							mirFunction->variadicElementType = elemType;
@@ -445,16 +444,14 @@ namespace uranite::ir::mir {
 				bool captured = false;
 				switch( parameterDescriptor.defaultValueExpression->nodeKind ) {
 					case hir::HIRNodeKind::StringLiteral: {
-						hir::HIRStringLiteral& strLit = static_cast<hir::HIRStringLiteral&>(
-							*parameterDescriptor.defaultValueExpression );
+						hir::HIRStringLiteral& strLit = static_cast<hir::HIRStringLiteral&>( *parameterDescriptor.defaultValueExpression );
 						defaultConstant.kind = MIRModuleConstant::String;
 						defaultConstant.stringValue = strLit.stringValue;
 						captured = true;
 						break;
 					}
 					case hir::HIRNodeKind::IntegerLiteral: {
-						hir::HIRIntegerLiteral& intLit = static_cast<hir::HIRIntegerLiteral&>(
-							*parameterDescriptor.defaultValueExpression );
+						hir::HIRIntegerLiteral& intLit = static_cast<hir::HIRIntegerLiteral&>( *parameterDescriptor.defaultValueExpression );
 						defaultConstant.kind = MIRModuleConstant::Integer;
 						defaultConstant.integerValue = intLit.integerValue;
 						captured = true;
@@ -469,8 +466,7 @@ namespace uranite::ir::mir {
 						break;
 					}
 					case hir::HIRNodeKind::BooleanLiteral: {
-						hir::HIRBooleanLiteral& boolLit = static_cast<hir::HIRBooleanLiteral&>(
-							*parameterDescriptor.defaultValueExpression );
+						hir::HIRBooleanLiteral& boolLit = static_cast<hir::HIRBooleanLiteral&>( *parameterDescriptor.defaultValueExpression );
 						defaultConstant.kind = MIRModuleConstant::Boolean;
 						defaultConstant.booleanValue = boolLit.booleanValue;
 						captured = true;
@@ -482,19 +478,16 @@ namespace uranite::ir::mir {
 						break;
 					}
 					case hir::HIRNodeKind::UnaryOperation: {
-						hir::HIRUnaryOperation& unaryOp = static_cast<hir::HIRUnaryOperation&>(
-							*parameterDescriptor.defaultValueExpression );
+						hir::HIRUnaryOperation& unaryOp = static_cast<hir::HIRUnaryOperation&>( *parameterDescriptor.defaultValueExpression );
 						if( unaryOp.operatorKind == token::Type::Minus && unaryOp.operandExpression != nullptr ) {
 							if( unaryOp.operandExpression->nodeKind == hir::HIRNodeKind::IntegerLiteral ) {
-								hir::HIRIntegerLiteral& intLit = static_cast<hir::HIRIntegerLiteral&>(
-									*unaryOp.operandExpression );
+								hir::HIRIntegerLiteral& intLit = static_cast<hir::HIRIntegerLiteral&>( *unaryOp.operandExpression );
 								defaultConstant.kind = MIRModuleConstant::Integer;
 								defaultConstant.integerValue = -intLit.integerValue;
 								captured = true;
 							}
 							else if( unaryOp.operandExpression->nodeKind == hir::HIRNodeKind::FloatLiteral ) {
-								hir::HIRFloatLiteral& floatLit = static_cast<hir::HIRFloatLiteral&>(
-									*unaryOp.operandExpression );
+								hir::HIRFloatLiteral& floatLit = static_cast<hir::HIRFloatLiteral&>( *unaryOp.operandExpression );
 								defaultConstant.kind = MIRModuleConstant::Float;
 								defaultConstant.floatValue = -floatLit.floatValue;
 								captured = true;
@@ -522,12 +515,10 @@ namespace uranite::ir::mir {
 			for( MIRInstruction& instr : block->blockInstructions ) {
 				if( instr.instructionKind == MIRInstructionKind::CallFunction ||
 					instr.instructionKind == MIRInstructionKind::InvokeFunction ) {
-					std::unordered_map<std::string, std::vector<std::string>>::iterator captureIt =
-						this->nestedFunctionCaptures.find( instr.calledFunctionQualifiedName );
+					std::unordered_map<std::string, std::vector<std::string>>::iterator captureIt = this->nestedFunctionCaptures.find( instr.calledFunctionQualifiedName );
 					if( captureIt != this->nestedFunctionCaptures.end() ) {
 						for( const std::string& captureName : captureIt->second ) {
-							std::unordered_map<std::string, MIRVariableIdentifier>::iterator varIt =
-								this->variableNameMap.find( captureName );
+							std::unordered_map<std::string, MIRVariableIdentifier>::iterator varIt = this->variableNameMap.find( captureName );
 							if( varIt != this->variableNameMap.end() ) {
 								instr.sourceOperands.push_back( varIt->second );
 							}
@@ -821,11 +812,17 @@ namespace uranite::ir::mir {
 				continue;
 			}
 			std::string methodName = baseMethod->functionName;
-			std::string ownerName = baseMethod->ownerClassName.empty() == false
-				? baseMethod->ownerClassName : enumQualifiedName;
-			std::unordered_map<std::string, std::vector<std::pair<int64_t, std::shared_ptr<hir::HIRFunctionDefinition>>>>::iterator overrideIt =
-				variantOverrides.find( methodName );
+			std::string ownerName = baseMethod->ownerClassName.empty() == false ? baseMethod->ownerClassName : enumQualifiedName;
+			std::unordered_map<std::string, std::vector<std::pair<int64_t, std::shared_ptr<hir::HIRFunctionDefinition>>>>::iterator overrideIt = variantOverrides.find( methodName );
 			if( overrideIt == variantOverrides.end() || overrideIt->second.empty() ) {
+				semantic::TypeSharedPointer enumBackingType = hirEnum.backedType;
+				if( enumBackingType == nullptr ) {
+					enumBackingType = std::make_shared<semantic::IntegerType>( 32, true );
+				}
+				if( baseMethod->parameterDescriptors.empty() == false &&
+					baseMethod->parameterDescriptors[0].isSelfParameter ) {
+					baseMethod->parameterDescriptors[0].parameterType = enumBackingType;
+				}
 				this->lowerFunctionDefinition( *baseMethod );
 				continue;
 			}
@@ -840,7 +837,10 @@ namespace uranite::ir::mir {
 			this->currentFunction = dispatchFunction;
 			std::shared_ptr<MIRBasicBlock> entryBlock = this->currentFunction->createBasicBlock( "entry" );
 			this->switchToBlock( entryBlock );
-			semantic::TypeSharedPointer enumBackingType = std::make_shared<semantic::Type>( semantic::Type::Kind::Integer, semantic::qualname::classes::i32::Name );
+			semantic::TypeSharedPointer enumBackingType = hirEnum.backedType;
+			if( enumBackingType == nullptr ) {
+				enumBackingType = std::make_shared<semantic::IntegerType>( 32, true );
+			}
 			MIRVariableIdentifier selfParam = this->currentFunction->allocateVariable( semantic::qualname::identifier::Self, enumBackingType, false );
 			dispatchFunction->parameterVariableIdentifiers.push_back( selfParam );
 			for( size_t paramIdx = 1; paramIdx < baseMethod->parameterDescriptors.size(); paramIdx++ ) {
@@ -945,10 +945,8 @@ namespace uranite::ir::mir {
 				std::string globalTargetName;
 				if( assignment.targetExpression != nullptr &&
 					assignment.targetExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
-					hir::HIRIdentifier& targetIdentifier =
-						static_cast<hir::HIRIdentifier&>( *assignment.targetExpression );
-					std::unordered_map<std::string, MIRVariableIdentifier>::iterator targetLookup =
-						this->variableNameMap.find( targetIdentifier.identifierName );
+					hir::HIRIdentifier& targetIdentifier = static_cast<hir::HIRIdentifier&>( *assignment.targetExpression );
+					std::unordered_map<std::string, MIRVariableIdentifier>::iterator targetLookup = this->variableNameMap.find( targetIdentifier.identifierName );
 					if( targetLookup != this->variableNameMap.end() ) {
 						targetVariable = targetLookup->second;
 					}
@@ -1104,8 +1102,7 @@ namespace uranite::ir::mir {
 				throwInstruction.sourceOperands.push_back( thrownValue );
 				throwInstruction.sourceLocation = throwNode.sourceLocation;
 				if( throwNode.thrownExpression != nullptr && throwNode.thrownExpression->resolvedType != nullptr ) {
-					throwInstruction.calledFunctionQualifiedName =
-						throwNode.thrownExpression->resolvedType->qualified.empty() == false
+					throwInstruction.calledFunctionQualifiedName = throwNode.thrownExpression->resolvedType->qualified.empty() == false
 						? throwNode.thrownExpression->resolvedType->qualified
 						: throwNode.thrownExpression->resolvedType->name;
 				}
@@ -1172,10 +1169,8 @@ namespace uranite::ir::mir {
 					if( outputOperand.boundExpression != nullptr ) {
 						MIRVariableIdentifier outputVariable = INVALID_VARIABLE_IDENTIFIER;
 						if( outputOperand.boundExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
-							hir::HIRIdentifier& outputIdentifier =
-								static_cast<hir::HIRIdentifier&>( *outputOperand.boundExpression );
-							std::unordered_map<std::string, MIRVariableIdentifier>::iterator outputLookup =
-								this->variableNameMap.find( outputIdentifier.identifierName );
+							hir::HIRIdentifier& outputIdentifier = static_cast<hir::HIRIdentifier&>( *outputOperand.boundExpression );
+							std::unordered_map<std::string, MIRVariableIdentifier>::iterator outputLookup = this->variableNameMap.find( outputIdentifier.identifierName );
 							if( outputLookup != this->variableNameMap.end() ) {
 								outputVariable = outputLookup->second;
 							}
@@ -1315,9 +1310,7 @@ namespace uranite::ir::mir {
 			MIRVariableIdentifier currentValue = this->currentFunction->allocateVariable( "_range_cur", loopVariableType, false );
 			loadLoopVar.destinationVariable = currentValue;
 			this->emitInstruction( loadLoopVar );
-			MIRInstructionKind compareKind = rangeExpression.isInclusive
-				? MIRInstructionKind::CompareLessEqual
-				: MIRInstructionKind::CompareLessThan;
+			MIRInstructionKind compareKind = rangeExpression.isInclusive ? MIRInstructionKind::CompareLessEqual : MIRInstructionKind::CompareLessThan;
 			MIRInstruction compareInstruction( compareKind );
 			compareInstruction.sourceOperands.push_back( currentValue );
 			compareInstruction.sourceOperands.push_back( endValue );
@@ -1386,9 +1379,7 @@ namespace uranite::ir::mir {
 			MIRVariableIdentifier iterableVariable = this->lowerExpression( hirLoop.iterableExpression );
 			std::string iteratorClassName;
 			if( hirLoop.iterableExpression->resolvedType != nullptr ) {
-				iteratorClassName = hirLoop.iterableExpression->resolvedType->qualified.empty() == false
-					? hirLoop.iterableExpression->resolvedType->qualified
-					: hirLoop.iterableExpression->resolvedType->name;
+				iteratorClassName = hirLoop.iterableExpression->resolvedType->qualified.empty() == false ? hirLoop.iterableExpression->resolvedType->qualified : hirLoop.iterableExpression->resolvedType->name;
 				size_t genericBracketPosition = iteratorClassName.find( '<' );
 				if( genericBracketPosition != std::string::npos ) {
 					iteratorClassName = iteratorClassName.substr( 0, genericBracketPosition );
@@ -2074,8 +2065,7 @@ namespace uranite::ir::mir {
 									ast::nodes::EnumVariantSharedPointer& astVariant = enumType->astDeclaration->variants[vi];
 									if( astVariant->name == fieldAccess.fieldName && astVariant->backedValue != nullptr ) {
 										if( astVariant->backedValue->kind == ast::Node::Kind::IntegerLiteral ) {
-											ast::nodes::IntegerLiteralExpression& intLit =
-												static_cast<ast::nodes::IntegerLiteralExpression&>( *astVariant->backedValue );
+											ast::nodes::IntegerLiteralExpression& intLit = static_cast<ast::nodes::IntegerLiteralExpression&>( *astVariant->backedValue );
 											variantValue = intLit.value;
 										}
 										break;
@@ -2103,9 +2093,7 @@ namespace uranite::ir::mir {
 		if( canUseSwitch ) {
 			MIRInstruction switchInstruction( MIRInstructionKind::SwitchBranch );
 			switchInstruction.sourceOperands.push_back( subjectVariable );
-			switchInstruction.defaultSwitchTarget = ( defaultArmIndex >= 0 )
-				? armBlocks[defaultArmIndex]->blockIdentifier
-				: mergeBlock->blockIdentifier;
+			switchInstruction.defaultSwitchTarget = ( defaultArmIndex >= 0 ) ? armBlocks[defaultArmIndex]->blockIdentifier : mergeBlock->blockIdentifier;
 			switchInstruction.sourceLocation = hirMatch.sourceLocation;
 			for( size_t armIndex = 0; armIndex < hirMatch.matchArms.size(); armIndex++ ) {
 				if( static_cast<int64_t>( armIndex ) == defaultArmIndex ) {
@@ -2146,9 +2134,7 @@ namespace uranite::ir::mir {
 			}
 			if( this->currentBlock->isTerminated == false ) {
 				MIRInstruction jumpToMerge( MIRInstructionKind::JumpUnconditional );
-				jumpToMerge.trueBranchTarget = ( defaultArmIndex >= 0 )
-					? armBlocks[defaultArmIndex]->blockIdentifier
-					: mergeBlock->blockIdentifier;
+				jumpToMerge.trueBranchTarget = ( defaultArmIndex >= 0 ) ? armBlocks[defaultArmIndex]->blockIdentifier : mergeBlock->blockIdentifier;
 				this->emitTerminator( jumpToMerge );
 			}
 		}
@@ -2230,7 +2216,6 @@ namespace uranite::ir::mir {
 				this->lowerBlock( *switchCase.caseBody );
 			}
 			if( this->currentBlock->isTerminated == false ) {
-				// Fallthrough: if case has no body, jump to next case block
 				if( hasBody == false ) {
 					size_t nextIndex = caseIndex + 1;
 					if( nextIndex < caseBlocks.size() ) {
@@ -2406,11 +2391,9 @@ namespace uranite::ir::mir {
 			}
 			case hir::HIRNodeKind::Identifier: {
 				hir::HIRIdentifier& identifier = static_cast<hir::HIRIdentifier&>( *hirExpression );
-				std::unordered_map<std::string, MIRVariableIdentifier>::iterator variableLookup =
-					this->variableNameMap.find( identifier.identifierName );
+				std::unordered_map<std::string, MIRVariableIdentifier>::iterator variableLookup = this->variableNameMap.find( identifier.identifierName );
 				if( variableLookup == this->variableNameMap.end() ) {
-					std::unordered_map<std::string, MIRModuleConstant>::iterator constantLookup =
-						this->currentModule->moduleConstants.find( identifier.identifierName );
+					std::unordered_map<std::string, MIRModuleConstant>::iterator constantLookup = this->currentModule->moduleConstants.find( identifier.identifierName );
 					if( constantLookup != this->currentModule->moduleConstants.end() ) {
 						MIRModuleConstant& moduleConstant = constantLookup->second;
 						MIRInstruction constantInstruction( MIRInstructionKind::ConstantInteger );
@@ -2438,8 +2421,7 @@ namespace uranite::ir::mir {
 						constantInstruction.destinationVariable = resultVariable;
 						return this->emitInstruction( constantInstruction );
 					}
-					std::unordered_map<std::string, MIRGlobalVariable>::iterator globalLookup =
-						this->currentModule->globalVariables.find( identifier.identifierName );
+					std::unordered_map<std::string, MIRGlobalVariable>::iterator globalLookup = this->currentModule->globalVariables.find( identifier.identifierName );
 					if( globalLookup != this->currentModule->globalVariables.end() ) {
 						MIRInstruction loadInstruction( MIRInstructionKind::LoadVariable );
 						loadInstruction.calledFunctionQualifiedName = fmt::format( "@{}", identifier.identifierName );
@@ -2476,8 +2458,7 @@ namespace uranite::ir::mir {
 				MIRInstruction loadInstruction( MIRInstructionKind::LoadVariable );
 				loadInstruction.calledFunctionQualifiedName = semantic::qualname::identifier::Self;
 				semantic::TypeSharedPointer selfResolvedType = hirExpression->resolvedType;
-				std::unordered_map<std::string, MIRVariableIdentifier>::iterator selfLookup =
-					this->variableNameMap.find( semantic::qualname::identifier::Self );
+				std::unordered_map<std::string, MIRVariableIdentifier>::iterator selfLookup = this->variableNameMap.find( semantic::qualname::identifier::Self );
 				if( selfLookup != this->variableNameMap.end() ) {
 					loadInstruction.sourceOperands.push_back( selfLookup->second );
 					if( selfResolvedType == nullptr ) {
@@ -2654,9 +2635,10 @@ namespace uranite::ir::mir {
 				}
 				std::vector<std::string> capturedNames;
 				std::unordered_set<std::string> seenCaptures;
-				std::function<void( const hir::HIRNodeSharedPointer& )> collectFreeVars =
-					[&]( const hir::HIRNodeSharedPointer& node ) {
-					if( node == nullptr ) return;
+				std::function<void( const hir::HIRNodeSharedPointer& )> collectFreeVars = [&]( const hir::HIRNodeSharedPointer& node ) {
+					if( node == nullptr ) {
+						return;
+					}
 					switch( node->nodeKind ) {
 						case hir::HIRNodeKind::Identifier: {
 							hir::HIRIdentifier& ident = static_cast<hir::HIRIdentifier&>( *node );
@@ -3553,8 +3535,7 @@ namespace uranite::ir::mir {
 			return false;
 		};
 		auto isStringMIRVariable = [&]( MIRVariableIdentifier variable ) -> bool {
-			std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor>::iterator descriptorIterator =
-				this->currentFunction->variableDescriptorTable.find( variable );
+			std::unordered_map<MIRVariableIdentifier, MIRVariableDescriptor>::iterator descriptorIterator = this->currentFunction->variableDescriptorTable.find( variable );
 			if( descriptorIterator != this->currentFunction->variableDescriptorTable.end() ) {
 				return isStringType( descriptorIterator->second.variableType );
 			}
@@ -3737,9 +3718,7 @@ namespace uranite::ir::mir {
 					      hirUnaryOp.resolvedType->name == semantic::qualname::classes::Double::Name ||
 					      hirUnaryOp.resolvedType->name == semantic::qualname::classes::f32::Name ||
 					      hirUnaryOp.resolvedType->name == semantic::qualname::classes::f64::Name ) ) );
-				instructionKind = isFloatNegate
-					? MIRInstructionKind::NegateFloat
-					: MIRInstructionKind::NegateInteger;
+				instructionKind = isFloatNegate ? MIRInstructionKind::NegateFloat : MIRInstructionKind::NegateInteger;
 				break;
 			}
 			case token::Type::Tilde:      instructionKind = MIRInstructionKind::BitwiseNot; break;
@@ -3748,26 +3727,20 @@ namespace uranite::ir::mir {
 			case token::Type::Decrement: {
 				MIRVariableIdentifier storageVariable = INVALID_VARIABLE_IDENTIFIER;
 				if( hirUnaryOp.operandExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
-					hir::HIRIdentifier& operandIdentifier =
-						static_cast<hir::HIRIdentifier&>( *hirUnaryOp.operandExpression );
-					std::unordered_map<std::string, MIRVariableIdentifier>::iterator storageLookup =
-						this->variableNameMap.find( operandIdentifier.identifierName );
+					hir::HIRIdentifier& operandIdentifier = static_cast<hir::HIRIdentifier&>( *hirUnaryOp.operandExpression );
+					std::unordered_map<std::string, MIRVariableIdentifier>::iterator storageLookup = this->variableNameMap.find( operandIdentifier.identifierName );
 					if( storageLookup != this->variableNameMap.end() ) {
 						storageVariable = storageLookup->second;
 					}
 				}
-				MIRVariableIdentifier oldValue = this->currentFunction->allocateVariable(
-					"_incold", hirUnaryOp.resolvedType, false
-				);
+				MIRVariableIdentifier oldValue = this->currentFunction->allocateVariable( "_incold", hirUnaryOp.resolvedType, false );
 				MIRInstruction copyOld( MIRInstructionKind::CopyValue );
 				copyOld.sourceOperands.push_back( operandVariable );
 				copyOld.destinationVariable = oldValue;
 				copyOld.operandType = hirUnaryOp.resolvedType;
 				copyOld.sourceLocation = hirUnaryOp.sourceLocation;
 				this->emitInstruction( copyOld );
-				MIRVariableIdentifier oneConst = this->currentFunction->allocateVariable(
-					"_incone", hirUnaryOp.resolvedType, false
-				);
+				MIRVariableIdentifier oneConst = this->currentFunction->allocateVariable( "_incone", hirUnaryOp.resolvedType, false );
 				MIRInstruction loadOne( MIRInstructionKind::ConstantInteger );
 				loadOne.integerConstantValue = 1;
 				loadOne.destinationVariable = oneConst;
@@ -3784,9 +3757,7 @@ namespace uranite::ir::mir {
 				MIRInstructionKind arithmeticKind = hirUnaryOp.operatorKind == token::Type::Increment
 					? ( isFloat ? MIRInstructionKind::AddFloat : MIRInstructionKind::AddInteger )
 					: ( isFloat ? MIRInstructionKind::SubtractFloat : MIRInstructionKind::SubtractInteger );
-				MIRVariableIdentifier newValue = this->currentFunction->allocateVariable(
-					"_incnew", hirUnaryOp.resolvedType, false
-				);
+				MIRVariableIdentifier newValue = this->currentFunction->allocateVariable( "_incnew", hirUnaryOp.resolvedType, false );
 				MIRInstruction addSub( arithmeticKind );
 				addSub.sourceOperands.push_back( operandVariable );
 				addSub.sourceOperands.push_back( oneConst );
@@ -3804,15 +3775,15 @@ namespace uranite::ir::mir {
 				}
 				return hirUnaryOp.isPrefixOperator ? newValue : oldValue;
 			}
-			default:                      instructionKind = MIRInstructionKind::NoOperation; break;
+			default:
+				instructionKind = MIRInstructionKind::NoOperation;
+				break;
 		}
 		MIRInstruction unaryInstruction( instructionKind );
 		unaryInstruction.sourceOperands.push_back( operandVariable );
 		unaryInstruction.operandType = hirUnaryOp.resolvedType;
 		unaryInstruction.sourceLocation = hirUnaryOp.sourceLocation;
-		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
-			"_unop", hirUnaryOp.resolvedType, false
-		);
+		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable( "_unop", hirUnaryOp.resolvedType, false );
 		unaryInstruction.destinationVariable = resultVariable;
 		return this->emitInstruction( unaryInstruction );
 	}
@@ -3841,9 +3812,8 @@ namespace uranite::ir::mir {
 					if( lastDotPos != std::string::npos ) {
 						parentShortName = parentShortName.substr( lastDotPos + 1 );
 					}
-					callInstruction.calledFunctionQualifiedName = this->currentParentClassName + "." + parentShortName;
-					std::unordered_map<std::string, MIRVariableIdentifier>::iterator selfLookup =
-						this->variableNameMap.find( semantic::qualname::identifier::Self );
+					callInstruction.calledFunctionQualifiedName = fmt::format( "{}.{}", this->currentParentClassName, parentShortName );
+					std::unordered_map<std::string, MIRVariableIdentifier>::iterator selfLookup = this->variableNameMap.find( semantic::qualname::identifier::Self );
 					if( selfLookup != this->variableNameMap.end() ) {
 						argumentVariables.insert( argumentVariables.begin(), selfLookup->second );
 					}
@@ -3851,12 +3821,10 @@ namespace uranite::ir::mir {
 			}
 		}
 		callInstruction.sourceOperands = std::move( argumentVariables );
-		std::unordered_map<std::string, std::vector<std::string>>::iterator captureIt =
-			this->nestedFunctionCaptures.find( callInstruction.calledFunctionQualifiedName );
+		std::unordered_map<std::string, std::vector<std::string>>::iterator captureIt = this->nestedFunctionCaptures.find( callInstruction.calledFunctionQualifiedName );
 		if( captureIt != this->nestedFunctionCaptures.end() ) {
 			for( const std::string& captureName : captureIt->second ) {
-				std::unordered_map<std::string, MIRVariableIdentifier>::iterator varIt =
-					this->variableNameMap.find( captureName );
+				std::unordered_map<std::string, MIRVariableIdentifier>::iterator varIt = this->variableNameMap.find( captureName );
 				if( varIt != this->variableNameMap.end() ) {
 					callInstruction.sourceOperands.push_back( varIt->second );
 				}
@@ -3869,9 +3837,7 @@ namespace uranite::ir::mir {
 			MIRVariableIdentifier valueVariable = this->lowerExpression( keywordArgument.second );
 			callInstruction.keywordArgumentValues.push_back( valueVariable );
 		}
-		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
-			"_call", hirCall.resolvedType, false
-		);
+		MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable( "_call", hirCall.resolvedType, false );
 		callInstruction.destinationVariable = resultVariable;
 		if( useInvoke ) {
 			std::shared_ptr<MIRBasicBlock> continuationBlock = this->currentFunction->createBasicBlock( "invoke.cont" );
@@ -3936,8 +3902,7 @@ namespace uranite::ir::mir {
 					for( size_t parameterIndex = 0; parameterIndex < receiverInterface->genericParameters.size(); parameterIndex++ ) {
 						const semantic::TypeSharedPointer& parameterType = receiverInterface->genericParameters[parameterIndex];
 						if( parameterType != nullptr && parameterType->name == callResultType->name ) {
-							std::unordered_map<std::string, semantic::TypeSharedPointer>::const_iterator substitutionIterator =
-								receiverInterface->typeSubstitutions.find( parameterType->name );
+							std::unordered_map<std::string, semantic::TypeSharedPointer>::const_iterator substitutionIterator = receiverInterface->typeSubstitutions.find( parameterType->name );
 							if( substitutionIterator != receiverInterface->typeSubstitutions.end() &&
 								substitutionIterator->second != nullptr ) {
 								callResultType = substitutionIterator->second;
@@ -3950,14 +3915,28 @@ namespace uranite::ir::mir {
 			if( receiverType->kind == semantic::Type::Kind::GenericParameter ) {
 				bool resolved = false;
 				if( this->currentClassName.empty() == false ) {
-					std::unordered_map<std::string, std::unordered_map<std::string, std::string>>::iterator classIt =
-						this->genericClassSubstitutions.find( this->currentClassName );
+					std::unordered_map<std::string, std::unordered_map<std::string, std::string>>::iterator classIt = this->genericClassSubstitutions.find( this->currentClassName );
 					if( classIt != this->genericClassSubstitutions.end() ) {
-						std::unordered_map<std::string, std::string>::iterator paramIt =
-							classIt->second.find( ownerClassName );
+						std::unordered_map<std::string, std::string>::iterator paramIt = classIt->second.find( ownerClassName );
 						if( paramIt != classIt->second.end() ) {
 							ownerClassName = paramIt->second;
 							resolved = true;
+						}
+					}
+				}
+				if( resolved == false ) {
+					semantic::GenericParameterType* genericParam = dynamic_cast<semantic::GenericParameterType*>( receiverType.get() );
+					if( genericParam != nullptr && genericParam->constraints.empty() == false ) {
+						for( const semantic::TypeSharedPointer& constraint : genericParam->constraints ) {
+							if( constraint != nullptr && constraint->kind == semantic::Type::Kind::Interface ) {
+								ownerClassName = constraint->qualified.empty() == false ? constraint->qualified : constraint->name;
+								size_t genPos = ownerClassName.find( '<' );
+								if( genPos != std::string::npos ) {
+									ownerClassName = ownerClassName.substr( 0, genPos );
+								}
+								resolved = true;
+								break;
+							}
 						}
 					}
 				}
@@ -3967,8 +3946,7 @@ namespace uranite::ir::mir {
 			}
 			if( receiverType->kind == semantic::Type::Kind::Interface &&
 				this->currentClassName.empty() == false ) {
-				std::unordered_map<std::string, std::unordered_map<std::string, std::string>>::iterator classIt =
-					this->genericClassSubstitutions.find( this->currentClassName );
+				std::unordered_map<std::string, std::unordered_map<std::string, std::string>>::iterator classIt = this->genericClassSubstitutions.find( this->currentClassName );
 				if( classIt != this->genericClassSubstitutions.end() ) {
 					for( const std::pair<const std::string, std::string>& substitution : classIt->second ) {
 						if( this->typeRegistry != nullptr ) {
@@ -4018,8 +3996,7 @@ namespace uranite::ir::mir {
 					if( genericPosition != std::string::npos ) {
 						objectClassName = objectClassName.substr( 0, genericPosition );
 					}
-					std::unordered_map<std::string, TypeLayoutDescriptor>::iterator layoutIterator =
-						this->currentModule->typeLayoutTable.find( objectClassName );
+					std::unordered_map<std::string, TypeLayoutDescriptor>::iterator layoutIterator = this->currentModule->typeLayoutTable.find( objectClassName );
 					if( layoutIterator != this->currentModule->typeLayoutTable.end() ) {
 						TypeLayoutDescriptor& layout = layoutIterator->second;
 						for( size_t fieldIndex = 0; fieldIndex < layout.fieldNames.size(); fieldIndex++ ) {
@@ -4054,10 +4031,8 @@ namespace uranite::ir::mir {
 					}
 				}
 				if( ownerClassName.empty() && this->typeRegistry != nullptr ) {
-					hir::HIRIdentifier& identifierNode =
-						static_cast<hir::HIRIdentifier&>( *hirMethodCall.receiverObject );
-					semantic::TypeSharedPointer typeByName =
-						this->typeRegistry->lookupType( identifierNode.identifierName );
+					hir::HIRIdentifier& identifierNode = static_cast<hir::HIRIdentifier&>( *hirMethodCall.receiverObject );
+					semantic::TypeSharedPointer typeByName = this->typeRegistry->lookupType( identifierNode.identifierName );
 					if( typeByName != nullptr && typeByName->kind == semantic::Type::Kind::Class ) {
 						ownerClassName = typeByName->qualified.empty() == false
 							? typeByName->qualified : typeByName->name;
@@ -4086,9 +4061,17 @@ namespace uranite::ir::mir {
 			if( ownerType == nullptr ) {
 				ownerType = this->typeRegistry->lookupType( ownerClassName );
 			}
-			if( ownerType != nullptr && ownerType->kind == semantic::Type::Kind::Class ) {
-				semantic::ClassType* classType = static_cast<semantic::ClassType*>( ownerType.get() );
-				semantic::MethodInfo* methodInfo = classType->findMethod( hirMethodCall.methodName );
+			if( ownerType != nullptr && ( ownerType->kind == semantic::Type::Kind::Class ||
+				ownerType->kind == semantic::Type::Kind::Struct ) ) {
+				semantic::MethodInfo* methodInfo = nullptr;
+				if( ownerType->kind == semantic::Type::Kind::Class ) {
+					semantic::ClassType* classType = static_cast<semantic::ClassType*>( ownerType.get() );
+					methodInfo = classType->findMethod( hirMethodCall.methodName );
+				}
+				else {
+					semantic::StructType* structType = static_cast<semantic::StructType*>( ownerType.get() );
+					methodInfo = structType->findMethod( hirMethodCall.methodName );
+				}
 				if( methodInfo != nullptr && methodInfo->isStatic ) {
 					argumentVariables.erase( argumentVariables.begin() );
 				}
@@ -4118,22 +4101,29 @@ namespace uranite::ir::mir {
 	}
 	
 	MIRVariableIdentifier MIRLowering::lowerFieldAccess( hir::HIRFieldAccess& hirFieldAccess ) {
+		// If object is an identifier naming an enum type, treat as enum variant access
+		if( hirFieldAccess.objectExpression != nullptr &&
+			hirFieldAccess.objectExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
+			hir::HIRIdentifier& idNode = static_cast<hir::HIRIdentifier&>( *hirFieldAccess.objectExpression );
+			semantic::TypeSharedPointer enumTypeLookup = this->typeRegistry != nullptr
+				? this->typeRegistry->lookupType( idNode.identifierName ) : nullptr;
+			if( enumTypeLookup != nullptr && enumTypeLookup->kind == semantic::Type::Kind::Enum ) {
+				hirFieldAccess.objectExpression->resolvedType = enumTypeLookup;
+			}
+		}
+
 		if( hirFieldAccess.objectExpression != nullptr &&
 			hirFieldAccess.objectExpression->resolvedType != nullptr &&
 			hirFieldAccess.objectExpression->resolvedType->kind == semantic::Type::Kind::Enum ) {
 			std::string enumName = hirFieldAccess.objectExpression->resolvedType->name;
 			std::string constantKey = fmt::format( "{}.{}", enumName, hirFieldAccess.fieldName );
-			std::unordered_map<std::string, MIRModuleConstant>::iterator constantLookup =
-				this->currentModule->moduleConstants.find( constantKey );
+			std::unordered_map<std::string, MIRModuleConstant>::iterator constantLookup = this->currentModule->moduleConstants.find( constantKey );
 			if( constantLookup != this->currentModule->moduleConstants.end() ) {
 				MIRInstruction constantInstruction( MIRInstructionKind::ConstantInteger );
 				constantInstruction.integerConstantValue = constantLookup->second.integerValue;
 				constantInstruction.operandType = hirFieldAccess.resolvedType;
 				constantInstruction.sourceLocation = hirFieldAccess.sourceLocation;
-				MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable(
-					fmt::format( "_enum_{}_{}", enumName, hirFieldAccess.fieldName ),
-					hirFieldAccess.resolvedType, false
-				);
+				MIRVariableIdentifier resultVariable = this->currentFunction->allocateVariable( fmt::format( "_enum_{}_{}", enumName, hirFieldAccess.fieldName ), hirFieldAccess.resolvedType, false );
 				constantInstruction.destinationVariable = resultVariable;
 				return this->emitInstruction( constantInstruction );
 			}
@@ -4149,8 +4139,7 @@ namespace uranite::ir::mir {
 							ast::nodes::EnumVariantSharedPointer& astVariant = enumType->astDeclaration->variants[vi];
 							if( astVariant->name == hirFieldAccess.fieldName && astVariant->backedValue != nullptr ) {
 								if( astVariant->backedValue->kind == ast::Node::Kind::IntegerLiteral ) {
-									ast::nodes::IntegerLiteralExpression& intLit =
-										static_cast<ast::nodes::IntegerLiteralExpression&>( *astVariant->backedValue );
+									ast::nodes::IntegerLiteralExpression& intLit = static_cast<ast::nodes::IntegerLiteralExpression&>( *astVariant->backedValue );
 									variantValue = intLit.value;
 								}
 								break;
