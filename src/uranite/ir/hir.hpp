@@ -493,11 +493,11 @@ namespace uranite::ir::hir {
 	/** @brief Integer literal expression. */
 	struct HIRIntegerLiteral : HIRNode {
 		
-		int64_t integerValue;
+		uint64_t integerValue;
 		std::string rawRepresentation;
 		
 		HIRIntegerLiteral(
-			int64_t integerValue,
+			uint64_t integerValue,
 			const std::string& rawRepresentation,
 			semantic::TypeSharedPointer resolvedType,
 			const lookup::SourceSharedPointer& sourceLocation

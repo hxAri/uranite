@@ -17,33 +17,33 @@
 #include <vector>
 
 namespace uranite::pkg {
-
+	
 	struct AuthorInfo {
 		std::string name;
 		std::string email;
 		std::string role;
 		std::string url;
 	};
-
+	
 	struct RepositoryInfo {
 		std::string type;
 		std::string url;
 	};
-
+	
 	struct PackageDependency {
 		std::string packageName;
 		std::string versionConstraint;
 		std::string sourceRepository;
 		bool isDevelopmentOnly = false;
 	};
-
+	
 	struct BuildProfile {
 		std::string optimizationLevel;
 		bool debugInfo = false;
 		bool stripSymbols = false;
 		bool linkTimeOptimization = false;
 	};
-
+	
 	struct BuildConfiguration {
 		std::string buildPath;
 		std::string optimizationLevel = "2";
@@ -57,9 +57,9 @@ namespace uranite::pkg {
 		bool emitLlvmIr = false;
 		std::unordered_map<std::string, BuildProfile> profiles;
 	};
-
+	
 	using ScriptsConfiguration = std::unordered_map<std::string, std::string>;
-
+	
 	struct TestConfiguration {
 		std::string path;
 		bool coverage = false;
@@ -68,14 +68,14 @@ namespace uranite::pkg {
 		int32_t timeout = 0;
 		std::unordered_map<std::string, std::string> environment;
 	};
-
+	
 	struct RequirementsConfiguration {
 		std::string modulesPath = "build/modules";
 		std::vector<PackageDependency> dependencies;
 		std::vector<PackageDependency> developmentDependencies;
 		std::vector<std::string> systemDependencies;
 	};
-
+	
 	struct PackageManifest {
 		std::string packageName;
 		std::string packageVersion;
@@ -92,11 +92,11 @@ namespace uranite::pkg {
 		ScriptsConfiguration scripts;
 		TestConfiguration testConfig;
 	};
-
+	
 	class ManifestParser {
-
+		
 		public:
-
+			
 			struct ConfigValue {
 				enum class Kind { String, Array, InlineTable };
 				Kind valueKind = Kind::String;
@@ -104,13 +104,13 @@ namespace uranite::pkg {
 				std::vector<std::string> arrayValues;
 				std::unordered_map<std::string, std::string> tableValues;
 			};
-
+			
 			static PackageManifest parseFromFile( const std::string& filePath );
 			static PackageManifest parseFromString( const std::string& yamlContent );
 			static std::unordered_map<std::string, std::unordered_map<std::string, ConfigValue>> parseYaml( const std::string& content );
-
+		
 		private:
-
+			
 			static std::string trimWhitespace( const std::string& text );
 			static std::string stripQuotes( const std::string& text );
 			static int32_t measureIndent( const std::string& line );

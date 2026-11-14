@@ -389,7 +389,7 @@ namespace uranite::ir::mir {
 						constantValues.count( operand ) > 0 &&
 						constantValues[operand].constantKind == MIRInstructionKind::ConstantInteger ) {
 						instruction.instructionKind = MIRInstructionKind::ConstantInteger;
-						instruction.integerConstantValue = -constantValues[operand].integerValue;
+						instruction.integerConstantValue = -static_cast<int64_t>( constantValues[operand].integerValue );
 						instruction.sourceOperands.clear();
 						ConstantValue newConst;
 						newConst.constantKind = MIRInstructionKind::ConstantInteger;

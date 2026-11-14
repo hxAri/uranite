@@ -150,36 +150,36 @@ namespace uranite::doc {
 	 * @brief Represents a single import statement with its module path and selectively imported entity names.
 	 */
 	struct ImportEntry {
-
+		
 		/** @brief The dot-separated module path (e.g., "uranite.io.file"). */
 		std::string modulePath;
-
+		
 		/** @brief Names of specific entities imported from the module (empty if importing the module itself). */
 		std::vector<std::string> importedNames;
-
+		
 	};
-
+	
 	/**
 	 * @struct ModuleDocumentation
 	 * @brief Represents a compilation unit module mapping metadata for an entire isolated single source file.
 	 */
 	struct ModuleDocumentation {
-
+		
 		/** @brief Mapped logical workspace package name domain context. */
 		std::string packageName;
-
+		
 		/** @brief Physical absolute or workspace relative source disk file location. */
 		std::string sourceFilePath;
-
+		
 		/** @brief All top-level visible classes, functions, structs, or constants exported by this module. */
 		std::vector<EntityDocumentationEntry> exportedEntities;
-
+		
 		/** @brief Structured import entries with module paths and selectively imported entity names. */
 		std::vector<ImportEntry> importedModules;
-
+		
 		/** @brief Names of entities re-exported via export { ... } blocks without local declarations. */
 		std::vector<std::string> reExportedNames;
-
+		
 	};
 	
 	/**

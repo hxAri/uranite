@@ -31,11 +31,11 @@
 namespace uranite::descriptor {
 	
 	static llvm::Type* getPointeeType( llvm::Value* value ) {
-		if( auto* alloca = llvm::dyn_cast<llvm::AllocaInst>( value ) )
+		if( llvm::AllocaInst *alloca = llvm::dyn_cast<llvm::AllocaInst>( value ) )
 			return alloca->getAllocatedType();
-		if( auto* gep = llvm::dyn_cast<llvm::GetElementPtrInst>( value ) )
+		if( llvm::GetElementPtrInst *gep = llvm::dyn_cast<llvm::GetElementPtrInst>( value ) )
 			return gep->getResultElementType();
-		if( auto* global = llvm::dyn_cast<llvm::GlobalVariable>( value ) )
+		if( llvm::GlobalVariable *global = llvm::dyn_cast<llvm::GlobalVariable>( value ) )
 			return global->getValueType();
 		return llvm::PointerType::getUnqual( value->getContext() );
 	}

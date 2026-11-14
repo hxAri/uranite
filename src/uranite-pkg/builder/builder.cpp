@@ -19,16 +19,15 @@
 #include "uranite/compiler/option.hpp"
 
 namespace uranite::pkg {
-
+	
 	BuildOrchestrator::BuildOrchestrator( const PackageManifest& manifest,
 		const std::vector<ResolvedDependency>& resolvedDependencies,
 		PackageCache& packageCache )
 		: manifest_( manifest ), resolvedDependencies_( resolvedDependencies ),
 		  packageCache_( packageCache ) {}
-
+	
 	std::vector<std::string> BuildOrchestrator::collectModulePaths() const {
 		std::vector<std::string> modulePaths;
-
 		std::string localModulesPath = this->manifest_.buildConfig.modulesPath;
 		if( localModulesPath.empty() ) {
 			localModulesPath = "modules";
@@ -36,7 +35,6 @@ namespace uranite::pkg {
 		if( std::filesystem::exists( localModulesPath ) ) {
 			modulePaths.push_back( localModulesPath );
 		}
-
 		std::string requirementsModulesPath = this->manifest_.requirements.modulesPath;
 		if( requirementsModulesPath.empty() ) {
 			requirementsModulesPath = "build/modules";
@@ -44,7 +42,6 @@ namespace uranite::pkg {
 		if( std::filesystem::exists( requirementsModulesPath ) ) {
 			modulePaths.push_back( requirementsModulesPath );
 		}
-
 		for( const ResolvedDependency& dependency : this->resolvedDependencies_ ) {
 			std::string dependencyModulesPath = this->packageCache_.getModulesPath(
 				dependency.packageName, dependency.resolvedVersion );
@@ -52,24 +49,22 @@ namespace uranite::pkg {
 				modulePaths.push_back( dependencyModulesPath );
 			}
 		}
-
 		return modulePaths;
 	}
-
+	
 	std::vector<std::string> BuildOrchestrator::collectLinkLibraries() const {
 		return this->manifest_.buildConfig.linkLibraries;
 	}
-
+	
 	std::string BuildOrchestrator::resolveOutputPath() const {
 		if( this->manifest_.buildConfig.buildPath.empty() == false ) {
 			return this->manifest_.buildConfig.buildPath;
 		}
 		return "build/" + this->manifest_.packageName;
 	}
-
+	
 	BuildResult BuildOrchestrator::build() {
 		BuildResult result;
-
 		std::string entryFile = this->manifest_.entrySourceFile;
 		if( entryFile.empty() ) {
 			entryFile = "src/main.urn";
@@ -77,20 +72,16 @@ namespace uranite::pkg {
 		if( std::filesystem::is_directory( entryFile ) ) {
 			entryFile = ( std::filesystem::path( entryFile ) / "__mod__.urn" ).string();
 		}
-
 		if( std::filesystem::exists( entryFile ) == false ) {
 			result.succeeded = false;
 			result.errorMessage = "entry file not found: " + entryFile;
 			return result;
 		}
-
 		std::string outputPath = this->resolveOutputPath();
-
 		std::filesystem::path outputParentPath = std::filesystem::path( outputPath ).parent_path();
 		if( outputParentPath.empty() == false && std::filesystem::exists( outputParentPath ) == false ) {
 			std::filesystem::create_directories( outputParentPath );
 		}
-
 		compiler::Options compilerOptions;
 		compilerOptions.output.source = entryFile;
 		compilerOptions.output.target = outputPath;
@@ -101,12 +92,10 @@ namespace uranite::pkg {
 			compilerOptions.output.kind = compiler::Output::Kind::Executable;
 		}
 		compilerOptions.linkLibraries = this->collectLinkLibraries();
-
 		std::vector<std::string> modulePaths = this->collectModulePaths();
 		for( const std::string& modulePath : modulePaths ) {
 			compilerOptions.includePaths.push_back( modulePath );
 		}
-
 		std::string optimizationLevel = this->manifest_.buildConfig.optimizationLevel;
 		if( optimizationLevel == "0" ) {
 			compilerOptions.optimization = optimizer::Level::O0;
@@ -120,51 +109,40 @@ namespace uranite::pkg {
 		else {
 			compilerOptions.optimization = optimizer::Level::O2;
 		}
-
 		compilerOptions.stripDebugInfo = this->manifest_.buildConfig.stripSymbols;
-
 		if( this->manifest_.buildConfig.targetTriple.empty() == false ) {
 			compilerOptions.targetTriple = this->manifest_.buildConfig.targetTriple;
 		}
-
 		compiler::Driver driver( compilerOptions );
 		int32_t compilerExitCode = driver.run();
-
 		result.exitCode = compilerExitCode;
 		result.succeeded = compilerExitCode == 0;
 		result.outputPath = outputPath;
-
 		if( result.succeeded == false ) {
 			result.errorMessage = "compilation failed with exit code " + std::to_string( compilerExitCode );
 		}
-
 		return result;
 	}
-
+	
 	BuildResult BuildOrchestrator::buildAndRun( const std::vector<std::string>& programArguments ) {
 		BuildResult buildResult = this->build();
-
 		if( buildResult.succeeded == false ) {
 			return buildResult;
 		}
-
 		int32_t programExitCode = this->executeProgram( buildResult.outputPath, programArguments );
 		buildResult.exitCode = programExitCode;
 		buildResult.succeeded = programExitCode == 0;
-
 		return buildResult;
 	}
-
+	
 	int32_t BuildOrchestrator::executeProgram( const std::string& executablePath,
 		const std::vector<std::string>& programArguments ) const {
-
 		std::vector<const char*> argvPointers;
 		argvPointers.push_back( executablePath.c_str() );
 		for( const std::string& argument : programArguments ) {
 			argvPointers.push_back( argument.c_str() );
 		}
 		argvPointers.push_back( nullptr );
-
 		pid_t childProcessId = fork();
 		if( childProcessId == 0 ) {
 			execv( executablePath.c_str(), const_cast<char* const*>( argvPointers.data() ) );
@@ -173,10 +151,8 @@ namespace uranite::pkg {
 		if( childProcessId < 0 ) {
 			return 1;
 		}
-
 		int32_t childStatus = 0;
 		waitpid( childProcessId, &childStatus, 0 );
-
 		if( WIFEXITED( childStatus ) ) {
 			return WEXITSTATUS( childStatus );
 		}

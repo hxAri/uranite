@@ -239,19 +239,19 @@ namespace uranite::ir::mir {
 		
 		// Per-class vtable identifier constant (itable global or unique marker)
 		std::unordered_map<std::string, llvm::Constant*> classVtableIdentifier;
-
+		
 		struct DroperCleanupEntry {
 			MIRVariableIdentifier variableIdentifier;
 			std::string qualifiedTypeName;
 			llvm::AllocaInst* aliveFlag = nullptr;
 			llvm::AllocaInst* pointerSlot = nullptr;
 		};
-
+		
 		std::vector<DroperCleanupEntry> droperCleanupEntries;
-
+		
 		// Variables whose current value is a heap-boxed optional payload owned by this function
 		std::unordered_set<MIRVariableIdentifier> optionalOwnedBoxes;
-
+		
 	};
 
 } // namespace uranite::ir::mir

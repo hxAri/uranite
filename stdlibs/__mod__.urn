@@ -21,8 +21,8 @@
 
 package uranite
 
-from uranite.adelia import Adelia
+public final class Uranite;
 
 export {
-    Adelia
+    Uranite
 }

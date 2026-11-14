@@ -158,7 +158,7 @@ namespace uranite::ir::mir {
 		lookup::SourceSharedPointer sourceLocation;
 		
 		// Constant payloads
-		int64_t integerConstantValue = 0;
+		uint64_t integerConstantValue = 0;
 		double floatConstantValue = 0.0;
 		bool booleanConstantValue = false;
 		std::string stringConstantValue;
@@ -246,7 +246,7 @@ namespace uranite::ir::mir {
 	struct MIRModuleConstant {
 		enum ConstantKind { Integer, Float, Boolean, String, Null };
 		ConstantKind kind = Integer;
-		int64_t integerValue = 0;
+		uint64_t integerValue = 0;
 		double floatValue = 0.0;
 		bool booleanValue = false;
 		std::string stringValue;
