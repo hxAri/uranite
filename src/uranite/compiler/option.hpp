@@ -84,7 +84,7 @@ namespace uranite::compiler {
 		
 		/** @brief Flag to automatically execute the program after successful compilation. */
 		bool executeAfterCompilation = false;
-
+		
 		/** @brief GDB flags when running under GDB with --run. nullopt means no GDB. */
 		std::optional<std::string> gdbFlags;
 		
