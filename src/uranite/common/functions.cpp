@@ -19,6 +19,7 @@
 
 #include <cxxabi.h>
 #include <regex>
+#include <sstream> 
 
 #include "uranite/common/functions.hpp"
 
@@ -65,7 +66,7 @@ namespace uranite::common::functions {
 	std::string removesuffix( const std::string &strings, const std::string &character ) {
 		if( strings.size() >= character.size() &&
 			strings.compare( strings.size() - character.size(), character.size(), character ) == 0 ) {
-			strings.substr( 0, strings.size() - character.size() );
+			return strings.substr( 0, strings.size() - character.size() );
 		}
 		return strings;
 	}
