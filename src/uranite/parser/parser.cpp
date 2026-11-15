@@ -2514,6 +2514,9 @@ namespace uranite::parser {
 							this->advance();
 							looksLikeType = parseOneTypePart();
 						}
+						if( looksLikeType && this->check( token::Type::Question ) ) {
+							this->advance();
+						}
 						if( looksLikeType && this->check( token::Type::Identifier ) ) {
 							this->position = typeStartPosition;
 							ast::nodes::TypeNodeSharedPointer parsedTypeNode = this->parseTypeNode();
