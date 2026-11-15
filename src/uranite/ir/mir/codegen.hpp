@@ -69,7 +69,7 @@ namespace uranite::ir::mir {
 		// Instruction category generators
 		void generateAllocateLocal( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateLoadVariable( const MIRInstruction& instruction );
-		void generateStoreVariable( const MIRInstruction& instruction );
+		void generateStoreVariable( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateCopyValue( const MIRInstruction& instruction );
 		void generateMoveValue( const MIRInstruction& instruction );
 		void generateConstantInteger( const MIRInstruction& instruction );
@@ -97,6 +97,12 @@ namespace uranite::ir::mir {
 		void emitDropCallForVariable( MIRVariableIdentifier variableId, llvm::Value* pointer );
 		void emitDroperScopeCleanup( MIRVariableIdentifier excludeVariable );
 		void registerDroperCleanupEntry( MIRVariableIdentifier variableId, const std::string& typeName );
+ 		bool isOptionalBoxedInnerType( const semantic::TypeSharedPointer& innerType );
+ 		bool optionalInnerIsScalarKind( const semantic::TypeSharedPointer& innerType );
+ 		llvm::Type* optionalScalarLLVMType( const semantic::TypeSharedPointer& innerType );
+ 		llvm::Value* createOptionalBox( llvm::Value* rawValue );
+		llvm::Value* unwrapOptionalOperand( MIRVariableIdentifier operandId, MIRFunctionDefinition& functionDefinition );
+		void emitOwnedBoxRelease( MIRVariableIdentifier variableId, MIRFunctionDefinition& functionDefinition );
 		void generatePhiNode( const MIRInstruction& instruction );
 		void generateConstructObject( const MIRInstruction& instruction, MIRFunctionDefinition& functionDefinition );
 		void generateYield( const MIRInstruction& instruction );
@@ -114,6 +120,7 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreateMalloc();
 		llvm::Function* getOrCreateCalloc();
 		llvm::Function* getOrCreateFree();
+		int getVtableFieldIndex( const std::string& typeName );
 		llvm::Function* getOrCreateMemcpy();
 		llvm::Function* getOrCreateStrlen();
 		llvm::Function* getOrCreateStrcmp();
@@ -218,6 +225,9 @@ namespace uranite::ir::mir {
 		// Interface dispatch: interface qualified name → ordered method names
 		std::unordered_map<std::string, std::vector<std::string>> interfaceMethodOrder;
 		
+		// Master VTable: global interface index → slot offset in master vtable (1-based, 0 = class vtable)
+		std::unordered_map<std::string, int> interfaceGlobalIndex;
+		
 		// Classes that have vtable pointers (implement interfaces)
 		std::unordered_set<std::string> classesWithVtable;
 		
@@ -229,16 +239,19 @@ namespace uranite::ir::mir {
 		
 		// Per-class vtable identifier constant (itable global or unique marker)
 		std::unordered_map<std::string, llvm::Constant*> classVtableIdentifier;
-
+		
 		struct DroperCleanupEntry {
 			MIRVariableIdentifier variableIdentifier;
 			std::string qualifiedTypeName;
 			llvm::AllocaInst* aliveFlag = nullptr;
 			llvm::AllocaInst* pointerSlot = nullptr;
 		};
-
+		
 		std::vector<DroperCleanupEntry> droperCleanupEntries;
-
+		
+		// Variables whose current value is a heap-boxed optional payload owned by this function
+		std::unordered_set<MIRVariableIdentifier> optionalOwnedBoxes;
+		
 	};
 
 } // namespace uranite::ir::mir

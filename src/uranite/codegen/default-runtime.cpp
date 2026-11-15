@@ -11,7 +11,7 @@
 #include "uranite/codegen/default-runtime.hpp"
 
 namespace uranite::codegen {
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getThrowFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_throw";
@@ -23,7 +23,7 @@ namespace uranite::codegen {
 		spec.isNoReturn = true;
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getPersonalityFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_personality_v0";
@@ -34,7 +34,7 @@ namespace uranite::codegen {
 		spec.isVariadic = true;
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getBeginCatchFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_begin_catch";
@@ -45,7 +45,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getEndCatchFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_end_catch";
@@ -56,7 +56,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getPushFrameFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_push_frame";
@@ -72,7 +72,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getPopFrameFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_pop_frame";
@@ -82,7 +82,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getGetFrameDepthFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_get_frame_depth";
@@ -92,7 +92,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getGetFrameAtFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "__uranite_get_frame_at";
@@ -103,7 +103,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getMallocFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "malloc";
@@ -114,7 +114,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getFreeFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "free";
@@ -125,7 +125,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getCallocFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "calloc";
@@ -139,7 +139,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getMemcpyFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "llvm.memcpy.p0.p0.i64";
@@ -155,7 +155,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getReallocFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "realloc";
@@ -169,7 +169,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getPrintfFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "printf";
@@ -181,7 +181,7 @@ namespace uranite::codegen {
 		spec.isVariadic = true;
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getSnprintfFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "snprintf";
@@ -197,7 +197,7 @@ namespace uranite::codegen {
 		spec.isVariadic = true;
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getStrlenFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strlen";
@@ -208,7 +208,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getStrcpyFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strcpy";
@@ -222,7 +222,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getStrcatFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strcat";
@@ -236,7 +236,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getStrcmpFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strcmp";
@@ -250,7 +250,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getStrstrFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strstr";
@@ -264,7 +264,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getStrncmpFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "strncmp";
@@ -279,7 +279,7 @@ namespace uranite::codegen {
 		);
 		return spec;
 	}
-
+	
 	RuntimeFunctionSpec DefaultRuntime::getWriteFunction( llvm::LLVMContext& context ) {
 		RuntimeFunctionSpec spec;
 		spec.functionName = "write";

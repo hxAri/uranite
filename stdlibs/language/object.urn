@@ -29,7 +29,7 @@ public class Object:
     Subclasses should override toString to provide a meaningful string representation.
     """
 
-    public function toString( self ) -> String:
+    public virtual function toString( self ) -> String:
 
         """
         Return a string representation of this object.

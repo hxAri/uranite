@@ -82,13 +82,13 @@ namespace uranite::codegen {
 			 * @param diagnosticEngine Reference to the engine for reporting compilation errors.
 			 */
 			LLVMCodegen( semantic::Analyzer& semanticAnalyzer, diagnostic::Engine& diagnosticEngine );
-
+			
 			/**
 			 * @brief Overrides the target triple for cross-compilation.
 			 * @param triple The LLVM target triple string (e.g., "aarch64-linux-gnu").
 			 */
 			void setTargetTriple( const std::string& triple );
-
+			
 			/**
 			 * @brief Dumps the current state of the LLVM module to standard error.
 			 */
@@ -258,7 +258,7 @@ namespace uranite::codegen {
 			llvm::Value* generateCallExpression( ast::nodes::CallExpression& expression );
 			llvm::Value* generateBuiltinPuts( ast::nodes::CallExpression& expression );
 			llvm::Value* coerceValueToString( llvm::Value* value );
-
+			
 			/**
 			 * @brief Generates LLVM IR for a constructor or object construction expression.
 			 * @param expression The construction expression node.
@@ -428,6 +428,7 @@ namespace uranite::codegen {
              * @return The resulting mangled string.
              */
             std::string buildMonomorphizedName( const ast::nodes::TypeNodeSharedPointer& typeNode );
+			
             std::string mangleName( const std::string& name, const std::string& className = "" );
 			
             /**
@@ -470,7 +471,7 @@ namespace uranite::codegen {
 			
 			llvm::Value* createCallOrInvoke( llvm::Function* callee, llvm::ArrayRef<llvm::Value*> args, const llvm::Twine& name = "" );
 			llvm::Value* createCallOrInvoke( llvm::FunctionType* type, llvm::Value* callee, llvm::ArrayRef<llvm::Value*> args, const llvm::Twine& name = "" );
-
+			
 			llvm::Function* getOrCreateFree();
 			llvm::Function* getOrCreateMalloc();
 			llvm::Function* getOrCreateCalloc();
@@ -539,7 +540,7 @@ namespace uranite::codegen {
 			);
 			
 			llvm::Value* unwrapOOPWrapperValue( llvm::Value* value, const std::string& wrapperTypeHint = "" );
-
+			
 			bool isThrowableClass( const std::string& typeName );
 			void injectTracebackInfo( llvm::Value* objectPointer, const std::string& typeName, const lookup::SourceSharedPointer& source, bool overwriteFileAndLine = true );
 			void generateArithmeticErrorCheck( llvm::Value* condition, const std::string& errorClassName, const std::string& message, const lookup::SourceSharedPointer& source );
@@ -553,7 +554,7 @@ namespace uranite::codegen {
 			
 			/** @brief Argument used for asynchronous task execution. */
 			llvm::Value* asyncTaskArgument = nullptr;
-
+			
 			/** @brief Stack of landing pad basic blocks for nested try/catch. */
 			std::stack<llvm::BasicBlock*> landingPads;
 			
@@ -586,7 +587,7 @@ namespace uranite::codegen {
 			
 			/** @brief Hierarchical defer scope stack. Each entry holds defers for one lexical scope. */
 			std::vector<std::vector<ast::nodes::StatementSharedPointer>> deferScopeStack;
-
+			
 			void pushDeferScope();
 			void popDeferScope();
 			void emitCurrentScopeDefers();
@@ -625,7 +626,7 @@ namespace uranite::codegen {
 			
 			/** @brief Compile-time constant values (survives namedValues.clear()). */
 			std::unordered_map<std::string, llvm::Constant*> constantValues;
-
+			
 			/** @brief Global variable declarations needing runtime initialization. */
 			std::vector<ast::nodes::ConstantDeclaration*> globalVariableInits;
 			
@@ -650,18 +651,18 @@ namespace uranite::codegen {
 			
 			/** @brief Mapping of variable names to their respective struct type names. */
 			std::unordered_map<std::string, std::string> variableStructType;
-
+			
 			std::string lastConstructedClassName;
 			std::string lastTargetInterfaceName;
 			
 			/** @brief Set of class names whose methods have been pre-registered. */
 			std::unordered_set<std::string> preRegisteredClasses;
-
+			
 			std::unordered_map<std::string, int> overloadedFunctionCounts;
-
+			
 			/** @brief Pluggable runtime interface for function name/signature resolution. */
 			std::shared_ptr<RuntimeInterface> runtimeInterface_;
-
+			
 			struct ScopeCleanupEntry {
 				std::string variableName;
 				std::string typeName;
@@ -669,10 +670,10 @@ namespace uranite::codegen {
 				llvm::Value* aliveFlag;
 				bool implementsDroper;
 			};
-
+			
 			std::vector<std::vector<ScopeCleanupEntry>> scopeCleanupStack;
 			std::unordered_map<std::string, llvm::Value*> aliveFlags;
-
+			
 			void pushCleanupScope();
 			void popCleanupScope();
 			void emitScopeCleanup( std::vector<ScopeCleanupEntry>& entries );

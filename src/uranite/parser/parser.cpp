@@ -2322,17 +2322,17 @@ namespace uranite::parser {
 				return std::make_shared<ast::nodes::FloatLiteralExpression>( raw, source, value );
 			}
 			case token::Type::LiteralInteger: {
-				int64_t value = 0;
+				uint64_t value = 0;
 				std::string raw = this->current().value;
 				this->advance();
 				if( raw.size() > 2 && raw[0] == '0' && ( raw[1] == 'x' || raw[1] == 'X' ) ) {
-					value = std::stoll( raw.substr( 2 ), nullptr, 16 );
+					value = std::stoull( raw.substr( 2 ), nullptr, 16 );
 				}
 				else if( raw.size() > 2 && raw[0] == '0' && ( raw[1] == 'b' || raw[1] == 'B' ) ) {
-					value = std::stoll( raw.substr( 2 ), nullptr, 2 );
+					value = std::stoull( raw.substr( 2 ), nullptr, 2 );
 				}
 				else if( raw.size() > 2 && raw[0] == '0' && ( raw[1] == 'o' || raw[1] == 'O' ) ) {
-					value = std::stoll( raw.substr( 2 ), nullptr, 8 );
+					value = std::stoull( raw.substr( 2 ), nullptr, 8 );
 				}
 				else {
 					std::string numericString;
@@ -2343,7 +2343,12 @@ namespace uranite::parser {
 						}
 						break;
 					}
-					value = std::stoll( numericString );
+					if( numericString.empty() == false && numericString[0] == '-' ) {
+						value = static_cast<uint64_t>( std::stoll( numericString ) );
+					}
+					else {
+						value = std::stoull( numericString );
+					}
 				}
 				return std::make_shared<ast::nodes::IntegerLiteralExpression>( value, raw, source );
 			}
@@ -2469,36 +2474,50 @@ namespace uranite::parser {
 						isConstVariable = true;
 						this->advance();
 					}
-					bool isNullablePrefix = this->check( token::Type::Question );
-					if( isNullablePrefix || this->check( token::Type::Identifier ) ) {
+					bool isTypeStart = this->check( token::Type::Question ) || this->check( token::Type::Identifier );
+					if( isTypeStart ) {
 						size_t typeStartPosition = this->position;
-						if( isNullablePrefix ) {
-							this->advance();
-						}
-						if( this->check( token::Type::Identifier ) ) {
-							this->advance();
-						}
-						if( this->check( token::Type::LessThan ) ) {
-							int genericDepth = 1;
-							this->advance();
-							while( ( genericDepth > 0 ) && ( this->isAtEnd( false ) ) ) {
-								if( this->check( token::Type::LessThan ) ) {
-									genericDepth++;
-								}
-								else if( this->check( token::Type::GreaterThan ) ) {
-									genericDepth--;
-								}
-								else if( this->check( token::Type::ShiftRight ) ) { 
-									genericDepth-= 2; 
-								}
+						auto parseOneTypePart = [&]() -> bool {
+							if( this->check( token::Type::Question ) ) {
 								this->advance();
 							}
-						}
-						if( this->check( token::Type::LeftBracket ) && ( this->peek( 1 ).type == token::Type::RightBracket ) ) {
+							if( this->check( token::Type::Identifier ) || this->check( token::Type::KeywordSelf ) ) {
+								this->advance();
+							}
+							else {
+								return false;
+							}
+							if( this->check( token::Type::LessThan ) ) {
+								int genericDepth = 1;
+								this->advance();
+								while( ( genericDepth > 0 ) && ( this->isAtEnd( false ) ) ) {
+									if( this->check( token::Type::LessThan ) ) {
+										genericDepth++;
+									}
+									else if( this->check( token::Type::GreaterThan ) ) {
+										genericDepth--;
+									}
+									else if( this->check( token::Type::ShiftRight ) ) { 
+										genericDepth-= 2; 
+									}
+									this->advance();
+								}
+							}
+							if( this->check( token::Type::LeftBracket ) && ( this->peek( 1 ).type == token::Type::RightBracket ) ) {
+								this->advance();
+								this->advance();
+							}
+							return true;
+						};
+						bool looksLikeType = parseOneTypePart();
+						while( looksLikeType && this->check( token::Type::Pipe ) ) {
 							this->advance();
+							looksLikeType = parseOneTypePart();
+						}
+						if( looksLikeType && this->check( token::Type::Question ) ) {
 							this->advance();
 						}
-						if( this->check( token::Type::Identifier ) ) {
+						if( looksLikeType && this->check( token::Type::Identifier ) ) {
 							this->position = typeStartPosition;
 							ast::nodes::TypeNodeSharedPointer parsedTypeNode = this->parseTypeNode();
 							std::string variableName = this->expect( token::Type::Identifier, "expected variable name" ).value;
@@ -2519,6 +2538,7 @@ namespace uranite::parser {
 							);
 							return variableStatement;
 						}
+						this->position = typeStartPosition;
 					}
 					this->position = savedPosition;
 				}

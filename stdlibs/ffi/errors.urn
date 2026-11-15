@@ -2,9 +2,9 @@ package uranite.ffi.errors
 
 from uranite.errors.error import Error
 
-public class FfiError extends Error:
+public class FFIError extends Error:
 
-    public function FfiError( self, String message, I64 code, ?Error cause = None ) -> Void:
+    public function FFIError( self, String message, I64 code, ?Error cause = None ) -> Void:
         """
         Construct an FFI error with a descriptive message.
 
@@ -22,7 +22,7 @@ public class FfiError extends Error:
         """
         parent( message, code, cause )
 
-public class LibraryLoadError extends FfiError:
+public class LibraryLoadError extends FFIError:
     """
     Raised when a dynamic library cannot be loaded.
 
@@ -53,7 +53,7 @@ public class LibraryLoadError extends FfiError:
         parent( systemError, 0, None )
         self.libraryPath = libraryPath
 
-public class SymbolNotFoundError extends FfiError:
+public class SymbolNotFoundError extends FFIError:
     """
     Raised when a named symbol cannot be resolved within a loaded dynamic library.
 

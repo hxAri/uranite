@@ -21,7 +21,7 @@ cmake_minimum_required( VERSION 3.22 )
 
 enable_testing()
 
-project( Uranite DESCRIPTION "Accelerated Execution Through Quantum Precision" VERSION 2026.8 LANGUAGES C CXX )
+project( Uranite DESCRIPTION "Accelerated Execution Through Quantum Precision" VERSION 2026.11 LANGUAGES C CXX )
 
 find_program( LLVM_CONFIG NAMES llvm-config llvm-config-19 REQUIRED )
 execute_process( COMMAND ${LLVM_CONFIG} --cxxflags OUTPUT_VARIABLE LLVM_CXXFLAGS OUTPUT_STRIP_TRAILING_WHITESPACE )

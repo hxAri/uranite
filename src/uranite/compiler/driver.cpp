@@ -234,6 +234,9 @@ namespace uranite::compiler {
 					}
 				}
 				for( std::unordered_map<std::string, semantic::TypeSharedPointer>::iterator typeIterator = allTypes.begin(); typeIterator != allTypes.end(); ++typeIterator ) {
+					if( typeIterator->second != nullptr && typeIterator->second->kind == semantic::Type::Kind::GenericParameter ) {
+						continue;
+					}
 					if( this->accumulatedModuleTypes_.find( typeIterator->first ) == this->accumulatedModuleTypes_.end() ) {
 						moduleInfo.analyzedTypes[typeIterator->first] = typeIterator->second;
 						this->accumulatedModuleTypes_[typeIterator->first] = typeIterator->second;
@@ -387,7 +390,7 @@ namespace uranite::compiler {
 				continue;
 			}
 			if( isSelectiveImportOperation && declarationIdentifier.empty() == false && selectivelyImportedIdentifiers.count( declarationIdentifier ) == 0 ) {
-				if( moduleDeclaration->kind != ast::Node::Kind::ConstantDeclaration && moduleDeclaration->kind != ast::Node::Kind::FunctionDeclaration ) {
+				if( moduleDeclaration->kind != ast::Node::Kind::ConstantDeclaration && moduleDeclaration->kind != ast::Node::Kind::FunctionDeclaration && moduleDeclaration->kind != ast::Node::Kind::ExternDeclaration ) {
 					continue;
 				}
 			}

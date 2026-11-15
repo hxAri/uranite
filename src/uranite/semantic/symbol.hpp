@@ -132,6 +132,9 @@ namespace uranite::semantic {
 		/** @brief The identifier name of the symbol. */
 		std::string name;
 		
+		/** @brief The module (package) where this symbol was defined. */
+		std::string sourceModule;
+		
 		/** @brief Shared pointer managing the ownership semantics of the symbol. */
 		OwnershipSharedPointer ownership;
 		
@@ -158,6 +161,7 @@ namespace uranite::semantic {
 			isMutable( false ),
 			kind( kind ),
 			name( name ),
+			sourceModule( "" ),
 			ownership( std::make_shared<Ownership>() ),
 			source( source ),
 			typeref( std::move( typeref ) ) {
@@ -181,6 +185,7 @@ namespace uranite::semantic {
 			isMutable( false ),
 			kind( kind ),
 			name( name ),
+			sourceModule( "" ),
 			ownership( ownership ),
 			source( source ),
 			typeref( std::move( typeref ) ) {

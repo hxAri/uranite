@@ -21,7 +21,7 @@
 #include "../manifest/lockfile.hpp"
 
 namespace uranite::pkg {
-
+	
 	struct ResolvedDependency {
 		std::string packageName;
 		SemanticVersion resolvedVersion;
@@ -29,33 +29,33 @@ namespace uranite::pkg {
 		std::string integrityHash;
 		std::vector<std::string> transitiveDependencyNames;
 	};
-
+	
 	struct ResolutionResult {
 		std::vector<ResolvedDependency> resolvedPackages;
 		bool hasConflicts = false;
 		std::vector<std::string> conflictMessages;
 	};
-
+	
 	class DependencyResolver {
-
+		
 		public:
-
+			
 			ResolutionResult resolve( const PackageManifest& manifest, bool includeDevelopmentDependencies );
 			ResolutionResult resolveFromLockfile( const Lockfile& lockfile );
 			std::vector<std::string> topologicalSort( const std::vector<ResolvedDependency>& resolvedPackages );
-
+		
 		private:
-
+			
 			void resolveRecursive( const std::string& packageName, const std::string& versionConstraint,
 				const std::string& sourceRepository, std::unordered_map<std::string, ResolvedDependency>& resolvedMap,
 				std::unordered_set<std::string>& visitedPackages, std::vector<std::string>& conflictMessages );
-
+			
 			std::vector<SemanticVersion> fetchAvailableVersions( const std::string& packageName,
 				const std::string& sourceRepository );
-
+			
 			PackageManifest fetchPackageManifest( const std::string& packageName,
 				const SemanticVersion& version, const std::string& sourceRepository );
-
+			
 			void topologicalSortVisit( const std::string& packageName,
 				const std::unordered_map<std::string, ResolvedDependency>& resolvedMap,
 				std::unordered_set<std::string>& visitedSet,
