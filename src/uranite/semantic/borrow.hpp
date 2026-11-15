@@ -86,7 +86,7 @@ namespace uranite::semantic {
 		lookup::SourceSharedPointer declarationSource;
 		
 		/// @brief Remembers if someone currently has permission to change this memory.
-		bool hasMutableBorrow;
+		bool hasMutableBorrow = false;
 		
 		/// @brief The number of users currently allowed to read this memory.
 		int immutableBorrowCount = 0;

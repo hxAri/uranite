@@ -1740,8 +1740,19 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::TakeReference: {
 				if( instruction.sourceOperands.empty() == false && instruction.destinationVariable != 0 ) {
 					llvm::Value* operandValue = this->getVariableValue( instruction.sourceOperands[0] );
+
 					if( operandValue != nullptr ) {
-						this->setVariableValue( instruction.destinationVariable, operandValue );
+						if( operandValue->getType()->isPointerTy() ) {
+									llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+									llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+									llvm::Value* asInt = this->irBuilder.CreatePtrToInt( operandValue, i64Type, "ref.ptoi" );
+									llvm::Value* referencePointer = this->irBuilder.CreateIntToPtr( asInt, ptrType, "ref" );
+									this->setVariableValue( instruction.destinationVariable, referencePointer );
+		
+						}
+						else {
+							this->setVariableValue( instruction.destinationVariable, operandValue );
+						}
 					}
 					else {
 						this->setVariableValue( instruction.destinationVariable,
@@ -6841,6 +6852,7 @@ namespace uranite::ir::mir {
  				break;
  			}
  			llvm::Value* argumentValue = this->loadVariableValue( instruction.sourceOperands[argumentIndex] );
+
  			if( argumentValue == nullptr ) {
  				if( argumentIndex < expectedParamCount ) {
  					arguments.push_back( llvm::Constant::getNullValue( calleeType->getParamType( argumentIndex ) ) );
