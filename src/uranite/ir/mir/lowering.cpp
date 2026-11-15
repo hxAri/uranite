@@ -2516,7 +2516,17 @@ namespace uranite::ir::mir {
 			}
 			case hir::HIRNodeKind::Reference: {
 				hir::HIRReference& refNode = static_cast<hir::HIRReference&>( *hirExpression );
-				MIRVariableIdentifier targetVariable = this->lowerExpression( refNode.targetExpression );
+				MIRVariableIdentifier targetVariable = INVALID_VARIABLE_IDENTIFIER;
+				if( refNode.targetExpression != nullptr && refNode.targetExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
+					hir::HIRIdentifier& ident = static_cast<hir::HIRIdentifier&>( *refNode.targetExpression );
+					std::unordered_map<std::string, MIRVariableIdentifier>::iterator variableLookup = this->variableNameMap.find( ident.identifierName );
+					if( variableLookup != this->variableNameMap.end() ) {
+						targetVariable = variableLookup->second;
+					}
+				}
+				if( targetVariable == INVALID_VARIABLE_IDENTIFIER ) {
+					targetVariable = this->lowerExpression( refNode.targetExpression );
+				}
 				MIRInstruction refInstruction( MIRInstructionKind::TakeReference );
 				refInstruction.sourceOperands.push_back( targetVariable );
 				refInstruction.operandType = refNode.resolvedType;
@@ -2549,7 +2559,17 @@ namespace uranite::ir::mir {
 			}
 			case hir::HIRNodeKind::AddressOf: {
 				hir::HIRAddressOf& addrNode = static_cast<hir::HIRAddressOf&>( *hirExpression );
-				MIRVariableIdentifier targetVariable = this->lowerExpression( addrNode.targetExpression );
+				MIRVariableIdentifier targetVariable = INVALID_VARIABLE_IDENTIFIER;
+				if( addrNode.targetExpression != nullptr && addrNode.targetExpression->nodeKind == hir::HIRNodeKind::Identifier ) {
+					hir::HIRIdentifier& ident = static_cast<hir::HIRIdentifier&>( *addrNode.targetExpression );
+					std::unordered_map<std::string, MIRVariableIdentifier>::iterator variableLookup = this->variableNameMap.find( ident.identifierName );
+					if( variableLookup != this->variableNameMap.end() ) {
+						targetVariable = variableLookup->second;
+					}
+				}
+				if( targetVariable == INVALID_VARIABLE_IDENTIFIER ) {
+					targetVariable = this->lowerExpression( addrNode.targetExpression );
+				}
 				MIRInstruction addrInstruction( MIRInstructionKind::AddressOf );
 				addrInstruction.sourceOperands.push_back( targetVariable );
 				addrInstruction.operandType = addrNode.resolvedType;

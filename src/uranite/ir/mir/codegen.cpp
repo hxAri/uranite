@@ -1740,8 +1740,19 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::TakeReference: {
 				if( instruction.sourceOperands.empty() == false && instruction.destinationVariable != 0 ) {
 					llvm::Value* operandValue = this->getVariableValue( instruction.sourceOperands[0] );
+
 					if( operandValue != nullptr ) {
-						this->setVariableValue( instruction.destinationVariable, operandValue );
+						if( operandValue->getType()->isPointerTy() ) {
+									llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+									llvm::Type* ptrType = llvm::PointerType::getUnqual( this->llvmContext );
+									llvm::Value* asInt = this->irBuilder.CreatePtrToInt( operandValue, i64Type, "ref.ptoi" );
+									llvm::Value* referencePointer = this->irBuilder.CreateIntToPtr( asInt, ptrType, "ref" );
+									this->setVariableValue( instruction.destinationVariable, referencePointer );
+		
+						}
+						else {
+							this->setVariableValue( instruction.destinationVariable, operandValue );
+						}
 					}
 					else {
 						this->setVariableValue( instruction.destinationVariable,
@@ -6841,6 +6852,7 @@ namespace uranite::ir::mir {
  				break;
  			}
  			llvm::Value* argumentValue = this->loadVariableValue( instruction.sourceOperands[argumentIndex] );
+
  			if( argumentValue == nullptr ) {
  				if( argumentIndex < expectedParamCount ) {
  					arguments.push_back( llvm::Constant::getNullValue( calleeType->getParamType( argumentIndex ) ) );
@@ -9045,6 +9057,19 @@ namespace uranite::ir::mir {
 		if( operandType == nullptr ) {
 			return llvm::Type::getInt64Ty( this->llvmContext );
 		}
+		bool isArenaContainer = false;
+		{
+			std::string containerName = operandType->name;
+			size_t genericBracket = containerName.find( '<' );
+			if( genericBracket != std::string::npos ) {
+				containerName = containerName.substr( 0, genericBracket );
+			}
+			size_t lastDot = containerName.rfind( '.' );
+			if( lastDot != std::string::npos ) {
+				containerName = containerName.substr( lastDot + 1 );
+			}
+			isArenaContainer = ( containerName == semantic::qualname::classes::arena::Name );
+		}
 		std::string elementClassName;
 		semantic::TypeSharedPointer elementSemaType = nullptr;
 		if( operandType->kind == semantic::Type::Kind::Class ) {
@@ -9071,23 +9096,27 @@ namespace uranite::ir::mir {
 		if( elementSemaType == nullptr ) {
 			return llvm::Type::getInt64Ty( this->llvmContext );
 		}
-		if( elementSemaType->kind == semantic::Type::Kind::Class || elementSemaType->kind == semantic::Type::Kind::Struct ) {
-			std::string lookupName = elementSemaType->qualified.empty() == false ? elementSemaType->qualified : elementSemaType->name;
-			if( this->structTypeCache.count( lookupName ) > 0 ) {
-				return this->structTypeCache[lookupName];
-			}
-			if( this->structTypeCache.count( elementSemaType->name ) > 0 ) {
-				return this->structTypeCache[elementSemaType->name];
-			}
-			llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, lookupName );
-			if( structType == nullptr ) {
-				structType = llvm::StructType::getTypeByName( this->llvmContext, elementSemaType->name );
-			}
-			if( structType != nullptr ) {
-				return structType;
+		llvm::Type* resolved = this->toLLVMType( elementSemaType );
+		if( isArenaContainer && ( elementSemaType->kind == semantic::Type::Kind::Class || elementSemaType->kind == semantic::Type::Kind::Struct ) ) {
+			if( resolved == nullptr || resolved->isPointerTy() ) {
+				std::string lookupName = elementSemaType->qualified.empty() == false ? elementSemaType->qualified : elementSemaType->name;
+				std::unordered_map<std::string, llvm::StructType*>::iterator cachedStruct = this->structTypeCache.find( lookupName );
+				if( cachedStruct != this->structTypeCache.end() ) {
+					return cachedStruct->second;
+				}
+				cachedStruct = this->structTypeCache.find( elementSemaType->name );
+				if( cachedStruct != this->structTypeCache.end() ) {
+					return cachedStruct->second;
+				}
+				llvm::StructType* structType = llvm::StructType::getTypeByName( this->llvmContext, lookupName );
+				if( structType == nullptr ) {
+					structType = llvm::StructType::getTypeByName( this->llvmContext, elementSemaType->name );
+				}
+				if( structType != nullptr ) {
+					return structType;
+				}
 			}
 		}
-		llvm::Type* resolved = this->toLLVMType( elementSemaType );
 		if( resolved == nullptr || resolved->isVoidTy() ) {
 			return llvm::Type::getInt64Ty( this->llvmContext );
 		}
