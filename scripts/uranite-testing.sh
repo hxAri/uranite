@@ -87,6 +87,10 @@ function main() {
 					puts "$filename/${basepath}\//: skipped because is not in the scope"
 					continue
 				fi
+				if [[ "$filename" =~ testing.urn ]]; then
+					puts "${filename/${basepath}\//}: silently skipped because low priority"
+					continue
+				fi
 				if [[ "$filename" =~ [aA]delia ]]; then
 					puts "${filename/${basepath}\//}: silently skipped because low priority"
 					continue
