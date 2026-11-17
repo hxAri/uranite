@@ -38,14 +38,16 @@ from uranite.memory.allocator import alloc, dealloc
 const I64 BASE64_PAD = 61
 """ASCII code for '=' padding character."""
 
-I64 encodeTableAddress = 0
-"""Lazily initialized 64-byte encode lookup table (index -> ASCII char)."""
-
-I64 decodeTableAddress = 0
-"""Lazily initialized 256-byte decode lookup table (ASCII char -> 6-bit value)."""
-
-I64 tablesInitialized = 0
-"""Flag indicating whether encode/decode tables have been computed."""
+public class Base64State:
+    
+    public static I64 encodeTableAddress = 0
+    """Lazily initialized 64-byte encode lookup table (index -> ASCII char)."""
+    
+    public static I64 decodeTableAddress = 0
+    """Lazily initialized 256-byte decode lookup table (ASCII char -> 6-bit value)."""
+    
+    public static I64 tablesInitialized = 0
+    """Flag indicating whether encode/decode tables have been computed."""
 
 public class Base64Error extends Error:
 
@@ -82,44 +84,44 @@ public function initializeBase64Tables() -> Void:
         Space: O(1) (320 bytes allocated)
     """
 
-    if tablesInitialized != 0:
+    if Base64State.tablesInitialized != 0:
         return
-    encodeTableAddress = alloc( 64 )
+    Base64State.encodeTableAddress = alloc( 64 )
     I64 charIndex = 0
     while charIndex < 26:
-        writeByteAt( encodeTableAddress, charIndex, 65 + charIndex )
+        writeByteAt( Base64State.encodeTableAddress, charIndex, 65 + charIndex )
         charIndex = charIndex + 1
     charIndex = 0
     while charIndex < 26:
-        writeByteAt( encodeTableAddress, 26 + charIndex, 97 + charIndex )
+        writeByteAt( Base64State.encodeTableAddress, 26 + charIndex, 97 + charIndex )
         charIndex = charIndex + 1
     charIndex = 0
     while charIndex < 10:
-        writeByteAt( encodeTableAddress, 52 + charIndex, 48 + charIndex )
+        writeByteAt( Base64State.encodeTableAddress, 52 + charIndex, 48 + charIndex )
         charIndex = charIndex + 1
-    writeByteAt( encodeTableAddress, 62, 43 )
-    writeByteAt( encodeTableAddress, 63, 47 )
+    writeByteAt( Base64State.encodeTableAddress, 62, 43 )
+    writeByteAt( Base64State.encodeTableAddress, 63, 47 )
 
-    decodeTableAddress = alloc( 256 )
+    Base64State.decodeTableAddress = alloc( 256 )
     I64 fillIndex = 0
     while fillIndex < 256:
-        writeByteAt( decodeTableAddress, fillIndex, 255 )
+        writeByteAt( Base64State.decodeTableAddress, fillIndex, 255 )
         fillIndex = fillIndex + 1
     charIndex = 0
     while charIndex < 26:
-        writeByteAt( decodeTableAddress, 65 + charIndex, charIndex )
+        writeByteAt( Base64State.decodeTableAddress, 65 + charIndex, charIndex )
         charIndex = charIndex + 1
     charIndex = 0
     while charIndex < 26:
-        writeByteAt( decodeTableAddress, 97 + charIndex, 26 + charIndex )
+        writeByteAt( Base64State.decodeTableAddress, 97 + charIndex, 26 + charIndex )
         charIndex = charIndex + 1
     charIndex = 0
     while charIndex < 10:
-        writeByteAt( decodeTableAddress, 48 + charIndex, 52 + charIndex )
+        writeByteAt( Base64State.decodeTableAddress, 48 + charIndex, 52 + charIndex )
         charIndex = charIndex + 1
-    writeByteAt( decodeTableAddress, 43, 62 )
-    writeByteAt( decodeTableAddress, 47, 63 )
-    tablesInitialized = 1
+    writeByteAt( Base64State.decodeTableAddress, 43, 62 )
+    writeByteAt( Base64State.decodeTableAddress, 47, 63 )
+    Base64State.tablesInitialized = 1
 
 public function base64EncodedLength( I64 inputLength ) -> I64:
 
@@ -178,10 +180,10 @@ public function base64Encode( I64 dataAddress, I64 dataLength, I64 outputAddress
         I64 byte1 = readByteAt( dataAddress, inputIndex + 1 )
         I64 byte2 = readByteAt( dataAddress, inputIndex + 2 )
         I64 triplet = ( byte0 << 16 ) | ( byte1 << 8 ) | byte2
-        writeByteAt( outputAddress, outputIndex, readByteAt( encodeTableAddress, ( triplet >> 18 ) & 63 ) )
-        writeByteAt( outputAddress, outputIndex + 1, readByteAt( encodeTableAddress, ( triplet >> 12 ) & 63 ) )
-        writeByteAt( outputAddress, outputIndex + 2, readByteAt( encodeTableAddress, ( triplet >> 6 ) & 63 ) )
-        writeByteAt( outputAddress, outputIndex + 3, readByteAt( encodeTableAddress, triplet & 63 ) )
+        writeByteAt( outputAddress, outputIndex, readByteAt( Base64State.encodeTableAddress, ( triplet >> 18 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 1, readByteAt( Base64State.encodeTableAddress, ( triplet >> 12 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 2, readByteAt( Base64State.encodeTableAddress, ( triplet >> 6 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 3, readByteAt( Base64State.encodeTableAddress, triplet & 63 ) )
         inputIndex = inputIndex + 3
         outputIndex = outputIndex + 4
     I64 remainingBytes = dataLength - inputIndex
@@ -189,16 +191,16 @@ public function base64Encode( I64 dataAddress, I64 dataLength, I64 outputAddress
         I64 byte0 = readByteAt( dataAddress, inputIndex )
         I64 byte1 = readByteAt( dataAddress, inputIndex + 1 )
         I64 triplet = ( byte0 << 16 ) | ( byte1 << 8 )
-        writeByteAt( outputAddress, outputIndex, readByteAt( encodeTableAddress, ( triplet >> 18 ) & 63 ) )
-        writeByteAt( outputAddress, outputIndex + 1, readByteAt( encodeTableAddress, ( triplet >> 12 ) & 63 ) )
-        writeByteAt( outputAddress, outputIndex + 2, readByteAt( encodeTableAddress, ( triplet >> 6 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex, readByteAt( Base64State.encodeTableAddress, ( triplet >> 18 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 1, readByteAt( Base64State.encodeTableAddress, ( triplet >> 12 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 2, readByteAt( Base64State.encodeTableAddress, ( triplet >> 6 ) & 63 ) )
         writeByteAt( outputAddress, outputIndex + 3, BASE64_PAD )
         outputIndex = outputIndex + 4
     elif remainingBytes == 1:
         I64 byte0 = readByteAt( dataAddress, inputIndex )
         I64 triplet = byte0 << 16
-        writeByteAt( outputAddress, outputIndex, readByteAt( encodeTableAddress, ( triplet >> 18 ) & 63 ) )
-        writeByteAt( outputAddress, outputIndex + 1, readByteAt( encodeTableAddress, ( triplet >> 12 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex, readByteAt( Base64State.encodeTableAddress, ( triplet >> 18 ) & 63 ) )
+        writeByteAt( outputAddress, outputIndex + 1, readByteAt( Base64State.encodeTableAddress, ( triplet >> 12 ) & 63 ) )
         writeByteAt( outputAddress, outputIndex + 2, BASE64_PAD )
         writeByteAt( outputAddress, outputIndex + 3, BASE64_PAD )
         outputIndex = outputIndex + 4
@@ -271,8 +273,8 @@ public function base64Decode( I64 encodedAddress, I64 encodedLength, I64 outputA
         I64 char1 = readByteAt( encodedAddress, inputIndex + 1 )
         I64 char2 = readByteAt( encodedAddress, inputIndex + 2 )
         I64 char3 = readByteAt( encodedAddress, inputIndex + 3 )
-        I64 sextet0 = readByteAt( decodeTableAddress, char0 )
-        I64 sextet1 = readByteAt( decodeTableAddress, char1 )
+        I64 sextet0 = readByteAt( Base64State.decodeTableAddress, char0 )
+        I64 sextet1 = readByteAt( Base64State.decodeTableAddress, char1 )
         if sextet0 == 255:
             raise new Base64Error( "invalid base64 character", 0, None )
         if sextet1 == 255:
@@ -283,7 +285,7 @@ public function base64Decode( I64 encodedAddress, I64 encodedLength, I64 outputA
             outputIndex = outputIndex + 1
             inputIndex = inputIndex + 4
         elif char3 == BASE64_PAD:
-            I64 sextet2 = readByteAt( decodeTableAddress, char2 )
+            I64 sextet2 = readByteAt( Base64State.decodeTableAddress, char2 )
             if sextet2 == 255:
                 raise new Base64Error( "invalid base64 character", 0, None )
             I64 combined = ( sextet0 << 18 ) | ( sextet1 << 12 ) | ( sextet2 << 6 )
@@ -292,8 +294,8 @@ public function base64Decode( I64 encodedAddress, I64 encodedLength, I64 outputA
             outputIndex = outputIndex + 2
             inputIndex = inputIndex + 4
         else:
-            I64 sextet2 = readByteAt( decodeTableAddress, char2 )
-            I64 sextet3 = readByteAt( decodeTableAddress, char3 )
+            I64 sextet2 = readByteAt( Base64State.decodeTableAddress, char2 )
+            I64 sextet3 = readByteAt( Base64State.decodeTableAddress, char3 )
             if sextet2 == 255:
                 raise new Base64Error( "invalid base64 character", 0, None )
             if sextet3 == 255:
