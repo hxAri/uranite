@@ -1960,6 +1960,7 @@ namespace uranite::descriptor {
 					bool hasBinary = false;
 					bool hasCenterAlign = false;
 					bool hasNamedPlaceholder = false;
+					bool hasCustomFill = false;
 					for( const FormatPlaceholder& ph : placeholders ) {
 						if( ph.align == '^' ) {
 							hasCenterAlign = true;
@@ -1970,8 +1971,11 @@ namespace uranite::descriptor {
 						if( ph.type == 'b' ) {
 							hasBinary = true;
 						}
+						if( ph.fill != ' ' ) {
+							hasCustomFill = true;
+						}
 					}
-					if( hasBinary == false && hasCenterAlign == false && hasNamedPlaceholder == false ) {
+					if( hasBinary == false && hasCenterAlign == false && hasNamedPlaceholder == false && hasCustomFill == false ) {
 						std::vector<int> argOrder;
 						std::string snprintfFmt = buildSnprintfFormat( fmtStr, placeholders, arguments, argOrder );
 						size_t bufSize = estimateBufferSize( fmtStr, placeholders );
