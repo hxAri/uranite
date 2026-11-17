@@ -850,7 +850,9 @@ namespace uranite::parser {
 					if( this->match( token::Type::Assignment ) ) {
 						varInitializer = this->parseExpression();
 					}
-					return std::make_shared<ast::nodes::ConstantDeclaration>( varName, varType, varInitializer, access, varSource, true );
+					std::string errorMessage( "top-level variable declarations are not allowed; only \"const Type NAME = value\" is valid at the top level" );
+					this->diagnostic.error( varSource, errorMessage );
+					return nullptr;
 				}
 				[[fallthrough]];
 			}
