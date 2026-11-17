@@ -47,6 +47,7 @@ namespace uranite::ir::mir {
 		AllocateLocal,
 		LoadVariable,
 		StoreVariable,
+		StoreIndirect,
 		CopyValue,
 		MoveValue,
 		DropValue,
