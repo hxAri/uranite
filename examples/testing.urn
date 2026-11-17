@@ -21,9 +21,24 @@
 package uranite.examples.testing
 
 from uranite.collection import ArrayList, Generator, HashMap, HashSet, Pair, Tuple
+from uranite.errors import Error, Throwable
 from uranite.functions.builtin import enumerate
-from uranite.io import getpass, input, puts
+from uranite.io import getpass, input, puts, putserr
 from uranite.iterators import Iterable
+from uranite.testing import {
+	assertBetween,
+    assertEqualF64,
+    assertEqualI64,
+    assertEqualStr,
+    assertFalse,
+    assertGreaterOrEqual,
+    assertGreaterThan,
+    assertLessOrEqual,
+    assertLessThan,
+    assertNotEqualI64,
+    assertNotEqualStr,
+    assertTrue,
+}
 
 private function generator( Int start, Int end ) -> Generator<Int>:
 	for Int i in start..end:
@@ -34,8 +49,11 @@ private async function printer( Iterable<Int> items ) -> Future<Void>:
 		puts( "Item: {} at index {}".format( n, i ) )
 
 public function main() -> Void:
-	ArrayList<Int> items = []
-	Generator<Int> gen = generator( 1, 10 )
-	for Int i in generator( 1, 10 ):
-		items.append( i )
-	printer( items )
+	try:
+		ArrayList<Int> items = []
+		Generator<Int> gen = generator( 1, 10 )
+		for Int i in generator( 1, 10 ):
+			items.append( i )
+		printer( items )
+	except Error as e:
+		putserr( e.toString() )
