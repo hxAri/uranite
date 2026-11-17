@@ -94,11 +94,13 @@ const I64 F_ERROR = 9
 const I64 FIBER_FIELD_COUNT = 10
 """Total number of fields in the fiber data array."""
 
-I64 gCurrentFiberPtr = 0
-"""Global pointer to the currently executing fiber's data array. Set before each context switch into a fiber and read by fiberTrampoline and fiberSuspend."""
+public class FiberState:
+    
+    public static I64 gCurrentFiberPtr = 0
+    """Global pointer to the currently executing fiber's data array. Set before each context switch into a fiber and read by fiberTrampoline and fiberSuspend."""
 
-I64 gCallerRspPtr = 0
-"""Global pointer to the caller's saved RSP buffer. Used to return control from the fiber back to the caller (scheduler or direct invoker)."""
+    public static I64 gCallerRspPtr = 0
+    """Global pointer to the caller's saved RSP buffer. Used to return control from the fiber back to the caller (scheduler or direct invoker)."""
 
 public function fiberTrampoline() -> Void:
     
@@ -114,16 +116,16 @@ public function fiberTrampoline() -> Void:
         Space: O(1)
     """
     
-    I64 fnAddr = readI64At( gCurrentFiberPtr, F_ENTRY_FN * 8 )
+    I64 fnAddr = readI64At( FiberState.gCurrentFiberPtr, F_ENTRY_FN * 8 )
     I64 result = 0
     asm volatile:
         x86-64 "call *$2" : output( "={rax}" result ) : input( "{rdi}" 0, "r" fnAddr ) : clobber( "memory", "rsi", "rcx", "rdx", "r8", "r9", "r10", "r11" )
         aarch64 "blr $2" : output( "={x0}" result ) : input( "{x0}" 0, "r" fnAddr ) : clobber( "memory", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x30" )
-    writeI64At( gCurrentFiberPtr, F_RETURN_VALUE * 8, result )
-    writeI64At( gCurrentFiberPtr, F_HAS_RETURN * 8, 1 )
-    writeI64At( gCurrentFiberPtr, F_STATE * 8, FIBER_TERMINATED )
-    I64 fiberRspPtr = gCurrentFiberPtr + F_CONTEXT_RSP * 8
-    swapContext( fiberRspPtr, gCallerRspPtr )
+    writeI64At( FiberState.gCurrentFiberPtr, F_RETURN_VALUE * 8, result )
+    writeI64At( FiberState.gCurrentFiberPtr, F_HAS_RETURN * 8, 1 )
+    writeI64At( FiberState.gCurrentFiberPtr, F_STATE * 8, FIBER_TERMINATED )
+    I64 fiberRspPtr = FiberState.gCurrentFiberPtr + F_CONTEXT_RSP * 8
+    swapContext( fiberRspPtr, FiberState.gCallerRspPtr )
 
 public function fiberSuspend( I64 value ) -> I64:
     
@@ -147,11 +149,11 @@ public function fiberSuspend( I64 value ) -> I64:
         Space: O(1)
     """
     
-    writeI64At( gCurrentFiberPtr, F_SUSPEND_VALUE * 8, value )
-    writeI64At( gCurrentFiberPtr, F_STATE * 8, FIBER_SUSPENDED )
-    I64 fiberRspPtr = gCurrentFiberPtr + F_CONTEXT_RSP * 8
-    swapContext( fiberRspPtr, gCallerRspPtr )
-    return readI64At( gCurrentFiberPtr, F_RESUME_VALUE * 8 )
+    writeI64At( FiberState.gCurrentFiberPtr, F_SUSPEND_VALUE * 8, value )
+    writeI64At( FiberState.gCurrentFiberPtr, F_STATE * 8, FIBER_SUSPENDED )
+    I64 fiberRspPtr = FiberState.gCurrentFiberPtr + F_CONTEXT_RSP * 8
+    swapContext( fiberRspPtr, FiberState.gCallerRspPtr )
+    return readI64At( FiberState.gCurrentFiberPtr, F_RESUME_VALUE * 8 )
 
 public class Fiber:
     
@@ -247,7 +249,7 @@ public class Fiber:
         self.callerRsp = new Memory<I64>( 1 )
         self.callerRsp.set( 0, 0 )
         self.data.set( F_STATE, FIBER_CREATED )
-        self.data.set( F_ENTRY_FN, entryFn )
+        self.data.set( F_ENTRY_FN, entryFnAddr )
         self.data.set( F_STACK_BASE, 0 )
         self.data.set( F_STACK_SIZE, DEFAULT_FIBER_STACK )
         self.data.set( F_CONTEXT_RSP, 0 )
@@ -293,8 +295,8 @@ public class Fiber:
         self.data.set( F_STATE, FIBER_RUNNING )
         I64 dataPtr = memoryToPtr( self.data )
         I64 callerPtr = memoryToPtr( self.callerRsp )
-        gCurrentFiberPtr = dataPtr
-        gCallerRspPtr = callerPtr
+        FiberState.gCurrentFiberPtr = dataPtr
+        FiberState.gCallerRspPtr = callerPtr
         I64 fiberRspPtr = dataPtr + F_CONTEXT_RSP * 8
         swapContext( callerPtr, fiberRspPtr )
         return self.data.get( F_SUSPEND_VALUE )
@@ -332,8 +334,8 @@ public class Fiber:
         self.data.set( F_STATE, FIBER_RUNNING )
         I64 dataPtr = memoryToPtr( self.data )
         I64 callerPtr = memoryToPtr( self.callerRsp )
-        gCurrentFiberPtr = dataPtr
-        gCallerRspPtr = callerPtr
+        FiberState.gCurrentFiberPtr = dataPtr
+        FiberState.gCallerRspPtr = callerPtr
         I64 fiberRspPtr = dataPtr + F_CONTEXT_RSP * 8
         swapContext( callerPtr, fiberRspPtr )
         return self.data.get( F_SUSPEND_VALUE )
@@ -456,8 +458,7 @@ export {
     F_SUSPEND_VALUE,
     Fiber,
     FiberError,
+    FiberState,
     fiberSuspend,
-    fiberTrampoline,
-    gCallerRspPtr,
-    gCurrentFiberPtr
+    fiberTrampoline
 }
