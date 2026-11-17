@@ -127,6 +127,7 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::AllocateLocal:        return "alloc";
 			case MIRInstructionKind::LoadVariable:         return "load";
 			case MIRInstructionKind::StoreVariable:        return "store";
+			case MIRInstructionKind::StoreIndirect:        return "store.indirect";
 			case MIRInstructionKind::CopyValue:            return "copy";
 			case MIRInstructionKind::MoveValue:            return "move";
 			case MIRInstructionKind::DropValue:            return "drop";
