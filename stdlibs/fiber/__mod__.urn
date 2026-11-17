@@ -22,8 +22,7 @@ from uranite.fiber.fiber import {
     FiberError,
     fiberSuspend,
     fiberTrampoline,
-    gCallerRspPtr,
-    gCurrentFiberPtr
+    FiberState
 }
 from uranite.fiber.fiber-scheduler import FiberScheduler, MAX_FIBERS
 
@@ -51,6 +50,5 @@ export {
     MAX_FIBERS,
     fiberSuspend,
     fiberTrampoline,
-    gCallerRspPtr,
-    gCurrentFiberPtr
+    FiberState
 }
