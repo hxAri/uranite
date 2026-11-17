@@ -268,7 +268,7 @@ namespace uranite::ir::hir {
 		if( declaration.source != nullptr ) {
 			std::string modulePath = deriveModulePath( declaration.source->filename );
 			if( modulePath.empty() == false ) {
-				hirFunction->mangledName = modulePath + "." + declaration.name;
+				hirFunction->mangledName = fmt::format( "{}.{}", modulePath, declaration.name );
 			}
 		}
 		for( const ast::nodes::FunctionParameterSharedPointer& parameter : declaration.parameters ) {
@@ -329,6 +329,31 @@ namespace uranite::ir::hir {
 		for( const ast::nodes::FieldDeclarationSharedPointer& field : declaration.fields ) {
 			if( field != nullptr ) {
 				hirClass->fieldDescriptors.push_back( this->lowerFieldDeclaration( *field, fieldIndex++ ) );
+			}
+		}
+		
+		// Promoted constructor fields: constructor parameters declared with a
+		// visibility modifier promote to instance fields, appended after the
+		// declared fields in constructor scan order (matching the semantic
+		// analyzer's promoted field registration).
+		for( const ast::nodes::DeclarationSharedPointer& method : declaration.methods ) {
+			if( method == nullptr || method->kind != ast::Node::Kind::FunctionDeclaration ) {
+				continue;
+			}
+			ast::nodes::FunctionDeclaration& constructorFunction = static_cast<ast::nodes::FunctionDeclaration&>( *method );
+			if( constructorFunction.name != declaration.name ) {
+				continue;
+			}
+			for( const ast::nodes::FunctionParameterSharedPointer& promotedParameter : constructorFunction.parameters ) {
+				if( promotedParameter == nullptr || promotedParameter->isProperty == false || promotedParameter->type == nullptr ) {
+					continue;
+				}
+				HIRFieldDescriptor promotedFieldDescriptor;
+				promotedFieldDescriptor.fieldName = promotedParameter->name;
+				promotedFieldDescriptor.fieldType = this->resolveTypeNode( promotedParameter->type );
+				promotedFieldDescriptor.fieldIndex = fieldIndex++;
+				promotedFieldDescriptor.fieldAccess = promotedParameter->propertyAccess;
+				hirClass->fieldDescriptors.push_back( std::move( promotedFieldDescriptor ) );
 			}
 		}
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
@@ -850,7 +875,7 @@ namespace uranite::ir::hir {
 					identifierExpression.resolvedSymbol->source != nullptr ) {
 					std::string modulePath = deriveModulePath( identifierExpression.resolvedSymbol->source->filename );
 					if( modulePath.empty() == false ) {
-						hirIdentifier->qualifiedScopeName = modulePath + "." + identifierExpression.name;
+						hirIdentifier->qualifiedScopeName = fmt::format( "{}.{}", modulePath, identifierExpression.name );
 					}
 				}
 				return hirIdentifier;
