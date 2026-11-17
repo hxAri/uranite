@@ -43,11 +43,13 @@ const I64 CRC32C_TABLE_ENTRIES = 256
 const I64 CRC32C_TABLE_BYTE_SIZE = 2048
 """Byte size of the lookup table (256 entries * 8 bytes each)."""
 
-I64 tableAddress = 0
-"""Lazily initialized address of the 256-entry CRC-32C lookup table."""
+public class Crc32cState:
+    
+    public static I64 tableAddress = 0
+    """Lazily initialized address of the 256-entry CRC-32C lookup table."""
 
-I64 tableInitialized = 0
-"""Flag indicating whether the lookup table has been computed."""
+    public static I64 tableInitialized = 0
+    """Flag indicating whether the lookup table has been computed."""
 
 public function initializeCrc32cTable() -> Void:
 
@@ -62,9 +64,9 @@ public function initializeCrc32cTable() -> Void:
         Space: O(1) (2048 bytes allocated)
     """
 
-    if tableInitialized != 0:
+    if Crc32cState.tableInitialized != 0:
         return
-    tableAddress = alloc( CRC32C_TABLE_BYTE_SIZE )
+    Crc32cState.tableAddress = alloc( CRC32C_TABLE_BYTE_SIZE )
     I64 byteValue = 0
     while byteValue < CRC32C_TABLE_ENTRIES:
         I64 crcAccumulator = byteValue
@@ -75,9 +77,9 @@ public function initializeCrc32cTable() -> Void:
             else:
                 crcAccumulator = ( crcAccumulator >> 1 ) & 2147483647
             bitIndex = bitIndex + 1
-        writeI64At( tableAddress, byteValue * 8, crcAccumulator & 4294967295 )
+        writeI64At( Crc32cState.tableAddress, byteValue * 8, crcAccumulator & 4294967295 )
         byteValue = byteValue + 1
-    tableInitialized = 1
+    Crc32cState.tableInitialized = 1
 
 public function crc32cUpdate( I64 currentCrc, I64 bufferAddress, I64 length ) -> I64:
 
@@ -110,7 +112,7 @@ public function crc32cUpdate( I64 currentCrc, I64 bufferAddress, I64 length ) ->
     while byteIndex < length:
         I64 dataByte = readByteAt( bufferAddress, byteIndex )
         I64 tableIndex = ( crcState ^ dataByte ) & 255
-        I64 tableEntry = readI64At( tableAddress, tableIndex * 8 )
+        I64 tableEntry = readI64At( Crc32cState.tableAddress, tableIndex * 8 )
         crcState = tableEntry ^ ( ( crcState >> 8 ) & 16777215 )
         byteIndex = byteIndex + 1
     return crcState & 4294967295
