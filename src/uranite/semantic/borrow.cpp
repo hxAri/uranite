@@ -280,6 +280,7 @@ namespace uranite::semantic {
 	}
 	
 	void BorrowChecker::checkFunctionDeclaration( ast::nodes::FunctionDeclaration& functionDeclaration ) {
+		std::unordered_map<std::string, BorrowOwnershipInfo> savedOwnershipTracking = this->ownershipTracking;
 		this->pushScope();
 		for( ast::nodes::FunctionParameterSharedPointer& functionParameter : functionDeclaration.parameters ) {
 			if( functionParameter->isSelf ) {
@@ -289,30 +290,81 @@ namespace uranite::semantic {
 		}
 		this->checkBlock( functionDeclaration.body );
 		this->popScope();
+		this->ownershipTracking = savedOwnershipTracking;
 	}
 	
 	void BorrowChecker::checkIfStatement( ast::nodes::IfStatement& statement ) {
 		this->checkExpression( statement.condition );
 		std::unordered_map<std::string, BorrowOwnershipState> preIfSnapshot = this->snapshotOwnershipStates();
+		bool preIfReturned = this->scopeReturnedStack.empty() ? false : this->scopeReturnedStack.back();
 		std::vector<std::unordered_map<std::string, BorrowOwnershipState>> branchEndSnapshots;
-		this->checkBlock( statement.thenBody );
+		std::vector<bool> branchReturnedFlags;
+		this->pushScope();
+		for( const ast::nodes::StatementSharedPointer& bodyStatement : statement.thenBody ) {
+			this->checkStatement( bodyStatement );
+		}
 		branchEndSnapshots.push_back( this->snapshotOwnershipStates() );
+		bool thenReturned = this->scopeReturnedStack.empty() ? false : this->scopeReturnedStack.back();
+		branchReturnedFlags.push_back( thenReturned );
+		this->popScope();
 		this->restoreOwnershipStates( preIfSnapshot );
+		if( this->scopeReturnedStack.empty() == false ) {
+			this->scopeReturnedStack.back() = preIfReturned;
+		}
 		for( std::pair<ast::nodes::ExpressionSharedPointer, std::vector<ast::nodes::StatementSharedPointer>>& elifBranch : statement.elifBranches ) {
 			this->checkExpression( elifBranch.first );
-			this->checkBlock( elifBranch.second );
+			this->pushScope();
+			for( const ast::nodes::StatementSharedPointer& elifBodyStatement : elifBranch.second ) {
+				this->checkStatement( elifBodyStatement );
+			}
 			branchEndSnapshots.push_back( this->snapshotOwnershipStates() );
+			bool elifReturned = this->scopeReturnedStack.empty() ? false : this->scopeReturnedStack.back();
+			branchReturnedFlags.push_back( elifReturned );
+			this->popScope();
 			this->restoreOwnershipStates( preIfSnapshot );
+			if( this->scopeReturnedStack.empty() == false ) {
+				this->scopeReturnedStack.back() = preIfReturned;
+			}
 		}
 		if( statement.elseBody.empty() == false ) {
-			this->checkBlock( statement.elseBody );
+			this->pushScope();
+			for( const ast::nodes::StatementSharedPointer& elseBodyStatement : statement.elseBody ) {
+				this->checkStatement( elseBodyStatement );
+			}
 			branchEndSnapshots.push_back( this->snapshotOwnershipStates() );
+			bool elseReturned = this->scopeReturnedStack.empty() ? false : this->scopeReturnedStack.back();
+			branchReturnedFlags.push_back( elseReturned );
+			this->popScope();
 			this->restoreOwnershipStates( preIfSnapshot );
+			if( this->scopeReturnedStack.empty() == false ) {
+				this->scopeReturnedStack.back() = preIfReturned;
+			}
 		}
 		else {
 			branchEndSnapshots.push_back( preIfSnapshot );
+			branchReturnedFlags.push_back( false );
 		}
-		this->mergeOwnershipStates( branchEndSnapshots, statement.source );
+		std::vector<std::unordered_map<std::string, BorrowOwnershipState>> nonReturningBranchSnapshots;
+		bool allBranchesReturned = ( branchReturnedFlags.empty() == false );
+		for( size_t branchIndex = 0; branchIndex < branchReturnedFlags.size(); branchIndex++ ) {
+			if( branchReturnedFlags[branchIndex] ) {
+				allBranchesReturned = allBranchesReturned && true;
+			}
+			else {
+				allBranchesReturned = false;
+				if( branchIndex < branchEndSnapshots.size() ) {
+					nonReturningBranchSnapshots.push_back( branchEndSnapshots[branchIndex] );
+				}
+			}
+		}
+		if( allBranchesReturned && branchReturnedFlags.empty() == false ) {
+			if( this->scopeReturnedStack.empty() == false ) {
+				this->scopeReturnedStack.back() = true;
+			}
+		}
+		else if( nonReturningBranchSnapshots.empty() == false ) {
+			this->mergeOwnershipStates( nonReturningBranchSnapshots, statement.source );
+		}
 	}
 	
 	void BorrowChecker::checkLoopIterationCleanup( const std::vector<std::string>& scopeVariables, const lookup::SourceSharedPointer& source ) {
@@ -346,6 +398,9 @@ namespace uranite::semantic {
 					}
 				}
 			}
+		}
+		if( this->scopeReturnedStack.empty() == false ) {
+			this->scopeReturnedStack.back() = true;
 		}
 	}
 	
@@ -673,7 +728,8 @@ namespace uranite::semantic {
 					ownerInformation.immutableBorrowCount++;
 				}
 			}
-			if( activeBorrows.empty() && ownerInformation.state != BorrowOwnershipState::Moved ) {
+			if( activeBorrows.empty() && ownerInformation.state != BorrowOwnershipState::Moved &&
+				ownerInformation.state != BorrowOwnershipState::Dropped ) {
 				ownerInformation.state = BorrowOwnershipState::Owned;
 			}
 		}
@@ -722,11 +778,15 @@ namespace uranite::semantic {
 		}
 		this->variableScope.pop_back();
 		this->currentScopeDepth--;
+		if( this->scopeReturnedStack.empty() == false ) {
+			this->scopeReturnedStack.pop_back();
+		}
 	}
 	
 	void BorrowChecker::pushScope() {
 		this->currentScopeDepth++;
     	this->variableScope.push_back({});
+		this->scopeReturnedStack.push_back( false );
 	}
 	
 }
