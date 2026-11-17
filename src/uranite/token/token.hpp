@@ -511,7 +511,7 @@ namespace uranite::token {
 		 * 
 		 */
 		bool isAssignment() const {
-			return this->type >= Type::Assignment && this->type <= Type::StarAssignment;
+			return this->type >= Type::AmpersandAssignment && this->type <= Type::StarAssignment;
 		}
 		
 		/**
