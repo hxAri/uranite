@@ -1,3 +1,4 @@
+#include <cstdio>
 
 //
 // @author hxAri (hxari)
@@ -1204,6 +1205,35 @@ namespace uranite::semantic {
 			case token::Type::LessThan:
 			case token::Type::LessThanEqual:
 			case token::Type::NotEqual: {
+				auto isStringComparisonType = []( const TypeSharedPointer& comparisonType ) -> bool {
+					if( comparisonType == nullptr ) {
+						return false;
+					}
+					return comparisonType->kind == Type::Kind::String ||
+						( comparisonType->kind == Type::Kind::Class && comparisonType->qualified == qualname::String );
+				};
+				auto isBooleanComparisonType = []( const TypeSharedPointer& comparisonType ) -> bool {
+					if( comparisonType == nullptr ) {
+						return false;
+					}
+					return comparisonType->kind == Type::Kind::Bool ||
+						( comparisonType->kind == Type::Kind::Class && comparisonType->qualified == qualname::Boolean );
+				};
+				auto isNumericComparisonType = []( const TypeSharedPointer& comparisonType ) -> bool {
+					if( comparisonType == nullptr ) {
+						return false;
+					}
+					return comparisonType->isNumeric() ||
+						( comparisonType->kind == Type::Kind::Class && ( qualname::isIntegerOop( comparisonType->qualified ) || qualname::isFloatOop( comparisonType->qualified ) ) );
+				};
+				bool isStringLikeComparisonType = isStringComparisonType( leftSideType ) || isStringComparisonType( rightSideType );
+				bool isNumericLikeComparisonType = isNumericComparisonType( leftSideType ) || isNumericComparisonType( rightSideType );
+				bool isBooleanLikeComparisonType = isBooleanComparisonType( leftSideType ) || isBooleanComparisonType( rightSideType );
+				if( isStringLikeComparisonType && ( isNumericLikeComparisonType || isBooleanLikeComparisonType ) ) {
+					std::string compareErrorMessage = fmt::format( "cannot compare types \"{}\" and \"{}\"", leftSideType->toString(), rightSideType->toString() );
+					this->diagnostic.error( expression.source, compareErrorMessage );
+					return this->typeRegistry.getBool();
+				}
 				if( leftSideType->kind == Type::Kind::Class || leftSideType->kind == Type::Kind::Struct ) {
 					ClassTypeSharedPointer leftSideClassType = std::dynamic_pointer_cast<ClassType>( leftSideType );
 					if( leftSideClassType ) {
@@ -2274,6 +2304,20 @@ namespace uranite::semantic {
 				this->diagnostic.error( enumFunctionDeclaration.source, abstractEnumMethodErrorMessage );
 				continue;
 			}
+			std::vector<TypeSharedPointer> enumMethodParameterTypes;
+			std::vector<std::string> enumMethodParameterNames;
+			for( ast::nodes::FunctionParameterSharedPointer& enumParameter : enumFunctionDeclaration.parameters ) {
+				if( enumParameter->isSelf ) {
+					continue;
+				}
+				TypeSharedPointer parameterResolvedType = this->resolveType( enumParameter->type );
+				enumMethodParameterTypes.push_back( parameterResolvedType ? parameterResolvedType : this->typeRegistry.getError() );
+				enumMethodParameterNames.push_back( enumParameter->name );
+			}
+			TypeSharedPointer enumMethodReturnType = enumFunctionDeclaration.returnType ? this->resolveType( enumFunctionDeclaration.returnType ) : this->typeRegistry.getVoid();
+			TypeSharedPointer enumMethodFunctionType = this->typeRegistry.makeFunction( enumMethodParameterTypes, enumMethodReturnType );
+			FunctionTypeSharedPointer enumMethodFuncTypeCast = std::static_pointer_cast<FunctionType>( enumMethodFunctionType );
+			enumMethodFuncTypeCast->parameterNames = std::move( enumMethodParameterNames );
 			MethodInfo enumMethodInformation;
 			enumMethodInformation.name = enumFunctionDeclaration.name;
 			enumMethodInformation.access = enumFunctionDeclaration.access;
@@ -2283,6 +2327,7 @@ namespace uranite::semantic {
 			enumMethodInformation.isFinal = false;
 			enumMethodInformation.isProperty = enumFunctionDeclaration.isProperty;
 			enumMethodInformation.virtualTableIndex = -1;
+			enumMethodInformation.type = enumMethodFunctionType;
 			enumType->methods.push_back( enumMethodInformation );
 		}
 	}
@@ -3969,6 +4014,20 @@ namespace uranite::semantic {
 				return std::static_pointer_cast<FunctionType>( structMethodCandidates[0]->type )->returnType;
 			}
 		}
+		else if( resolvedObjectType->kind == Type::Kind::Enum ) {
+			EnumTypeSharedPointer enumType = std::static_pointer_cast<EnumType>( resolvedObjectType );
+			std::vector<MethodInfo>::iterator methodIterator = std::find_if(
+				enumType->methods.begin(),
+				enumType->methods.end(),
+				[&]( const MethodInfo& methodInformation ) {
+					return methodInformation.name == expression.method;
+				}
+			);
+			if( methodIterator != enumType->methods.end() && methodIterator->type != nullptr &&
+				methodIterator->type->kind == Type::Kind::Function ) {
+				return std::static_pointer_cast<FunctionType>( methodIterator->type )->returnType;
+			}
+		}
 		else if( resolvedObjectType->kind == Type::Kind::GenericParameter ) {
 			GenericParameterTypeSharedPointer genericParamType =
 				std::static_pointer_cast<GenericParameterType>( resolvedObjectType );
@@ -4821,6 +4880,7 @@ namespace uranite::semantic {
 			fieldInformation.name = fieldDeclaration->name;
 			fieldInformation.type = fieldType ? fieldType : this->typeRegistry.getError();
 			fieldInformation.access = fieldDeclaration->access;
+			fieldInformation.isStatic = fieldDeclaration->isStatic;
 			fieldInformation.isInitialized = classAst->isBuiltin || fieldDeclaration->defaultValue != nullptr || ( fieldInformation.type && fieldInformation.type->kind == Type::Kind::Optional );
 			fieldInformation.index = currentFieldIndex++;
 			classType->fields.push_back( fieldInformation );
@@ -5084,6 +5144,14 @@ namespace uranite::semantic {
 				std::string thisQualified = buildQualified( classDeclaration.name );
 				TypeSharedPointer existing = this->typeRegistry.lookupType( classDeclaration.name );
 				if( existing != nullptr && existing->kind == Type::Kind::Class ) {
+					ClassTypeSharedPointer existingClassCheck = std::static_pointer_cast<ClassType>( existing );
+					if( existingClassCheck->astDeclaration != nullptr && classDeclaration.source != nullptr &&
+						existingClassCheck->astDeclaration->source != nullptr &&
+						existingClassCheck->astDeclaration->source->filename != classDeclaration.source->filename ) {
+						existing = nullptr;
+					}
+				}
+				if( existing != nullptr && existing->kind == Type::Kind::Class ) {
 					ClassTypeSharedPointer existingClass = std::static_pointer_cast<ClassType>( existing );
 					if( existingClass->astDeclaration != nullptr ) {
 						existingClass->astDeclaration = &classDeclaration;
@@ -5121,6 +5189,14 @@ namespace uranite::semantic {
 				std::string thisQualified = buildQualified( structDeclaration.name );
 				TypeSharedPointer existingStruct = this->typeRegistry.lookupType( structDeclaration.name );
 				if( existingStruct != nullptr && existingStruct->kind == Type::Kind::Struct ) {
+					StructTypeSharedPointer existingStructCheck = std::static_pointer_cast<StructType>( existingStruct );
+					if( existingStructCheck->astDeclaration != nullptr && structDeclaration.source != nullptr &&
+						existingStructCheck->astDeclaration->source != nullptr &&
+						existingStructCheck->astDeclaration->source->filename != structDeclaration.source->filename ) {
+						existingStruct = nullptr;
+					}
+				}
+				if( existingStruct != nullptr && existingStruct->kind == Type::Kind::Struct ) {
 					StructTypeSharedPointer existingStructType = std::static_pointer_cast<StructType>( existingStruct );
 					if( existingStructType->astDeclaration != nullptr ) {
 						existingStructType->astDeclaration = &structDeclaration;
@@ -5149,7 +5225,16 @@ namespace uranite::semantic {
 			}
 			case ast::Node::Kind::EnumDeclaration: {
 				ast::nodes::EnumDeclaration& enumDeclaration = static_cast<ast::nodes::EnumDeclaration&>( *declaration );
+				std::string thisQualified = buildQualified( enumDeclaration.name );
 				TypeSharedPointer existingEnum = this->typeRegistry.lookupType( enumDeclaration.name );
+				if( existingEnum != nullptr && existingEnum->kind == Type::Kind::Enum ) {
+					EnumTypeSharedPointer existingEnumCheck = std::static_pointer_cast<EnumType>( existingEnum );
+					if( existingEnumCheck->astDeclaration != nullptr && enumDeclaration.source != nullptr &&
+						existingEnumCheck->astDeclaration->source != nullptr &&
+						existingEnumCheck->astDeclaration->source->filename != enumDeclaration.source->filename ) {
+						existingEnum = nullptr;
+					}
+				}
 				if( existingEnum != nullptr && existingEnum->kind == Type::Kind::Enum ) {
 					EnumTypeSharedPointer existingEnumType = std::static_pointer_cast<EnumType>( existingEnum );
 					if( existingEnumType->astDeclaration != nullptr ) {
@@ -5172,6 +5257,14 @@ namespace uranite::semantic {
 				ast::nodes::InterfaceDeclaration& interfaceDeclaration = static_cast<ast::nodes::InterfaceDeclaration&>( *declaration );
 				std::string thisQualified = buildQualified( interfaceDeclaration.name );
 				TypeSharedPointer existingInterface = this->typeRegistry.lookupType( interfaceDeclaration.name );
+				if( existingInterface != nullptr && existingInterface->kind == Type::Kind::Interface ) {
+					InterfaceTypeSharedPointer existingInterfaceCheck = std::static_pointer_cast<InterfaceType>( existingInterface );
+					if( existingInterfaceCheck->astDeclaration != nullptr && interfaceDeclaration.source != nullptr &&
+						existingInterfaceCheck->astDeclaration->source != nullptr &&
+						existingInterfaceCheck->astDeclaration->source->filename != interfaceDeclaration.source->filename ) {
+						existingInterface = nullptr;
+					}
+				}
 				if( existingInterface != nullptr && existingInterface->kind == Type::Kind::Interface ) {
 					InterfaceTypeSharedPointer existingInterfaceType = std::static_pointer_cast<InterfaceType>( existingInterface );
 					if( existingInterfaceType->astDeclaration != nullptr ) {
@@ -5202,7 +5295,16 @@ namespace uranite::semantic {
 			}
 			case ast::Node::Kind::TraitDeclaration: {
 				ast::nodes::TraitDeclaration& traitDeclaration = static_cast<ast::nodes::TraitDeclaration&>( *declaration );
+				std::string thisQualified = buildQualified( traitDeclaration.name );
 				TypeSharedPointer existingTrait = this->typeRegistry.lookupType( traitDeclaration.name );
+				if( existingTrait != nullptr && existingTrait->kind == Type::Kind::Trait ) {
+					TraitTypeSharedPointer existingTraitCheck = std::static_pointer_cast<TraitType>( existingTrait );
+					if( existingTraitCheck->astDeclaration != nullptr && traitDeclaration.source != nullptr &&
+						existingTraitCheck->astDeclaration->source != nullptr &&
+						existingTraitCheck->astDeclaration->source->filename != traitDeclaration.source->filename ) {
+						existingTrait = nullptr;
+					}
+				}
 				if( existingTrait != nullptr && existingTrait->kind == Type::Kind::Trait ) {
 					TraitTypeSharedPointer existingTraitType = std::static_pointer_cast<TraitType>( existingTrait );
 					if( existingTraitType->astDeclaration != nullptr ) {
