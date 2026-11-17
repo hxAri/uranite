@@ -328,6 +328,9 @@ namespace uranite::semantic {
 			
 			/// A list that stores variable names based on the code area where they exist.
 			std::vector<std::vector<std::string>> variableScope;
+			
+			/// Tracks whether the current scope ended with a return statement.
+			std::vector<bool> scopeReturnedStack;
 		
 	};
 	
