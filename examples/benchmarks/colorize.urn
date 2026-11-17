@@ -66,6 +66,7 @@ function benchmarkConversions( I64 iterations ) -> I64:
         RGB duplicateRgb = new RGB( redChannel, greenChannel, blueChannel )
         if rgbColor.equals( duplicateRgb ):
             checksum++
+        delete duplicateRgb
         String rgbRepr = rgbColor.toString()
         I32 packedHex = ColorConverter.rgbToHex( redChannel, greenChannel, blueChannel )
         RGB unpackedRgb = ColorConverter.hexToRgb( packedHex )
@@ -77,16 +78,19 @@ function benchmarkConversions( I64 iterations ) -> I64:
         if constructedHsl.equals( hslFromRgb ):
             checksum++
         String hslRepr = constructedHsl.toString()
+        delete constructedHsl
         HSV hsvFromRgb = ColorConverter.rgbToHsv( redChannel, greenChannel, blueChannel )
         RGB hsvRoundtrip = ColorConverter.hsvToRgb( hsvFromRgb.hue, hsvFromRgb.saturation, hsvFromRgb.value )
         checksum+= hsvRoundtrip.green + hsvRoundtrip.blue
         HSV constructedHsv = new HSV( hsvFromRgb.hue, hsvFromRgb.saturation, hsvFromRgb.value )
         String hsvRepr = constructedHsv.toString()
+        delete constructedHsv
         CMYK cmykFromRgb = ColorConverter.rgbToCmyk( redChannel, greenChannel, blueChannel )
         RGB cmykRoundtrip = ColorConverter.cmykToRgb( cmykFromRgb.cyan, cmykFromRgb.magenta, cmykFromRgb.yellow, cmykFromRgb.key )
         checksum+= cmykRoundtrip.blue
         CMYK constructedCmyk = new CMYK( cmykFromRgb.cyan, cmykFromRgb.magenta, cmykFromRgb.yellow, cmykFromRgb.key )
         String cmykRepr = constructedCmyk.toString()
+        delete constructedCmyk
         HSL hexHslResult = ColorConverter.hexToHsl( hexColor )
         I32 hslHexResult = ColorConverter.hslToHex( hexHslResult.hue, hexHslResult.saturation, hexHslResult.lightness )
         checksum+= hslHexResult
@@ -96,6 +100,7 @@ function benchmarkConversions( I64 iterations ) -> I64:
         CMYK hexCmykResult = ColorConverter.hexToCmyk( hexColor )
         I32 cmykHexResult = ColorConverter.cmykToHex( hexCmykResult.cyan, hexCmykResult.magenta, hexCmykResult.yellow, hexCmykResult.key )
         checksum+= cmykHexResult
+        delete rgbColor
     return checksum
 
 function benchmarkColorApi( I64 iterations ) -> I64:
@@ -129,10 +134,13 @@ function benchmarkColorApi( I64 iterations ) -> I64:
         F64 perceptualDistance = color.distanceTo( otherColor )
         if perceptualDistance >= 0.0:
             checksum++
+        delete otherColor
         Color sameColor = new Color( hexColor )
         if color.equals( sameColor ):
             checksum++
+        delete sameColor
         String colorRepr = color.toString()
+        delete color
         Color fromRgbColor = Color.fromRgb( 200, 100, 50 )
         checksum+= fromRgbColor.red
         Color fromHslColor = Color.fromHsl( 120.0, 0.8, 0.5 )
@@ -159,6 +167,8 @@ function benchmarkDistanceAndPalettes( I64 iterations ) -> I64:
         F64 euclideanDist = ColorDistance.euclidean( firstRgb, secondRgb )
         F64 redmeanDist = ColorDistance.redmean( firstRgb, secondRgb )
         F64 similarityPct = ColorDistance.similarity( firstRgb, secondRgb )
+        delete firstRgb
+        delete secondRgb
         if euclideanDist >= 0.0 and redmeanDist >= 0.0 and similarityPct >= 0.0:
             checksum++
     for I64 step = 0; step < iterations; step++:
