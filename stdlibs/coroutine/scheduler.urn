@@ -12,8 +12,7 @@ from uranite.fiber.fiber import {
     Fiber,
     fiberSuspend,
     fiberTrampoline,
-    gCallerRspPtr,
-    gCurrentFiberPtr
+    FiberState
 }
 from uranite.io.syscall import memoryToPtr, readI64At, writeI64At
 from uranite.memory.memory import Memory
@@ -136,8 +135,8 @@ public class CoroutineScheduler implements Scheduler:
                     writeI64At( fiberAddr, F_STATE * 8, FIBER_RUNNING )
                     I64 mainPtr = memoryToPtr( self.mainRspBuf )
                     I64 fiberRspPtr = fiberAddr + F_CONTEXT_RSP * 8
-                    gCurrentFiberPtr = fiberAddr
-                    gCallerRspPtr = mainPtr
+                    FiberState.gCurrentFiberPtr = fiberAddr
+                    FiberState.gCallerRspPtr = mainPtr
                     swapContext( mainPtr, fiberRspPtr )
                     self.currentIdx = -1
                     return
