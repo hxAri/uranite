@@ -1078,6 +1078,9 @@ namespace uranite::ast {
 			/** @brief Flag indicating if the function is a generator. */
 			bool isGenerator = false;
 			
+			/** @brief Flag indicating if the function is a naked assembly function with no prologue/epilogue. */
+			bool isNaked = false;
+			
 			/** @brief Flag indicating if the function is implemented in native code. */
 			bool isNative = false;
 			
