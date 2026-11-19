@@ -196,6 +196,7 @@ void __uranite_throw( void* object, const char* typeName ) {
     exc->header.exception_class = URANITE_EXCEPTION_CLASS;
     exc->header.exception_cleanup = uranite_exception_cleanup;
     exc->uraniteObject = object;
+    exc->typeName = typeName;
     _Unwind_RaiseException( &exc->header );
     report_unhandled_exception( object, typeName );
     abort();
@@ -204,6 +205,30 @@ void __uranite_throw( void* object, const char* typeName ) {
 void* __uranite_begin_catch( void* unwind_exception_ptr ) {
     UraniteException* exc = (UraniteException*)unwind_exception_ptr;
     return exc->uraniteObject;
+}
+
+int __uranite_exception_matches_any( void* unwind_exception_ptr, const char** candidateNames, int64_t candidateCount ) {
+    if( unwind_exception_ptr == NULL || candidateNames == NULL || candidateCount <= 0 ) {
+        return 0;
+    }
+    UraniteException* exc = (UraniteException*)unwind_exception_ptr;
+    if( exc->typeName == NULL ) {
+        return 0;
+    }
+    for( int64_t candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++ ) {
+        const char* candidateName = candidateNames[candidateIndex];
+        if( candidateName != NULL && strcmp( candidateName, exc->typeName ) == 0 ) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void __uranite_rethrow( void* unwind_exception_ptr ) {
+    UraniteException* exc = (UraniteException*)unwind_exception_ptr;
+    _Unwind_Resume( &exc->header );
+    report_unhandled_exception( exc->uraniteObject, exc->typeName );
+    abort();
 }
 
 void __uranite_end_catch( void* unwind_exception_ptr ) {
