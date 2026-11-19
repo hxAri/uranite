@@ -1068,6 +1068,7 @@ namespace uranite::ir::hir {
 		bool isConstMethod = false;
 		bool isGeneratorFunction = false;
 		bool isNativeMethod = false;
+		bool isNakedMethod = false;
 		bool isPropertyMethod = false;
 		std::vector<semantic::TypeSharedPointer> raisesTypes;
 		std::vector<std::shared_ptr<HIRFunctionDefinition>> nestedFunctionDefinitions;
