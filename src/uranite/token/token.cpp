@@ -62,6 +62,7 @@ namespace uranite::token {
 			{ "match", Type::KeywordMatch },
 			{ "move", Type::KeywordMove },
 			{ "mut", Type::KeywordMutable },
+			{ "naked", Type::KeywordNaked },
 			{ "native", Type::KeywordNative },
 			{ "new", Type::KeywordNew },
 			{ "None", Type::KeywordNone },
@@ -410,6 +411,7 @@ namespace uranite::token {
 			case Type::KeywordMatch: return "match";
 			case Type::KeywordMove: return "move";
 			case Type::KeywordMutable: return "mut";
+			case Type::KeywordNaked: return "naked";
 			case Type::KeywordNative: return "native";
 			case Type::KeywordNew: return "new";
 			case Type::KeywordNone: return "none";
