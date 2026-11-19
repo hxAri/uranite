@@ -57,6 +57,7 @@ namespace uranite::ir::mir {
 		void lowerMatch( hir::HIRMatch& hirMatch );
 		void lowerSwitch( hir::HIRSwitch& hirSwitch );
 		void lowerTryCatch( hir::HIRTryCatch& hirTryCatch );
+		std::vector<std::string> collectExceptionCandidateNames( const semantic::TypeSharedPointer& handlerType );
 		void lowerDefer( hir::HIRDefer& hirDefer );
 		
 		// Expression lowering — returns variable holding result
