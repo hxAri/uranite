@@ -29,6 +29,7 @@ extern "C" {
 typedef struct {
     struct _Unwind_Exception header;
     void* uraniteObject;
+    const char* typeName;
 } UraniteException;
 
 typedef struct {
@@ -46,6 +47,8 @@ _Unwind_Reason_Code __uranite_personality_v0(
 void __uranite_throw( void* object, const char* typeName ) __attribute__(( noreturn ));
 void* __uranite_begin_catch( void* unwind_exception_ptr );
 void __uranite_end_catch( void* unwind_exception_ptr );
+int __uranite_exception_matches_any( void* unwind_exception_ptr, const char** candidateNames, int64_t candidateCount );
+void __uranite_rethrow( void* unwind_exception_ptr ) __attribute__(( noreturn ));
 void __uranite_release_traceback_of( int64_t throwableObjectAddress );
 
 void __uranite_push_frame( const char* file, int64_t line, int64_t column, const char* function );
