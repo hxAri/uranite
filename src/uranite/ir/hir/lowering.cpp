@@ -166,7 +166,52 @@ namespace uranite::ir::hir {
 					ast::nodes::ClassDeclaration& classDeclaration = static_cast<ast::nodes::ClassDeclaration&>( *declaration );
 					std::shared_ptr<HIRClassDefinition> hirClass = this->lowerClassDeclaration( classDeclaration );
 					if( hirClass != nullptr ) {
-						hirModule->classDefinitions.push_back( std::move( hirClass ) );
+						std::vector<std::shared_ptr<HIRClassDefinition>> pendingClassDefinitions;
+						pendingClassDefinitions.push_back( hirClass );
+						for( size_t pendingIndex = 0; pendingIndex < pendingClassDefinitions.size(); pendingIndex++ ) {
+							std::shared_ptr<HIRClassDefinition> currentClassDefinition = pendingClassDefinitions[pendingIndex];
+							hirModule->classDefinitions.push_back( currentClassDefinition );
+							for( HIRNodeSharedPointer& nestedNode : currentClassDefinition->nestedDeclarations ) {
+								if( nestedNode == nullptr ) {
+									continue;
+								}
+								if( nestedNode->nodeKind == HIRNodeKind::ClassDefinition ) {
+									pendingClassDefinitions.push_back( std::static_pointer_cast<HIRClassDefinition>( nestedNode ) );
+								}
+								else if( nestedNode->nodeKind == HIRNodeKind::StructDefinition ) {
+									std::shared_ptr<HIRStructDefinition> nestedStructDefinition = std::static_pointer_cast<HIRStructDefinition>( nestedNode );
+									std::vector<std::shared_ptr<HIRStructDefinition>> pendingStructDefinitions;
+									pendingStructDefinitions.push_back( nestedStructDefinition );
+									for( size_t structIndex = 0; structIndex < pendingStructDefinitions.size(); structIndex++ ) {
+										std::shared_ptr<HIRStructDefinition> currentStructDefinition = pendingStructDefinitions[structIndex];
+										hirModule->structDefinitions.push_back( currentStructDefinition );
+										for( HIRNodeSharedPointer& structNestedNode : currentStructDefinition->nestedDeclarations ) {
+											if( structNestedNode == nullptr ) {
+												continue;
+											}
+											if( structNestedNode->nodeKind == HIRNodeKind::StructDefinition ) {
+												pendingStructDefinitions.push_back( std::static_pointer_cast<HIRStructDefinition>( structNestedNode ) );
+											}
+											else if( structNestedNode->nodeKind == HIRNodeKind::ClassDefinition ) {
+												pendingClassDefinitions.push_back( std::static_pointer_cast<HIRClassDefinition>( structNestedNode ) );
+											}
+											else if( structNestedNode->nodeKind == HIRNodeKind::EnumDefinition ) {
+												hirModule->enumDefinitions.push_back( std::static_pointer_cast<HIREnumDefinition>( structNestedNode ) );
+											}
+											else if( structNestedNode->nodeKind == HIRNodeKind::InterfaceDefinition ) {
+												hirModule->interfaceDefinitions.push_back( std::static_pointer_cast<HIRInterfaceDefinition>( structNestedNode ) );
+											}
+										}
+									}
+								}
+								else if( nestedNode->nodeKind == HIRNodeKind::EnumDefinition ) {
+									hirModule->enumDefinitions.push_back( std::static_pointer_cast<HIREnumDefinition>( nestedNode ) );
+								}
+								else if( nestedNode->nodeKind == HIRNodeKind::InterfaceDefinition ) {
+									hirModule->interfaceDefinitions.push_back( std::static_pointer_cast<HIRInterfaceDefinition>( nestedNode ) );
+								}
+							}
+						}
 					}
 					break;
 				}
@@ -174,7 +219,52 @@ namespace uranite::ir::hir {
 					ast::nodes::StructDeclaration& structDeclaration = static_cast<ast::nodes::StructDeclaration&>( *declaration );
 					std::shared_ptr<HIRStructDefinition> hirStruct = this->lowerStructDefinition( structDeclaration );
 					if( hirStruct != nullptr ) {
-						hirModule->structDefinitions.push_back( std::move( hirStruct ) );
+						std::vector<std::shared_ptr<HIRStructDefinition>> pendingStructDefinitions;
+						pendingStructDefinitions.push_back( hirStruct );
+						for( size_t structIndex = 0; structIndex < pendingStructDefinitions.size(); structIndex++ ) {
+							std::shared_ptr<HIRStructDefinition> currentStructDefinition = pendingStructDefinitions[structIndex];
+							hirModule->structDefinitions.push_back( currentStructDefinition );
+							for( HIRNodeSharedPointer& structNestedNode : currentStructDefinition->nestedDeclarations ) {
+								if( structNestedNode == nullptr ) {
+									continue;
+								}
+								if( structNestedNode->nodeKind == HIRNodeKind::StructDefinition ) {
+									pendingStructDefinitions.push_back( std::static_pointer_cast<HIRStructDefinition>( structNestedNode ) );
+								}
+								else if( structNestedNode->nodeKind == HIRNodeKind::ClassDefinition ) {
+									std::shared_ptr<HIRClassDefinition> nestedClassDefinition = std::static_pointer_cast<HIRClassDefinition>( structNestedNode );
+									std::vector<std::shared_ptr<HIRClassDefinition>> pendingClassDefinitions;
+									pendingClassDefinitions.push_back( nestedClassDefinition );
+									for( size_t classIndex = 0; classIndex < pendingClassDefinitions.size(); classIndex++ ) {
+										std::shared_ptr<HIRClassDefinition> currentClassDefinition = pendingClassDefinitions[classIndex];
+										hirModule->classDefinitions.push_back( currentClassDefinition );
+										for( HIRNodeSharedPointer& nestedNode : currentClassDefinition->nestedDeclarations ) {
+											if( nestedNode == nullptr ) {
+												continue;
+											}
+											if( nestedNode->nodeKind == HIRNodeKind::ClassDefinition ) {
+												pendingClassDefinitions.push_back( std::static_pointer_cast<HIRClassDefinition>( nestedNode ) );
+											}
+											else if( nestedNode->nodeKind == HIRNodeKind::StructDefinition ) {
+												pendingStructDefinitions.push_back( std::static_pointer_cast<HIRStructDefinition>( nestedNode ) );
+											}
+											else if( nestedNode->nodeKind == HIRNodeKind::EnumDefinition ) {
+												hirModule->enumDefinitions.push_back( std::static_pointer_cast<HIREnumDefinition>( nestedNode ) );
+											}
+											else if( nestedNode->nodeKind == HIRNodeKind::InterfaceDefinition ) {
+												hirModule->interfaceDefinitions.push_back( std::static_pointer_cast<HIRInterfaceDefinition>( nestedNode ) );
+											}
+										}
+									}
+								}
+								else if( structNestedNode->nodeKind == HIRNodeKind::EnumDefinition ) {
+									hirModule->enumDefinitions.push_back( std::static_pointer_cast<HIREnumDefinition>( structNestedNode ) );
+								}
+								else if( structNestedNode->nodeKind == HIRNodeKind::InterfaceDefinition ) {
+									hirModule->interfaceDefinitions.push_back( std::static_pointer_cast<HIRInterfaceDefinition>( structNestedNode ) );
+								}
+							}
+						}
 					}
 					break;
 				}
@@ -264,6 +354,7 @@ namespace uranite::ir::hir {
 		hirFunction->isConstMethod = declaration.isConst;
 		hirFunction->isGeneratorFunction = declaration.isGenerator;
 		hirFunction->isNativeMethod = declaration.isNative;
+		hirFunction->isNakedMethod = declaration.isNaked;
 		hirFunction->isPropertyMethod = declaration.isProperty;
 		if( declaration.source != nullptr ) {
 			std::string modulePath = deriveModulePath( declaration.source->filename );
@@ -403,6 +494,39 @@ namespace uranite::ir::hir {
 			}
 		}
 		this->currentOwnerClassName = previousOwnerClassName;
+		for( const ast::nodes::DeclarationSharedPointer& nestedDeclaration : declaration.nestedDeclarations ) {
+			if( nestedDeclaration == nullptr ) {
+				continue;
+			}
+			if( nestedDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+				ast::nodes::ClassDeclaration& nestedClass = static_cast<ast::nodes::ClassDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIRClassDefinition> hirNestedClass = this->lowerClassDeclaration( nestedClass );
+				if( hirNestedClass != nullptr ) {
+					hirClass->nestedDeclarations.push_back( hirNestedClass );
+				}
+			}
+			else if( nestedDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+				ast::nodes::StructDeclaration& nestedStruct = static_cast<ast::nodes::StructDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIRStructDefinition> hirNestedStruct = this->lowerStructDefinition( nestedStruct );
+				if( hirNestedStruct != nullptr ) {
+					hirClass->nestedDeclarations.push_back( hirNestedStruct );
+				}
+			}
+			else if( nestedDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+				ast::nodes::EnumDeclaration& nestedEnum = static_cast<ast::nodes::EnumDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIREnumDefinition> hirNestedEnum = this->lowerEnumDeclaration( nestedEnum );
+				if( hirNestedEnum != nullptr ) {
+					hirClass->nestedDeclarations.push_back( hirNestedEnum );
+				}
+			}
+			else if( nestedDeclaration->kind == ast::Node::Kind::InterfaceDeclaration ) {
+				ast::nodes::InterfaceDeclaration& nestedInterface = static_cast<ast::nodes::InterfaceDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIRInterfaceDefinition> hirNestedInterface = this->lowerInterfaceDeclaration( nestedInterface );
+				if( hirNestedInterface != nullptr ) {
+					hirClass->nestedDeclarations.push_back( hirNestedInterface );
+				}
+			}
+		}
 		for( const std::pair<std::string, semantic::TypeSharedPointer>& saved : savedClassGenericTypes ) {
 			if( saved.second != nullptr ) {
 				this->semanticAnalyzer.types().registerType( saved.first, saved.second );
@@ -451,6 +575,39 @@ namespace uranite::ir::hir {
 				}
 			}
 		}
+		for( const ast::nodes::DeclarationSharedPointer& nestedDeclaration : declaration.nestedDeclarations ) {
+			if( nestedDeclaration == nullptr ) {
+				continue;
+			}
+			if( nestedDeclaration->kind == ast::Node::Kind::ClassDeclaration ) {
+				ast::nodes::ClassDeclaration& nestedClass = static_cast<ast::nodes::ClassDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIRClassDefinition> hirNestedClass = this->lowerClassDeclaration( nestedClass );
+				if( hirNestedClass != nullptr ) {
+					hirStruct->nestedDeclarations.push_back( hirNestedClass );
+				}
+			}
+			else if( nestedDeclaration->kind == ast::Node::Kind::StructDeclaration ) {
+				ast::nodes::StructDeclaration& nestedStruct = static_cast<ast::nodes::StructDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIRStructDefinition> hirNestedStruct = this->lowerStructDefinition( nestedStruct );
+				if( hirNestedStruct != nullptr ) {
+					hirStruct->nestedDeclarations.push_back( hirNestedStruct );
+				}
+			}
+			else if( nestedDeclaration->kind == ast::Node::Kind::EnumDeclaration ) {
+				ast::nodes::EnumDeclaration& nestedEnum = static_cast<ast::nodes::EnumDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIREnumDefinition> hirNestedEnum = this->lowerEnumDeclaration( nestedEnum );
+				if( hirNestedEnum != nullptr ) {
+					hirStruct->nestedDeclarations.push_back( hirNestedEnum );
+				}
+			}
+			else if( nestedDeclaration->kind == ast::Node::Kind::InterfaceDeclaration ) {
+				ast::nodes::InterfaceDeclaration& nestedInterface = static_cast<ast::nodes::InterfaceDeclaration&>( *nestedDeclaration );
+				std::shared_ptr<HIRInterfaceDefinition> hirNestedInterface = this->lowerInterfaceDeclaration( nestedInterface );
+				if( hirNestedInterface != nullptr ) {
+					hirStruct->nestedDeclarations.push_back( hirNestedInterface );
+				}
+			}
+		}
 		return hirStruct;
 	}
 	
@@ -463,6 +620,7 @@ namespace uranite::ir::hir {
 		semantic::TypeSharedPointer enumType = this->semanticAnalyzer.types().lookupType( declaration.name );
 		std::string enumQualifiedName = ( enumType != nullptr && enumType->qualified.empty() == false )
 			? enumType->qualified : declaration.name;
+		hirEnum->enumQualifiedName = enumQualifiedName;
 		for( const ast::nodes::GenericParameterSharedPointer& genericParameter : declaration.genericParameters ) {
 			if( genericParameter != nullptr ) {
 				hirEnum->genericParameters.push_back( this->lowerGenericParameter( *genericParameter ) );
