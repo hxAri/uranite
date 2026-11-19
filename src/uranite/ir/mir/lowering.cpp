@@ -1,5 +1,3 @@
-#include <cstdio>
-
 //
 // @author hxAri (hxari)
 // @create 13-06-2026
@@ -20,6 +18,7 @@
 
 #include <fmt/format.h>
 #include <functional>
+#include <set>
 
 #include "uranite/ir/mir/lowering.hpp"
 #include "uranite/semantic/qualnames.hpp"
@@ -333,6 +332,7 @@ namespace uranite::ir::mir {
 		mirFunction->isStaticMethod = hirFunction.isStaticMethod;
 		mirFunction->isGeneratorFunction = hirFunction.isGeneratorFunction;
 		mirFunction->isAsyncFunction = hirFunction.isAsyncFunction;
+		mirFunction->isNakedFunction = hirFunction.isNakedMethod;
 		if( hirFunction.isAsyncFunction && hirFunction.returnTypeDescriptor != nullptr ) {
 			if( hirFunction.returnTypeDescriptor->kind == semantic::Type::Kind::Future ) {
 				semantic::FutureType* futureType = static_cast<semantic::FutureType*>( hirFunction.returnTypeDescriptor.get() );
@@ -744,6 +744,7 @@ namespace uranite::ir::mir {
 		mirNested->isStaticMethod = hirNested.isStaticMethod;
 		mirNested->isGeneratorFunction = hirNested.isGeneratorFunction;
 		mirNested->isAsyncFunction = hirNested.isAsyncFunction;
+		mirNested->isNakedFunction = hirNested.isNakedMethod;
 		this->currentFunction = mirNested;
 		this->nextInstructionIdentifier = 0;
 		this->variableNameMap.clear();
@@ -924,11 +925,13 @@ namespace uranite::ir::mir {
 		std::string savedClassName = this->currentClassName;
 		std::string savedParentClassName = this->currentParentClassName;
 		this->currentParentClassName = "";
+		std::unordered_map<std::string, bool> handledMethodNames;
 		for( std::shared_ptr<hir::HIRFunctionDefinition>& baseMethod : hirEnum.methodDefinitions ) {
 			if( baseMethod == nullptr ) {
 				continue;
 			}
 			std::string methodName = baseMethod->functionName;
+			handledMethodNames[methodName] = true;
 			std::string ownerName = baseMethod->ownerClassName.empty() == false ? baseMethod->ownerClassName : enumQualifiedName;
 			std::unordered_map<std::string, std::vector<std::pair<int64_t, std::shared_ptr<hir::HIRFunctionDefinition>>>>::iterator overrideIt = variantOverrides.find( methodName );
 			if( overrideIt == variantOverrides.end() || overrideIt->second.empty() ) {
@@ -1012,16 +1015,100 @@ namespace uranite::ir::mir {
 			this->variableNameMap = savedVariableNames;
 			this->currentModule->functionDefinitions.push_back( std::move( dispatchFunction ) );
 		}
+		for( std::pair<const std::string, std::vector<std::pair<int64_t, std::shared_ptr<hir::HIRFunctionDefinition>>>>& overrideEntry : variantOverrides ) {
+			if( handledMethodNames.find( overrideEntry.first ) != handledMethodNames.end() || overrideEntry.second.empty() ) {
+				continue;
+			}
+			std::shared_ptr<hir::HIRFunctionDefinition> templateMethod = overrideEntry.second.front().second;
+			if( templateMethod == nullptr ) {
+				continue;
+			}
+			std::string methodName = overrideEntry.first;
+			std::string ownerName = templateMethod->ownerClassName.empty() == false ? templateMethod->ownerClassName : enumQualifiedName;
+			this->currentClassName = ownerName;
+			std::string fullDispatchName = fmt::format( "{}.{}", ownerName, methodName );
+			std::shared_ptr<MIRFunctionDefinition> dispatchFunction = std::make_shared<MIRFunctionDefinition>();
+			dispatchFunction->functionName = fullDispatchName;
+			dispatchFunction->returnTypeDescriptor = templateMethod->returnTypeDescriptor;
+			std::shared_ptr<MIRFunctionDefinition> previousFunction = this->currentFunction;
+			std::unordered_map<std::string, MIRVariableIdentifier> savedVariableNames = this->variableNameMap;
+			this->variableNameMap.clear();
+			this->currentFunction = dispatchFunction;
+			std::shared_ptr<MIRBasicBlock> entryBlock = this->currentFunction->createBasicBlock( "entry" );
+			this->switchToBlock( entryBlock );
+			semantic::TypeSharedPointer enumBackingType = hirEnum.backedType;
+			if( enumBackingType == nullptr ) {
+				enumBackingType = std::make_shared<semantic::IntegerType>( 32, true );
+			}
+			if( templateMethod->parameterDescriptors.empty() == false &&
+				templateMethod->parameterDescriptors[0].isSelfParameter ) {
+				MIRVariableIdentifier selfParam = this->currentFunction->allocateVariable( semantic::qualname::identifier::Self, enumBackingType, false );
+				dispatchFunction->parameterVariableIdentifiers.push_back( selfParam );
+				this->variableNameMap[semantic::qualname::identifier::Self] = selfParam;
+			}
+			for( size_t paramIdx = 1; paramIdx < templateMethod->parameterDescriptors.size(); paramIdx++ ) {
+				hir::HIRParameterDescriptor& param = templateMethod->parameterDescriptors[paramIdx];
+				MIRVariableIdentifier paramVar = this->currentFunction->allocateVariable(
+					param.parameterName, param.parameterType, false
+				);
+				dispatchFunction->parameterVariableIdentifiers.push_back( paramVar );
+				this->variableNameMap[param.parameterName] = paramVar;
+			}
+			std::shared_ptr<MIRBasicBlock> defaultBlock = this->currentFunction->createBasicBlock( "default" );
+			MIRVariableIdentifier selfValue = INVALID_VARIABLE_IDENTIFIER;
+			std::unordered_map<std::string, MIRVariableIdentifier>::iterator selfLookup = this->variableNameMap.find( semantic::qualname::identifier::Self );
+			if( selfLookup != this->variableNameMap.end() ) {
+				MIRInstruction loadSelf( MIRInstructionKind::LoadVariable );
+				loadSelf.sourceOperands.push_back( selfLookup->second );
+				loadSelf.operandType = enumBackingType;
+				selfValue = this->currentFunction->allocateVariable( "_self_val", enumBackingType, false );
+				loadSelf.destinationVariable = selfValue;
+				this->emitInstruction( loadSelf );
+			}
+			MIRInstruction switchInstr( MIRInstructionKind::SwitchBranch );
+			if( selfValue != INVALID_VARIABLE_IDENTIFIER ) {
+				switchInstr.sourceOperands.push_back( selfValue );
+			}
+			switchInstr.defaultSwitchTarget = defaultBlock->blockIdentifier;
+			for( std::pair<int64_t, std::shared_ptr<hir::HIRFunctionDefinition>>& overridePair : overrideEntry.second ) {
+				int64_t discriminant = overridePair.first;
+				std::shared_ptr<hir::HIRFunctionDefinition>& overrideMethod = overridePair.second;
+				std::shared_ptr<MIRBasicBlock> caseBlock = this->currentFunction->createBasicBlock( fmt::format( "case.{}", discriminant ) );
+				switchInstr.switchBranchTargets.push_back( { discriminant, caseBlock->blockIdentifier } );
+				this->switchToBlock( caseBlock );
+				if( overrideMethod != nullptr && overrideMethod->functionBody != nullptr ) {
+					this->lowerBlock( *overrideMethod->functionBody );
+				}
+				if( this->currentBlock != nullptr &&
+					( this->currentBlock->blockInstructions.empty() ||
+					  this->currentBlock->blockInstructions.back().instructionKind != MIRInstructionKind::ReturnValue ) ) {
+					MIRInstruction retVoid( MIRInstructionKind::ReturnValue );
+					retVoid.sourceOperands.clear();
+					this->emitTerminator( retVoid );
+				}
+			}
+			this->switchToBlock( entryBlock );
+			this->emitTerminator( switchInstr );
+			this->switchToBlock( defaultBlock );
+			MIRInstruction defaultReturn( MIRInstructionKind::ReturnValue );
+			defaultReturn.sourceOperands.clear();
+			this->emitTerminator( defaultReturn );
+			this->currentFunction = previousFunction;
+			this->variableNameMap = savedVariableNames;
+			this->currentModule->functionDefinitions.push_back( std::move( dispatchFunction ) );
+		}
 		this->currentClassName = savedClassName;
 		this->currentParentClassName = savedParentClassName;
 	}
 	
 	void MIRLowering::lowerBlock( hir::HIRBlock& hirBlock ) {
+		std::unordered_map<std::string, MIRVariableIdentifier> savedVariableNameMap = this->variableNameMap;
 		for( const hir::HIRNodeSharedPointer& statement : hirBlock.blockStatements ) {
 			if( statement != nullptr ) {
 				this->lowerStatement( statement );
 			}
 		}
+		this->variableNameMap = savedVariableNameMap;
 	}
 	
 	void MIRLowering::lowerStatement( const hir::HIRNodeSharedPointer& hirStatement ) {
@@ -1143,6 +1230,7 @@ namespace uranite::ir::mir {
 							? assignment.valueExpression->resolvedType 
 							: assignment.targetExpression->resolvedType;
 						arithmeticInstruction.sourceLocation = assignment.sourceLocation;
+						arithmeticInstruction.landingPadTarget = this->activeLandingPad;
 						arithmeticInstruction.destinationVariable = this->currentFunction->allocateVariable( "_compound_result", arithmeticInstruction.operandType, false );
 						storedValueVariable = this->emitInstruction( arithmeticInstruction );
 					}
@@ -1298,6 +1386,7 @@ namespace uranite::ir::mir {
 						arithmeticInstruction.sourceOperands.push_back( valueVariable );
 						arithmeticInstruction.operandType = assignment.valueExpression != nullptr ? assignment.valueExpression->resolvedType : nullptr;
 						arithmeticInstruction.sourceLocation = assignment.sourceLocation;
+						arithmeticInstruction.landingPadTarget = this->activeLandingPad;
 						arithmeticInstruction.destinationVariable = this->currentFunction->allocateVariable( "_compound_result", assignment.valueExpression != nullptr ? assignment.valueExpression->resolvedType : nullptr, false );
 						valueVariable = this->emitInstruction( arithmeticInstruction );
 					}
@@ -2417,58 +2506,127 @@ namespace uranite::ir::mir {
 	void MIRLowering::lowerSwitch( hir::HIRSwitch& hirSwitch ) {
 		MIRVariableIdentifier subjectVariable = this->lowerExpression( hirSwitch.switchSubject );
 		std::shared_ptr<MIRBasicBlock> mergeBlock = this->currentFunction->createBasicBlock( "switch.merge" );
-		MIRInstruction switchInstruction( MIRInstructionKind::SwitchBranch );
-		switchInstruction.sourceOperands.push_back( subjectVariable );
-		switchInstruction.defaultSwitchTarget = mergeBlock->blockIdentifier;
-		switchInstruction.sourceLocation = hirSwitch.sourceLocation;
 		std::vector<std::shared_ptr<MIRBasicBlock>> caseBlocks;
 		for( size_t caseIndex = 0; caseIndex < hirSwitch.switchCases.size(); caseIndex++ ) {
-			std::shared_ptr<MIRBasicBlock> caseBlock = this->currentFunction->createBasicBlock(
-				fmt::format( "switch.case.{}", caseIndex )
+			caseBlocks.push_back(
+				this->currentFunction->createBasicBlock( fmt::format( "switch.case.{}", caseIndex ) )
 			);
-			caseBlocks.push_back( caseBlock );
+		}
+		bool canUseSwitch = true;
+		std::vector<int64_t> caseDiscriminants( hirSwitch.switchCases.size(), 0 );
+		MIRBlockIdentifier defaultTargetBlock = mergeBlock->blockIdentifier;
+		for( size_t caseIndex = 0; caseIndex < hirSwitch.switchCases.size(); caseIndex++ ) {
 			hir::HIRSwitchCase& switchCase = hirSwitch.switchCases[caseIndex];
 			if( switchCase.isDefaultCase ) {
-				switchInstruction.defaultSwitchTarget = caseBlock->blockIdentifier;
+				defaultTargetBlock = caseBlocks[caseIndex]->blockIdentifier;
+				continue;
 			}
-			else {
-				int64_t discriminant = static_cast<int64_t>( caseIndex );
-				if( switchCase.casePattern != nullptr &&
-					switchCase.casePattern->nodeKind == hir::HIRNodeKind::FieldAccess ) {
-					hir::HIRFieldAccess& fieldAccess = static_cast<hir::HIRFieldAccess&>( *switchCase.casePattern );
-					if( fieldAccess.objectExpression != nullptr && fieldAccess.objectExpression->resolvedType != nullptr ) {
-						semantic::EnumTypeSharedPointer enumType = std::dynamic_pointer_cast<semantic::EnumType>(
-							fieldAccess.objectExpression->resolvedType
-						);
-						if( enumType != nullptr ) {
-							semantic::EnumVariantInfo* variantInfo = enumType->findVariant( fieldAccess.fieldName );
-							if( variantInfo != nullptr ) {
-								int64_t variantValue = variantInfo->discriminant;
-								if( enumType->astDeclaration != nullptr ) {
-									for( size_t vi = 0; vi < enumType->astDeclaration->variants.size(); vi++ ) {
-										ast::nodes::EnumVariantSharedPointer& astVariant = enumType->astDeclaration->variants[vi];
-										if( astVariant->name == fieldAccess.fieldName && astVariant->backedValue != nullptr ) {
-											if( astVariant->backedValue->kind == ast::Node::Kind::IntegerLiteral ) {
-												ast::nodes::IntegerLiteralExpression& intLit = static_cast<ast::nodes::IntegerLiteralExpression&>( *astVariant->backedValue );
-												variantValue = intLit.value;
-											}
-											break;
+			if( switchCase.casePattern == nullptr ) {
+				canUseSwitch = false;
+				continue;
+			}
+			if( switchCase.casePattern->nodeKind == hir::HIRNodeKind::IntegerLiteral ) {
+				hir::HIRIntegerLiteral& integerLiteral = static_cast<hir::HIRIntegerLiteral&>( *switchCase.casePattern );
+				caseDiscriminants[caseIndex] = static_cast<int64_t>( integerLiteral.integerValue );
+			}
+			else if( switchCase.casePattern->nodeKind == hir::HIRNodeKind::FieldAccess ) {
+				hir::HIRFieldAccess& fieldAccess = static_cast<hir::HIRFieldAccess&>( *switchCase.casePattern );
+				bool resolvedEnumDiscriminant = false;
+				if( fieldAccess.objectExpression != nullptr && fieldAccess.objectExpression->resolvedType != nullptr ) {
+					semantic::EnumTypeSharedPointer enumType = std::dynamic_pointer_cast<semantic::EnumType>(
+						fieldAccess.objectExpression->resolvedType
+					);
+					if( enumType != nullptr ) {
+						semantic::EnumVariantInfo* variantInfo = enumType->findVariant( fieldAccess.fieldName );
+						if( variantInfo != nullptr ) {
+							int64_t variantValue = variantInfo->discriminant;
+							if( enumType->astDeclaration != nullptr ) {
+								for( size_t variantIndex = 0; variantIndex < enumType->astDeclaration->variants.size(); variantIndex++ ) {
+									ast::nodes::EnumVariantSharedPointer& astVariant = enumType->astDeclaration->variants[variantIndex];
+									if( astVariant->name == fieldAccess.fieldName && astVariant->backedValue != nullptr ) {
+										if( astVariant->backedValue->kind == ast::Node::Kind::IntegerLiteral ) {
+											ast::nodes::IntegerLiteralExpression& backedIntegerLiteral = static_cast<ast::nodes::IntegerLiteralExpression&>( *astVariant->backedValue );
+											variantValue = backedIntegerLiteral.value;
 										}
+										break;
 									}
 								}
-								discriminant = variantValue;
 							}
+							caseDiscriminants[caseIndex] = variantValue;
+							resolvedEnumDiscriminant = true;
 						}
 					}
 				}
-				else if( switchCase.casePattern->nodeKind == hir::HIRNodeKind::IntegerLiteral ) {
-					hir::HIRIntegerLiteral& intLit = static_cast<hir::HIRIntegerLiteral&>( *switchCase.casePattern );
-					discriminant = static_cast<int64_t>( intLit.integerValue );
+				if( resolvedEnumDiscriminant == false ) {
+					canUseSwitch = false;
 				}
-				switchInstruction.switchBranchTargets.push_back( { discriminant, caseBlock->blockIdentifier } );
+			}
+			else {
+				canUseSwitch = false;
 			}
 		}
-		this->emitTerminator( switchInstruction );
+		if( canUseSwitch ) {
+			MIRInstruction switchInstruction( MIRInstructionKind::SwitchBranch );
+			switchInstruction.sourceOperands.push_back( subjectVariable );
+			switchInstruction.defaultSwitchTarget = defaultTargetBlock;
+			switchInstruction.sourceLocation = hirSwitch.sourceLocation;
+			for( size_t caseIndex = 0; caseIndex < hirSwitch.switchCases.size(); caseIndex++ ) {
+				hir::HIRSwitchCase& switchCase = hirSwitch.switchCases[caseIndex];
+				if( switchCase.isDefaultCase ) {
+					continue;
+				}
+				switchInstruction.switchBranchTargets.push_back( { caseDiscriminants[caseIndex], caseBlocks[caseIndex]->blockIdentifier } );
+			}
+			this->emitTerminator( switchInstruction );
+		}
+		else {
+			MIRBlockIdentifier reachedDefaultTarget = defaultTargetBlock;
+			bool hasRemainingCases = false;
+			for( size_t caseIndex = 0; caseIndex < hirSwitch.switchCases.size(); caseIndex++ ) {
+				hir::HIRSwitchCase& switchCase = hirSwitch.switchCases[caseIndex];
+				if( switchCase.isDefaultCase ) {
+					continue;
+				}
+				if( switchCase.casePattern == nullptr ) {
+					MIRInstruction jumpToCase( MIRInstructionKind::JumpUnconditional );
+					jumpToCase.trueBranchTarget = caseBlocks[caseIndex]->blockIdentifier;
+					this->emitTerminator( jumpToCase );
+					hasRemainingCases = false;
+					reachedDefaultTarget = caseBlocks[caseIndex]->blockIdentifier;
+					break;
+				}
+				MIRVariableIdentifier patternVariable = this->lowerExpression( switchCase.casePattern );
+				MIRInstruction compareInstruction( MIRInstructionKind::CompareEqual );
+				MIRVariableIdentifier compareResultVariable = this->currentFunction->allocateVariable( "_switch_cmp", nullptr, false );
+				compareInstruction.destinationVariable = compareResultVariable;
+				compareInstruction.sourceOperands.push_back( subjectVariable );
+				compareInstruction.sourceOperands.push_back( patternVariable );
+				compareInstruction.sourceLocation = hirSwitch.sourceLocation;
+				this->emitInstruction( compareInstruction );
+				std::shared_ptr<MIRBasicBlock> nextCheckBlock = this->currentFunction->createBasicBlock(
+					fmt::format( "switch.next.{}", caseIndex )
+				);
+				MIRInstruction branchInstruction( MIRInstructionKind::BranchConditional );
+				branchInstruction.sourceOperands.push_back( compareResultVariable );
+				branchInstruction.trueBranchTarget = caseBlocks[caseIndex]->blockIdentifier;
+				branchInstruction.falseBranchTarget = nextCheckBlock->blockIdentifier;
+				branchInstruction.sourceLocation = hirSwitch.sourceLocation;
+				this->emitTerminator( branchInstruction );
+				this->switchToBlock( nextCheckBlock );
+				hasRemainingCases = true;
+				reachedDefaultTarget = nextCheckBlock->blockIdentifier;
+			}
+			if( hasRemainingCases && this->currentBlock->isTerminated == false ) {
+				MIRInstruction jumpToDefault( MIRInstructionKind::JumpUnconditional );
+				jumpToDefault.trueBranchTarget = defaultTargetBlock;
+				this->emitTerminator( jumpToDefault );
+			}
+			else if( hasRemainingCases == false && this->currentBlock->isTerminated == false ) {
+				MIRInstruction jumpToTarget( MIRInstructionKind::JumpUnconditional );
+				jumpToTarget.trueBranchTarget = reachedDefaultTarget;
+				this->emitTerminator( jumpToTarget );
+			}
+		}
 		for( size_t caseIndex = 0; caseIndex < hirSwitch.switchCases.size(); caseIndex++ ) {
 			this->switchToBlock( caseBlocks[caseIndex] );
 			hir::HIRSwitchCase& switchCase = hirSwitch.switchCases[caseIndex];
@@ -2498,6 +2656,103 @@ namespace uranite::ir::mir {
 			}
 		}
 		this->switchToBlock( mergeBlock );
+	}
+	
+	std::vector<std::string> MIRLowering::collectExceptionCandidateNames( const semantic::TypeSharedPointer& handlerType ) {
+		std::vector<std::string> candidateNames;
+		if( handlerType == nullptr ) {
+			return candidateNames;
+		}
+		std::function<std::string( const semantic::TypeSharedPointer& type )> typeNameOf = []( const semantic::TypeSharedPointer& type ) -> std::string {
+			if( type == nullptr ) {
+				return std::string();
+			}
+			if( type->qualified.empty() == false ) {
+				return type->qualified;
+			}
+			return type->name;
+		};
+		std::string targetName = typeNameOf( handlerType );
+		if( targetName.empty() ) {
+			return candidateNames;
+		}
+		std::set<std::string> seenNames;
+		seenNames.insert( targetName );
+		candidateNames.push_back( targetName );
+		if( this->typeRegistry == nullptr ) {
+			return candidateNames;
+		}
+		if( handlerType->kind == semantic::Type::Kind::Interface ) {
+			for( const std::pair<const std::string, semantic::TypeSharedPointer>& typeEntry : this->typeRegistry->getUserTypes() ) {
+				if( typeEntry.second == nullptr || typeEntry.second->kind != semantic::Type::Kind::Class ) {
+					continue;
+				}
+				semantic::ClassType* classPtr = static_cast<semantic::ClassType*>( typeEntry.second.get() );
+				std::string entryQualifiedName = typeEntry.second->qualified.empty() == false
+					? typeEntry.second->qualified : typeEntry.second->name;
+				if( classPtr->implementsInterface( targetName ) || classPtr->implementsInterface( handlerType->name ) ) {
+					if( seenNames.find( entryQualifiedName ) == seenNames.end() ) {
+						seenNames.insert( entryQualifiedName );
+						candidateNames.push_back( entryQualifiedName );
+					}
+				}
+				else {
+					semantic::TypeSharedPointer walkClass = typeEntry.second;
+					while( walkClass != nullptr && walkClass->kind == semantic::Type::Kind::Class ) {
+						semantic::ClassType* walkClassPtr = static_cast<semantic::ClassType*>( walkClass.get() );
+						bool implementsTarget = false;
+						for( const semantic::TypeSharedPointer& implementedInterface : walkClassPtr->interfaces ) {
+							if( implementedInterface == nullptr ) {
+								continue;
+							}
+							std::string interfaceName = implementedInterface->qualified.empty() == false
+								? implementedInterface->qualified : implementedInterface->name;
+							if( interfaceName == targetName || interfaceName == handlerType->name ||
+								implementedInterface->name == handlerType->name ) {
+								implementsTarget = true;
+								break;
+							}
+						}
+						if( implementsTarget ) {
+							if( seenNames.find( entryQualifiedName ) == seenNames.end() ) {
+								seenNames.insert( entryQualifiedName );
+								candidateNames.push_back( entryQualifiedName );
+							}
+							break;
+						}
+						walkClass = walkClassPtr->baseClass;
+					}
+				}
+			}
+		}
+		else if( handlerType->kind == semantic::Type::Kind::Class ) {
+			for( const std::pair<const std::string, semantic::TypeSharedPointer>& typeEntry : this->typeRegistry->getUserTypes() ) {
+				if( typeEntry.second == nullptr || typeEntry.second->kind != semantic::Type::Kind::Class ) {
+					continue;
+				}
+				semantic::ClassType* classPtr = static_cast<semantic::ClassType*>( typeEntry.second.get() );
+				semantic::TypeSharedPointer walkBase = typeEntry.second;
+				bool isSubclass = false;
+				while( walkBase != nullptr && walkBase->kind == semantic::Type::Kind::Class ) {
+					std::string walkName = walkBase->qualified.empty() == false ? walkBase->qualified : walkBase->name;
+					if( walkName == targetName ) {
+						isSubclass = true;
+						break;
+					}
+					semantic::ClassType* walkBasePtr = static_cast<semantic::ClassType*>( walkBase.get() );
+					walkBase = walkBasePtr->baseClass;
+				}
+				if( isSubclass ) {
+					std::string entryName = typeEntry.second->qualified.empty() == false
+						? typeEntry.second->qualified : typeEntry.second->name;
+					if( seenNames.find( entryName ) == seenNames.end() ) {
+						seenNames.insert( entryName );
+						candidateNames.push_back( entryName );
+					}
+				}
+			}
+		}
+		return candidateNames;
 	}
 	
 	void MIRLowering::lowerTryCatch( hir::HIRTryCatch& hirTryCatch ) {
@@ -2530,18 +2785,36 @@ namespace uranite::ir::mir {
 		landingPadInstruction.sourceLocation = hirTryCatch.sourceLocation;
 		MIRVariableIdentifier exceptionVariable = this->currentFunction->allocateVariable( "_caught_exception", nullptr, false );
 		landingPadInstruction.destinationVariable = exceptionVariable;
-		this->emitInstruction( landingPadInstruction );
+		landingPadInstruction.landingPadTarget = previousLandingPad;
+		std::vector<std::shared_ptr<MIRBasicBlock>> handlerBlocks;
 		for( size_t handlerIndex = 0; handlerIndex < hirTryCatch.exceptionHandlers.size(); handlerIndex++ ) {
 			hir::HIRExceptionHandler& handler = hirTryCatch.exceptionHandlers[handlerIndex];
 			std::shared_ptr<MIRBasicBlock> handlerBlock = this->currentFunction->createBasicBlock(
 				fmt::format( "catch.handler.{}", handlerIndex )
 			);
-			if( this->currentBlock->isTerminated == false ) {
-				MIRInstruction jumpToHandler( MIRInstructionKind::JumpUnconditional );
-				jumpToHandler.trueBranchTarget = handlerBlock->blockIdentifier;
-				this->emitTerminator( jumpToHandler );
+			handlerBlocks.push_back( handlerBlock );
+			landingPadInstruction.exceptionHandlerTargets.push_back( handlerBlock->blockIdentifier );
+			std::vector<std::string> handlerTypeNames;
+			for( const semantic::TypeSharedPointer& exceptionType : handler.exceptionTypes ) {
+				std::vector<std::string> candidateNames = this->collectExceptionCandidateNames( exceptionType );
+				for( const std::string& candidateName : candidateNames ) {
+					handlerTypeNames.push_back( candidateName );
+				}
 			}
-			this->switchToBlock( handlerBlock );
+			landingPadInstruction.exceptionHandlerTypeNames.push_back( handlerTypeNames );
+		}
+		this->emitInstruction( landingPadInstruction );
+		MIRInstruction landingPadTerminator( MIRInstructionKind::JumpUnconditional );
+		if( handlerBlocks.empty() == false ) {
+			landingPadTerminator.trueBranchTarget = handlerBlocks.front()->blockIdentifier;
+		}
+		else {
+			landingPadTerminator.trueBranchTarget = postTryCatchTarget;
+		}
+		this->emitTerminator( landingPadTerminator );
+		for( size_t handlerIndex = 0; handlerIndex < hirTryCatch.exceptionHandlers.size(); handlerIndex++ ) {
+			hir::HIRExceptionHandler& handler = hirTryCatch.exceptionHandlers[handlerIndex];
+			this->switchToBlock( handlerBlocks[handlerIndex] );
 			if( handler.exceptionVariableName.empty() == false ) {
 				semantic::TypeSharedPointer handlerType = handler.exceptionTypes.empty() ? nullptr : handler.exceptionTypes[0];
 				MIRVariableIdentifier handlerVariable = this->currentFunction->allocateVariable(
@@ -3983,6 +4256,7 @@ namespace uranite::ir::mir {
 		binaryInstruction.sourceOperands.push_back( rightVariable );
 		binaryInstruction.operandType = hirBinaryOp.resolvedType;
 		binaryInstruction.sourceLocation = hirBinaryOp.sourceLocation;
+		binaryInstruction.landingPadTarget = this->activeLandingPad;
 		semantic::TypeSharedPointer resultType = hirBinaryOp.resolvedType;
 		if( resultType == nullptr && isFloatOperation ) {
 			resultType = std::make_shared<semantic::Type>( semantic::Type::Kind::Float, semantic::qualname::classes::f64::Name );
@@ -4006,15 +4280,13 @@ namespace uranite::ir::mir {
 				if( operandGenericPos != std::string::npos ) {
 					operandTypeName = operandTypeName.substr( 0, operandGenericPos );
 				}
-				std::string qualifiedMethodName = operandTypeName + ".negate";
+				std::string qualifiedMethodName = fmt::format( "{}.negate", operandTypeName );
 				MIRInstruction methodCall( MIRInstructionKind::CallFunction );
 				methodCall.calledFunctionQualifiedName = qualifiedMethodName;
 				methodCall.sourceOperands.push_back( operandVariable );
 				methodCall.operandType = hirUnaryOp.resolvedType;
 				methodCall.sourceLocation = hirUnaryOp.sourceLocation;
-				MIRVariableIdentifier callResult = this->currentFunction->allocateVariable(
-					"_op_neg", hirUnaryOp.resolvedType, false
-				);
+				MIRVariableIdentifier callResult = this->currentFunction->allocateVariable( "_op_neg", hirUnaryOp.resolvedType, false );
 				methodCall.destinationVariable = callResult;
 				return this->emitInstruction( methodCall );
 			}
@@ -4242,7 +4514,12 @@ namespace uranite::ir::mir {
 					receiverType = optionalType->inner;
 				}
 			}
-			ownerClassName = receiverType->name;
+			if( receiverType->kind == semantic::Type::Kind::String ) {
+				ownerClassName = semantic::qualname::classes::string::Qualified;
+			}
+			else {
+				ownerClassName = receiverType->name;
+			}
 			size_t genericBracketPosition = ownerClassName.find( '<' );
 			if( genericBracketPosition != std::string::npos ) {
 				ownerClassName = ownerClassName.substr( 0, genericBracketPosition );
