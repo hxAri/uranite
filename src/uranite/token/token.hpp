@@ -68,6 +68,7 @@ namespace uranite::token {
 		KeywordDelete,
 		KeywordExtends,
 		KeywordFinal,
+		KeywordNaked,
 		KeywordNative,
 		KeywordNew,
 		KeywordOverride,
