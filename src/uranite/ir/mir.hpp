@@ -184,6 +184,13 @@ namespace uranite::ir::mir {
 		// Landing pad
 		MIRBlockIdentifier landingPadTarget = INVALID_BLOCK_IDENTIFIER;
 		
+		// Exception handler dispatch (LandingPad): per-handler candidate type-name sets
+		// (qualified names of the declared type plus every subtype; empty set = catch-all)
+		// and the handler basic blocks to branch to. The landingPadTarget field carries
+		// the enclosing outer landing pad used when no handler matches (rethrow).
+		std::vector<std::vector<std::string>> exceptionHandlerTypeNames;
+		std::vector<MIRBlockIdentifier> exceptionHandlerTargets;
+		
 		// Phi node
 		std::vector<std::pair<MIRBlockIdentifier, MIRVariableIdentifier>> phiIncomingValues;
 		
@@ -276,6 +283,7 @@ namespace uranite::ir::mir {
 		semantic::TypeSharedPointer generatorYieldType;
 		bool isAsyncFunction = false;
 		semantic::TypeSharedPointer asyncInnerReturnType;
+		bool isNakedFunction = false;
 		
 		/** @brief Allocates a new variable and registers it in the descriptor table. */
 		MIRVariableIdentifier allocateVariable(
