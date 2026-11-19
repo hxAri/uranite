@@ -121,6 +121,56 @@ namespace uranite::ir::mir {
 		llvm::Function* getOrCreateCalloc();
 		llvm::Function* getOrCreateFree();
 		int getVtableFieldIndex( const std::string& typeName );
+		
+		/**
+		 * @brief Generates a runtime throw of a newly constructed arithmetic error (e.g. ZeroDivisionError).
+		 * @param errorClassName The qualified name of the error class to construct and throw.
+		 * @param message The human-readable error message.
+		 * @param source The source location for traceback injection.
+		 * @param landingPadTarget The enclosing landing pad block identifier, or INVALID if none.
+		 */
+		void generateMIRThrowError( const std::string& errorClassName, const std::string& message, const lookup::SourceSharedPointer& source, MIRBlockIdentifier landingPadTarget = INVALID_BLOCK_IDENTIFIER );
+		
+		/**
+		 * @brief Resolves or creates the per-class typeid global used for runtime instanceof checks.
+		 * @param typeName Any known spelling of the class name (short, qualified, or generic); the
+		 *        name is normalized (generic arguments stripped, package-relative fallback) so that
+		 *        construction sites and instanceof checks converge on the same global. Classes with
+		 *        an existing master vtable or itable marker reuse that global as their identity.
+		 * @return The typeid global variable, or nullptr when the name is empty.
+		 */
+		llvm::GlobalVariable* getOrCreateClassTypeId( const std::string& typeName );
+		
+		/**
+		 * @brief Lazily creates the zero-filled sentinel global used to null-guard instanceof loads.
+		 * @return An 8-byte zero-initialized global whose address can be safely dereferenced as a
+		 *         substitute object pointer when the real receiver is null (its first slot reads as
+		 *         null, matching no typeid).
+		 */
+		llvm::GlobalVariable* getOrCreateInstanceofNullSentinel();
+		
+		/**
+		 * @brief Collects the typeid globals of every concrete class that satisfies an instanceof target.
+		 * @param targetType The semantic type being tested against (class or interface).
+		 * @return Typeid globals for the target class itself plus every transitive subclass (for
+		 *         class targets), or every class implementing the interface (for interface targets).
+		 */
+		std::vector<llvm::GlobalVariable*> collectInstanceofCandidates( const semantic::TypeSharedPointer& targetType );
+
+		/**
+		 * @brief Resolves or creates the runtime helper that tests whether a caught exception's
+		 *        type name matches any of the supplied candidate names (subtypes included).
+		 * @return The external function declaration, or nullptr on failure.
+		 */
+		llvm::Function* getOrCreateExceptionMatchesAny();
+
+		/**
+		 * @brief Resolves or creates the runtime helper that re-raises a caught exception wrapper
+		 *        after no handler matches, preserving its original type name.
+		 * @return The external function declaration, or nullptr on failure.
+		 */
+		llvm::Function* getOrCreateUraniteRethrow();
+
 		llvm::Function* getOrCreateMemcpy();
 		llvm::Function* getOrCreateStrlen();
 		llvm::Function* getOrCreateStrcmp();
@@ -221,6 +271,12 @@ namespace uranite::ir::mir {
 		
 		// Interface dispatch: class name → itable global variable
 		std::unordered_map<std::string, llvm::GlobalVariable*> interfaceTableMap;
+		
+		// Runtime type identification: class name (base/short/qualified) → per-class typeid global
+		std::unordered_map<std::string, llvm::GlobalVariable*> classTypeIdMap;
+		
+		// Null-object sentinel used to safely evaluate instanceof on potentially-null receivers
+		llvm::GlobalVariable* instanceofNullSentinel = nullptr;
 		
 		// Interface dispatch: interface qualified name → ordered method names
 		std::unordered_map<std::string, std::vector<std::string>> interfaceMethodOrder;
