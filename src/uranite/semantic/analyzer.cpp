@@ -1,5 +1,3 @@
-#include <cstdio>
-
 //
 // @author hxAri (hxari)
 // @create 2025-02-24 15:15
@@ -2278,6 +2276,20 @@ namespace uranite::semantic {
 					this->diagnostic.error( functionDeclaration.source, abstractMethodErrorMessage );
 					continue;
 				}
+				std::vector<TypeSharedPointer> variantMethodParameterTypes;
+				std::vector<std::string> variantMethodParameterNames;
+				for( ast::nodes::FunctionParameterSharedPointer& variantParameter : functionDeclaration.parameters ) {
+					if( variantParameter->isSelf ) {
+						continue;
+					}
+					TypeSharedPointer parameterResolvedType = this->resolveType( variantParameter->type );
+					variantMethodParameterTypes.push_back( parameterResolvedType ? parameterResolvedType : this->typeRegistry.getError() );
+					variantMethodParameterNames.push_back( variantParameter->name );
+				}
+				TypeSharedPointer variantMethodReturnType = functionDeclaration.returnType ? this->resolveType( functionDeclaration.returnType ) : this->typeRegistry.getVoid();
+				TypeSharedPointer variantMethodFunctionType = this->typeRegistry.makeFunction( variantMethodParameterTypes, variantMethodReturnType );
+				FunctionTypeSharedPointer variantMethodFuncTypeCast = std::static_pointer_cast<FunctionType>( variantMethodFunctionType );
+				variantMethodFuncTypeCast->parameterNames = std::move( variantMethodParameterNames );
 				MethodInfo methodInformation;
 				methodInformation.name = functionDeclaration.name;
 				methodInformation.access = functionDeclaration.access;
@@ -2287,6 +2299,7 @@ namespace uranite::semantic {
 				methodInformation.isFinal = false;
 				methodInformation.isProperty = functionDeclaration.isProperty;
 				methodInformation.virtualTableIndex = -1;
+				methodInformation.type = variantMethodFunctionType;
 				variantInformation.methods.push_back( methodInformation );
 			}
 			enumType->variants.push_back( variantInformation );
@@ -2329,6 +2342,20 @@ namespace uranite::semantic {
 			enumMethodInformation.virtualTableIndex = -1;
 			enumMethodInformation.type = enumMethodFunctionType;
 			enumType->methods.push_back( enumMethodInformation );
+		}
+		for( EnumVariantInfo& variantInformation : enumType->variants ) {
+			for( MethodInfo& variantMethodInformation : variantInformation.methods ) {
+				bool hasEnumLevelMethod = false;
+				for( MethodInfo& existingEnumMethod : enumType->methods ) {
+					if( existingEnumMethod.name == variantMethodInformation.name ) {
+						hasEnumLevelMethod = true;
+						break;
+					}
+				}
+				if( hasEnumLevelMethod == false ) {
+					enumType->methods.push_back( variantMethodInformation );
+				}
+			}
 		}
 	}
 	
@@ -3772,6 +3799,33 @@ namespace uranite::semantic {
 					}
 				}
 			}
+			if( allMethodCandidates.empty() ) {
+				if( expression.method == qualname::classes::object::methods::ToString ) {
+					TypeSharedPointer stringReturnType = this->typeRegistry.lookupType( qualname::classes::string::Name );
+					return stringReturnType != nullptr ? stringReturnType : this->typeRegistry.getError();
+				}
+				if( expression.method == qualname::classes::object::methods::HashCode ) {
+					TypeSharedPointer intReturnType = this->typeRegistry.lookupType( qualname::classes::Int::Name );
+					return intReturnType != nullptr ? intReturnType : this->typeRegistry.getError();
+				}
+				bool isCodegenIntrinsic = (
+					expression.method == qualname::classes::string::methods::CharCodeAt ||
+					expression.method == qualname::classes::string::methods::CharAt ||
+					expression.method == qualname::classes::string::methods::Substring ||
+					expression.method == qualname::classes::string::methods::IndexOf ||
+					expression.method == qualname::classes::string::methods::Concat ||
+					expression.method == qualname::interfaces::equatable::methods::Equals
+				);
+				bool isGenericTemplate = ( classType->name.find( '<' ) != std::string::npos ||
+					classType->genericParameters.empty() == false );
+				if( isCodegenIntrinsic == false &&
+					isGenericTemplate == false &&
+					classType->methods.empty() == false ) {
+					std::string noMethodErrorMessage = fmt::format( "no method \"{}\" in class \"{}\"", expression.method, classType->name );
+					this->diagnostic.error( expression.source, noMethodErrorMessage );
+					return this->typeRegistry.getError();
+				}
+			}
 			std::vector<MethodInfo*> filteredCandidates;
 			for( MethodInfo* candidate : allMethodCandidates ) {
 				if( candidate->isStatic == isStaticCall ) {
@@ -4026,6 +4080,19 @@ namespace uranite::semantic {
 			if( methodIterator != enumType->methods.end() && methodIterator->type != nullptr &&
 				methodIterator->type->kind == Type::Kind::Function ) {
 				return std::static_pointer_cast<FunctionType>( methodIterator->type )->returnType;
+			}
+			for( EnumVariantInfo& variantInformation : enumType->variants ) {
+				std::vector<MethodInfo>::iterator variantMethodIterator = std::find_if(
+					variantInformation.methods.begin(),
+					variantInformation.methods.end(),
+					[&]( const MethodInfo& methodInformation ) {
+						return methodInformation.name == expression.method;
+					}
+				);
+				if( variantMethodIterator != variantInformation.methods.end() && variantMethodIterator->type != nullptr &&
+					variantMethodIterator->type->kind == Type::Kind::Function ) {
+					return std::static_pointer_cast<FunctionType>( variantMethodIterator->type )->returnType;
+				}
 			}
 		}
 		else if( resolvedObjectType->kind == Type::Kind::GenericParameter ) {
@@ -5162,6 +5229,22 @@ namespace uranite::semantic {
 							existingClass->package = this->currentPackageName;
 							existingClass->qualified = thisQualified;
 						}
+						if( thisQualified.empty() == false && thisQualified != classDeclaration.name ) {
+							this->typeRegistry.registerType( thisQualified, existing );
+						}
+						if( parentQualified.empty() == false && parentQualified != this->currentPackageName ) {
+							std::string relativeParentName = parentQualified;
+							if( this->currentPackageName.empty() == false ) {
+								std::string packagePrefix = this->currentPackageName + ".";
+								if( parentQualified.rfind( packagePrefix, 0 ) == 0 ) {
+									relativeParentName = parentQualified.substr( packagePrefix.size() );
+								}
+							}
+							std::string nestedRelativeName = fmt::format( "{}.{}", relativeParentName, classDeclaration.name );
+							if( nestedRelativeName.empty() == false && nestedRelativeName != classDeclaration.name && nestedRelativeName != thisQualified ) {
+								this->typeRegistry.registerType( nestedRelativeName, existing );
+							}
+						}
 						for( ast::nodes::DeclarationSharedPointer& nestedDeclaration : classDeclaration.nestedDeclarations ) {
 							this->registerTypeDeclaration( nestedDeclaration, thisQualified );
 						}
@@ -5179,6 +5262,22 @@ namespace uranite::semantic {
 					classType->genericParameters.push_back( std::make_shared<GenericParameterType>( genericParameter->name ) );
 				}
 				this->typeRegistry.registerType( classDeclaration.name, classType );
+				if( thisQualified.empty() == false && thisQualified != classDeclaration.name ) {
+					this->typeRegistry.registerType( thisQualified, classType );
+				}
+				if( parentQualified.empty() == false && parentQualified != this->currentPackageName ) {
+					std::string relativeParentName = parentQualified;
+					if( this->currentPackageName.empty() == false ) {
+						std::string packagePrefix = this->currentPackageName + ".";
+						if( parentQualified.rfind( packagePrefix, 0 ) == 0 ) {
+							relativeParentName = parentQualified.substr( packagePrefix.size() );
+						}
+					}
+					std::string nestedRelativeName = fmt::format( "{}.{}", relativeParentName, classDeclaration.name );
+					if( nestedRelativeName.empty() == false && nestedRelativeName != classDeclaration.name && nestedRelativeName != thisQualified ) {
+						this->typeRegistry.registerType( nestedRelativeName, classType );
+					}
+				}
 				for( ast::nodes::DeclarationSharedPointer& nestedDeclaration : classDeclaration.nestedDeclarations ) {
 					this->registerTypeDeclaration( nestedDeclaration, thisQualified );
 				}
@@ -5204,6 +5303,22 @@ namespace uranite::semantic {
 							existingStructType->package = this->currentPackageName;
 							existingStructType->qualified = thisQualified;
 						}
+						if( thisQualified.empty() == false && thisQualified != structDeclaration.name ) {
+							this->typeRegistry.registerType( thisQualified, existingStruct );
+						}
+						if( parentQualified.empty() == false && parentQualified != this->currentPackageName ) {
+							std::string relativeParentName = parentQualified;
+							if( this->currentPackageName.empty() == false ) {
+								std::string packagePrefix = this->currentPackageName + ".";
+								if( parentQualified.rfind( packagePrefix, 0 ) == 0 ) {
+									relativeParentName = parentQualified.substr( packagePrefix.size() );
+								}
+							}
+							std::string nestedRelativeName = fmt::format( "{}.{}", relativeParentName, structDeclaration.name );
+							if( nestedRelativeName.empty() == false && nestedRelativeName != structDeclaration.name && nestedRelativeName != thisQualified ) {
+								this->typeRegistry.registerType( nestedRelativeName, existingStruct );
+							}
+						}
 						for( ast::nodes::DeclarationSharedPointer& nestedDeclaration : structDeclaration.nestedDeclarations ) {
 							this->registerTypeDeclaration( nestedDeclaration, thisQualified );
 						}
@@ -5218,6 +5333,22 @@ namespace uranite::semantic {
 					structType->genericParameters.push_back( std::make_shared<GenericParameterType>( genericParameter->name ) );
 				}
 				this->typeRegistry.registerType( structDeclaration.name, structType );
+				if( thisQualified.empty() == false && thisQualified != structDeclaration.name ) {
+					this->typeRegistry.registerType( thisQualified, structType );
+				}
+				if( parentQualified.empty() == false && parentQualified != this->currentPackageName ) {
+					std::string relativeParentName = parentQualified;
+					if( this->currentPackageName.empty() == false ) {
+						std::string packagePrefix = this->currentPackageName + ".";
+						if( parentQualified.rfind( packagePrefix, 0 ) == 0 ) {
+							relativeParentName = parentQualified.substr( packagePrefix.size() );
+						}
+					}
+					std::string nestedRelativeName = fmt::format( "{}.{}", relativeParentName, structDeclaration.name );
+					if( nestedRelativeName.empty() == false && nestedRelativeName != structDeclaration.name && nestedRelativeName != thisQualified ) {
+						this->typeRegistry.registerType( nestedRelativeName, structType );
+					}
+				}
 				for( ast::nodes::DeclarationSharedPointer& nestedDeclaration : structDeclaration.nestedDeclarations ) {
 					this->registerTypeDeclaration( nestedDeclaration, thisQualified );
 				}
