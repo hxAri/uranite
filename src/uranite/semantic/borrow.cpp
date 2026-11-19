@@ -197,6 +197,18 @@ namespace uranite::semantic {
 			case ast::Node::Kind::MethodCallExpression: {
 				ast::nodes::MethodCallExpression& methodCallExpression = static_cast<ast::nodes::MethodCallExpression& >( *expression );
 				this->checkExpression( methodCallExpression.object );
+				bool isRetainingMethod = (
+					methodCallExpression.method == "add" ||
+					methodCallExpression.method == "append" ||
+					methodCallExpression.method == "emplace" ||
+					methodCallExpression.method == "enqueue" ||
+					methodCallExpression.method == "insert" ||
+					methodCallExpression.method == "prepend" ||
+					methodCallExpression.method == "push" ||
+					methodCallExpression.method == "put" ||
+					methodCallExpression.method == "set" ||
+					methodCallExpression.method == "store"
+				);
 				for( ast::nodes::ExpressionSharedPointer& argument : methodCallExpression.arguments ) {
 					this->checkExpression( argument );
 					if( argument->kind == ast::Node::Kind::IdentifierExpression ) {
@@ -204,11 +216,15 @@ namespace uranite::semantic {
 						std::unordered_map<std::string, BorrowOwnershipInfo>::iterator ownershipIterator = this->ownershipTracking.find( identifierExpression.name );
 						if( ownershipIterator != this->ownershipTracking.end() && ownershipIterator->second.state == BorrowOwnershipState::Owned ) {
 							if( argument->semanticType && argument->semanticType->isPrimitive() == false &&
-								argument->semanticType->kind != Type::Kind::Enum &&
-								argument->semanticType->kind != Type::Kind::Class &&
-								argument->semanticType->kind != Type::Kind::Interface &&
-								argument->semanticType->kind != Type::Kind::Struct ) {
-								this->moveValue( identifierExpression.name, argument->source );
+								argument->semanticType->kind != Type::Kind::Enum ) {
+								if( argument->semanticType->kind != Type::Kind::Class &&
+									argument->semanticType->kind != Type::Kind::Interface &&
+									argument->semanticType->kind != Type::Kind::Struct ) {
+									this->moveValue( identifierExpression.name, argument->source );
+								}
+								else if( isRetainingMethod && ownershipIterator->second.isHeapAllocated ) {
+									ownershipIterator->second.isStoredInCollection = true;
+								}
 							}
 						}
 					}
@@ -367,17 +383,18 @@ namespace uranite::semantic {
 		}
 	}
 	
-	void BorrowChecker::checkLoopIterationCleanup( const std::vector<std::string>& scopeVariables, const lookup::SourceSharedPointer& source ) {
-		for( const std::string& variableName : scopeVariables ) {
-			std::unordered_map<std::string, BorrowOwnershipInfo>::iterator ownershipIterator = this->ownershipTracking.find( variableName );
+	void BorrowChecker::checkLoopIterationCleanup( const std::vector<ScopeVariableEntry>& scopeVariables, const lookup::SourceSharedPointer& source ) {
+		for( const ScopeVariableEntry& scopeVariableEntry : scopeVariables ) {
+			std::unordered_map<std::string, BorrowOwnershipInfo>::iterator ownershipIterator = this->ownershipTracking.find( scopeVariableEntry.name );
 			if( ownershipIterator == this->ownershipTracking.end() ) {
 				continue;
 			}
 			BorrowOwnershipInfo& ownershipInformation = ownershipIterator->second;
 			if( ownershipInformation.isHeapAllocated && ownershipInformation.isArenaManaged == false &&
+				ownershipInformation.isStoredInCollection == false &&
 				ownershipInformation.state != BorrowOwnershipState::Dropped &&
 				ownershipInformation.state != BorrowOwnershipState::Moved ) {
-				std::string heapWarningMessage = fmt::format( "heap-allocated value \"{}\" is not freed before next loop iteration; add \"delete {}\" before end of loop body", variableName, variableName );
+				std::string heapWarningMessage = fmt::format( "heap-allocated value \"{}\" is not freed before next loop iteration; add \"delete {}\" before end of loop body", scopeVariableEntry.name, scopeVariableEntry.name );
 				this->diagnostic.warning( ownershipInformation.declarationSource, heapWarningMessage );
 			}
 		}
@@ -471,8 +488,8 @@ namespace uranite::semantic {
 					this->checkStatement( tryBodyStatement );
 				}
 				if( this->variableScope.empty() == false ) {
-					for( const std::string& tryScopeVariable : this->variableScope.back() ) {
-						std::unordered_map<std::string, BorrowOwnershipInfo>::iterator heapCheckIterator = this->ownershipTracking.find( tryScopeVariable );
+					for( const ScopeVariableEntry& tryScopeVariableEntry : this->variableScope.back() ) {
+						std::unordered_map<std::string, BorrowOwnershipInfo>::iterator heapCheckIterator = this->ownershipTracking.find( tryScopeVariableEntry.name );
 						if( heapCheckIterator != this->ownershipTracking.end() &&
 							heapCheckIterator->second.isHeapAllocated &&
 							heapCheckIterator->second.isArenaManaged == false &&
@@ -480,7 +497,7 @@ namespace uranite::semantic {
 							heapCheckIterator->second.state != BorrowOwnershipState::Moved ) {
 							std::string heapLeakWarningMessage = fmt::format(
 								"heap-allocated \"{}\" in try block may leak if exception is thrown; add \"delete {}\" before potential throw sites",
-								tryScopeVariable, tryScopeVariable
+								tryScopeVariableEntry.name, tryScopeVariableEntry.name
 							);
 							this->diagnostic.warning( heapCheckIterator->second.declarationSource, heapLeakWarningMessage );
 						}
@@ -687,6 +704,13 @@ namespace uranite::semantic {
 	}
 	
 	void BorrowChecker::declareOwnership( const std::string& variableName, bool isMutable, const lookup::SourceSharedPointer& source ) {
+		ScopeVariableEntry scopeVariableEntry;
+		scopeVariableEntry.name = variableName;
+		std::unordered_map<std::string, BorrowOwnershipInfo>::iterator existingIterator = this->ownershipTracking.find( variableName );
+		if( existingIterator != this->ownershipTracking.end() ) {
+			scopeVariableEntry.shadowsPrevious = true;
+			scopeVariableEntry.previousOwnershipInfo = existingIterator->second;
+		}
 		BorrowOwnershipInfo ownershipInformation;
 		ownershipInformation.declarationSource = source;
 		ownershipInformation.isMutable = isMutable;
@@ -695,7 +719,7 @@ namespace uranite::semantic {
 		ownershipInformation.state = BorrowOwnershipState::Owned;
 		this->ownershipTracking[variableName] = ownershipInformation;
 		if( this->variableScope.empty() == false ) {
-			this->variableScope.back().push_back( variableName );
+			this->variableScope.back().push_back( scopeVariableEntry );
 		}
 	}
 	
@@ -772,9 +796,15 @@ namespace uranite::semantic {
 		if( this->variableScope.empty() ) {
 			return;
 		}
-		std::vector<std::string>& scopeVariables = this->variableScope.back();
-		for( std::vector<std::string>::reverse_iterator variableIterator = scopeVariables.rbegin(); variableIterator != scopeVariables.rend(); ++variableIterator ) {
-			this->dropValue( *variableIterator );
+		std::vector<ScopeVariableEntry>& scopeVariables = this->variableScope.back();
+		for( std::vector<ScopeVariableEntry>::reverse_iterator variableIterator = scopeVariables.rbegin(); variableIterator != scopeVariables.rend(); ++variableIterator ) {
+			this->dropValue( variableIterator->name );
+			if( variableIterator->shadowsPrevious ) {
+				this->ownershipTracking[variableIterator->name] = variableIterator->previousOwnershipInfo;
+			}
+			else {
+				this->ownershipTracking.erase( variableIterator->name );
+			}
 		}
 		this->variableScope.pop_back();
 		this->currentScopeDepth--;
