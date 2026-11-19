@@ -97,8 +97,12 @@ function createSignalRestorer() -> I64:
     if mmapResult.isError():
         return 0
     I64 codeAddr = mmapResult.value()
-    # Writes bytes: 48 C7 C0 0F 00 00 00 (mov $15,%rax) 0F 05 (syscall)
-    asm "movabsq $$0x0F0000000FC0C748, %rcx\nmovq %rcx, (%rdi)\nmovb $$0x05, 8(%rdi)" : : input( "{rdi}" codeAddr ) : clobber( "rcx", "memory" )
+    # Writes the rt_sigreturn trampoline for the host architecture.
+    #   x86-64: mov $15, %rax; syscall  (bytes 48 C7 C0 0F 00 00 00 0F 05)
+    #   aarch64: mov x8, #139; svc #0  (bytes 68 11 80 D2 01 00 00 D4)
+    asm volatile:
+        x86-64 "movabsq $$0x0F0000000FC0C748, %rcx\nmovq %rcx, (%rdi)\nmovb $$0x05, 8(%rdi)" : : input( "{rdi}" codeAddr ) : clobber( "rcx", "memory" )
+        aarch64 "movz w9, #0x1168\nmovk w9, #0xd280, lsl #16\nstr w9, [x0]\nmovz w9, #0x0001\nmovk w9, #0xd400, lsl #16\nstr w9, [x0, #4]" : : input( "{x0}" codeAddr ) : clobber( "w9", "memory" )
     return codeAddr
 
 
