@@ -527,6 +527,12 @@ namespace uranite::parser {
 		if( this->check( token::Type::Identifier ) ) {
 			name = this->current().value;
 			this->advance();
+			while( this->check( token::Type::Dot ) && this->peek( 1 ).type == token::Type::Identifier ) {
+				this->advance();
+				name += ".";
+				name += this->current().value;
+				this->advance();
+			}
 		}
 		else if( this->check( token::Type::KeywordSelf ) ) {
 			name = semantic::qualname::identifier::SelfType;
@@ -607,6 +613,7 @@ namespace uranite::parser {
 				bool memberAbstract = false;
 				bool memberAsync = false;
 				bool memberFinal = false;
+				bool memberNaked = false;
 				bool memberNative = false;
 				bool memberOverride = false;
 				bool memberReadonly = false;
@@ -627,6 +634,9 @@ namespace uranite::parser {
 					}
 					if( this->match( token::Type::KeywordNative ) ) {
 						memberNative = true; continue;
+					}
+					if( this->match( token::Type::KeywordNaked ) ) {
+						memberNaked = true; continue;
 					}
 					if( this->match( token::Type::KeywordOverride ) ) {
 						memberOverride = true; continue;
@@ -665,6 +675,9 @@ namespace uranite::parser {
 					}
 					if( memberNative ) {
 						method->isNative = true;
+					}
+					if( memberNaked ) {
+						method->isNaked = true;
 					}
 					declaration->methods.push_back( method );
 				}
@@ -730,6 +743,7 @@ namespace uranite::parser {
 		bool isAsync = false;
 		bool isFinal = false;
 		bool isNative = false;
+		bool isNaked = false;
 		bool isOverride = false;
 		bool isReadonly = false;
 		bool isStatic = false;
@@ -749,6 +763,10 @@ namespace uranite::parser {
 			}
 			if( this->match( token::Type::KeywordNative ) ) {
 				isNative = true;
+				continue;
+			}
+			if( this->match( token::Type::KeywordNaked ) ) {
+				isNaked = true;
 				continue;
 			}
 			if( this->match( token::Type::KeywordOverride ) ) {
@@ -779,6 +797,9 @@ namespace uranite::parser {
 				if( isNative ) {
 					declaration->isNative = true;
 				}
+				if( isNaked ) {
+					declaration->isNaked = true;
+				}
 				return declaration;
 			}
 			case token::Type::KeywordFunction: {
@@ -791,6 +812,9 @@ namespace uranite::parser {
 				}
 				if( isNative ) {
 					declaration->isNative = true;
+				}
+				if( isNaked ) {
+					declaration->isNaked = true;
 				}
 				return declaration;
 			}
@@ -2485,6 +2509,10 @@ namespace uranite::parser {
 							}
 							if( this->check( token::Type::Identifier ) || this->check( token::Type::KeywordSelf ) ) {
 								this->advance();
+								while( this->check( token::Type::Dot ) && this->peek( 1 ).type == token::Type::Identifier ) {
+									this->advance();
+									this->advance();
+								}
 							}
 							else {
 								return false;
@@ -2620,6 +2648,7 @@ namespace uranite::parser {
 				bool memberAbstract = false;
 				bool memberAsync = false;
 				bool memberFinal = false;
+				bool memberNaked = false;
 				bool memberNative = false;
 				bool memberOverride = false;
 				bool memberReadonly = false;
@@ -2640,6 +2669,9 @@ namespace uranite::parser {
 					}
 					if( this->match( token::Type::KeywordNative ) ) {
 						memberNative = true; continue;
+					}
+					if( this->match( token::Type::KeywordNaked ) ) {
+						memberNaked = true; continue;
 					}
 					if( this->match( token::Type::KeywordOverride ) ) {
 						memberOverride = true; continue;
@@ -2678,6 +2710,9 @@ namespace uranite::parser {
 					}
 					if( memberNative ) {
 						method->isNative = true;
+					}
+					if( memberNaked ) {
+						method->isNaked = true;
 					}
 					structDeclaration->methods.push_back( method );
 				}
