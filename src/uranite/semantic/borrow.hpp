@@ -97,6 +97,9 @@ namespace uranite::semantic {
 		/// @brief Tracks if this memory is stored in the general long-term storage area.
 		bool isHeapAllocated = false;
 		
+		/// @brief Tracks if this memory has been stored into a retaining container, exempting loop-iteration leak warnings.
+		bool isStoredInCollection = false;
+		
 		/// @brief Set to true if the primary holder is allowed to change the data.
 		bool isMutable;
 		
@@ -271,12 +274,26 @@ namespace uranite::semantic {
 			
 			// Memory Cleanup Operations
 			
+			/** @brief Records a variable declared in a scope, including any shadowed outer ownership state. */
+			struct ScopeVariableEntry {
+				
+				/// @brief The variable name.
+				std::string name;
+				
+				/// @brief Saved ownership information for the outer variable when this declaration shadows it.
+				BorrowOwnershipInfo previousOwnershipInfo;
+				
+				/// @brief Set to true when this declaration shadows an existing variable in an outer scope.
+				bool shadowsPrevious = false;
+				
+			};
+			
 			/**
 			 * @brief Ensures memory from a loop cycle is cleaned before the next cycle.
-			 * @param scopeVariables A list of names of the variables in the current area.
+			 * @param scopeVariables A list of variables in the current area.
 			 * @param source The place in the source code where the loop is.
 			 */
-			void checkLoopIterationCleanup( const std::vector<std::string>& scopeVariables, const lookup::SourceSharedPointer& source );
+			void checkLoopIterationCleanup( const std::vector<ScopeVariableEntry>& scopeVariables, const lookup::SourceSharedPointer& source );
 			
 			/**
 			 * @brief Captures the current ownership state of all tracked variables.
@@ -326,8 +343,8 @@ namespace uranite::semantic {
 			/// A map that connects variable names to their ownership status.
 			std::unordered_map<std::string, BorrowOwnershipInfo> ownershipTracking;
 			
-			/// A list that stores variable names based on the code area where they exist.
-			std::vector<std::vector<std::string>> variableScope;
+			/// A list that stores variable entries based on the code area where they exist.
+			std::vector<std::vector<ScopeVariableEntry>> variableScope;
 			
 			/// Tracks whether the current scope ended with a return statement.
 			std::vector<bool> scopeReturnedStack;
