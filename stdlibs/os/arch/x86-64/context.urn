@@ -24,7 +24,7 @@ package uranite.os.arch.x86-64.context
 
 from uranite.os.arch.native.memory import writeI64At
 
-public function swapContext( I64 fromStackPtr, I64 toStackPtr ) -> Void:
+public naked function swapContext( I64 fromStackPtr, I64 toStackPtr ) -> Void:
 
     """
     Switch execution context by saving callee-saved registers and swapping the
@@ -39,7 +39,7 @@ public function swapContext( I64 fromStackPtr, I64 toStackPtr ) -> Void:
             Pointer to the slot from which the target RSP is loaded.
     """
 
-    asm volatile "pushq %rbx\n\tpushq %rbp\n\tpushq %r12\n\tpushq %r13\n\tpushq %r14\n\tpushq %r15\n\tmovq %rsp, (%rdi)\n\tmovq (%rsi), %rsp\n\tpopq %r15\n\tpopq %r14\n\tpopq %r13\n\tpopq %r12\n\tpopq %rbp\n\tpopq %rbx" : output() : input( "{rdi}" fromStackPtr, "{rsi}" toStackPtr ) : clobber( "memory", "cc" )
+    asm volatile "pushq %rbx\n\tpushq %rbp\n\tpushq %r12\n\tpushq %r13\n\tpushq %r14\n\tpushq %r15\n\tmovq %rsp, (%rdi)\n\tmovq (%rsi), %rsp\n\tpopq %r15\n\tpopq %r14\n\tpopq %r13\n\tpopq %r12\n\tpopq %rbp\n\tpopq %rbx\n\tret" : output() : input() : clobber( "memory" )
 
 public function makeContext( I64 stackBase, I64 stackSize, I64 entryFn ) -> I64:
 
