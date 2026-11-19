@@ -449,6 +449,16 @@ namespace uranite::ir::mir {
 			if( targetBlock == nullptr ) {
 				continue;
 			}
+			bool isLandingPadBlock = false;
+			for( const MIRInstruction& landingPadInstruction : currentBlock->blockInstructions ) {
+				if( landingPadInstruction.instructionKind == MIRInstructionKind::LandingPad ) {
+					isLandingPadBlock = true;
+					break;
+				}
+			}
+			if( isLandingPadBlock ) {
+				continue;
+			}
 			if( targetBlock->predecessorBlocks.size() != 1 ) {
 				continue;
 			}
@@ -493,6 +503,14 @@ namespace uranite::ir::mir {
 						switchTarget.second = currentBlock->blockIdentifier;
 					}
 				}
+				for( MIRBlockIdentifier& handlerTarget : instruction.exceptionHandlerTargets ) {
+					if( handlerTarget == targetIdentifier ) {
+						handlerTarget = currentBlock->blockIdentifier;
+					}
+				}
+				if( instruction.landingPadTarget == targetIdentifier ) {
+					instruction.landingPadTarget = currentBlock->blockIdentifier;
+				}
 			}
 			functionDefinition.controlFlowBlocks[targetIdentifier] = nullptr;
 			this->totalRemovedBlocks++;
@@ -510,6 +528,31 @@ namespace uranite::ir::mir {
 		std::vector<MIRBlockIdentifier> worklist;
 		worklist.push_back( functionDefinition.entryBlockIdentifier );
 		reachableBlocks.insert( functionDefinition.entryBlockIdentifier );
+		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
+			if( basicBlock == nullptr ) {
+				continue;
+			}
+			for( const MIRInstruction& instruction : basicBlock->blockInstructions ) {
+				if( instruction.instructionKind == MIRInstructionKind::LandingPad ) {
+					for( MIRBlockIdentifier handlerTarget : instruction.exceptionHandlerTargets ) {
+						if( handlerTarget != INVALID_BLOCK_IDENTIFIER &&
+							handlerTarget < functionDefinition.controlFlowBlocks.size() &&
+							functionDefinition.controlFlowBlocks[handlerTarget] != nullptr &&
+							reachableBlocks.count( handlerTarget ) == 0 ) {
+							reachableBlocks.insert( handlerTarget );
+							worklist.push_back( handlerTarget );
+						}
+					}
+				}
+				if( instruction.landingPadTarget != INVALID_BLOCK_IDENTIFIER &&
+					instruction.landingPadTarget < functionDefinition.controlFlowBlocks.size() &&
+					functionDefinition.controlFlowBlocks[instruction.landingPadTarget] != nullptr &&
+					reachableBlocks.count( instruction.landingPadTarget ) == 0 ) {
+					reachableBlocks.insert( instruction.landingPadTarget );
+					worklist.push_back( instruction.landingPadTarget );
+				}
+			}
+		}
 		while( worklist.empty() == false ) {
 			MIRBlockIdentifier currentIdentifier = worklist.back();
 			worklist.pop_back();
