@@ -1166,6 +1166,28 @@ namespace uranite::ir::mir {
 			this->generateAsyncFunction( functionDefinition, llvmFunctionName, llvmFunction );
 			return;
 		}
+		if( functionDefinition.isNakedFunction ) {
+			llvmFunction->addFnAttr( llvm::Attribute::Naked );
+			llvmFunction->addFnAttr( llvm::Attribute::NoInline );
+			llvm::BasicBlock* nakedEntryBlock = llvm::BasicBlock::Create( this->llvmContext, "entry", llvmFunction );
+			this->blockMap[functionDefinition.entryBlockIdentifier] = nakedEntryBlock;
+			this->irBuilder.SetInsertPoint( nakedEntryBlock );
+			for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
+				if( basicBlock != nullptr && basicBlock->blockIdentifier != functionDefinition.entryBlockIdentifier ) {
+					llvm::BasicBlock* extraBlock = llvm::BasicBlock::Create( this->llvmContext, basicBlock->blockLabel, llvmFunction );
+					this->blockMap[basicBlock->blockIdentifier] = extraBlock;
+				}
+			}
+			for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
+				if( basicBlock != nullptr ) {
+					this->irBuilder.SetInsertPoint( this->blockMap[basicBlock->blockIdentifier] );
+					for( const MIRInstruction& instruction : basicBlock->blockInstructions ) {
+						this->generateInstruction( instruction, functionDefinition );
+					}
+				}
+			}
+			return;
+		}
 		for( std::shared_ptr<MIRBasicBlock>& basicBlock : functionDefinition.controlFlowBlocks ) {
 			if( basicBlock != nullptr ) {
 				llvm::BasicBlock* llvmBlock = llvm::BasicBlock::Create(
@@ -1342,7 +1364,10 @@ namespace uranite::ir::mir {
 				frameColumn = functionDefinition.sourceLocation->location->column;
 			}
 		}
-		this->emitPushFrame( frameFilename, frameLine, frameColumn, frameDisplayName );
+		bool skipFrameTracking = ( functionDefinition.functionName.find( "swapContext" ) != std::string::npos );
+		if( skipFrameTracking == false ) {
+			this->emitPushFrame( frameFilename, frameLine, frameColumn, frameDisplayName );
+		}
 		if( isMainFunction && this->programHasAsyncFunctions ) {
 			llvm::Function* schedulerInitFunc = this->llvmModule->getFunction( "runtimeInit" );
 			if( schedulerInitFunc == nullptr ) {
@@ -1654,6 +1679,73 @@ namespace uranite::ir::mir {
 				if( instruction.destinationVariable != INVALID_VARIABLE_IDENTIFIER ) {
 					this->setVariableValue( instruction.destinationVariable, caughtObject );
 				}
+				if( instruction.exceptionHandlerTargets.empty() == false ) {
+					llvm::PointerType* pointerType = llvm::PointerType::getUnqual( this->llvmContext );
+					llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+					llvm::Function* matchesFunction = this->getOrCreateExceptionMatchesAny();
+					llvm::Function* rethrowFunction = this->getOrCreateUraniteRethrow();
+					llvm::BasicBlock* dispatchBlock = this->irBuilder.GetInsertBlock();
+					bool catchAllReached = false;
+					for( size_t handlerIndex = 0; handlerIndex < instruction.exceptionHandlerTargets.size(); handlerIndex++ ) {
+						if( catchAllReached ) {
+							break;
+						}
+						if( handlerIndex >= instruction.exceptionHandlerTypeNames.size() ) {
+							break;
+						}
+						MIRBlockIdentifier handlerTargetIdentifier = instruction.exceptionHandlerTargets[handlerIndex];
+						if( this->blockMap.count( handlerTargetIdentifier ) == 0 ) {
+							continue;
+						}
+						llvm::BasicBlock* handlerLLVMBlock = this->blockMap[handlerTargetIdentifier];
+						const std::vector<std::string>& candidateNames = instruction.exceptionHandlerTypeNames[handlerIndex];
+						if( candidateNames.empty() ) {
+							this->irBuilder.CreateBr( handlerLLVMBlock );
+							catchAllReached = true;
+							continue;
+						}
+						std::vector<llvm::Constant*> namePointerConstants;
+						for( const std::string& candidateName : candidateNames ) {
+							namePointerConstants.push_back( this->irBuilder.CreateGlobalStringPtr( candidateName, "exc.type.name" ) );
+						}
+						llvm::ArrayType* namesArrayType = llvm::ArrayType::get( pointerType, namePointerConstants.size() );
+						llvm::Constant* namesArrayConstant = llvm::ConstantArray::get( namesArrayType, namePointerConstants );
+						llvm::GlobalVariable* namesGlobal = new llvm::GlobalVariable(
+							*this->llvmModule, namesArrayType, true,
+							llvm::GlobalValue::InternalLinkage,
+							namesArrayConstant,
+							fmt::format( "_MIR_exc_names_{}.{}", this->currentMIRFunction->functionName, handlerIndex )
+						);
+						llvm::Value* namesPointer = this->irBuilder.CreateBitCast( namesGlobal, pointerType, "exc.names.ptr" );
+						llvm::Value* matchesValue = this->irBuilder.CreateCall(
+							matchesFunction, { exceptionPtr, namesPointer, llvm::ConstantInt::get( i64Type, candidateNames.size() ) }, "exc.match"
+						);
+						llvm::Value* isMatched = this->irBuilder.CreateICmpNE( matchesValue, llvm::ConstantInt::get( llvm::Type::getInt32Ty( this->llvmContext ), 0 ), "exc.matched" );
+						llvm::BasicBlock* nextCheckBlock = llvm::BasicBlock::Create( this->llvmContext, fmt::format( "exc.check.{}", handlerIndex + 1 ), enclosingFunction );
+						this->irBuilder.CreateCondBr( isMatched, handlerLLVMBlock, nextCheckBlock );
+						this->irBuilder.SetInsertPoint( nextCheckBlock );
+					}
+					if( catchAllReached ) {
+						// dispatch already branched to the catch-all; nothing more to do
+					}
+					else {
+						llvm::BasicBlock* unreachableBlock = llvm::BasicBlock::Create( this->llvmContext, "rethrow.unreachable", enclosingFunction );
+						if( instruction.landingPadTarget != INVALID_BLOCK_IDENTIFIER &&
+							this->blockMap.count( instruction.landingPadTarget ) > 0 ) {
+							if( enclosingFunction->hasPersonalityFn() == false ) {
+								enclosingFunction->setPersonalityFn( this->getOrCreatePersonality() );
+							}
+							llvm::BasicBlock* unwindDestination = this->blockMap[instruction.landingPadTarget];
+							this->irBuilder.CreateInvoke( rethrowFunction, unreachableBlock, unwindDestination, { exceptionPtr } );
+						}
+						else {
+							this->irBuilder.CreateCall( rethrowFunction, { exceptionPtr } );
+							this->irBuilder.CreateUnreachable();
+						}
+						this->irBuilder.SetInsertPoint( unreachableBlock );
+						this->irBuilder.CreateUnreachable();
+					}
+				}
 				break;
 			}
 			case MIRInstructionKind::CallVirtual:
@@ -1711,6 +1803,7 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::InstanceOfCheck: {
 				if( instruction.destinationVariable != 0 ) {
 					bool isMatch = false;
+					bool runtimeResultEmitted = false;
 					if( instruction.operandType != nullptr && instruction.sourceOperands.empty() == false ) {
 						std::string targetTypeName = instruction.operandType->name;
 						size_t bracketPos = targetTypeName.find( '<' );
@@ -1778,7 +1871,71 @@ namespace uranite::ir::mir {
 									}
 								}
 								if( isMatch == false && ( sourceTypeName == semantic::qualname::classes::object::Name || sourceTypeName == targetTypeName ) ) {
+									
+									// Object-typed receivers cannot be checked at runtime: they may
+									// hold structs (no vtable slot) or unboxed primitives, so preserve
+									// the permissive Object-protocol behavior for them. Class- and
+									// interface-typed receivers go through the runtime path instead.
 									isMatch = true;
+								}
+								
+								// Runtime type identification: when the static type of the
+								// checked value cannot prove the result (base-class or
+								// interface-typed receivers), compare the per-class typeid
+								// stored in the object's vtable slot against the typeid
+								// globals of the target and all its concrete subtypes.
+								if( isMatch == false ) {
+									semantic::TypeSharedPointer runtimeSourceType = descriptor.variableType;
+									if( runtimeSourceType->kind == semantic::Type::Kind::Optional ) {
+										semantic::OptionalType* runtimeOptionalType = static_cast<semantic::OptionalType*>( runtimeSourceType.get() );
+										if( runtimeOptionalType->inner != nullptr ) {
+											runtimeSourceType = runtimeOptionalType->inner;
+										}
+									}
+									std::string runtimeSourceTypeName = runtimeSourceType->name;
+									size_t runtimeGenericPosition = runtimeSourceTypeName.find( '<' );
+									if( runtimeGenericPosition != std::string::npos ) {
+										runtimeSourceTypeName = runtimeSourceTypeName.substr( 0, runtimeGenericPosition );
+									}
+									if( semantic::qualname::errorHierarchyNames().count( runtimeSourceTypeName ) == 0 &&
+										semantic::qualname::errorHierarchyNames().count( targetTypeName ) == 0 ) {
+										llvm::Value* objectValue = this->loadVariableValue( sourceVar );
+										int runtimeVtableFieldIndex = this->getVtableFieldIndex( runtimeSourceTypeName );
+										if( objectValue != nullptr &&
+											objectValue->getType()->isPointerTy() &&
+											runtimeVtableFieldIndex >= 0 ) {
+											std::vector<llvm::GlobalVariable*> candidateGlobals = this->collectInstanceofCandidates( instruction.operandType );
+											if( candidateGlobals.empty() == false ) {
+												llvm::PointerType* instanceOfPointerType = llvm::PointerType::getUnqual( this->llvmContext );
+												llvm::Value* isNullValue = this->irBuilder.CreateICmpEQ(
+													objectValue,
+													llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( instanceOfPointerType ) ),
+													"instanceof.isnull"
+												);
+												llvm::Value* isNotNullValue = this->irBuilder.CreateNot( isNullValue, "instanceof.notnull" );
+												llvm::GlobalVariable* nullSentinel = this->getOrCreateInstanceofNullSentinel();
+												llvm::Value* sentinelPointer = this->irBuilder.CreateBitCast( nullSentinel, instanceOfPointerType, "instanceof.sentinel" );
+												llvm::Value* safeObjectPointer = this->irBuilder.CreateSelect( isNullValue, sentinelPointer, objectValue, "instanceof.safeobj" );
+												std::vector<llvm::Type*> instanceOfWrapperFields( runtimeVtableFieldIndex + 1, instanceOfPointerType );
+												llvm::StructType* instanceOfWrapperType = llvm::StructType::get( this->llvmContext, instanceOfWrapperFields );
+												llvm::Value* typeIdSlotPointer = this->irBuilder.CreateStructGEP(
+													instanceOfWrapperType, safeObjectPointer,
+													static_cast<unsigned>( runtimeVtableFieldIndex ),
+													"instanceof.slot"
+												);
+												llvm::Value* typeIdValue = this->irBuilder.CreateLoad( instanceOfPointerType, typeIdSlotPointer, "instanceof.typeid" );
+												llvm::Value* anyMatchValue = llvm::ConstantInt::getFalse( this->llvmContext );
+												for( llvm::GlobalVariable* candidateGlobal : candidateGlobals ) {
+													llvm::Value* candidatePointer = this->irBuilder.CreateBitCast( candidateGlobal, instanceOfPointerType, "instanceof.cand" );
+													llvm::Value* candidateEquals = this->irBuilder.CreateICmpEQ( typeIdValue, candidatePointer, "instanceof.cmp" );
+													anyMatchValue = this->irBuilder.CreateOr( anyMatchValue, candidateEquals, "instanceof.any" );
+												}
+												llvm::Value* runtimeResultValue = this->irBuilder.CreateAnd( isNotNullValue, anyMatchValue, "instanceof.result" );
+												this->setVariableValue( instruction.destinationVariable, runtimeResultValue );
+												runtimeResultEmitted = true;
+											}
+										}
+									}
 								}
 							}
 							else {
@@ -1789,11 +1946,13 @@ namespace uranite::ir::mir {
 							isMatch = true;
 						}
 					}
-					this->setVariableValue( 
-						instruction.destinationVariable,
-						isMatch ? llvm::ConstantInt::getTrue( this->llvmContext )
-						        : llvm::ConstantInt::getFalse( this->llvmContext ) 
-					);
+					if( runtimeResultEmitted == false ) {
+						this->setVariableValue( 
+							instruction.destinationVariable,
+							isMatch ? llvm::ConstantInt::getTrue( this->llvmContext )
+							        : llvm::ConstantInt::getFalse( this->llvmContext ) 
+						);
+					}
 				}
 				break;
 			}
@@ -2536,6 +2695,73 @@ namespace uranite::ir::mir {
 		this->setVariableValue( instruction.destinationVariable, constValue );
 	}
 	
+	void MIRCodegen::generateMIRThrowError( const std::string& errorClassName, const std::string& message, const lookup::SourceSharedPointer& source, MIRBlockIdentifier landingPadTarget ) {
+		llvm::StructType* errorStructType = nullptr;
+		std::unordered_map<std::string, llvm::StructType*>::iterator structIterator = this->structTypeCache.find( errorClassName );
+		if( structIterator != this->structTypeCache.end() ) {
+			errorStructType = structIterator->second;
+		}
+		if( errorStructType == nullptr ) {
+			errorStructType = llvm::StructType::getTypeByName( this->llvmContext, errorClassName );
+		}
+		if( errorStructType != nullptr ) {
+			llvm::DataLayout dataLayout( this->llvmModule.get() );
+			uint64_t structSize = dataLayout.getTypeAllocSize( errorStructType );
+			llvm::Function* mallocFunction = this->getOrCreateMalloc();
+			llvm::ConstantInt* sizeValue = llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), structSize );
+			llvm::Value* rawPointer = this->irBuilder.CreateCall( mallocFunction, { sizeValue }, "err.raw" );
+			llvm::Value* errorPointer = this->irBuilder.CreateBitCast( rawPointer, llvm::PointerType::getUnqual( errorStructType ), "err.obj" );
+			std::string constructorKey = fmt::format( "{}.{}", errorClassName, errorClassName );
+			std::unordered_map<std::string, llvm::Function*>::iterator constructorIterator = this->functionResolutionMap.find( constructorKey );
+			llvm::Function* constructorFunction = nullptr;
+			if( constructorIterator != this->functionResolutionMap.end() ) {
+				constructorFunction = constructorIterator->second;
+			}
+			if( constructorFunction == nullptr ) {
+				constructorFunction = this->llvmModule->getFunction( constructorKey );
+			}
+			if( constructorFunction != nullptr ) {
+				llvm::Value* messageValue = this->irBuilder.CreateGlobalStringPtr( message, "err.msg" );
+				llvm::ConstantInt* codeValue = llvm::ConstantInt::get( llvm::Type::getInt64Ty( this->llvmContext ), 0 );
+				std::vector<llvm::Value*> constructorArguments;
+				constructorArguments.push_back( errorPointer );
+				constructorArguments.push_back( messageValue );
+				constructorArguments.push_back( codeValue );
+				for( size_t argumentIndex = constructorArguments.size(); argumentIndex < constructorFunction->arg_size(); argumentIndex++ ) {
+					constructorArguments.push_back( llvm::Constant::getNullValue( constructorFunction->getArg( argumentIndex )->getType() ) );
+				}
+				this->irBuilder.CreateCall( constructorFunction, constructorArguments );
+			}
+			llvm::Value* castedException = this->irBuilder.CreateBitCast( errorPointer, llvm::PointerType::getUnqual( this->llvmContext ), "err.cast" );
+			llvm::Value* typeNameStr = this->irBuilder.CreateGlobalStringPtr( errorClassName, "throw.typename" );
+			llvm::Function* throwFunction = this->getOrCreateUraniteThrow();
+			if( landingPadTarget != INVALID_BLOCK_IDENTIFIER &&
+				this->blockMap.count( landingPadTarget ) > 0 ) {
+				llvm::Function* enclosingFunction = this->irBuilder.GetInsertBlock()->getParent();
+				if( enclosingFunction->hasPersonalityFn() == false ) {
+					enclosingFunction->setPersonalityFn( this->getOrCreatePersonality() );
+				}
+				llvm::BasicBlock* unwindDestination = this->blockMap[landingPadTarget];
+				llvm::BasicBlock* unreachableBlock = llvm::BasicBlock::Create( this->llvmContext, "throw.unreachable", enclosingFunction );
+				this->irBuilder.CreateInvoke( throwFunction, unreachableBlock, unwindDestination, { castedException, typeNameStr } );
+				this->irBuilder.SetInsertPoint( unreachableBlock );
+			}
+			else if( this->asyncWrapperCatchBlock != nullptr ) {
+				llvm::Function* enclosingFunction = this->irBuilder.GetInsertBlock()->getParent();
+				if( enclosingFunction->hasPersonalityFn() == false ) {
+					enclosingFunction->setPersonalityFn( this->getOrCreatePersonality() );
+				}
+				llvm::BasicBlock* unreachableBlock = llvm::BasicBlock::Create( this->llvmContext, "throw.unreachable", enclosingFunction );
+				this->irBuilder.CreateInvoke( throwFunction, unreachableBlock, this->asyncWrapperCatchBlock, { castedException, typeNameStr } );
+				this->irBuilder.SetInsertPoint( unreachableBlock );
+			}
+			else {
+				this->irBuilder.CreateCall( throwFunction, { castedException, typeNameStr } );
+			}
+		}
+		this->irBuilder.CreateUnreachable();
+	}
+	
 	void MIRCodegen::generateArithmetic( const MIRInstruction& instruction ) {
 		if( instruction.destinationVariable == INVALID_VARIABLE_IDENTIFIER ) {
 			return;
@@ -2650,12 +2876,32 @@ namespace uranite::ir::mir {
 			case MIRInstructionKind::MultiplyInteger:
 				result = this->irBuilder.CreateMul( leftOperand, rightOperand, "mul.i" );
 				break;
-			case MIRInstructionKind::DivideInteger:
+			case MIRInstructionKind::DivideInteger: {
+				if( rightOperand->getType()->isIntegerTy() ) {
+					llvm::Value* zeroCheck = this->irBuilder.CreateICmpEQ( rightOperand, llvm::ConstantInt::get( rightOperand->getType(), 0 ), "divzero.chk" );
+					llvm::BasicBlock* errorBlock = llvm::BasicBlock::Create( this->llvmContext, "div.zero", this->irBuilder.GetInsertBlock()->getParent() );
+					llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create( this->llvmContext, "div.cont", this->irBuilder.GetInsertBlock()->getParent() );
+					this->irBuilder.CreateCondBr( zeroCheck, errorBlock, continueBlock );
+					this->irBuilder.SetInsertPoint( errorBlock );
+					this->generateMIRThrowError( semantic::qualname::classes::zerodivisionerror::Qualified, "integer division by zero", instruction.sourceLocation, instruction.landingPadTarget );
+					this->irBuilder.SetInsertPoint( continueBlock );
+				}
 				result = this->irBuilder.CreateSDiv( leftOperand, rightOperand, "div.i" );
 				break;
-			case MIRInstructionKind::ModuloInteger:
+			}
+			case MIRInstructionKind::ModuloInteger: {
+				if( rightOperand->getType()->isIntegerTy() ) {
+					llvm::Value* zeroCheck = this->irBuilder.CreateICmpEQ( rightOperand, llvm::ConstantInt::get( rightOperand->getType(), 0 ), "modzero.chk" );
+					llvm::BasicBlock* errorBlock = llvm::BasicBlock::Create( this->llvmContext, "mod.zero", this->irBuilder.GetInsertBlock()->getParent() );
+					llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create( this->llvmContext, "mod.cont", this->irBuilder.GetInsertBlock()->getParent() );
+					this->irBuilder.CreateCondBr( zeroCheck, errorBlock, continueBlock );
+					this->irBuilder.SetInsertPoint( errorBlock );
+					this->generateMIRThrowError( semantic::qualname::classes::zerodivisionerror::Qualified, "integer modulo by zero", instruction.sourceLocation, instruction.landingPadTarget );
+					this->irBuilder.SetInsertPoint( continueBlock );
+				}
 				result = this->irBuilder.CreateSRem( leftOperand, rightOperand, "mod.i" );
 				break;
+			}
 			case MIRInstructionKind::PowerInteger: {
 				llvm::ConstantInt* leftPowerConstant = llvm::dyn_cast<llvm::ConstantInt>( leftOperand );
 				llvm::ConstantInt* rightPowerConstant = llvm::dyn_cast<llvm::ConstantInt>( rightOperand );
@@ -2736,11 +2982,22 @@ namespace uranite::ir::mir {
 				llvm::ConstantFP* leftConst = llvm::dyn_cast<llvm::ConstantFP>( leftOperand );
 				llvm::ConstantFP* rightConst = llvm::dyn_cast<llvm::ConstantFP>( rightOperand );
 				if( leftConst && rightConst ) {
+					if( rightConst->getValueAPF().isZero() ) {
+						this->generateMIRThrowError( semantic::qualname::classes::zerodivisionerror::Qualified, "float division by zero", instruction.sourceLocation, instruction.landingPadTarget );
+						return;
+					}
 					llvm::APFloat res = leftConst->getValueAPF();
 					res.divide( rightConst->getValueAPF(), llvm::APFloat::rmNearestTiesToEven );
 					result = llvm::ConstantFP::get( this->llvmContext, res );
 				}
 				else {
+					llvm::Value* floatZeroCheck = this->irBuilder.CreateFCmpOEQ( rightOperand, llvm::ConstantFP::get( rightOperand->getType(), 0.0 ), "fdivzero.chk" );
+					llvm::BasicBlock* errorBlock = llvm::BasicBlock::Create( this->llvmContext, "fdiv.zero", this->irBuilder.GetInsertBlock()->getParent() );
+					llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create( this->llvmContext, "fdiv.cont", this->irBuilder.GetInsertBlock()->getParent() );
+					this->irBuilder.CreateCondBr( floatZeroCheck, errorBlock, continueBlock );
+					this->irBuilder.SetInsertPoint( errorBlock );
+					this->generateMIRThrowError( semantic::qualname::classes::zerodivisionerror::Qualified, "float division by zero", instruction.sourceLocation, instruction.landingPadTarget );
+					this->irBuilder.SetInsertPoint( continueBlock );
 					result = this->irBuilder.CreateFDiv( leftOperand, rightOperand, "div.f" );
 				}
 				break;
@@ -8718,8 +8975,17 @@ namespace uranite::ir::mir {
 				if( this->interfaceTableMap.count( itableKey ) == 0 ) {
 					itableKey = shortTypeName;
 				}
+				llvm::GlobalVariable* itableGlobal = nullptr;
 				if( this->interfaceTableMap.count( itableKey ) > 0 ) {
-					llvm::GlobalVariable* itableGlobal = this->interfaceTableMap[itableKey];
+					itableGlobal = this->interfaceTableMap[itableKey];
+				}
+				else {
+					
+					// Classes without an itable still need a per-class identity stored in
+					// the vtable slot so runtime instanceof checks can recognize instances.
+					itableGlobal = this->getOrCreateClassTypeId( typeName );
+				}
+				if( itableGlobal != nullptr ) {
 					int vtableFieldIndex = this->getVtableFieldIndex( typeName );
 					if( vtableFieldIndex < 0 ) {
 						vtableFieldIndex = 0;
@@ -9445,6 +9711,162 @@ namespace uranite::ir::mir {
 		return -1;
 	}
 	
+	llvm::GlobalVariable* MIRCodegen::getOrCreateClassTypeId( const std::string& typeName ) {
+		if( typeName.empty() ) {
+			return nullptr;
+		}
+		std::string baseName = typeName;
+		size_t genericPosition = baseName.find( '<' );
+		if( genericPosition != std::string::npos ) {
+			baseName = baseName.substr( 0, genericPosition );
+		}
+		std::string shortName = baseName;
+		size_t lastDotPosition = baseName.rfind( '.' );
+		if( lastDotPosition != std::string::npos ) {
+			shortName = baseName.substr( lastDotPosition + 1 );
+		}
+		if( this->interfaceTableMap.count( baseName ) > 0 ) {
+			llvm::GlobalVariable* existingGlobal = this->interfaceTableMap[baseName];
+			this->classTypeIdMap[typeName] = existingGlobal;
+			this->classTypeIdMap[baseName] = existingGlobal;
+			if( shortName.empty() == false ) {
+				this->classTypeIdMap[shortName] = existingGlobal;
+			}
+			return existingGlobal;
+		}
+		if( shortName.empty() == false && this->interfaceTableMap.count( shortName ) > 0 ) {
+			llvm::GlobalVariable* existingGlobal = this->interfaceTableMap[shortName];
+			this->classTypeIdMap[typeName] = existingGlobal;
+			this->classTypeIdMap[baseName] = existingGlobal;
+			this->classTypeIdMap[shortName] = existingGlobal;
+			return existingGlobal;
+		}
+		if( this->classTypeIdMap.count( baseName ) > 0 ) {
+			llvm::GlobalVariable* cachedGlobal = this->classTypeIdMap[baseName];
+			this->classTypeIdMap[typeName] = cachedGlobal;
+			return cachedGlobal;
+		}
+		if( shortName.empty() == false && this->classTypeIdMap.count( shortName ) > 0 ) {
+			llvm::GlobalVariable* cachedGlobal = this->classTypeIdMap[shortName];
+			this->classTypeIdMap[typeName] = cachedGlobal;
+			this->classTypeIdMap[baseName] = cachedGlobal;
+			return cachedGlobal;
+		}
+		llvm::PointerType* pointerType = llvm::PointerType::getUnqual( this->llvmContext );
+		std::string markerName = fmt::format( "_MIR_typeid_{}", baseName );
+		llvm::GlobalVariable* markerGlobal = new llvm::GlobalVariable(
+			*this->llvmModule, pointerType, true,
+			llvm::GlobalValue::InternalLinkage,
+			llvm::ConstantPointerNull::get( llvm::cast<llvm::PointerType>( pointerType ) ),
+			markerName
+		);
+		this->classTypeIdMap[typeName] = markerGlobal;
+		this->classTypeIdMap[baseName] = markerGlobal;
+		if( shortName.empty() == false && shortName != baseName ) {
+			this->classTypeIdMap[shortName] = markerGlobal;
+		}
+		return markerGlobal;
+	}
+	
+	llvm::GlobalVariable* MIRCodegen::getOrCreateInstanceofNullSentinel() {
+		if( this->instanceofNullSentinel != nullptr ) {
+			return this->instanceofNullSentinel;
+		}
+		llvm::ArrayType* sentinelArrayType = llvm::ArrayType::get( llvm::Type::getInt8Ty( this->llvmContext ), 8 );
+		this->instanceofNullSentinel = new llvm::GlobalVariable(
+			*this->llvmModule, sentinelArrayType, true,
+			llvm::GlobalValue::InternalLinkage,
+			llvm::ConstantAggregateZero::get( sentinelArrayType ),
+			"_MIR_instanceof_null_sentinel"
+		);
+		return this->instanceofNullSentinel;
+	}
+	
+	std::vector<llvm::GlobalVariable*> MIRCodegen::collectInstanceofCandidates( const semantic::TypeSharedPointer& targetType ) {
+		std::vector<llvm::GlobalVariable*> candidates;
+		if( targetType == nullptr ) {
+			return candidates;
+		}
+		auto stripGenericSuffix = []( const std::string& name ) -> std::string {
+			size_t bracketPosition = name.find( '<' );
+			if( bracketPosition != std::string::npos ) {
+				return name.substr( 0, bracketPosition );
+			}
+			return name;
+		};
+		std::string targetBaseName = stripGenericSuffix( targetType->name );
+		std::string targetQualifiedName = targetType->qualified.empty() == false
+			? stripGenericSuffix( targetType->qualified ) : targetBaseName;
+		bool targetIsInterface = ( targetType->kind == semantic::Type::Kind::Interface );
+		std::set<llvm::GlobalVariable*> seenGlobals;
+		for( const std::pair<const std::string, semantic::TypeSharedPointer>& typeEntry : this->semanticAnalyzer.types().getUserTypes() ) {
+			if( typeEntry.second == nullptr || typeEntry.second->kind != semantic::Type::Kind::Class ) {
+				continue;
+			}
+			semantic::ClassType* candidateClass = static_cast<semantic::ClassType*>( typeEntry.second.get() );
+			std::string candidateName = stripGenericSuffix( candidateClass->name );
+			std::string candidateQualifiedName = candidateClass->qualified.empty() == false
+				? stripGenericSuffix( candidateClass->qualified ) : candidateName;
+			bool matchesTarget = ( candidateName == targetBaseName || candidateQualifiedName == targetQualifiedName );
+			if( matchesTarget == false && targetIsInterface == false ) {
+				semantic::TypeSharedPointer walkBase = candidateClass->baseClass;
+				while( walkBase != nullptr && matchesTarget == false ) {
+					std::string walkName = stripGenericSuffix( walkBase->name );
+					std::string walkQualifiedName = walkBase->qualified.empty() == false
+						? stripGenericSuffix( walkBase->qualified ) : walkName;
+					if( walkName == targetBaseName || walkQualifiedName == targetQualifiedName ) {
+						matchesTarget = true;
+						break;
+					}
+					if( walkBase->kind == semantic::Type::Kind::Class ) {
+						walkBase = static_cast<semantic::ClassType*>( walkBase.get() )->baseClass;
+					}
+					else {
+						break;
+					}
+				}
+			}
+			if( matchesTarget == false && targetIsInterface ) {
+				semantic::TypeSharedPointer walkClass = typeEntry.second;
+				while( walkClass != nullptr && walkClass->kind == semantic::Type::Kind::Class && matchesTarget == false ) {
+					semantic::ClassType* walkClassPtr = static_cast<semantic::ClassType*>( walkClass.get() );
+					if( walkClassPtr->implementsInterface( targetQualifiedName ) || walkClassPtr->implementsInterface( targetBaseName ) ) {
+						matchesTarget = true;
+						break;
+					}
+					for( const semantic::TypeSharedPointer& implementedInterface : walkClassPtr->interfaces ) {
+						if( implementedInterface == nullptr ) {
+							continue;
+						}
+						std::string interfaceName = stripGenericSuffix( implementedInterface->name );
+						std::string interfaceQualifiedName = implementedInterface->qualified.empty() == false
+							? stripGenericSuffix( implementedInterface->qualified ) : interfaceName;
+						if( interfaceName == targetBaseName || interfaceQualifiedName == targetQualifiedName ) {
+							matchesTarget = true;
+							break;
+						}
+					}
+					walkClass = walkClassPtr->baseClass;
+				}
+			}
+			if( matchesTarget ) {
+				llvm::GlobalVariable* candidateGlobal = this->getOrCreateClassTypeId( typeEntry.first );
+				if( candidateGlobal != nullptr && seenGlobals.insert( candidateGlobal ).second ) {
+					candidates.push_back( candidateGlobal );
+				}
+			}
+		}
+		if( candidates.empty() && targetIsInterface == false ) {
+			llvm::GlobalVariable* targetGlobal = this->getOrCreateClassTypeId(
+				targetQualifiedName.empty() == false ? targetQualifiedName : targetBaseName
+			);
+			if( targetGlobal != nullptr ) {
+				candidates.push_back( targetGlobal );
+			}
+		}
+		return candidates;
+	}
+	
 	llvm::Function* MIRCodegen::getOrCreateFree() {
 		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getFreeFunction( this->llvmContext );
 		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
@@ -9486,6 +9908,25 @@ namespace uranite::ir::mir {
 		return function;
 	}
 	
+	llvm::Function* MIRCodegen::getOrCreateExceptionMatchesAny() {
+		llvm::Type* pointerType = llvm::PointerType::getUnqual( this->llvmContext );
+		llvm::Type* i64Type = llvm::Type::getInt64Ty( this->llvmContext );
+		return this->getOrCreateExtern(
+			"__uranite_exception_matches_any",
+			llvm::Type::getInt32Ty( this->llvmContext ),
+			{ pointerType, pointerType, i64Type }
+		);
+	}
+
+	llvm::Function* MIRCodegen::getOrCreateUraniteRethrow() {
+		llvm::Type* pointerType = llvm::PointerType::getUnqual( this->llvmContext );
+		return this->getOrCreateExtern(
+			"__uranite_rethrow",
+			llvm::Type::getVoidTy( this->llvmContext ),
+			{ pointerType }
+		);
+	}
+
 	llvm::Function* MIRCodegen::getOrCreateStrcmp() {
 		codegen::RuntimeFunctionSpec spec = this->runtimeInterface_->getStrcmpFunction( this->llvmContext );
 		llvm::Function* function = this->llvmModule->getFunction( spec.functionName );
@@ -9984,6 +10425,9 @@ namespace uranite::ir::mir {
 	}
 	
 	void MIRCodegen::emitPopFrame() {
+		if( this->currentMIRFunction != nullptr && this->currentMIRFunction->functionName.find( "swapContext" ) != std::string::npos ) {
+			return;
+		}
 		llvm::Function* popFrame = this->getOrCreatePopFrame();
 		this->irBuilder.CreateCall( popFrame, {} );
 	}
