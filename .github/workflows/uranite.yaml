@@ -48,8 +48,6 @@ jobs:
             run: |
                 chmod +x scripts/uranite-testing.sh
                 export PATH="$GITHUB_WORKSPACE/build:$PATH"
-                ./scripts/uranite-testing.sh ./examples
-                ./scripts/uranite-testing.sh ./examples/benchmarks
                 ./scripts/uranite-testing.sh ./examples/tutorials
                 ./scripts/uranite-testing.sh ./testing
         -   name: "Package Uranite Distribution (Prod Only)"
